@@ -92,6 +92,7 @@ const resolveEffectiveStatementWindow = async ({
   statementPeriodStart,
   statementPeriodEnd,
   cutoffAt = null,
+  propertyDateAcquired = null,
 }) => {
   if (!isValidObjectId(businessId) || !isValidObjectId(propertyId) || !isValidObjectId(landlordId)) {
     throw new Error("resolveEffectiveStatementWindow requires valid business, property, and landlord ids.");
@@ -132,8 +133,12 @@ const resolveEffectiveStatementWindow = async ({
       .sort((a, b) => b.cursor.getTime() - a.cursor.getTime())[0]?.item || null;
 
   const previousCutoffAt = getStatementCursor(latestProcessedStatement);
+  const propertyAcquiredAt = propertyDateAcquired ? startOfDay(propertyDateAcquired) : null;
 
   let effectiveStartAt = requestedStartAt;
+  if (propertyAcquiredAt && propertyAcquiredAt.getTime() > effectiveStartAt.getTime()) {
+    effectiveStartAt = propertyAcquiredAt;
+  }
   if (previousCutoffAt && previousCutoffAt.getTime() >= effectiveStartAt.getTime()) {
     effectiveStartAt = new Date(previousCutoffAt.getTime() + 1);
   }
@@ -506,7 +511,7 @@ export const generateLandlordStatement = async ({
 
   const property = await Property.findById(propertyObjectId)
     .select(
-      "propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount commissionTaxSettings totalUnits business landlords"
+      "dateAcquired propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount commissionTaxSettings totalUnits business landlords"
     )
     .lean();
 
@@ -531,6 +536,7 @@ export const generateLandlordStatement = async ({
     statementPeriodStart,
     statementPeriodEnd,
     cutoffAt,
+    propertyDateAcquired: property.dateAcquired || null,
   });
 
   const periodStart = effectiveStartAt;

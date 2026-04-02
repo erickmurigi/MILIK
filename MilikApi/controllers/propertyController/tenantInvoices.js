@@ -134,6 +134,73 @@ const buildStatementPeriod = (invoiceDate) => {
   return { start, end };
 };
 
+const isFutureInvoiceDate = (value) => {
+  const date = normalizeDate(value, new Date());
+  return date.getTime() > Date.now();
+};
+
+const isActiveInvoiceStatus = (status = "") => !["cancelled", "reversed"].includes(safeLower(status));
+
+const getInvoiceDuplicateBucket = ({ category, metadata = {} } = {}) => {
+  const normalizedCategory = String(category || "").toUpperCase();
+
+  if (normalizedCategory === "RENT_CHARGE") {
+    return safeLower(metadata?.billItemKey) === "rent_utility:combined" ? "combined" : "rent";
+  }
+
+  if (normalizedCategory === "UTILITY_CHARGE") {
+    const utilityKey = normalizeUtilityMatch(
+      metadata?.utilityType ||
+        metadata?.meterUtilityType ||
+        metadata?.statementUtilityType ||
+        metadata?.utilityName ||
+        metadata?.utility ||
+        ""
+    );
+
+    return utilityKey ? `utility:${utilityKey}` : "utility";
+  }
+
+  return "";
+};
+
+const isUtilityDuplicateBucket = (bucket = "") => bucket === "utility" || String(bucket).startsWith("utility:");
+
+const findConflictingMonthlyInvoice = ({ existingInvoices = [], category, metadata = {} } = {}) => {
+  const requestedBucket = getInvoiceDuplicateBucket({ category, metadata });
+  if (!requestedBucket) return null;
+
+  return (
+    existingInvoices.find((invoice) => {
+      if (!isActiveInvoiceStatus(invoice?.status)) return false;
+
+      const existingBucket = getInvoiceDuplicateBucket({
+        category: invoice?.category,
+        metadata: invoice?.metadata || {},
+      });
+
+      if (!existingBucket) return false;
+
+      if (requestedBucket === "combined") {
+        return existingBucket === "combined" || existingBucket === "rent" || isUtilityDuplicateBucket(existingBucket);
+      }
+
+      if (requestedBucket === "rent") {
+        return existingBucket === "combined" || existingBucket === "rent";
+      }
+
+      if (isUtilityDuplicateBucket(requestedBucket)) {
+        if (existingBucket === "combined") return true;
+        if (!isUtilityDuplicateBucket(existingBucket)) return false;
+        if (requestedBucket === "utility" || existingBucket === "utility") return true;
+        return requestedBucket === existingBucket;
+      }
+
+      return false;
+    }) || null
+  );
+};
+
 const findFirstAccount = async (businessId, candidates = []) => {
   for (const candidate of candidates) {
     const query = { business: businessId };
@@ -1893,6 +1960,12 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     normalizedDueDate = normalizedInvoiceDate;
   }
 
+  if (isFutureInvoiceDate(normalizedInvoiceDate)) {
+    const error = new Error("Future invoicing is disabled. Use the current date or an earlier billing period.");
+    error.statusCode = 400;
+    throw error;
+  }
+
   if (!skipEnsureSystemAccounts) {
     await ensureSystemChartOfAccounts(businessId);
   }
@@ -2028,6 +2101,37 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     req?.body?.chartAccountCode ||
     req?.body?.accountCode ||
     req?.body?.account;
+
+  const statementPeriod = buildStatementPeriod(normalizedInvoiceDate);
+  const activeMonthlyInvoices = ["RENT_CHARGE", "UTILITY_CHARGE"].includes(normalizedCategory)
+    ? await TenantInvoice.find({
+        business: businessId,
+        property: accountingContext.propertyId,
+        tenant,
+        unit,
+        category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE"] },
+        invoiceDate: {
+          $gte: statementPeriod.start,
+          $lte: statementPeriod.end,
+        },
+      })
+        .select("_id invoiceNumber category status invoiceDate metadata")
+        .lean()
+    : [];
+
+  const conflictingMonthlyInvoice = findConflictingMonthlyInvoice({
+    existingInvoices: activeMonthlyInvoices,
+    category: normalizedCategory,
+    metadata: metadata && typeof metadata === "object" ? metadata : {},
+  });
+
+  if (conflictingMonthlyInvoice) {
+    const error = new Error(
+      `A ${normalizedCategory === "UTILITY_CHARGE" ? "utility" : "rent"} invoice already exists for this tenant in the selected billing period${conflictingMonthlyInvoice?.invoiceNumber ? ` (${conflictingMonthlyInvoice.invoiceNumber})` : ""}.`
+    );
+    error.statusCode = 409;
+    throw error;
+  }
 
   let postingAccount;
   try {

@@ -145,8 +145,8 @@ const TenantStatement = () => {
   const dispatch = useDispatch();
 
   const [activeTab, setActiveTab] = useState("statement");
-  const [startDate, setStartDate] = useState("2026-01-01");
-  const [endDate, setEndDate] = useState("2026-03-31");
+  const [startDate, setStartDate] = useState(() => `${new Date().getFullYear()}-01-01`);
+  const [endDate, setEndDate] = useState(() => formatInputDate(new Date()));
   const [transactionType, setTransactionType] = useState("ALL");
   const [reviewFormOpen, setReviewFormOpen] = useState(false);
   const [allocationTraceTarget, setAllocationTraceTarget] = useState(null);

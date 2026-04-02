@@ -120,22 +120,26 @@ const getMonthEndDate = (month, year) => {
   return new Date(y, monthIndex + 1, 0, 23, 59, 59, 999);
 };
 
-const getDefaultPeriodStart = ({ month, year, latestProcessedCutoffAt }) => {
+const getDefaultPeriodStart = ({ month, year, latestProcessedCutoffAt, propertyDateAcquired, todayIso }) => {
   const fallback = buildPeriod(month, year).periodStart;
-  if (!latestProcessedCutoffAt) return fallback;
 
-  const latestCutoff = new Date(latestProcessedCutoffAt);
-  if (Number.isNaN(latestCutoff.getTime())) return fallback;
-
-  const fallbackDate = new Date(fallback);
-  if (Number.isNaN(fallbackDate.getTime())) return fallback;
-
-  const selectedMonthEnd = getMonthEndDate(month, year);
-  if (latestCutoff.getTime() > selectedMonthEnd.getTime()) {
-    return fallback;
+  if (latestProcessedCutoffAt) {
+    const latestCutoff = new Date(latestProcessedCutoffAt);
+    if (!Number.isNaN(latestCutoff.getTime())) {
+      return toIsoDate(latestCutoff);
+    }
   }
 
-  return toIsoDate(latestCutoff.getTime() > fallbackDate.getTime() ? latestCutoff : fallbackDate);
+  if (propertyDateAcquired) {
+    const acquiredDate = new Date(propertyDateAcquired);
+    if (!Number.isNaN(acquiredDate.getTime())) {
+      acquiredDate.setHours(0, 0, 0, 0);
+      const todayStart = new Date(`${todayIso}T00:00:00`);
+      return toIsoDate(acquiredDate.getTime() > todayStart.getTime() ? todayStart : acquiredDate);
+    }
+  }
+
+  return fallback;
 };
 
 const isFutureIsoDate = (value, todayIso) => Boolean(value) && value > todayIso;
@@ -363,11 +367,13 @@ const Statements = () => {
         month,
         year,
         latestProcessedCutoffAt,
+        propertyDateAcquired: selectedProperty?.dateAcquired,
+        todayIso,
       })
     );
     setPeriodEnd("");
     setDraftStatement(null);
-  }, [month, year, selectedPropertyId, processedContextLoaded, latestProcessedCutoffAt]);
+  }, [month, year, selectedPropertyId, processedContextLoaded, latestProcessedCutoffAt, selectedProperty?.dateAcquired, todayIso]);
 
   const workspace = draftStatement?.metadata?.workspace || null;
   const summary = workspace?.summary || {};
@@ -754,11 +760,15 @@ const Statements = () => {
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 <p className="font-medium">Statement period rules</p>
                 <p className="mt-1">
-                  Period start anchors from the latest processed statement cut-off when available. The next statement begins immediately after that cut-off timestamp, so same-day transactions posted after processing flow into the next statement. Period end does not auto-fill and cannot be in the future.
+                  The first statement defaults its start date to the property acquisition date. After a statement is processed, the next statement starts immediately after the last processed cut-off timestamp, so any transaction posted moments later flows into the next statement automatically. Period end does not auto-fill and cannot be in the future.
                 </p>
                 {latestProcessedCutoffAt ? (
                   <p className="mt-2 text-amber-900">
                     Latest processed cut-off for this property: <span className="font-semibold">{formatDateTime(latestProcessedCutoffAt)}</span>
+                  </p>
+                ) : selectedProperty?.dateAcquired ? (
+                  <p className="mt-2 text-amber-900">
+                    First statement start anchor: <span className="font-semibold">{formatDate(selectedProperty.dateAcquired)}</span>
                   </p>
                 ) : null}
               </div>

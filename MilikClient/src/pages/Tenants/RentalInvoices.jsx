@@ -118,6 +118,38 @@ const formatPeriodLabel = (month, year) => {
 
 const getStartOfPeriod = (month, year) => new Date(year, month, 1);
 const getEndOfPeriod = (month, year) => new Date(year, month, 5);
+const isFutureBillingPeriod = (month, year) => {
+  const parsedMonth = Number(month);
+  const parsedYear = Number(year);
+  if (!Number.isFinite(parsedMonth) || !Number.isFinite(parsedYear)) return false;
+
+  const selectedPeriodStart = new Date(parsedYear, parsedMonth, 1, 0, 0, 0, 0);
+  if (Number.isNaN(selectedPeriodStart.getTime())) return false;
+
+  const now = new Date();
+  const currentPeriodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  return selectedPeriodStart.getTime() > currentPeriodStart.getTime();
+};
+
+const clampBillingPeriod = (month, year) => {
+  const now = new Date();
+  const fallback = { month: now.getMonth(), year: now.getFullYear() };
+  const parsedMonth = Number(month);
+  const parsedYear = Number(year);
+
+  if (!Number.isFinite(parsedMonth) || !Number.isFinite(parsedYear)) {
+    return fallback;
+  }
+
+  if (isFutureBillingPeriod(parsedMonth, parsedYear)) {
+    return fallback;
+  }
+
+  return {
+    month: parsedMonth,
+    year: parsedYear,
+  };
+};
 
 const buildCombinedInvoiceMetadata = ({ utilityAmount = 0, utilityLabel = "", periodLabel = "" } = {}) => {
   const normalizedUtilityLabel = String(utilityLabel || "").trim() || "Utility";
@@ -218,12 +250,16 @@ const RentalInvoices = () => {
   const [tenantInvoicesFromApi, setTenantInvoicesFromApi] = useState([]);
   const [invoiceRevenueAccounts, setInvoiceRevenueAccounts] = useState([]);
   const [deletingInvoiceIds, setDeletingInvoiceIds] = useState([]);
+  const [submittingSingleBooking, setSubmittingSingleBooking] = useState(false);
+  const [submittingBatchBooking, setSubmittingBatchBooking] = useState(false);
   const currentDate = new Date();
+  const currentBookingMonth = currentDate.getMonth();
+  const currentBookingYear = currentDate.getFullYear();
 
   const [singleBookingForm, setSingleBookingForm] = useState({
     tenantId: tenantId || "",
-    month: currentDate.getMonth(),
-    year: currentDate.getFullYear(),
+    month: currentBookingMonth,
+    year: currentBookingYear,
     billingMode: "combined",
     taxHandling: "company_default",
     taxCodeKey: "vat_standard",
@@ -232,8 +268,8 @@ const RentalInvoices = () => {
 
   const [batchBookingForm, setBatchBookingForm] = useState({
     propertyId: "all",
-    month: currentDate.getMonth(),
-    year: currentDate.getFullYear(),
+    month: currentBookingMonth,
+    year: currentBookingYear,
     billingMode: "combined",
     taxHandling: "company_default",
     taxCodeKey: "vat_standard",
@@ -273,6 +309,26 @@ const RentalInvoices = () => {
     if (!tenantId) return;
     setSingleBookingForm((prev) => ({ ...prev, tenantId }));
   }, [tenantId]);
+
+  useEffect(() => {
+    if (!isFutureBillingPeriod(singleBookingForm.month, singleBookingForm.year)) return;
+
+    setSingleBookingForm((prev) => ({
+      ...prev,
+      month: currentBookingMonth,
+      year: currentBookingYear,
+    }));
+  }, [singleBookingForm.month, singleBookingForm.year, currentBookingMonth, currentBookingYear]);
+
+  useEffect(() => {
+    if (!isFutureBillingPeriod(batchBookingForm.month, batchBookingForm.year)) return;
+
+    setBatchBookingForm((prev) => ({
+      ...prev,
+      month: currentBookingMonth,
+      year: currentBookingYear,
+    }));
+  }, [batchBookingForm.month, batchBookingForm.year, currentBookingMonth, currentBookingYear]);
 
   useEffect(() => {
     if (!currentCompany?._id) {
@@ -1327,67 +1383,78 @@ const visibleInvoiceKeys = useMemo(
     }
   };
   const handleSingleBooking = async () => {
-  console.log("handleSingleBooking fired");
+    if (submittingSingleBooking) return;
 
-  const selectedTenant = tenantLookup[singleBookingForm.tenantId];
+    const selectedTenant = tenantLookup[singleBookingForm.tenantId];
 
-  if (!selectedTenant) {
-    toast.error("Please select a tenant");
-    return;
-  }
-
-  const pricing = getTenantPricing(selectedTenant);
-  if (pricing.total <= 0) {
-    toast.error("Selected tenant has no billable rent/utility amount");
-    return;
-  }
-
-  try {
-    console.log("Selected tenant for booking:", selectedTenant);
-
-    const result = await createInvoiceForTenant(
-      selectedTenant,
-      Number(singleBookingForm.month),
-      Number(singleBookingForm.year),
-      singleBookingForm.billingMode,
-      getBookingTaxSelection(singleBookingForm)
-    );
-
-    console.log("Invoice booking result:", result);
-
-    if (!result.created && result.reason === "already_exists") {
-      toast.info(`Invoice for ${result.periodLabel} already exists for this tenant`);
+    if (!selectedTenant) {
+      toast.error("Please select a tenant");
       return;
     }
 
-    if (!result.created) {
-      toast.error(result.reason || "Failed to create booking");
+    if (isFutureBillingPeriod(singleBookingForm.month, singleBookingForm.year)) {
+      toast.error("Future invoicing is disabled. Select the current month or an earlier clean period.");
       return;
     }
 
-    toast.success(
-      `Booked ${result.invoiceIds.join(", ")} for ${getTenantDisplayName(selectedTenant)}`
-    );
+    const pricing = getTenantPricing(selectedTenant);
+    if (pricing.total <= 0) {
+      toast.error("Selected tenant has no billable rent/utility amount");
+      return;
+    }
 
-    setShowSingleBooking(false);
-    setBookingAction("");
-    window.dispatchEvent(new Event("invoicesUpdated"));
-    setRefreshTick((prev) => prev + 1);
-  } catch (error) {
-    console.error("Single booking failed:", error);
-    toast.error(
-      error?.response?.data?.error ||
-      error?.response?.data?.message ||
-      error?.message ||
-      "Failed to create invoice"
-    );
-  }
-};
+    setSubmittingSingleBooking(true);
+    try {
+      const result = await createInvoiceForTenant(
+        selectedTenant,
+        Number(singleBookingForm.month),
+        Number(singleBookingForm.year),
+        singleBookingForm.billingMode,
+        getBookingTaxSelection(singleBookingForm)
+      );
+
+      if (!result.created && result.reason === "already_exists") {
+        toast.info(`Invoice for ${result.periodLabel} already exists for this tenant`);
+        return;
+      }
+
+      if (!result.created) {
+        toast.error(result.reason || "Failed to create booking");
+        return;
+      }
+
+      toast.success(
+        `Booked ${result.invoiceIds.join(", ")} for ${getTenantDisplayName(selectedTenant)}`
+      );
+
+      setShowSingleBooking(false);
+      setBookingAction("");
+      window.dispatchEvent(new Event("invoicesUpdated"));
+      setRefreshTick((prev) => prev + 1);
+    } catch (error) {
+      console.error("Single booking failed:", error);
+      toast.error(
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to create invoice"
+      );
+    } finally {
+      setSubmittingSingleBooking(false);
+    }
+  };
 
   const handleBatchBooking = async () => {
+    if (submittingBatchBooking) return;
+
     const selectedPropertyId = batchBookingForm.propertyId;
     const month = Number(batchBookingForm.month);
     const year = Number(batchBookingForm.year);
+
+    if (isFutureBillingPeriod(month, year)) {
+      toast.error("Future invoicing is disabled. Select the current month or an earlier clean period.");
+      return;
+    }
 
     const eligibleTenants = tenantsFromStore.filter((tenant) => {
       const tenantStatus = String(tenant?.status || "active").toLowerCase();
@@ -1472,6 +1539,8 @@ const visibleInvoiceKeys = useMemo(
 
       return fallbackErrorMessage || "Batch booking failed";
     };
+
+    setSubmittingBatchBooking(true);
 
     try {
       for (const tenant of eligibleTenants) {
@@ -1682,6 +1751,8 @@ const visibleInvoiceKeys = useMemo(
           error?.message ||
           "Batch booking failed"
       );
+    } finally {
+      setSubmittingBatchBooking(false);
     }
   };
 
@@ -2203,12 +2274,19 @@ const visibleInvoiceKeys = useMemo(
                   <select
                     value={singleBookingForm.month}
                     onChange={(e) =>
-                      setSingleBookingForm((prev) => ({ ...prev, month: Number(e.target.value) }))
+                      setSingleBookingForm((prev) => {
+                        const nextPeriod = clampBillingPeriod(Number(e.target.value), prev.year);
+                        return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
+                      })
                     }
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
                   >
                     {MONTH_OPTIONS.map((monthOption) => (
-                      <option key={monthOption.value} value={monthOption.value}>
+                      <option
+                        key={monthOption.value}
+                        value={monthOption.value}
+                        disabled={isFutureBillingPeriod(monthOption.value, Number(singleBookingForm.year))}
+                      >
                         {monthOption.label}
                       </option>
                     ))}
@@ -2220,10 +2298,14 @@ const visibleInvoiceKeys = useMemo(
                   <input
                     type="number"
                     min="2000"
-                    max="2100"
+                    max={currentBookingYear}
                     value={singleBookingForm.year}
                     onChange={(e) =>
-                      setSingleBookingForm((prev) => ({ ...prev, year: Number(e.target.value) }))
+                      setSingleBookingForm((prev) => {
+                        const nextYear = Math.min(Number(e.target.value) || currentBookingYear, currentBookingYear);
+                        const nextPeriod = clampBillingPeriod(prev.month, nextYear);
+                        return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
+                      })
                     }
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
                   />
@@ -2355,9 +2437,10 @@ const visibleInvoiceKeys = useMemo(
                 </button>
                 <button
                   onClick={handleSingleBooking}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg text-white bg-[#0B3B2E] hover:bg-[#0A3127]"
+                  disabled={submittingSingleBooking}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Create Booking
+                  {submittingSingleBooking ? "Creating..." : "Create Booking"}
                 </button>
               </div>
             </div>
@@ -2408,12 +2491,19 @@ const visibleInvoiceKeys = useMemo(
                   <select
                     value={batchBookingForm.month}
                     onChange={(e) =>
-                      setBatchBookingForm((prev) => ({ ...prev, month: Number(e.target.value) }))
+                      setBatchBookingForm((prev) => {
+                        const nextPeriod = clampBillingPeriod(Number(e.target.value), prev.year);
+                        return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
+                      })
                     }
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
                   >
                     {MONTH_OPTIONS.map((monthOption) => (
-                      <option key={monthOption.value} value={monthOption.value}>
+                      <option
+                        key={monthOption.value}
+                        value={monthOption.value}
+                        disabled={isFutureBillingPeriod(monthOption.value, Number(batchBookingForm.year))}
+                      >
                         {monthOption.label}
                       </option>
                     ))}
@@ -2425,10 +2515,14 @@ const visibleInvoiceKeys = useMemo(
                   <input
                     type="number"
                     min="2000"
-                    max="2100"
+                    max={currentBookingYear}
                     value={batchBookingForm.year}
                     onChange={(e) =>
-                      setBatchBookingForm((prev) => ({ ...prev, year: Number(e.target.value) }))
+                      setBatchBookingForm((prev) => {
+                        const nextYear = Math.min(Number(e.target.value) || currentBookingYear, currentBookingYear);
+                        const nextPeriod = clampBillingPeriod(prev.month, nextYear);
+                        return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
+                      })
                     }
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
                   />
@@ -2531,9 +2625,10 @@ const visibleInvoiceKeys = useMemo(
                 </button>
                 <button
                   onClick={handleBatchBooking}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg text-white bg-[#0B3B2E] hover:bg-[#0A3127]"
+                  disabled={submittingBatchBooking}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Run Batch Booking
+                  {submittingBatchBooking ? "Running..." : "Run Batch Booking"}
                 </button>
               </div>
             </div>
