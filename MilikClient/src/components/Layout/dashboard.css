@@ -1,0 +1,91 @@
+/* dashboard.css */
+.windows-toolbar {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Windows-style scrollbar */
+.windows-scrollbar::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.windows-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.windows-scrollbar::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 6px;
+}
+
+.windows-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.dark .windows-scrollbar::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+.dark .windows-scrollbar::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
+
+.dark .windows-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Menu animations */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideRight {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Menu styles */
+.menu-dropdown {
+  animation: slideDown 0.2s ease-out;
+}
+
+.submenu-dropdown {
+  animation: slideRight 0.2s ease-out;
+}
+
+/* Windows-style button focus */
+button:focus {
+  outline: 2px solid #10b981;
+  outline-offset: 1px;
+}
+
+/* Dark mode adjustments */
+.dark .menu-dropdown,
+.dark .submenu-dropdown {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+/* Status bar style */
+.status-bar {
+  border-top: 1px solid #e5e7eb;
+  font-size: 12px;
+  padding: 2px 16px;
+}
+
+.dark .status-bar {
+  border-top-color: #374151;
+  background-color: #1f2937;
+}

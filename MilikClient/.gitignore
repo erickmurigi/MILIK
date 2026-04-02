@@ -1,0 +1,58 @@
+# Environment Variables
+.env
+.env.local
+.env.production
+.env.staging
+.env.*
+!.env.example
+!.env.sample
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Build and coverage artifacts
+build
+coverage
+.cache
+.parcel-cache
+
+# Package manager artifacts
+.pnpm-store
+.npm
+
+# Security-sensitive files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Local OS/app files
+Thumbs.db
+Desktop.ini
+# Archive / repo artifacts
+*.zip
+.git/
+

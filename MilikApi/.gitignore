@@ -1,0 +1,75 @@
+# Environment Variables
+.env
+.env.local
+.env.production
+.env.staging
+.env.*
+!.env.example
+!.env.sample
+
+# Dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory
+coverage/
+*.lcov
+.nyc_output/
+
+# Build outputs
+dist/
+build/
+
+# Local uploads and generated files
+uploads/
+tmp/
+temp/
+*.tmp
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS Files
+Thumbs.db
+Desktop.ini
+
+# Security-sensitive files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+
+# Database dumps/backups
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+
+# Testing
+.jest-cache/
+
+# Archive / repo artifacts
+*.zip
+.git/
+
