@@ -1553,6 +1553,7 @@ export const getTakeOnBalances = async (req, res) => {
 export const getTenantInvoicesList = async (req, res) => {
   try {
     const { tenant, business, status, category } = req.query;
+    const includeSnapshots = ["1", "true", "yes"].includes(String(req.query?.includeSnapshots || "").trim().toLowerCase());
     const businessId = ensureBusinessAccess(req, resolveAuthorizedBusinessId(req, business));
 
     const query = { business: businessId };
@@ -1581,7 +1582,42 @@ export const getTenantInvoicesList = async (req, res) => {
       notes
     );
 
-    return res.status(200).json(adjustedInvoices);
+    if (!includeSnapshots || adjustedInvoices.length === 0) {
+      return res.status(200).json(adjustedInvoices);
+    }
+
+    const tenantIds = [...new Set(
+      adjustedInvoices
+        .map((invoice) => normalizeEntityId(invoice?.tenant))
+        .filter(Boolean)
+    )];
+
+    const snapshotMap = await computeTenantInvoiceSnapshotsBatch({
+      businessId,
+      tenantIds,
+    });
+
+    const snapshotByInvoiceId = new Map();
+    snapshotMap.forEach(({ invoiceSnapshots = [] }) => {
+      invoiceSnapshots.forEach((snapshot) => {
+        snapshotByInvoiceId.set(String(snapshot._id), snapshot);
+      });
+    });
+
+    const hydratedInvoices = adjustedInvoices.map((invoice) => {
+      const snapshot = snapshotByInvoiceId.get(String(invoice._id));
+      if (!snapshot) return invoice;
+
+      return {
+        ...invoice,
+        appliedAmount: round2(Number(snapshot.applied || 0)),
+        outstanding: round2(Number(snapshot.outstanding || 0)),
+        remainingCreditableAmount: round2(Number(snapshot.remainingCreditableAmount || 0)),
+        computedStatus: snapshot.computedStatus || invoice.status,
+      };
+    });
+
+    return res.status(200).json(hydratedInvoices);
   } catch (err) {
     console.error("Failed to fetch tenant invoices:", err);
     return res.status(500).json({ error: "Failed to fetch tenant invoices" });

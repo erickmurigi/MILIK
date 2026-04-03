@@ -450,7 +450,7 @@ const Statements = () => {
     directToLandlordRows.length > 0 ||
     depositSettlementRows.length > 0 ||
     depositMemoRows.length > 0;
-  const statementColSpan = 8 + utilityColumns.length * 2;
+  const statementColSpan = 7 + utilityColumns.length * 2;
   const hasFuturePeriodDate =
     isFutureIsoDate(periodStart, todayIso) || isFutureIsoDate(periodEnd, todayIso);
   const hasValidPeriodSelection =
@@ -981,7 +981,7 @@ const Statements = () => {
                             </React.Fragment>
                           ))}
                           <th className="px-4 py-3 text-right font-semibold text-white">Total Paid</th>
-                          <th className="px-4 py-3 text-right font-semibold text-white">Balance</th>
+                          <th className="px-4 py-3 text-right font-semibold text-white">Balance C/F</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 bg-white">
@@ -1014,28 +1014,23 @@ const Statements = () => {
                             </tr>
                           ))
                         )}
-                      </tbody>
-                      <tfoot className="bg-slate-50">
-                        <tr>
-                          <td className="px-4 py-3 font-semibold text-slate-700" colSpan={2}>Total</td>
-                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.openingBalance)}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.invoicedRent)}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.paidRent)}</td>
-                          {utilityColumns.map((column) => {
-                            const utilityTotal = (Array.isArray(totals.utilities) ? totals.utilities : []).find(
-                              (item) => item?.key === column.key
-                            );
-                            return (
+                        {preparedRows.length > 0 ? (
+                          <tr className="bg-slate-50">
+                            <td colSpan={2} className="px-4 py-3 font-semibold text-slate-700">Total</td>
+                            <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
+                            <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
+                            <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
+                            {utilityColumns.map((column) => (
                               <React.Fragment key={`foot-${column.key}`}>
-                                <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(Number(utilityTotal?.invoiced || 0))}</td>
-                                <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(Number(utilityTotal?.paid || 0))}</td>
+                                <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(Number(column?.invoiced || 0))}</td>
+                                <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(Number(column?.paid || 0))}</td>
                               </React.Fragment>
-                            );
-                          })}
-                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.totalPaid)}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.closingBalance)}</td>
-                        </tr>
-                      </tfoot>
+                            ))}
+                            <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.totalPaid ?? 0)}</td>
+                            <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.closingBalance ?? summary.closingBalance ?? 0)}</td>
+                          </tr>
+                        ) : null}
+                      </tbody>
                     </table>
                   </div>
 

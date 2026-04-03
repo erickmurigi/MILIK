@@ -1,5 +1,7 @@
 import React from "react";
+import { useDispatch } from "react-redux";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import {
   FaArrowRight,
   FaBolt,
@@ -19,6 +21,8 @@ import {
   FaWallet,
 } from "react-icons/fa";
 import FreeTrialModal from "../../components/FreeTrialModal";
+import { loginSuccess } from "../../redux/authSlice";
+import { getCompanySuccess } from "../../redux/companiesRedux";
 import "./home.css";
 
 const heroHighlights = [
@@ -117,6 +121,7 @@ const erpSnapshots = [
 
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
 const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
+const API_BASE = String(import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
 
 function HeroWorkspaceVisual() {
   return (
@@ -257,17 +262,83 @@ function HeroWorkspaceVisual() {
 }
 
 function Home() {
+  const dispatch = useDispatch();
   const location = useLocation();
   const navigate = useNavigate();
   const [showTrialModal, setShowTrialModal] = React.useState(false);
   const [trialRole, setTrialRole] = React.useState("property_manager");
   const [activeFaq, setActiveFaq] = React.useState(null);
   const [demoExpiredNotice, setDemoExpiredNotice] = React.useState("");
+  const [restoringDemoAccess, setRestoringDemoAccess] = React.useState(false);
 
   const openTrialModal = (role = "property_manager") => {
     setTrialRole(role);
     setShowTrialModal(true);
   };
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const demoAccessToken = params.get("demoAccess");
+
+    if (!demoAccessToken) return undefined;
+
+    let cancelled = false;
+    setRestoringDemoAccess(true);
+
+    const restoreDemoAccess = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/trial/access`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: demoAccessToken }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || !data?.success || !data?.demoAvailable || !data?.token || !data?.user) {
+          throw new Error(data?.message || "Failed to restore demo access.");
+        }
+
+        if (cancelled) return;
+
+        dispatch(loginSuccess({ token: data.token, user: data.user }));
+
+        if (data.user?.company?._id) {
+          dispatch(getCompanySuccess(data.user.company));
+          localStorage.setItem("milik_active_company_id", data.user.company._id);
+        }
+
+        toast.success(data?.message || "Welcome back. Resuming your remaining demo time.");
+
+        params.delete("demoAccess");
+        const nextSearch = params.toString();
+        navigate(data.redirectTo || "/dashboard", { replace: true, state: { restoredFromDemoEmail: true, homeSearch: nextSearch ? `?${nextSearch}` : "" } });
+      } catch (error) {
+        if (cancelled) return;
+        const message = error?.message || "Failed to restore demo access.";
+        toast.error(message);
+        params.delete("demoAccess");
+        const nextSearch = params.toString();
+        navigate(
+          {
+            pathname: location.pathname,
+            search: nextSearch ? `?${nextSearch}` : "",
+          },
+          { replace: true }
+        );
+      } finally {
+        if (!cancelled) {
+          setRestoringDemoAccess(false);
+        }
+      }
+    };
+
+    restoreDemoAccess();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch, location.pathname, location.search, navigate]);
 
   React.useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -311,6 +382,11 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-[#f6f8f7] text-slate-900">
+      {restoringDemoAccess ? (
+        <div className="border-b border-[#0B3B2E]/10 bg-[#ECF6F1] px-4 py-3 text-sm text-[#0B3B2E]">
+          <div className="mx-auto max-w-7xl font-semibold sm:px-2">Opening your MILIK demo workspace...</div>
+        </div>
+      ) : null}
       {demoExpiredNotice ? (
         <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:px-2">

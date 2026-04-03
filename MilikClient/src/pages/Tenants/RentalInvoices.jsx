@@ -88,15 +88,11 @@ const getUnitDisplayName = (tenant) => {
   );
 };
 
-const formatDateDisplay = (dateValue) => {
+const formatDateDisplay = (dateValue, options = {}) => {
   if (!dateValue) return "-";
   const date = new Date(dateValue);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return date.toLocaleDateString("en-GB", options);
 };
 
 const escapeHtml = (value) =>
@@ -120,15 +116,15 @@ const formatPeriodLabel = (month, year) => {
   return `${date.toLocaleString("en-US", { month: "short" })} ${String(year).slice(-2)}`;
 };
 
-const formatBillingDateValue = (year, month, day) => {
-  const yyyy = String(Number(year) || new Date().getFullYear());
-  const mm = String(Number(month) + 1).padStart(2, "0");
-  const dd = String(Number(day)).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+const toPeriodDateString = (year, month, day) => {
+  const safeYear = Number(year);
+  const safeMonth = Number(month);
+  const safeDay = Number(day);
+  return `${String(safeYear).padStart(4, "0")}-${String(safeMonth + 1).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
 };
 
-const getStartOfPeriod = (month, year) => formatBillingDateValue(year, month, 1);
-const getEndOfPeriod = (month, year) => formatBillingDateValue(year, month, 5);
+const getStartOfPeriod = (month, year) => toPeriodDateString(year, month, 1);
+const getEndOfPeriod = (month, year) => toPeriodDateString(year, month, 5);
 const isFutureBillingPeriod = (month, year) => {
   const parsedMonth = Number(month);
   const parsedYear = Number(year);
@@ -940,7 +936,7 @@ const visibleInvoiceKeys = useMemo(
   const buildInvoiceHtml = (invoice) => {
     const amount = Number(invoice?.amount || 0).toLocaleString();
     const createdLabel = invoice?.createdAt
-      ? new Date(invoice.createdAt).toLocaleString()
+      ? new Date(invoice.createdAt).toLocaleString("en-GB")
       : invoice?.createdDate || "-";
 
     return `<!doctype html>

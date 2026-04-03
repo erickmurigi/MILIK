@@ -93,6 +93,7 @@ export async function sendTrialAccessEmail({ trialRequest, accessToken, demoExpi
 
   const transporter = buildSmtpTransporter();
   const from = resolveMailSender("TRIAL_FROM_EMAIL");
+  const replyTo = resolvePrimaryNotificationRecipient() || undefined;
   const publicHomeUrl = buildPublicHomeUrl();
   const accessLink = `${publicHomeUrl}?demoAccess=${encodeURIComponent(accessToken)}`;
   const expiresLabel = demoExpiresAt
@@ -103,33 +104,54 @@ export async function sendTrialAccessEmail({ trialRequest, accessToken, demoExpi
     : "within 3 days";
 
   const subject = resumedDemo
-    ? "Resume your MILIK demo workspace"
-    : "Your MILIK demo workspace access link";
+    ? "Resume your MILIK workspace"
+    : "Your MILIK demo workspace is ready";
 
   const text = [
     resumedDemo
-      ? "Your MILIK demo is still active. Use the access link below to re-enter your workspace."
-      : "Your MILIK demo workspace is ready. Use the access link below to enter the workspace.",
+      ? "Your MILIK demo workspace is still active. Use the secure link below to resume your remaining demo time."
+      : "Your MILIK demo workspace is ready. Use the secure link below to open the guided read-only workspace.",
     "",
-    `Access link: ${accessLink}`,
+    `Open workspace: ${accessLink}`,
     `Access expires: ${expiresLabel}`,
     "",
-    "The workspace is read-only and separated from live company data.",
+    "This workspace is read-only and kept separate from live company data.",
+    "If the button does not open directly, copy and paste the full link into your browser.",
   ].join("\n");
 
   const html = `
-    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827; max-width: 720px;">
-      <h2 style="margin: 0 0 16px; color: #0B3B2E;">${resumedDemo ? "Resume your demo" : "Your demo is ready"}</h2>
-      <p style="margin: 0 0 16px;">
-        ${resumedDemo
-          ? "Your MILIK demo workspace is still active. Use the button below to continue without filling the request form again."
-          : "Your MILIK demo workspace is ready. Use the button below to enter the guided read-only environment."}
-      </p>
-      <p style="margin: 0 0 20px;">
-        <a href="${accessLink}" style="display: inline-block; background: #0B3B2E; color: #ffffff; text-decoration: none; padding: 12px 20px; border-radius: 999px; font-weight: 700;">${resumedDemo ? "Resume Demo" : "Open Demo Workspace"}</a>
-      </p>
-      <p style="margin: 0 0 8px;"><strong>Access expires:</strong> ${expiresLabel}</p>
-      <p style="margin: 0; color: #475569;">This workspace stays read-only and separate from live company data.</p>
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827; max-width: 720px; margin: 0 auto;">
+      <div style="border: 1px solid #dbe6df; border-radius: 18px; overflow: hidden; background: #ffffff;">
+        <div style="padding: 22px 28px; background: linear-gradient(135deg, #0B3B2E 0%, #0E4C3D 100%); color: #ffffff;">
+          <div style="font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 700; opacity: 0.88;">MILIK</div>
+          <h2 style="margin: 10px 0 0; font-size: 24px; line-height: 1.25; color: #ffffff;">${resumedDemo ? "Resume your demo workspace" : "Your demo workspace is ready"}</h2>
+          <p style="margin: 12px 0 0; color: rgba(255,255,255,0.88); font-size: 14px;">
+            ${resumedDemo
+              ? "Your 3-day demo window is still active. Use the secure link below to return directly to the MILIK dashboard."
+              : "Enter the guided MILIK dashboard preview using the secure access link below. The environment remains read-only and separated from live company data."}
+          </p>
+        </div>
+        <div style="padding: 24px 28px 28px; background: #ffffff;">
+          <div style="margin: 0 0 18px; padding: 14px 16px; border-radius: 14px; background: #f6faf8; border: 1px solid #dbe9e2;">
+            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; color: #4a6b5e;">Access window</div>
+            <div style="margin-top: 6px; font-size: 15px; font-weight: 700; color: #0B3B2E;">Available until ${expiresLabel}</div>
+          </div>
+
+          <p style="margin: 0 0 18px;">
+            <a href="${accessLink}" style="display: inline-block; background: #0B3B2E; color: #ffffff !important; text-decoration: none; padding: 13px 22px; border-radius: 999px; font-weight: 700;">${resumedDemo ? "Resume Demo" : "Open Demo Workspace"}</a>
+          </p>
+
+          <p style="margin: 0 0 10px; color: #334155; font-size: 14px;">If the button does not open directly, use this secure link:</p>
+          <p style="margin: 0 0 18px; word-break: break-word; font-size: 13px; color: #0B3B2E;">${accessLink}</p>
+
+          <div style="padding: 14px 16px; border-radius: 14px; background: #fff8f1; border: 1px solid #f6d2bb;">
+            <div style="font-size: 12px; font-weight: 700; color: #c2410c; text-transform: uppercase; letter-spacing: 0.12em;">Important</div>
+            <p style="margin: 8px 0 0; font-size: 13px; color: #7c2d12;">
+              This demo workspace is read-only. It is designed for guided evaluation and does not mix with live company transactions or production records.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 
@@ -139,6 +161,11 @@ export async function sendTrialAccessEmail({ trialRequest, accessToken, demoExpi
     subject,
     text,
     html,
+    replyTo,
+    headers: {
+      "X-Auto-Response-Suppress": "OOF, AutoReply",
+      "Auto-Submitted": "auto-generated",
+    },
   });
 
   return {

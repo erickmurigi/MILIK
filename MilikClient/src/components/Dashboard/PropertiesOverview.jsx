@@ -1,14 +1,49 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
+import { adminRequests } from '../../utils/requestMethods';
 
 const PropertiesOverview = ({ darkMode }) => {
-  const properties = useSelector(state => state.property?.properties || []);
-  const units = useSelector(state => state.unit?.units || []);
-  const rentPayments = useSelector(state => state.rentPayment?.rentPayments || []);
-  const propertiesLoading = useSelector(state => state.property?.loading || state.property?.isFetching);
+  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser);
+  const properties = useSelector((state) => state.property?.properties || []);
+  const units = useSelector((state) => state.unit?.units || []);
+  const rentPayments = useSelector((state) => state.rentPayment?.rentPayments || []);
+  const propertiesLoading = useSelector((state) => state.property?.loading || state.property?.isFetching);
+
+  const [invoices, setInvoices] = useState([]);
+
+  const businessId =
+    currentCompany?._id ||
+    currentUser?.company?._id ||
+    (typeof currentUser?.company === 'string' ? currentUser.company : '');
+
+  useEffect(() => {
+    let active = true;
+
+    const loadInvoices = async () => {
+      if (!businessId) {
+        if (active) setInvoices([]);
+        return;
+      }
+
+      try {
+        const response = await adminRequests.get(`/tenant-invoices?business=${businessId}`);
+        if (!active) return;
+        const payload = response?.data;
+        setInvoices(Array.isArray(payload) ? payload : Array.isArray(payload?.invoices) ? payload.invoices : []);
+      } catch (_error) {
+        if (active) setInvoices([]);
+      }
+    };
+
+    loadInvoices();
+    return () => {
+      active = false;
+    };
+  }, [businessId]);
 
   const activeProperties = useMemo(
-    () => properties.filter((p) => !p?.status || p.status === 'active'),
+    () => properties.filter((p) => !p?.status || String(p.status).toLowerCase() === 'active'),
     [properties]
   );
 
@@ -22,33 +57,61 @@ const PropertiesOverview = ({ darkMode }) => {
     return value._id || null;
   };
 
-  const formatMoney = (value) => {
-    if (value >= 1000000) return `KSh ${(value / 1000000).toFixed(1)}M`;
-    if (value >= 1000) return `KSh ${(value / 1000).toFixed(1)}K`;
-    return `KSh ${Math.round(value).toLocaleString()}`;
+  const parseDate = (value) => {
+    const date = value ? new Date(value) : null;
+    return date && !Number.isNaN(date.getTime()) ? date : null;
+  };
+
+  const isActiveInvoice = (invoice) => {
+    const status = String(invoice?.status || '').toLowerCase();
+    return !['cancelled', 'reversed'].includes(status);
   };
 
   const isActivePayment = (payment) => {
-    const postingStatus = String(payment?.postingStatus || "").toLowerCase();
-    return !payment?.reversalOf && !payment?.isReversed && !payment?.isCancelled && postingStatus !== "reversed";
+    const postingStatus = String(payment?.postingStatus || '').toLowerCase();
+    return !payment?.reversalOf && !payment?.isReversed && !payment?.isCancelled && postingStatus !== 'reversed';
+  };
+
+  const amountFromInvoice = (invoice) =>
+    Number(invoice?.adjustedAmount ?? invoice?.netAmount ?? invoice?.amount ?? 0);
+
+  const formatMoney = (value) => {
+    const numeric = Number(value || 0);
+    if (numeric >= 1000000) return `KSh ${(numeric / 1000000).toFixed(1)}M`;
+    if (numeric >= 1000) return `KSh ${(numeric / 1000).toFixed(1)}K`;
+    return `KSh ${Math.round(numeric).toLocaleString()}`;
   };
 
   const propertiesWithStats = useMemo(() => {
     const propertyStats = activeProperties.map((property) => {
-      const propertyId = property._id;
-      const propertyUnits = units.filter((unit) => getId(unit.property) === propertyId);
-      const unitIds = new Set(propertyUnits.map((unit) => unit._id));
+      const propertyId = String(property._id || '');
+      const propertyUnits = units.filter((unit) => String(getId(unit.property) || '') === propertyId);
+      const unitIds = new Set(propertyUnits.map((unit) => String(unit._id)));
       const occupiedUnits = propertyUnits.filter((unit) => unit.status === 'occupied' || unit.isVacant === false).length;
       const vacantUnits = Math.max(propertyUnits.length - occupiedUnits, 0);
       const totalUnits = propertyUnits.length;
       const occupancyRate = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
-      const expectedRevenue = propertyUnits.reduce((sum, unit) => sum + Number(unit.rent || 0), 0);
 
-      const monthlyCollection = rentPayments
+      const periodInvoices = invoices.filter((invoice) => {
+        if (!isActiveInvoice(invoice)) return false;
+        if (!['RENT_CHARGE', 'UTILITY_CHARGE'].includes(String(invoice?.category || '').toUpperCase())) return false;
+
+        const invoicePropertyId = String(getId(invoice?.property) || '');
+        if (invoicePropertyId !== propertyId) return false;
+
+        const invoiceDate = parseDate(invoice?.invoiceDate || invoice?.createdAt);
+        if (!invoiceDate) return false;
+
+        return invoiceDate.getMonth() === currentMonth && invoiceDate.getFullYear() === currentYear;
+      });
+
+      const invoicedThisMonth = periodInvoices.reduce((sum, invoice) => sum + amountFromInvoice(invoice), 0);
+
+      const monthlyCollectionRaw = rentPayments
         .filter((payment) => {
-          const paymentDate = new Date(payment.paymentDate || payment.createdAt);
-          if (Number.isNaN(paymentDate.getTime())) return false;
-          const unitId = getId(payment.unit);
+          const paymentDate = parseDate(payment?.paymentDate || payment?.createdAt);
+          if (!paymentDate) return false;
+          const unitId = String(getId(payment?.unit) || '');
           return (
             unitId &&
             unitIds.has(unitId) &&
@@ -57,9 +120,11 @@ const PropertiesOverview = ({ darkMode }) => {
             isActivePayment(payment)
           );
         })
-        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+        .reduce((sum, payment) => sum + Math.abs(Number(payment?.amount || 0)), 0);
 
-      const collectionRate = expectedRevenue > 0 ? (monthlyCollection / expectedRevenue) * 100 : 0;
+      const monthlyCollection = invoicedThisMonth > 0 ? monthlyCollectionRaw : 0;
+      const collectionRate = invoicedThisMonth > 0 ? (monthlyCollection / invoicedThisMonth) * 100 : 0;
+      const invoicedStatus = invoicedThisMonth > 0 ? 'Invoiced' : 'Not invoiced';
 
       return {
         id: propertyId,
@@ -69,14 +134,15 @@ const PropertiesOverview = ({ darkMode }) => {
         occupiedUnits,
         vacantUnits,
         occupancyRate,
-        expectedRevenue,
+        expectedRevenue: invoicedThisMonth,
         monthlyCollection,
-        collectionRate
+        collectionRate,
+        invoicedStatus,
       };
     });
 
     return propertyStats.sort((a, b) => b.occupancyRate - a.occupancyRate);
-  }, [activeProperties, units, rentPayments, currentMonth, currentYear]);
+  }, [activeProperties, invoices, units, rentPayments, currentMonth, currentYear]);
 
   const portfolioOccupancy = useMemo(() => {
     const totalUnits = propertiesWithStats.reduce((sum, item) => sum + item.totalUnits, 0);
@@ -98,7 +164,7 @@ const PropertiesOverview = ({ darkMode }) => {
             Properties Overview
           </h2>
           <p className={`mt-1 text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-600'}`}>
-            Compact portfolio health snapshot.
+            Invoice-aware property billing and collection snapshot.
           </p>
         </div>
         <button className="text-xs font-bold text-[#31694E] hover:text-[#E85C0D] transition-colors uppercase tracking-wide">
@@ -141,9 +207,18 @@ const PropertiesOverview = ({ darkMode }) => {
                   <h4 className={`font-extrabold text-sm truncate ${darkMode ? 'text-gray-900' : 'text-slate-900'}`} title={property.name}>
                     {property.name}
                   </h4>
-                  <p className={`mt-0.5 text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                    {property.code}
-                  </p>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                      {property.code}
+                    </p>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                      property.expectedRevenue > 0
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {property.invoicedStatus}
+                    </span>
+                  </div>
                 </div>
                 <div className="text-right shrink-0">
                   <div className={`text-lg font-extrabold ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>{property.occupancyRate.toFixed(0)}%</div>
@@ -175,7 +250,7 @@ const PropertiesOverview = ({ darkMode }) => {
 
                 <div>
                   <div className="flex items-center justify-between text-[11px] mb-1">
-                    <span className={`${darkMode ? 'text-gray-500' : 'text-gray-600'} font-bold`}>Collection</span>
+                    <span className={`${darkMode ? 'text-gray-500' : 'text-gray-600'} font-bold`}>Collections this month</span>
                     <span className="font-extrabold text-[#E85C0D]">{formatMoney(property.monthlyCollection)} / {formatMoney(property.expectedRevenue)}</span>
                   </div>
                   <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
