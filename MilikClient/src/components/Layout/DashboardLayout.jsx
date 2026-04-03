@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Toaster } from "react-hot-toast";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
@@ -196,7 +196,28 @@ const TopToolbar = ({
 }) => {
   const [activeMenu, setActiveMenu] = useState(null);
   const [hoveredFinancialItem, setHoveredFinancialItem] = useState(null);
+  const hoverCloseTimerRef = useRef(null);
   const navigate = useNavigate();
+
+  const clearHoverCloseTimer = () => {
+    if (hoverCloseTimerRef.current) {
+      window.clearTimeout(hoverCloseTimerRef.current);
+      hoverCloseTimerRef.current = null;
+    }
+  };
+
+  const openHoveredFinancialItem = (menuId) => {
+    clearHoverCloseTimer();
+    setHoveredFinancialItem(menuId);
+  };
+
+  const closeHoveredFinancialItem = () => {
+    clearHoverCloseTimer();
+    hoverCloseTimerRef.current = window.setTimeout(() => {
+      setHoveredFinancialItem(null);
+      hoverCloseTimerRef.current = null;
+    }, 120);
+  };
 
   const isSystemAdminWorkspace = currentWorkspace === WORKSPACE_IDS.SYSTEM_ADMIN;
   const isCompanySetupWorkspace = currentWorkspace === WORKSPACE_IDS.COMPANY_SETUP;
@@ -502,7 +523,8 @@ const TopToolbar = ({
     if (route) {
       navigate(route);
       setActiveMenu(null);
-      setHoveredFinancialItem(null);
+      clearHoverCloseTimer();
+                    setHoveredFinancialItem(null);
     }
   };
 
@@ -534,8 +556,8 @@ const TopToolbar = ({
           darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
         }`}
         style={{ marginLeft: "0px" }}
-        onMouseEnter={() => setHoveredFinancialItem(menuId)}
-        onMouseLeave={() => setHoveredFinancialItem(null)}
+        onMouseEnter={() => openHoveredFinancialItem(menuId)}
+        onMouseLeave={closeHoveredFinancialItem}
       >
         <div
           style={{ backgroundColor: menuInfo.color }}
@@ -557,6 +579,7 @@ const TopToolbar = ({
                 <button
                   onClick={() => {
                     handleMenuItemClick(item.id);
+                    clearHoverCloseTimer();
                     setHoveredFinancialItem(null);
                   }}
                   className={`w-full text-left px-5 py-3 text-sm font-medium flex items-center space-x-3 transition-all duration-150 border-l-4 ${
@@ -608,8 +631,8 @@ const TopToolbar = ({
           darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
         }`}
         style={{ marginLeft: "0px" }}
-        onMouseEnter={() => setHoveredFinancialItem(categoryId)}
-        onMouseLeave={() => setHoveredFinancialItem(null)}
+        onMouseEnter={() => openHoveredFinancialItem(categoryId)}
+        onMouseLeave={closeHoveredFinancialItem}
       >
         <div
           style={{ backgroundColor: category.color }}
@@ -631,6 +654,7 @@ const TopToolbar = ({
                 <button
                   onClick={() => {
                     handleMenuItemClick(item.id);
+                    clearHoverCloseTimer();
                     setHoveredFinancialItem(null);
                   }}
                   className={`w-full text-left px-5 py-3 text-sm font-medium flex items-center space-x-3 transition-all duration-150 border-l-4 ${
@@ -677,10 +701,8 @@ const TopToolbar = ({
         <div
           key={item.id}
           className="relative"
-          onMouseEnter={() => setHoveredFinancialItem(item.id)}
-          onMouseLeave={() => {
-            setTimeout(() => setHoveredFinancialItem(null), 50);
-          }}
+          onMouseEnter={() => openHoveredFinancialItem(item.id)}
+          onMouseLeave={closeHoveredFinancialItem}
         >
           <button
             className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between transition-all duration-200 ${
@@ -710,10 +732,8 @@ const TopToolbar = ({
           {hoveredFinancialItem === item.id && nestedSubmenus[item.id] && (
             <div
               className="absolute left-full top-0 w-2 h-full pointer-events-auto"
-              onMouseEnter={() => setHoveredFinancialItem(item.id)}
-              onMouseLeave={() => {
-                setTimeout(() => setHoveredFinancialItem(null), 50);
-              }}
+              onMouseEnter={() => openHoveredFinancialItem(item.id)}
+              onMouseLeave={closeHoveredFinancialItem}
             />
           )}
 

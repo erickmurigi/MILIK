@@ -467,9 +467,9 @@ const ProcessedStatements = () => {
 
   return (
     <>
-      <DashboardLayout lockContentScroll>
-        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-4">
-          <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-4">
+      <DashboardLayout>
+        <div className="flex min-h-[calc(100vh-10rem)] flex-col bg-slate-50 p-4">
+          <div className="mx-auto flex w-full max-w-[98%] min-h-0 flex-1 flex-col gap-4">
             <div className="flex flex-shrink-0 items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">Processed Statements</h1>

@@ -104,6 +104,13 @@ const toIsoDate = (date) => {
   return `${y}-${m}-${day}`;
 };
 
+const resolveDayKey = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return toIsoDate(date);
+};
+
 const buildPeriod = (month, year) => {
   const monthIndex = Number(month) - 1;
   const y = Number(year);
@@ -505,27 +512,34 @@ const Statements = () => {
   };
 
   useEffect(() => {
-    if (!selectedPropertyId) {
+    if (!selectedPropertyId || !processedContextLoaded || !hasValidPeriodSelection) {
       setDraftStatement(null);
       return;
     }
 
-    if (!processedContextLoaded || !hasValidPeriodSelection) {
-      setDraftStatement(null);
-      return;
-    }
+    const statementMatchesSelection =
+      Boolean(draftStatement?._id) &&
+      normalizeId(draftStatement?.property) === normalizeId(selectedPropertyId) &&
+      normalizeId(draftStatement?.landlord) === normalizeId(landlordId) &&
+      resolveDayKey(draftStatement?.periodStart) === resolveDayKey(periodStart) &&
+      resolveDayKey(draftStatement?.periodEnd) === resolveDayKey(periodEnd);
 
-    loadDraftWorkspace();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!statementMatchesSelection) {
+      setDraftStatement(null);
+    }
   }, [
     selectedPropertyId,
     landlordId,
     periodStart,
     periodEnd,
-    statementType,
     currentCompany?._id,
     processedContextLoaded,
     hasValidPeriodSelection,
+    draftStatement?._id,
+    draftStatement?.property,
+    draftStatement?.landlord,
+    draftStatement?.periodStart,
+    draftStatement?.periodEnd,
   ]);
 
   const handleApprove = async () => {

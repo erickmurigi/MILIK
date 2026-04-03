@@ -178,6 +178,113 @@ const buildCombinedInvoiceMetadata = ({ utilityAmount = 0, utilityLabel = "", pe
   };
 };
 
+const buildUtilityInvoiceMetadata = (utilityLabel = "") => {
+  const normalizedUtilityLabel = String(utilityLabel || "").trim();
+  if (!normalizedUtilityLabel) return undefined;
+
+  return {
+    utilityType: normalizedUtilityLabel,
+    meterUtilityType: normalizedUtilityLabel,
+    statementUtilityType: normalizedUtilityLabel,
+  };
+};
+
+const normalizeInvoiceStatus = (status = "") => String(status || "").trim().toLowerCase();
+const isActiveInvoiceStatus = (status = "") => !["cancelled", "reversed"].includes(normalizeInvoiceStatus(status));
+
+const normalizeUtilityConflictKey = (value = "") =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const getInvoiceConflictBucket = ({ category, metadata = {} } = {}) => {
+  const normalizedCategory = String(category || "").trim().toUpperCase();
+
+  if (normalizedCategory === "RENT_CHARGE") {
+    return String(metadata?.billItemKey || "").trim().toLowerCase() === "rent_utility:combined"
+      ? "combined"
+      : "rent";
+  }
+
+  if (normalizedCategory === "UTILITY_CHARGE") {
+    const utilityKey = normalizeUtilityConflictKey(
+      metadata?.utilityType ||
+        metadata?.meterUtilityType ||
+        metadata?.statementUtilityType ||
+        metadata?.utilityName ||
+        metadata?.utility ||
+        ""
+    );
+
+    return utilityKey ? `utility:${utilityKey}` : "utility";
+  }
+
+  return "";
+};
+
+const isUtilityConflictBucket = (bucket = "") =>
+  bucket === "utility" || String(bucket || "").startsWith("utility:");
+
+const doInvoiceConflictBucketsOverlap = (requestedBucket = "", existingBucket = "") => {
+  if (!requestedBucket || !existingBucket) return false;
+
+  if (requestedBucket === "combined") {
+    return existingBucket === "combined" || existingBucket === "rent" || isUtilityConflictBucket(existingBucket);
+  }
+
+  if (requestedBucket === "rent") {
+    return existingBucket === "combined" || existingBucket === "rent";
+  }
+
+  if (isUtilityConflictBucket(requestedBucket)) {
+    if (existingBucket === "combined") return true;
+    if (!isUtilityConflictBucket(existingBucket)) return false;
+    if (requestedBucket === "utility" || existingBucket === "utility") return true;
+    return requestedBucket === existingBucket;
+  }
+
+  return false;
+};
+
+const isInvoiceInBillingPeriod = (dateRef, month, year) => {
+  if (!dateRef) return false;
+  const dt = new Date(dateRef);
+  if (Number.isNaN(dt.getTime())) return false;
+  return dt.getMonth() === Number(month) && dt.getFullYear() === Number(year);
+};
+
+const getActiveInvoicesForTenantPeriod = ({ invoices = [], tenantId, month, year }) =>
+  invoices.filter((invoice) => {
+    const invoiceTenantId = String(invoice?.tenant?._id || invoice?.tenant || "");
+    if (invoiceTenantId !== String(tenantId || "")) return false;
+    if (!isActiveInvoiceStatus(invoice?.status)) return false;
+
+    return isInvoiceInBillingPeriod(invoice?.invoiceDate || invoice?.createdAt, month, year);
+  });
+
+const hasBlockingInvoiceForRequest = ({
+  invoices = [],
+  tenantId,
+  month,
+  year,
+  category,
+  metadata,
+}) => {
+  const requestedBucket = getInvoiceConflictBucket({ category, metadata });
+  if (!requestedBucket) return false;
+
+  return getActiveInvoicesForTenantPeriod({ invoices, tenantId, month, year }).some((invoice) => {
+    const existingBucket = getInvoiceConflictBucket({
+      category: invoice?.category,
+      metadata: invoice?.metadata || {},
+    });
+
+    return doInvoiceConflictBucketsOverlap(requestedBucket, existingBucket);
+  });
+};
+
 const getBookingTaxSelection = (form = {}) => ({
   handling: form?.taxHandling || "company_default",
   taxCodeKey: form?.taxCodeKey || "vat_standard",
@@ -1287,29 +1394,37 @@ const visibleInvoiceKeys = useMemo(
     }
 
     const periodLabel = formatPeriodLabel(month, year);
-
-    const existingTenantInvoices = tenantInvoicesFromApi.filter((invoice) => {
-      const invoiceTenantId = String(invoice?.tenant?._id || invoice?.tenant || "");
-      if (invoiceTenantId !== String(targetTenant._id)) return false;
-
-      const dateRef = invoice?.invoiceDate || invoice?.createdAt;
-      if (!dateRef) return false;
-
-      const dt = new Date(dateRef);
-      if (Number.isNaN(dt.getTime())) return false;
-
-      return dt.getMonth() === Number(month) && dt.getFullYear() === Number(year);
-    });
-
-    if (existingTenantInvoices.length > 0) {
-      return { created: false, reason: "already_exists", periodLabel };
-    }
-
     const { rentAmount, utilityAmount, utilityLabel } = getTenantPricing(targetTenant);
     const createdInvoiceIds = [];
+    const utilityMetadata = buildUtilityInvoiceMetadata(utilityLabel);
 
     if (billingMode === "separate") {
-      if (rentAmount > 0) {
+      const shouldCreateRent =
+        rentAmount > 0 &&
+        !hasBlockingInvoiceForRequest({
+          invoices: tenantInvoicesFromApi,
+          tenantId: targetTenant._id,
+          month,
+          year,
+          category: "RENT_CHARGE",
+        });
+
+      const shouldCreateUtility =
+        utilityAmount > 0 &&
+        !hasBlockingInvoiceForRequest({
+          invoices: tenantInvoicesFromApi,
+          tenantId: targetTenant._id,
+          month,
+          year,
+          category: "UTILITY_CHARGE",
+          metadata: utilityMetadata,
+        });
+
+      if (!shouldCreateRent && !shouldCreateUtility) {
+        return { created: false, reason: "already_exists", periodLabel };
+      }
+
+      if (shouldCreateRent) {
         const createdInvoice = await createBackendInvoiceEntry({
           targetTenant,
           amount: rentAmount,
@@ -1323,7 +1438,7 @@ const visibleInvoiceKeys = useMemo(
         createdInvoiceIds.push(createdInvoice?.invoiceNumber || "AUTO");
       }
 
-      if (utilityAmount > 0) {
+      if (shouldCreateUtility) {
         const createdInvoice = await createBackendInvoiceEntry({
           targetTenant,
           amount: utilityAmount,
@@ -1333,13 +1448,7 @@ const visibleInvoiceKeys = useMemo(
           description: utilityLabel
             ? `${utilityLabel} charge (${periodLabel})`
             : `Utility charge (${periodLabel})`,
-          metadata: utilityLabel
-            ? {
-                utilityType: utilityLabel,
-                meterUtilityType: utilityLabel,
-                statementUtilityType: utilityLabel,
-              }
-            : undefined,
+          metadata: utilityMetadata,
           taxSelection,
         });
 
@@ -1347,32 +1456,50 @@ const visibleInvoiceKeys = useMemo(
       }
     } else {
       const combinedAmount = Number(rentAmount || 0) + Number(utilityAmount || 0);
+      const hasCombinedBlocker = hasBlockingInvoiceForRequest({
+        invoices: tenantInvoicesFromApi,
+        tenantId: targetTenant._id,
+        month,
+        year,
+        category: "RENT_CHARGE",
+        metadata: buildCombinedInvoiceMetadata({
+          utilityAmount,
+          utilityLabel,
+          periodLabel,
+        }),
+      });
 
-      if (combinedAmount > 0) {
-        const createdInvoice = await createBackendInvoiceEntry({
-          targetTenant,
-          amount: combinedAmount,
-          paymentType: "rent",
-          categoryOverride: "RENT_CHARGE",
-          month,
-          year,
-          description:
-            utilityAmount > 0
-              ? `Combined rent + utility charge (${periodLabel})`
-              : `Rent charge (${periodLabel})`,
-          metadata: buildCombinedInvoiceMetadata({
-            utilityAmount,
-            utilityLabel,
-            periodLabel,
-          }),
-          taxSelection,
-        });
-
-        createdInvoiceIds.push(createdInvoice?.invoiceNumber || "AUTO");
+      if (combinedAmount <= 0) {
+        return { created: false, reason: "No billable rent or utility entries found" };
       }
+
+      if (hasCombinedBlocker) {
+        return { created: false, reason: "already_exists", periodLabel };
+      }
+
+      const createdInvoice = await createBackendInvoiceEntry({
+        targetTenant,
+        amount: combinedAmount,
+        paymentType: "rent",
+        categoryOverride: "RENT_CHARGE",
+        month,
+        year,
+        description:
+          utilityAmount > 0
+            ? `Combined rent + utility charge (${periodLabel})`
+            : `Rent charge (${periodLabel})`,
+        metadata: buildCombinedInvoiceMetadata({
+          utilityAmount,
+          utilityLabel,
+          periodLabel,
+        }),
+        taxSelection,
+      });
+
+      createdInvoiceIds.push(createdInvoice?.invoiceNumber || "AUTO");
     }
 
-    return { created: true, invoiceIds: createdInvoiceIds, periodLabel, ledgerSynced: true };
+    return { created: createdInvoiceIds.length > 0, invoiceIds: createdInvoiceIds, periodLabel, ledgerSynced: true };
   };
 
   const handleBookingActionChange = (value) => {
@@ -1552,35 +1679,32 @@ const visibleInvoiceKeys = useMemo(
     try {
       for (const tenant of eligibleTenants) {
         const periodLabel = formatPeriodLabel(month, year);
-        const existingTenantInvoices = tenantInvoicesFromApi.filter((invoice) => {
-          const invoiceTenantId = String(invoice?.tenant?._id || invoice?.tenant || "");
-          if (invoiceTenantId !== String(tenant._id)) return false;
-
-          const dateRef = invoice?.invoiceDate || invoice?.createdAt;
-          if (!dateRef) return false;
-
-          const dt = new Date(dateRef);
-          if (Number.isNaN(dt.getTime())) return false;
-
-          return dt.getMonth() === month && dt.getFullYear() === year;
-        });
-
-        if (existingTenantInvoices.length > 0) {
-          skippedCount += 1;
-          continue;
-        }
-
         const { rentAmount, utilityAmount, utilityLabel } = getTenantPricing(tenant);
+        const utilityMetadata = buildUtilityInvoiceMetadata(utilityLabel);
 
         if (rentAmount <= 0 && utilityAmount <= 0) {
           continue;
         }
 
-        tenantsToProcess.push(tenant);
+        let tenantHasBatchItems = false;
 
         if (batchBookingForm.billingMode === "combined") {
           const combinedAmount = Number(rentAmount || 0) + Number(utilityAmount || 0);
-          if (combinedAmount > 0) {
+          const combinedMetadata = buildCombinedInvoiceMetadata({
+            utilityAmount,
+            utilityLabel,
+            periodLabel,
+          });
+          const hasCombinedBlocker = hasBlockingInvoiceForRequest({
+            invoices: tenantInvoicesFromApi,
+            tenantId: tenant._id,
+            month,
+            year,
+            category: "RENT_CHARGE",
+            metadata: combinedMetadata,
+          });
+
+          if (combinedAmount > 0 && !hasCombinedBlocker) {
             batchItems.push(
               buildInvoicePayloadForTenant({
                 targetTenant: tenant,
@@ -1593,17 +1717,35 @@ const visibleInvoiceKeys = useMemo(
                   utilityAmount > 0
                     ? `Combined rent + utility charge (${periodLabel})`
                     : `Rent charge (${periodLabel})`,
-                metadata: buildCombinedInvoiceMetadata({
-                  utilityAmount,
-                  utilityLabel,
-                  periodLabel,
-                }),
+                metadata: combinedMetadata,
                 taxSelection: getBookingTaxSelection(batchBookingForm),
               })
             );
+            tenantHasBatchItems = true;
           }
         } else {
-          if (rentAmount > 0) {
+          const shouldCreateRent =
+            rentAmount > 0 &&
+            !hasBlockingInvoiceForRequest({
+              invoices: tenantInvoicesFromApi,
+              tenantId: tenant._id,
+              month,
+              year,
+              category: "RENT_CHARGE",
+            });
+
+          const shouldCreateUtility =
+            utilityAmount > 0 &&
+            !hasBlockingInvoiceForRequest({
+              invoices: tenantInvoicesFromApi,
+              tenantId: tenant._id,
+              month,
+              year,
+              category: "UTILITY_CHARGE",
+              metadata: utilityMetadata,
+            });
+
+          if (shouldCreateRent) {
             batchItems.push(
               buildInvoicePayloadForTenant({
                 targetTenant: tenant,
@@ -1615,9 +1757,10 @@ const visibleInvoiceKeys = useMemo(
                 taxSelection: getBookingTaxSelection(batchBookingForm),
               })
             );
+            tenantHasBatchItems = true;
           }
 
-          if (utilityAmount > 0) {
+          if (shouldCreateUtility) {
             batchItems.push(
               buildInvoicePayloadForTenant({
                 targetTenant: tenant,
@@ -1628,18 +1771,20 @@ const visibleInvoiceKeys = useMemo(
                 description: utilityLabel
                   ? `${utilityLabel} charge (${periodLabel})`
                   : `Utility charge (${periodLabel})`,
-                metadata: utilityLabel
-                  ? {
-                      utilityType: utilityLabel,
-                      meterUtilityType: utilityLabel,
-                      statementUtilityType: utilityLabel,
-                    }
-                  : undefined,
+                metadata: utilityMetadata,
                 taxSelection: getBookingTaxSelection(batchBookingForm),
               })
             );
+            tenantHasBatchItems = true;
           }
         }
+
+        if (!tenantHasBatchItems) {
+          skippedCount += 1;
+          continue;
+        }
+
+        tenantsToProcess.push(tenant);
       }
 
       if (batchItems.length === 0 && skippedCount > 0) {

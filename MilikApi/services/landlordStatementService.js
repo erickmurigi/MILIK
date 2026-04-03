@@ -1573,34 +1573,16 @@ export const generateLandlordStatement = async ({
       return sum + Number(row?.perMonth || 0);
     }, 0)
   );
-  const hasNonBlankSettlementActivity =
-    round2(
-      Math.abs(totalRentInvoiced) +
-        Math.abs(totalRentReceived) +
-        Math.abs(totalUtilityInvoiced) +
-        Math.abs(totalUtilityCollected) +
-        Math.abs(totalExpenses) +
-        Math.abs(totalExtraDeductions) +
-        Math.abs(totalAdditions) +
-        Math.abs(openingLandlordSettlementBalance)
-    ) > 0;
 
-  if (commissionBase <= 0 && occupiedRentRoll > 0 && hasNonBlankSettlementActivity) {
-    commissionBase = occupiedRentRoll;
-    commissionBaseLabel =
-      recognitionBasis === "invoiced"
-        ? "Occupied rent roll fallback (accrual recovery)"
-        : recognitionBasis === "received_manager_only"
-        ? "Occupied rent roll fallback (manager recovery)"
-        : "Occupied rent roll fallback (landlord recovery)";
-  }
-
-  const commissionAmount = calculateCommissionAmount({
-    paymentMode: commissionPaymentMode,
-    percentage: commissionPct,
-    fixedAmount: commissionFixedAmount,
-    commissionBase,
-  });
+  const commissionAmount =
+    round2(commissionBase) > 0
+      ? calculateCommissionAmount({
+          paymentMode: commissionPaymentMode,
+          percentage: commissionPct,
+          fixedAmount: commissionFixedAmount,
+          commissionBase,
+        })
+      : 0;
 
   const commissionDescription = buildCommissionDescription({
     paymentMode: commissionPaymentMode,
