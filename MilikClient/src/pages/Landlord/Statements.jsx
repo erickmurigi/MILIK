@@ -450,7 +450,7 @@ const Statements = () => {
     directToLandlordRows.length > 0 ||
     depositSettlementRows.length > 0 ||
     depositMemoRows.length > 0;
-  const statementColSpan = 6 + utilityColumns.length * 2;
+  const statementColSpan = 8 + utilityColumns.length * 2;
   const hasFuturePeriodDate =
     isFutureIsoDate(periodStart, todayIso) || isFutureIsoDate(periodEnd, todayIso);
   const hasValidPeriodSelection =
@@ -967,6 +967,7 @@ const Statements = () => {
                         <tr>
                           <th className="sticky left-0 z-20 bg-[#0B3B2E] px-4 py-3 text-left font-semibold text-white">Unit</th>
                           <th className="sticky left-[120px] z-20 bg-[#0B3B2E] px-4 py-3 text-left font-semibold text-white">Tenant</th>
+                          <th className="px-4 py-3 text-right font-semibold text-white">Balance B/F</th>
                           <th className="px-4 py-3 text-right font-semibold text-white">Rent Invoiced</th>
                           <th className="px-4 py-3 text-right font-semibold text-white">Rent Paid</th>
                           {utilityColumns.map((column) => (
@@ -995,6 +996,7 @@ const Statements = () => {
                             <tr key={`${row.unitId || row.unitNumber || "row"}-${index}`}>
                               <td className="sticky left-0 z-10 bg-white px-4 py-3 text-slate-700">{row.unit || row.unitNumber || "-"}</td>
                               <td className="sticky left-[120px] z-10 bg-white px-4 py-3 text-slate-700">{row.tenantName || "-"}</td>
+                              <td className="px-4 py-3 text-right text-slate-700">{currency(row.openingBalance ?? row.balanceBF ?? 0)}</td>
                               <td className="px-4 py-3 text-right text-slate-700">{currency(row.invoicedRent)}</td>
                               <td className="px-4 py-3 text-right text-slate-700">{currency(row.paidRent)}</td>
                               {utilityColumns.map((column) => (
@@ -1008,11 +1010,32 @@ const Statements = () => {
                                 </React.Fragment>
                               ))}
                               <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(row.totalPaid)}</td>
-                              <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(row.balance)}</td>
+                              <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(row.closingBalance ?? row.balanceCF ?? row.balance ?? 0)}</td>
                             </tr>
                           ))
                         )}
                       </tbody>
+                      <tfoot className="bg-slate-50">
+                        <tr>
+                          <td className="px-4 py-3 font-semibold text-slate-700" colSpan={2}>Total</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.openingBalance)}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.invoicedRent)}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.paidRent)}</td>
+                          {utilityColumns.map((column) => {
+                            const utilityTotal = (Array.isArray(totals.utilities) ? totals.utilities : []).find(
+                              (item) => item?.key === column.key
+                            );
+                            return (
+                              <React.Fragment key={`foot-${column.key}`}>
+                                <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(Number(utilityTotal?.invoiced || 0))}</td>
+                                <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(Number(utilityTotal?.paid || 0))}</td>
+                              </React.Fragment>
+                            );
+                          })}
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.totalPaid)}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.closingBalance)}</td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
 

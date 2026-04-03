@@ -530,6 +530,11 @@ router.post("/", async (req, res) => {
     }
 
     if (activeDemoSession.hasDemoWindow) {
+      const accessEmailNotification = await dispatchDemoAccessEmail(trial, {
+        demoExpiresAt: activeDemoSession.demoExpiresAt,
+        resumedDemo: true,
+      });
+
       attachAuthCookie(res, activeDemoSession.token);
 
       return res.status(200).json({
@@ -544,6 +549,7 @@ router.post("/", async (req, res) => {
         trialRequestId: trial._id,
         demoExpiresAt: activeDemoSession.demoExpiresAt.toISOString(),
         emailNotification,
+        accessEmailNotification,
         demoSeed: activeDemoSession.demoSeed,
       });
     }

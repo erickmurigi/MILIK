@@ -92,7 +92,11 @@ const formatDateDisplay = (dateValue) => {
   if (!dateValue) return "-";
   const date = new Date(dateValue);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString();
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 };
 
 const escapeHtml = (value) =>
@@ -116,8 +120,15 @@ const formatPeriodLabel = (month, year) => {
   return `${date.toLocaleString("en-US", { month: "short" })} ${String(year).slice(-2)}`;
 };
 
-const getStartOfPeriod = (month, year) => new Date(year, month, 1);
-const getEndOfPeriod = (month, year) => new Date(year, month, 5);
+const formatBillingDateValue = (year, month, day) => {
+  const yyyy = String(Number(year) || new Date().getFullYear());
+  const mm = String(Number(month) + 1).padStart(2, "0");
+  const dd = String(Number(day)).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const getStartOfPeriod = (month, year) => formatBillingDateValue(year, month, 1);
+const getEndOfPeriod = (month, year) => formatBillingDateValue(year, month, 5);
 const isFutureBillingPeriod = (month, year) => {
   const parsedMonth = Number(month);
   const parsedYear = Number(year);
