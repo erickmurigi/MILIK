@@ -39,6 +39,9 @@ import trialRoutes from "./routes/trial.js";
 import companySettingsRoutes from "./routes/companySettings.js";
 import journalEntriesRoutes from "./routes/propertyRoutes/journalEntries.js";
 import financialReportsRoutes from "./routes/propertyRoutes/financialReports.js";
+import mpesaCollectionsRoutes from "./routes/propertyRoutes/mpesaCollections.js";
+import expenseRequisitionRoutes from "./routes/propertyRoutes/expenseRequisitions.js";
+import landlordStandingOrdersRoutes from "./routes/propertyRoutes/landlordStandingOrders.js";
 import { blockDemoWrites } from "./utils/demoAccess.js";
 import {
   canAccessCompanyId,
@@ -358,6 +361,7 @@ app.get("/api", (req, res) => {
       landlords: "/api/landlords",
       leases: "/api/leases",
       rentPayments: "/api/rent-payments",
+      mpesaCollections: "/api/mpesa-collections",
       maintenance: "/api/maintenances",
       expenses: "/api/propertyexpenses",
       utilities: "/api/utilities",
@@ -388,6 +392,9 @@ app.use("/api/late-penalties", latePenaltyRoutes);
 app.use("/api/units", unitRoutes);
 app.use("/api/tenants", tenantRoutes);
 app.use("/api/rent-payments", rentPaymentRoutes);
+app.use("/api/mpesa-collections", mpesaCollectionsRoutes);
+app.use("/api/expense-requisitions", expenseRequisitionRoutes);
+app.use("/api/landlord-standing-orders", landlordStandingOrdersRoutes);
 app.use("/api/maintenances", maintenanceRoutes);
 app.use("/api/leases", leaseRoutes);
 app.use("/api/propertyexpenses", expensePropertyRoutes);

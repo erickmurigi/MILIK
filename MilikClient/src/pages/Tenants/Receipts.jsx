@@ -940,54 +940,204 @@ const visibleReceiptIds = useMemo(
     setJournalDrawerOpen(true);
   };
 
+
   const handlePrintReceipt = (receipt) => {
     const tenantName = getTenantName(receipt, tenants);
     const unitName = getUnitName(receipt, tenants);
     const propertyName = getPropertyName(receipt, tenants);
     const companyName = currentCompany?.companyName || currentCompany?.name || "MILIK";
+    const companyEmail = currentCompany?.email || "";
+    const companyPhone = currentCompany?.phoneNo || currentCompany?.phone || "";
+    const companyTown = currentCompany?.town || "";
+    const companyLogo = currentCompany?.logo || "";
+    const safeLogoHtml = companyLogo
+      ? `<img src="${escapeHtml(companyLogo)}" alt="Company logo" style="max-height:64px;max-width:96px;object-fit:contain;" />`
+      : `<div style="height:64px;width:64px;border-radius:18px;background:#ecfdf5;color:#0B3B2E;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;">${escapeHtml(String(companyName || "M").slice(0, 1).toUpperCase())}</div>`;
 
-    const printWindow = window.open("", "_blank", "width=900,height=700");
+    const amount = Math.abs(Number(receipt?.amount || 0));
+    const allocationSummary = receipt?.allocationSummary || {};
+    const summaryRows = [
+      { label: "Rent", value: Number(allocationSummary.rent || 0) },
+      { label: "Utilities", value: Number(allocationSummary.utility || 0) },
+      { label: "Deposit", value: Number(allocationSummary.deposit || 0) },
+      { label: "Late penalty", value: Number(allocationSummary.latePenalty || 0) },
+      { label: "Debit note", value: Number(allocationSummary.debitNote || 0) },
+      { label: "Other", value: Number(allocationSummary.other || 0) },
+      { label: "Unapplied / prepayment", value: Number(allocationSummary.unapplied || 0) },
+    ].filter((row) => row.value > 0);
+
+    const allocationRows = Array.isArray(receipt?.allocations) ? receipt.allocations : [];
+    const allocationTable = allocationRows.length > 0
+      ? allocationRows
+          .map((row, index) => {
+            const invoiceRef = row?.invoiceNumber || row?.invoiceRef || row?.description || row?.invoice || `Line ${index + 1}`;
+            const category = getAllocationGroupLabel(row?.priorityGroup || row?.chargeType || row?.allocationGroup || "");
+            return `
+              <tr>
+                <td>${escapeHtml(String(index + 1))}</td>
+                <td>${escapeHtml(String(invoiceRef || "-"))}</td>
+                <td>${escapeHtml(String(category || "-"))}</td>
+                <td style="text-align:right;">KES ${Math.abs(Number(row?.appliedAmount || 0)).toLocaleString()}</td>
+              </tr>
+            `;
+          })
+          .join("")
+      : `
+          <tr>
+            <td>1</td>
+            <td colspan="2">Receipt captured without explicit allocation lines</td>
+            <td style="text-align:right;">KES ${amount.toLocaleString()}</td>
+          </tr>
+        `;
+
+    const breakdownHtml = summaryRows.length > 0
+      ? summaryRows
+          .map(
+            (row) => `
+              <div class="mini-row">
+                <span>${escapeHtml(row.label)}</span>
+                <strong>KES ${Math.abs(Number(row.value || 0)).toLocaleString()}</strong>
+              </div>
+            `
+          )
+          .join("")
+      : `
+          <div class="mini-row">
+            <span>Total receipt amount</span>
+            <strong>KES ${amount.toLocaleString()}</strong>
+          </div>
+        `;
+
+    const printWindow = window.open("", "_blank", "width=980,height=760");
     if (!printWindow) return;
 
     printWindow.document.write(`
       <html>
         <head>
-          <title>MILIK Receipt ${receipt.receiptNumber || ""}</title>
+          <title>${escapeHtml(companyName)} Receipt ${escapeHtml(receipt.receiptNumber || receipt.referenceNumber || "")}</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 24px; color: #1f2937; }
-            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 16px; }
-            .logo { height: 48px; width: 48px; border: 2px dashed #9ca3af; border-radius: 8px; display:flex; align-items:center; justify-content:center; color:#6b7280; font-size:11px; font-weight:700; }
-            .company { font-size: 20px; font-weight: 800; color: #0B3B2E; }
-            .title { font-size: 22px; font-weight: 700; color: #0B3B2E; margin-top: 8px; margin-bottom: 4px; }
-            .sub { color: #6b7280; margin-bottom: 16px; }
-            .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 12px; }
-            .row { display: flex; justify-content: space-between; padding: 6px 0; }
-            .label { color: #6b7280; }
-            .value { font-weight: 700; }
-            .amount { font-size: 24px; color: #0B3B2E; }
+            * { box-sizing: border-box; }
+            body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: #f8fafc; }
+            .page { width: 100%; padding: 28px; }
+            .sheet { background: white; border: 1px solid #e2e8f0; border-radius: 24px; padding: 28px; box-shadow: 0 10px 35px rgba(15, 23, 42, 0.08); }
+            .topbar { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; padding-bottom:20px; border-bottom:3px solid #0B3B2E; }
+            .company-name { font-size: 28px; font-weight: 900; letter-spacing: -0.03em; color: #0B3B2E; }
+            .company-meta { margin-top: 6px; font-size: 12px; color: #475569; line-height: 1.6; }
+            .badge { display:inline-flex; margin-top: 10px; padding: 6px 12px; border-radius:999px; background:#ecfdf5; color:#0B3B2E; font-size:11px; font-weight:800; letter-spacing:0.18em; text-transform:uppercase; }
+            .title-row { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-top:24px; }
+            .title h1 { margin:0; font-size:30px; color:#0f172a; letter-spacing:-0.03em; }
+            .title p { margin:6px 0 0; color:#64748b; font-size:13px; }
+            .amount-card { min-width: 230px; border-radius: 20px; background: linear-gradient(135deg, #0B3B2E, #153f35); color: white; padding: 18px 20px; }
+            .amount-card .label { font-size: 11px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.86; }
+            .amount-card .value { margin-top: 10px; font-size: 30px; font-weight: 900; }
+            .grid { display:grid; grid-template-columns: 1.15fr 0.85fr; gap:18px; margin-top:22px; }
+            .card { border:1px solid #e2e8f0; border-radius:18px; padding:18px; }
+            .card h2 { margin:0 0 14px; font-size:14px; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:#475569; }
+            .info-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px 16px; }
+            .info-item span { display:block; font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:#64748b; }
+            .info-item strong { display:block; margin-top:6px; font-size:14px; color:#0f172a; }
+            .mini-row { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #e2e8f0; font-size:13px; }
+            .mini-row:last-child { border-bottom:none; padding-bottom:0; }
+            table { width:100%; border-collapse: collapse; margin-top: 6px; }
+            th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.14em; color:#64748b; background:#f8fafc; padding:10px 12px; border-bottom:1px solid #e2e8f0; }
+            td { padding:10px 12px; border-bottom:1px solid #e2e8f0; font-size:13px; }
+            tbody tr:last-child td { border-bottom:none; }
+            .footer { margin-top:24px; display:flex; justify-content:space-between; gap:20px; align-items:flex-start; border-top:1px solid #e2e8f0; padding-top:18px; color:#64748b; font-size:12px; }
+            .note { max-width: 60%; line-height:1.6; }
+            .signature { min-width:220px; text-align:right; }
+            .signature-line { margin-top:38px; border-top:1px solid #94a3b8; padding-top:8px; color:#334155; }
+            @media print {
+              body { background: white; }
+              .page { padding: 0; }
+              .sheet { border: none; box-shadow: none; border-radius: 0; padding: 12px; }
+            }
           </style>
         </head>
         <body>
-          <div class="header">
-            <div>
-              <div class="company">${escapeHtml(companyName)}</div>
-              <div class="sub">Property Management System</div>
+          <div class="page">
+            <div class="sheet">
+              <div class="topbar">
+                <div>
+                  <div class="company-name">${escapeHtml(companyName)}</div>
+                  <div class="company-meta">
+                    ${companyTown ? `${escapeHtml(companyTown)}<br/>` : ""}
+                    ${companyPhone ? `${escapeHtml(companyPhone)}<br/>` : ""}
+                    ${companyEmail ? `${escapeHtml(companyEmail)}` : ""}
+                  </div>
+                  <div class="badge">${escapeHtml(getReceiptDisplayType(receipt))}</div>
+                </div>
+                <div>${safeLogoHtml}</div>
+              </div>
+
+              <div class="title-row">
+                <div class="title">
+                  <h1>Official Receipt</h1>
+                  <p>This receipt confirms collection captured in MILIK and is intended for customer-facing use.</p>
+                </div>
+                <div class="amount-card">
+                  <div class="label">Receipt amount</div>
+                  <div class="value">KES ${amount.toLocaleString()}</div>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="card">
+                  <h2>Receipt details</h2>
+                  <div class="info-grid">
+                    <div class="info-item"><span>Receipt number</span><strong>${escapeHtml(receipt.receiptNumber || "-")}</strong></div>
+                    <div class="info-item"><span>Reference number</span><strong>${escapeHtml(receipt.referenceNumber || "-")}</strong></div>
+                    <div class="info-item"><span>Receipt date</span><strong>${escapeHtml(formatDate(receipt.paymentDate))}</strong></div>
+                    <div class="info-item"><span>Banking date</span><strong>${escapeHtml(formatDate(receipt.bankingDate))}</strong></div>
+                    <div class="info-item"><span>Payment method</span><strong>${escapeHtml(String(receipt.paymentMethod || "-").replaceAll("_", " "))}</strong></div>
+                    <div class="info-item"><span>Cashbook</span><strong>${escapeHtml(getCashbookLabel(receipt))}</strong></div>
+                    <div class="info-item"><span>Status</span><strong>${receipt.isConfirmed ? "Confirmed" : "Pending confirmation"}</strong></div>
+                    <div class="info-item"><span>Posting status</span><strong>${escapeHtml(String(receipt.postingStatus || "unposted").replaceAll("_", " "))}</strong></div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <h2>Payer and property</h2>
+                  <div class="info-grid">
+                    <div class="info-item"><span>Tenant</span><strong>${escapeHtml(tenantName)}</strong></div>
+                    <div class="info-item"><span>Unit</span><strong>${escapeHtml(unitName)}</strong></div>
+                    <div class="info-item"><span>Property</span><strong>${escapeHtml(propertyName)}</strong></div>
+                    <div class="info-item"><span>Receipt type</span><strong>${escapeHtml(getReceiptDisplayType(receipt))}</strong></div>
+                  </div>
+                  <div style="margin-top:16px;">
+                    <h2 style="margin-bottom:8px;">Allocation summary</h2>
+                    ${breakdownHtml}
+                  </div>
+                </div>
+              </div>
+
+              <div class="card" style="margin-top:18px;">
+                <h2>Allocation lines</h2>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width:64px;">#</th>
+                      <th>Reference</th>
+                      <th>Category</th>
+                      <th style="text-align:right;">Applied amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${allocationTable}
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="footer">
+                <div class="note">
+                  <strong style="display:block; color:#0f172a; margin-bottom:6px;">Narration / notes</strong>
+                  ${escapeHtml(receipt?.description || "No additional description captured for this receipt.")}
+                </div>
+                <div class="signature">
+                  <div>Generated on ${escapeHtml(new Date().toLocaleString())}</div>
+                  <div class="signature-line">Authorized collection record</div>
+                </div>
+              </div>
             </div>
-            <div class="logo">LOGO</div>
-          </div>
-          <div class="title">MILIK RECEIPT</div>
-          <div class="sub">Professional property receipt statement</div>
-          <div class="card">
-            <div class="row"><span class="label">Receipt #</span><span class="value">${escapeHtml(receipt.receiptNumber || "-")}</span></div>
-            <div class="row"><span class="label">Reference #</span><span class="value">${escapeHtml(receipt.referenceNumber || "-")}</span></div>
-            <div class="row"><span class="label">Date</span><span class="value">${formatDate(receipt.paymentDate)}</span></div>
-            <div class="row"><span class="label">Tenant</span><span class="value">${escapeHtml(tenantName)}</span></div>
-            <div class="row"><span class="label">Property</span><span class="value">${escapeHtml(propertyName)}</span></div>
-            <div class="row"><span class="label">Unit</span><span class="value">${escapeHtml(unitName)}</span></div>
-            <div class="row"><span class="label">Payment Type</span><span class="value">${escapeHtml(receipt.paymentType || "-")}</span></div>
-            <div class="row"><span class="label">Method</span><span class="value">${escapeHtml(receipt.paymentMethod || "-")}</span></div>
-            <div class="row"><span class="label">Status</span><span class="value">${receipt.isConfirmed ? "Confirmed" : "Pending"}</span></div>
-            <div class="row"><span class="label">Amount</span><span class="value amount">Ksh ${Math.abs(Number(receipt.amount || 0)).toLocaleString()}</span></div>
           </div>
         </body>
       </html>

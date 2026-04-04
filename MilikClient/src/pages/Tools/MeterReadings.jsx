@@ -567,7 +567,7 @@ const MeterReadings = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-        <div className="mx-auto max-w-7xl space-y-6">
+        <div className="mx-auto space-y-6" style={{ maxWidth: "96%" }}>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>

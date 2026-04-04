@@ -94,6 +94,11 @@ const AddReceipt = () => {
   const [searchParams] = useSearchParams();
 
   const preselectedTenantId = searchParams.get("tenant") || "";
+  const prefilledAmount = searchParams.get("amount") || "";
+  const prefilledReference = searchParams.get("reference") || "";
+  const prefilledMethod = searchParams.get("paymentMethod") || searchParams.get("method") || "";
+  const prefilledPaymentType = searchParams.get("paymentType") || "";
+  const prefilledDescription = searchParams.get("description") || "";
   const { currentCompany } = useSelector((state) => state.company || {});
   const rawProperties = useSelector((state) => state.property?.properties);
   const rawTenants = useSelector((state) => state.tenant?.tenants);
@@ -106,17 +111,17 @@ const AddReceipt = () => {
   const [formData, setFormData] = useState({
     propertyId: "",
     tenantId: preselectedTenantId,
-    amount: "",
-    paymentType: "rent",
-    paymentMethod: "mobile_money",
+    amount: prefilledAmount,
+    paymentType: ["rent", "deposit", "utility", "late_fee", "other"].includes(prefilledPaymentType) ? prefilledPaymentType : "rent",
+    paymentMethod: ["bank_transfer", "mobile_money", "cash", "check", "credit_card"].includes(prefilledMethod) ? prefilledMethod : "mobile_money",
     cashbook: "Main Cashbook",
     paidDirectToLandlord: false,
     paymentDate: todayInput(),
     dueDate: todayInput(),
-    referenceNumber: "",
+    referenceNumber: prefilledReference,
     bankingDate: todayInput(),
     recordDate: todayInput(),
-    description: "",
+    description: prefilledDescription,
     isConfirmed: false,
   });
   const [priorityInvoiceKeys, setPriorityInvoiceKeys] = useState([]);
@@ -364,6 +369,15 @@ const AddReceipt = () => {
     }));
   };
 
+
+  const labelClass = "text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-700";
+  const inputClass =
+    "w-full mt-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10";
+  const sectionCardClass = "rounded-2xl border border-slate-200 bg-white shadow-sm";
+  const preventWheelValueChange = (event) => {
+    event.currentTarget.blur();
+  };
+
   const handleSubmit = async () => {
     if (!currentCompany?._id) {
       toast.error("No active company selected");
@@ -435,20 +449,25 @@ const AddReceipt = () => {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
-        <div className="mx-auto max-w-5xl">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-white p-4 md:p-6">
+        <div className="mx-auto max-w-6xl">
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
+            <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-4 py-4 md:px-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <button
                 onClick={() => navigate(preselectedTenantId ? `/receipts/${preselectedTenantId}` : "/receipts")}
-                className="text-slate-600 hover:text-slate-900 flex items-center gap-2 font-semibold text-sm"
+                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
               >
                 <FaArrowLeft /> Back to Receipts
               </button>
-              <h1 className="text-sm md:text-base font-bold text-slate-900 uppercase tracking-wide">
-                Add Receipt
-              </h1>
+                <div className="text-white md:text-right">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-100">Rental Receipting</p>
+                  <h1 className="mt-1 text-xl font-black tracking-tight md:text-2xl">Add Receipt</h1>
+                  <p className="mt-1 text-sm text-slate-200">Capture tenant collections cleanly, allocate safely, and preserve ledger integrity.</p>
+                </div>
+              </div>
             </div>
+            <div className="p-4 md:p-6">
 
             {formData.tenantId && (
               <div className="mb-3 space-y-2">
@@ -636,13 +655,22 @@ const AddReceipt = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+              <div className={`${sectionCardClass} p-4 md:p-5`}>
+                <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Receipt details</p>
+                    <h2 className="mt-1 text-lg font-black text-slate-900">Collection information</h2>
+                  </div>
+                  <div className="rounded-full bg-[#0B3B2E]/8 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[#0B3B2E]">Posting-safe entry</div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-semibold text-slate-700">Property *</label>
+                <label className={labelClass}>Property *</label>
                 <select
                   value={formData.propertyId}
                   onChange={(e) => onPropertyChange(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                  className={inputClass}
                 >
                   <option value="">Select property</option>
                   {properties.map((property) => (
@@ -654,11 +682,11 @@ const AddReceipt = () => {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Tenant *</label>
+                <label className={labelClass}>Tenant *</label>
                 <select
                   value={formData.tenantId}
                   onChange={(e) => setFormData((prev) => ({ ...prev, tenantId: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                  className={inputClass}
                   disabled={!formData.propertyId}
                 >
                   <option value="">{formData.propertyId ? "Select tenant" : "Select property first"}</option>
@@ -671,7 +699,7 @@ const AddReceipt = () => {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Amount *</label>
+                <label className={labelClass}>Amount *</label>
                 <input
                   type="number"
                   min="0"
@@ -679,27 +707,28 @@ const AddReceipt = () => {
                   inputMode="decimal"
                   value={formData.amount}
                   onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  onWheel={preventWheelValueChange}
+                  className={`${inputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Reference Number</label>
+                <label className={labelClass}>Reference Number</label>
                 <input
                   type="text"
                   value={formData.referenceNumber}
                   onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                  className={inputClass}
                   placeholder="Bank ref / MPESA code"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Payment Type *</label>
+                <label className={labelClass}>Payment Type *</label>
                 <select
                   value={formData.paymentType}
                   onChange={(e) => setFormData((prev) => ({ ...prev, paymentType: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                  className={inputClass}
                 >
                   <option value="rent">Rent</option>
                   <option value="deposit">Deposit</option>
@@ -710,11 +739,11 @@ const AddReceipt = () => {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Payment Method *</label>
+                <label className={labelClass}>Payment Method *</label>
                 <select
                   value={formData.paymentMethod}
                   onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                  className={inputClass}
                 >
                   <option value="mobile_money">Mobile Money</option>
                   <option value="bank_transfer">Bank Transfer</option>
@@ -725,7 +754,7 @@ const AddReceipt = () => {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">
+                <label className={labelClass}>
                   {isDirectToLandlord ? "Cashbook" : "Cashbook *"}
                 </label>
                 {isDirectToLandlord ? (
@@ -737,7 +766,7 @@ const AddReceipt = () => {
                     <select
                       value={formData.cashbook}
                       onChange={(e) => setFormData((prev) => ({ ...prev, cashbook: e.target.value }))}
-                      className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                      className={inputClass}
                     >
                       {cashbookOptions.map((option) => (
                         <option key={option._id || option.name} value={option.name}>
@@ -753,52 +782,52 @@ const AddReceipt = () => {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Payment Date *</label>
+                <label className={labelClass}>Payment Date *</label>
                 <input
                   type="date"
                   value={formData.paymentDate}
                   onChange={(e) => setFormData((prev) => ({ ...prev, paymentDate: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Due Date *</label>
+                <label className={labelClass}>Due Date *</label>
                 <input
                   type="date"
                   value={formData.dueDate}
                   onChange={(e) => setFormData((prev) => ({ ...prev, dueDate: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Banking Date</label>
+                <label className={labelClass}>Banking Date</label>
                 <input
                   type="date"
                   value={formData.bankingDate}
                   onChange={(e) => setFormData((prev) => ({ ...prev, bankingDate: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Record Date</label>
+                <label className={labelClass}>Record Date</label>
                 <input
                   type="date"
                   value={formData.recordDate}
                   onChange={(e) => setFormData((prev) => ({ ...prev, recordDate: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                  className={inputClass}
                 />
               </div>
 
               <div className="md:col-span-2">
-                <label className="text-xs font-semibold text-slate-700">Description</label>
+                <label className={labelClass}>Description</label>
                 <textarea
                   rows={3}
                   value={formData.description}
                   onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                  className={inputClass}
                   placeholder="Optional notes"
                 />
               </div>
@@ -816,7 +845,7 @@ const AddReceipt = () => {
                     }))
                   }
                 />
-                <label htmlFor="paidDirectToLandlord" className="text-xs font-semibold text-slate-700">
+                <label htmlFor="paidDirectToLandlord" className={labelClass}>
                   Direct to landlord receipt (do not post to MILIK cashbook)
                 </label>
               </div>
@@ -828,28 +857,48 @@ const AddReceipt = () => {
                   checked={formData.isConfirmed}
                   onChange={(e) => setFormData((prev) => ({ ...prev, isConfirmed: e.target.checked }))}
                 />
-                <label htmlFor="isConfirmed" className="text-xs font-semibold text-slate-700">
+                <label htmlFor="isConfirmed" className={labelClass}>
                   Mark as confirmed
                 </label>
+              </div>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className={`${sectionCardClass} p-4 md:p-5`}>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Posting controls</p>
+                  <h2 className="mt-1 text-lg font-black text-slate-900">Receipt status and notes</h2>
+                  <p className="mt-1 text-sm text-slate-600">Use these controls only when you are ready for the receipt to participate in operational reporting and downstream posting actions.</p>
+                  <div className="mt-4 space-y-4">
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      <p className="font-bold">Reference discipline</p>
+                      <p className="mt-1 text-amber-800">Use the bank reference, M-Pesa code, or teller reference exactly as received so duplicates remain easy to detect during reconciliation.</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                      <p className="font-bold text-slate-900">Receipt amount wheel lock</p>
+                      <p className="mt-1">Mouse-wheel changes on the Amount field are disabled to prevent accidental edits while scrolling.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => navigate(preselectedTenantId ? `/receipts/${preselectedTenantId}` : "/receipts")}
-                className="px-4 py-2 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
+                className="rounded-xl border border-slate-300 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmit}
-                className={`px-4 py-2 text-xs rounded-md text-white font-semibold flex items-center gap-2 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
               >
                 <FaSave /> Save Receipt
               </button>
             </div>
           </div>
         </div>
+      </div>
       </div>
     </DashboardLayout>
   );

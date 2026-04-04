@@ -2333,3 +2333,61 @@ export const sendCommunicationMessage = async (payload) => {
   const res = await adminRequests.post('/communications/send', payload);
   return res.data;
 };
+
+
+export const listMpesaCollections = async ({ business, status = "", source = "", shortCode = "", search = "" } = {}) => {
+  const params = {};
+  if (business) params.business = business;
+  if (status) params.status = status;
+  if (source) params.source = source;
+  if (shortCode) params.shortCode = shortCode;
+  if (search) params.search = search;
+  const res = await adminRequests.get("/mpesa-collections", { params });
+  return res?.data?.data || [];
+};
+
+export const importMpesaBatch = async ({ business, rawText, shortCode = "" } = {}) => {
+  const res = await adminRequests.post("/mpesa-collections/import-batch", { business, rawText, shortCode });
+  return res?.data?.data || res?.data || {};
+};
+
+
+export const listExpenseRequisitions = async (params = {}) => {
+  const res = await adminRequests.get("/expense-requisitions", { params });
+  return res?.data?.data || [];
+};
+
+export const createExpenseRequisition = async (payload = {}) => {
+  const res = await adminRequests.post("/expense-requisitions", payload);
+  return res?.data?.data || res?.data || {};
+};
+
+export const updateExpenseRequisition = async (id, payload = {}) => {
+  const res = await adminRequests.put(`/expense-requisitions/${id}`, payload);
+  return res?.data?.data || res?.data || {};
+};
+
+export const deleteExpenseRequisition = async (id, params = {}) => {
+  const res = await adminRequests.delete(`/expense-requisitions/${id}`, { params });
+  return res?.data || {};
+};
+
+export const listLandlordStandingOrders = async (params = {}) => {
+  const res = await adminRequests.get("/landlord-standing-orders", { params });
+  return res?.data?.data || [];
+};
+
+export const createLandlordStandingOrder = async (payload = {}) => {
+  const res = await adminRequests.post("/landlord-standing-orders", payload);
+  return res?.data?.data || res?.data || {};
+};
+
+export const updateLandlordStandingOrder = async (id, payload = {}) => {
+  const res = await adminRequests.put(`/landlord-standing-orders/${id}`, payload);
+  return res?.data?.data || res?.data || {};
+};
+
+export const deleteLandlordStandingOrder = async (id, params = {}) => {
+  const res = await adminRequests.delete(`/landlord-standing-orders/${id}`, { params });
+  return res?.data || {};
+};

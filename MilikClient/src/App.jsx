@@ -34,6 +34,8 @@ import InvoiceNotes from "./pages/Tenants/InvoiceNotes";
 import AddReceipt from "./pages/Tenants/AddReceipt";
 import TenantDeposits from "./pages/Tenants/TenantDeposits";
 import TakeOnBalances from "./pages/Tenants/TakeOnBalances";
+import MpesaBatchImport from "./pages/Tenants/MpesaBatchImport";
+import TenantPrepayments from "./pages/Tenants/TenantPrepayments";
 import UnitTypesPage from "./pages/Lease/Lease";
 import Vacants from "./pages/Vacants/Vacants";
 import Maintenances from "./pages/Maintenances/Maintenances";
@@ -53,16 +55,20 @@ import LedgerAccountActivity from "./pages/Financial/LedgerAccountActivity";
 import RentalCollectionReport from "./pages/Reports/RentalCollectionReport";
 import PaidBalanceReport from "./pages/Reports/PaidBalanceReport";
 import AgedAnalysisReport from "./pages/Reports/AgedAnalysisReport";
+import RentalAgedAnalysisReport from "./pages/Reports/RentalAgedAnalysisReport";
+import RentalInvoiceVATReport from "./pages/Reports/RentalInvoiceVATReport";
 import CommissionReports from "./pages/Reports/CommissionReports";
 import TrialBalanceReport from "./pages/Reports/TrialBalanceReport";
 import IncomeStatementReport from "./pages/Reports/IncomeStatementReport";
 import BalanceSheetReport from "./pages/Reports/BalanceSheetReport";
 import TaxReports from "./pages/Reports/TaxReports";
 import JournalEntries from "./pages/Financial/JournalEntries";
+import ExpenseRequisition from "./pages/Financial/ExpenseRequisition";
 import MeterReadings from "./pages/Tools/MeterReadings";
 import LatePenalties from "./pages/Tools/LatePenalties";
 import SupportDocumentation from "./pages/Help/SupportDocumentation";
 import AboutMilik from "./pages/Help/AboutMilik";
+import LandlordStandingOrders from "./pages/Landlord/LandlordStandingOrders";
 
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
 const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
@@ -369,8 +375,12 @@ function App() {
         <Route path="/invoices/notes" element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><InvoiceNotes /></PermissionRoute>} />
         <Route path="/receipts" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><Receipts /></PermissionRoute>} />
         <Route path="/receipts/new" element={<PermissionRoute resource="receipts" action="create" moduleKey="propertyManagement"><AddReceipt /></PermissionRoute>} />
+        <Route path="/receipts/mpesa-import" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><MpesaBatchImport /></PermissionRoute>} />
+        <Route path="/receipts/prepayments" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><TenantPrepayments /></PermissionRoute>} />
         <Route path="/receipts/:id" element={<ProtectedRoute><Receipts /></ProtectedRoute>} />
         <Route path="/financial/payment-vouchers" element={<PermissionRoute resource="paymentVouchers" moduleKey="accounts"><PaymentVouchers /></PermissionRoute>} />
+        <Route path="/expenses/requisition" element={<ProtectedRoute><ExpenseRequisition /></ProtectedRoute>} />
+        <Route path="/landlords/standing-orders" element={<ProtectedRoute><LandlordStandingOrders /></ProtectedRoute>} />
         <Route path="/financial/journals" element={<PermissionRoute resource="journals" moduleKey="accounts"><JournalEntries /></PermissionRoute>} />
         <Route path="/financial/chart-of-accounts" element={<PermissionRoute resource="chartOfAccounts" moduleKey="accounts"><ChartOfAccounts /></PermissionRoute>} />
         <Route path="/financial/chart-of-accounts/:accountId/activity" element={<ProtectedRoute><LedgerAccountActivity /></ProtectedRoute>} />
@@ -392,7 +402,8 @@ function App() {
         <Route path="/reports/export" element={<ProtectedRoute><RentalCollectionReport /></ProtectedRoute>} />
         <Route path="/reports/paid-balance" element={<ProtectedRoute><PaidBalanceReport /></ProtectedRoute>} />
         <Route path="/reports/aged-analysis" element={<ProtectedRoute><AgedAnalysisReport /></ProtectedRoute>} />
-        <Route path="/reports/rental-aged-analysis" element={<ProtectedRoute><AgedAnalysisReport /></ProtectedRoute>} />
+        <Route path="/reports/rental-aged-analysis" element={<ProtectedRoute><RentalAgedAnalysisReport /></ProtectedRoute>} />
+        <Route path="/invoices/vat" element={<ProtectedRoute><RentalInvoiceVATReport /></ProtectedRoute>} />
         <Route path="/reports/commissions" element={<ProtectedRoute><CommissionReports /></ProtectedRoute>} />
         <Route path="/reports/trial-balance" element={<PermissionRoute resource="financialReports" moduleKey="accounts"><TrialBalanceReport /></PermissionRoute>} />
         <Route path="/reports/income-statement" element={<PermissionRoute resource="financialReports" moduleKey="accounts"><IncomeStatementReport /></PermissionRoute>} />
