@@ -553,8 +553,23 @@ export const closeStatement = async (req, res) => {
     let periodStart = payload.periodStart;
     let periodEnd = payload.periodEnd;
 
+    let scopedBusinessId = null;
+    try {
+      scopedBusinessId = resolveScopedBusinessId(req, business || null);
+      if (scopedBusinessId) {
+        business = scopedBusinessId;
+      }
+    } catch (scopeError) {
+      return res.status(scopeError.statusCode || 403).json({ message: scopeError.message });
+    }
+
     if (statementId) {
-      approvedStatement = await LandlordStatement.findById(statementId).lean();
+      const scopedStatementQuery = { _id: statementId };
+      if (scopedBusinessId) {
+        scopedStatementQuery.business = scopedBusinessId;
+      }
+
+      approvedStatement = await LandlordStatement.findOne(scopedStatementQuery).lean();
       if (!approvedStatement) {
         return res.status(404).json({ message: "Approved statement snapshot not found" });
       }
@@ -563,6 +578,16 @@ export const closeStatement = async (req, res) => {
       }
 
       business = business || approvedStatement.business;
+
+      try {
+        const verifiedBusinessId = resolveScopedBusinessId(req, business || approvedStatement.business || null);
+        if (verifiedBusinessId) {
+          business = verifiedBusinessId;
+        }
+      } catch (scopeError) {
+        return res.status(scopeError.statusCode || 403).json({ message: scopeError.message });
+      }
+
       landlord = landlord || approvedStatement.landlord;
       property = property || approvedStatement.property;
       periodStart = periodStart || approvedStatement.periodStart;

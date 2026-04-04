@@ -408,7 +408,7 @@ const TopToolbar = ({
         icon: FaUsers,
         submenu: [
           { id: "tenants-list", label: "Tenants Listing", icon: FaUsers },
-          { id: "add-tenant", label: "Add New Tenant", icon: FaPlus },
+          { id: "add-tenant", label: "New Tenant", icon: FaPlus },
           { type: "separator" },
           { id: "tenant-deposits", label: "Tenants Deposits", icon: FaCoins },
           { id: "tenant-agreements", label: "Tenant Agreements", icon: FaClipboard },
@@ -837,7 +837,7 @@ const TopToolbar = ({
           <button
             onClick={() => navigate("/tenants/new")}
             className={`p-2 rounded ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
-            title="Add Tenant"
+            title="New Tenant"
           >
             + Tenant
           </button>

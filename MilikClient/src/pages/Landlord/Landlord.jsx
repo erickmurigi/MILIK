@@ -714,7 +714,7 @@ const Landlords = () => {
       summary: `Records: ${filteredLandlords.length} • Printed on ${new Date().toLocaleString()}`,
       columns: [
         { label: "Landlord Code", value: (row) => row?.landlordCode || row?.code || "-" },
-        { label: "Landlord Name", value: (row) => row?.name || row?.landlordName || "-" },
+        { label: "Landlord Name", value: (row) => row?.fullName || row?.name || row?.landlordName || row?.firstName || "-" },
         { label: "Status", value: (row) => row?.status || "Active" },
         { label: "Location", value: (row) => row?.location || "-" },
         { label: "Email", value: (row) => row?.email || "-" },
@@ -1068,7 +1068,7 @@ const Landlords = () => {
                           {landlord.landlordCode || landlord.code}
                         </td>
                         <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
-                          {landlord.landlordName || landlord.name}
+                          {landlord.fullName || landlord.landlordName || landlord.name || landlord.firstName || "-"}
                         </td>
 
                         <td className="px-3 py-1 border border-gray-200 align-top">

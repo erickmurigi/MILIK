@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Property from "../models/Property.js";
 import Unit from "../models/Unit.js";
 import Tenant from "../models/Tenant.js";
+import Landlord from "../models/Landlord.js";
 import TenantInvoice from "../models/TenantInvoice.js";
 import RentPayment from "../models/RentPayment.js";
 import ExpenseProperty from "../models/ExpenseProperty.js";
@@ -518,6 +519,17 @@ export const generateLandlordStatement = async ({
   if (!property) throw new Error("Property not found");
   if (!property.business) {
     throw new Error("Property is missing business scope. Cannot generate landlord statement safely.");
+  }
+
+  const landlordRecord = await Landlord.findOne({
+    _id: landlordObjectId,
+    company: property.business,
+  })
+    .select("landlordName email phoneNumber")
+    .lean();
+
+  if (!landlordRecord) {
+    throw new Error("Landlord not found for the supplied property business scope.");
   }
 
   const businessId = String(property.business);
@@ -1775,7 +1787,13 @@ export const generateLandlordStatement = async ({
         (property.landlords || []).find(
           (l) => String(l.landlordId) === String(landlordId)
         ) || {};
-      return ll.name || "Landlord";
+      return (
+        ll.name ||
+        landlordRecord?.landlordName ||
+        landlordRecord?.email ||
+        landlordRecord?.phoneNumber ||
+        "Landlord"
+      );
     })(),
     utilityColumns,
     rows: tenantRows.map((row) => ({

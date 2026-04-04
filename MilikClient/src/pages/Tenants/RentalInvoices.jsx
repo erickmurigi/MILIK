@@ -95,6 +95,13 @@ const formatDateDisplay = (dateValue, options = {}) => {
   return date.toLocaleDateString("en-GB", options);
 };
 
+const formatDateTimeDisplay = (dateValue, options = {}) => {
+  if (!dateValue) return "-";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-GB", options);
+};
+
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -123,8 +130,16 @@ const toPeriodDateString = (year, month, day) => {
   return `${String(safeYear).padStart(4, "0")}-${String(safeMonth + 1).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
 };
 
+const getDaysInMonth = (month, year) => new Date(Number(year), Number(month) + 1, 0).getDate();
+const normalizeDueDay = (value, month, year) => {
+  const parsed = Number(value);
+  const safeDay = Number.isFinite(parsed) ? Math.trunc(parsed) : 5;
+  const maxDay = getDaysInMonth(month, year);
+  return Math.min(Math.max(safeDay, 1), maxDay);
+};
 const getStartOfPeriod = (month, year) => toPeriodDateString(year, month, 1);
-const getEndOfPeriod = (month, year) => toPeriodDateString(year, month, 5);
+const getDueDateForPeriod = (month, year, dueDay = 5) =>
+  toPeriodDateString(year, month, normalizeDueDay(dueDay, month, year));
 const isFutureBillingPeriod = (month, year) => {
   const parsedMonth = Number(month);
   const parsedYear = Number(year);
@@ -187,6 +202,29 @@ const buildUtilityInvoiceMetadata = (utilityLabel = "") => {
     meterUtilityType: normalizedUtilityLabel,
     statementUtilityType: normalizedUtilityLabel,
   };
+};
+
+const getInvoiceChargeTypeKey = ({ category, metadata = {} } = {}) => {
+  const normalizedCategory = String(category || "").toUpperCase();
+  if (
+    normalizedCategory === "RENT_CHARGE" &&
+    String(metadata?.billItemKey || "").toLowerCase() === "rent_utility:combined"
+  ) {
+    return "combined";
+  }
+  if (normalizedCategory === "DEPOSIT_CHARGE") return "deposit";
+  if (normalizedCategory === "UTILITY_CHARGE") return "utility";
+  if (normalizedCategory === "LATE_PENALTY_CHARGE") return "late_penalty";
+  return "rent";
+};
+
+const getInvoiceChargeTypeLabel = (chargeType = "rent") => {
+  const normalized = String(chargeType || "rent").toLowerCase();
+  if (normalized === "combined") return "Combined Rent + Utility";
+  if (normalized === "deposit") return "Deposit";
+  if (normalized === "utility") return "Utility";
+  if (normalized === "late_penalty") return "Late Penalty";
+  return "Rent";
 };
 
 const normalizeInvoiceStatus = (status = "") => String(status || "").trim().toLowerCase();
@@ -322,9 +360,18 @@ const resolveTenantPropertyName = (tenant, unitsFromStore = [], propertiesFromSt
 const buildJournalEntriesForInvoice = (invoice) => {
   const amount = Number(invoice?.amount || 0);
   const chargeType = String(invoice?.chargeType || "combined").toLowerCase();
-  const revenueAccount =
-    INVOICE_REVENUE_ACCOUNT_MAP[chargeType] || INVOICE_REVENUE_ACCOUNT_MAP.combined;
-  const narration = `Invoice ${invoice?.id || ""} ${chargeType} charge for ${invoice?.period || "period"}`;
+  const sourceInvoice = invoice?.originalInvoice || {};
+  const fallbackAccount =
+    chargeType === "deposit"
+      ? { code: "2100", name: "Tenant Deposit Payable" }
+      : chargeType === "late_penalty"
+      ? { code: sourceInvoice?.chartAccount?.code || "", name: sourceInvoice?.chartAccount?.name || "Late Penalty Income" }
+      : INVOICE_REVENUE_ACCOUNT_MAP[chargeType] || INVOICE_REVENUE_ACCOUNT_MAP.combined;
+  const revenueAccount = {
+    code: sourceInvoice?.chartAccount?.code || fallbackAccount.code,
+    name: sourceInvoice?.chartAccount?.name || fallbackAccount.name,
+  };
+  const narration = `Invoice ${invoice?.id || ""} ${getInvoiceChargeTypeLabel(chargeType)} charge for ${invoice?.period || "period"}`;
 
   return [
     {
@@ -374,6 +421,7 @@ const RentalInvoices = () => {
     tenantId: tenantId || "",
     month: currentBookingMonth,
     year: currentBookingYear,
+    dueDay: 5,
     billingMode: "combined",
     taxHandling: "company_default",
     taxCodeKey: "vat_standard",
@@ -384,6 +432,7 @@ const RentalInvoices = () => {
     propertyId: "all",
     month: currentBookingMonth,
     year: currentBookingYear,
+    dueDay: 5,
     billingMode: "combined",
     taxHandling: "company_default",
     taxCodeKey: "vat_standard",
@@ -443,6 +492,21 @@ const RentalInvoices = () => {
       year: currentBookingYear,
     }));
   }, [batchBookingForm.month, batchBookingForm.year, currentBookingMonth, currentBookingYear]);
+
+  useEffect(() => {
+    setSingleBookingForm((prev) => {
+      const normalizedDueDay = normalizeDueDay(prev.dueDay, prev.month, prev.year);
+      return normalizedDueDay === prev.dueDay ? prev : { ...prev, dueDay: normalizedDueDay };
+    });
+  }, [singleBookingForm.month, singleBookingForm.year]);
+
+  useEffect(() => {
+    setBatchBookingForm((prev) => {
+      const normalizedDueDay = normalizeDueDay(prev.dueDay, prev.month, prev.year);
+      return normalizedDueDay === prev.dueDay ? prev : { ...prev, dueDay: normalizedDueDay };
+    });
+  }, [batchBookingForm.month, batchBookingForm.year]);
+
 
   useEffect(() => {
     if (!currentCompany?._id) {
@@ -853,18 +917,12 @@ const RentalInvoices = () => {
           invoice?.unitName ||
           getUnitDisplayName(tenant);
 
-        const normalizedCategory = String(invoice?.category || "").toUpperCase();
-        const isCombinedInvoice =
-          normalizedCategory === "RENT_CHARGE" &&
-          String(invoice?.metadata?.billItemKey || "").toLowerCase() === "rent_utility:combined";
-        const chargeType =
-          isCombinedInvoice
-            ? "combined"
-            : normalizedCategory === "DEPOSIT_CHARGE"
-            ? "deposit"
-            : normalizedCategory === "UTILITY_CHARGE"
-            ? "utility"
-            : "rent";
+        const chargeType = getInvoiceChargeTypeKey({
+          category: invoice?.category,
+          metadata: invoice?.metadata || {},
+        });
+        const invoiceDateValue = invoice?.invoiceDate || invoice?.createdAt || null;
+        const dueDateValue = invoice?.dueDate || null;
 
         return {
           key: `${invoice?._id || idx}`,
@@ -873,6 +931,7 @@ const RentalInvoices = () => {
           period: formatPeriodLabel(month, year),
           storagePeriodKey: formatPeriodLabel(month, year),
           chargeType,
+          chargeTypeLabel: getInvoiceChargeTypeLabel(chargeType),
           tenantId: invoiceTenantId,
           tenantName: invoice?.tenant?.name || getTenantDisplayName(tenant),
           propertyName,
@@ -881,12 +940,16 @@ const RentalInvoices = () => {
           status: derivedStatus,
           createdAt: invoice?.createdAt || invoice?.invoiceDate,
           createdDate: formatDateDisplay(invoice?.createdAt || invoice?.invoiceDate),
+          invoiceDateValue,
+          invoiceDateLabel: formatDateDisplay(invoiceDateValue),
+          dueDateValue,
+          dueDateLabel: formatDateDisplay(dueDateValue),
           originalInvoice: invoice,
         };
       })
       .sort((a, b) => {
-        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        const aDate = a.invoiceDateValue ? new Date(a.invoiceDateValue).getTime() : a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bDate = b.invoiceDateValue ? new Date(b.invoiceDateValue).getTime() : b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return bDate - aDate;
       });
   }, [tenantInvoicesFromApi, rentPayments, tenantLookup, unitsFromStore, propertiesFromStore]);
@@ -917,8 +980,8 @@ const RentalInvoices = () => {
       }
 
       if (appliedFilters.fromDate || appliedFilters.toDate) {
-        if (!invoice.createdAt) return false;
-        const invoiceDate = new Date(invoice.createdAt);
+        if (!invoice.invoiceDateValue) return false;
+        const invoiceDate = new Date(invoice.invoiceDateValue);
         if (Number.isNaN(invoiceDate.getTime())) return false;
 
         if (appliedFilters.fromDate) {
@@ -976,6 +1039,9 @@ const visibleInvoiceKeys = useMemo(
     currentCompany?.name ||
     currentCompany?.company ||
     "MILIK Property Management";
+  const companyPhone = currentCompany?.phone || currentCompany?.phoneNumber || currentCompany?.contactPhone || "";
+  const companyEmail = currentCompany?.email || currentCompany?.companyEmail || currentCompany?.contactEmail || "";
+  const companyAddress = currentCompany?.address || currentCompany?.postalAddress || currentCompany?.location || "";
 
   const applySearch = () => {
     setAppliedFilters({ ...draftFilters });
@@ -1041,10 +1107,53 @@ const visibleInvoiceKeys = useMemo(
   };
 
   const buildInvoiceHtml = (invoice) => {
-    const amount = Number(invoice?.amount || 0).toLocaleString();
-    const createdLabel = invoice?.createdAt
-      ? new Date(invoice.createdAt).toLocaleString("en-GB")
-      : invoice?.createdDate || "-";
+    const sourceInvoice = invoice?.originalInvoice || {};
+    const taxSnapshot = sourceInvoice?.taxSnapshot || {};
+    const chargeTypeLabel = invoice?.chargeTypeLabel || getInvoiceChargeTypeLabel(invoice?.chargeType);
+    const utilityBreakdown = Array.isArray(sourceInvoice?.metadata?.utilityBreakdown)
+      ? sourceInvoice.metadata.utilityBreakdown
+      : [];
+    const invoiceDateLabel = invoice?.invoiceDateLabel || formatDateDisplay(sourceInvoice?.invoiceDate);
+    const dueDateLabel = invoice?.dueDateLabel || formatDateDisplay(sourceInvoice?.dueDate);
+    const preparedLabel = formatDateTimeDisplay(new Date());
+    const subtotal = Number(
+      taxSnapshot?.netAmount ?? taxSnapshot?.enteredAmount ?? sourceInvoice?.amount ?? invoice?.amount ?? 0
+    );
+    const taxAmount = Number(taxSnapshot?.taxAmount || 0);
+    const totalAmount = Number(
+      taxSnapshot?.grossAmount ?? sourceInvoice?.amount ?? invoice?.amount ?? 0
+    );
+
+    const baseLineItems =
+      invoice?.chargeType === "combined"
+        ? [
+            {
+              description: `Rent charge for ${invoice?.period || "selected period"}`,
+              amount: Math.max(0, subtotal - utilityBreakdown.reduce((sum, item) => sum + Number(item?.amount || 0), 0)),
+            },
+            ...utilityBreakdown.map((item) => ({
+              description: `${item?.label || "Utility"} charge${item?.periodLabel ? ` (${item.periodLabel})` : ""}`,
+              amount: Number(item?.amount || 0),
+            })),
+          ].filter((item) => Number(item.amount || 0) > 0)
+        : [
+            {
+              description: sourceInvoice?.description || `${chargeTypeLabel} charge`,
+              amount: subtotal,
+            },
+          ];
+
+    const lineItems = baseLineItems.length > 0 ? baseLineItems : [{ description: sourceInvoice?.description || `${chargeTypeLabel} charge`, amount: subtotal }];
+
+    const lineRows = lineItems
+      .map(
+        (item, index) => `<tr>
+          <td>${index + 1}</td>
+          <td>${escapeHtml(item.description)}</td>
+          <td class="num">KES ${Number(item.amount || 0).toLocaleString()}</td>
+        </tr>`
+      )
+      .join("\n");
 
     return `<!doctype html>
 <html>
@@ -1052,40 +1161,140 @@ const visibleInvoiceKeys = useMemo(
   <meta charset="utf-8" />
   <title>${escapeHtml(invoice?.id || "Invoice")}</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
-    .header { border-bottom: 2px solid #0B3B2E; padding-bottom: 12px; margin-bottom: 18px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
-    .brand-wrap { display:flex; align-items:center; gap:10px; }
-    .logo { width:40px; height:40px; border-radius:8px; background:#0B3B2E; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px; }
-    .brand { font-size: 20px; font-weight: 800; color: #0B3B2E; }
-    .company { color:#111827; font-size:13px; font-weight:700; }
-    .subtitle { color: #4b5563; font-size: 12px; text-align:right; }
-    .grid { display: grid; grid-template-columns: 180px 1fr; gap: 8px 12px; font-size: 13px; }
-    .label { color: #6b7280; font-weight: 600; }
-    .value { color: #111827; font-weight: 700; }
-    .amount { margin-top: 18px; font-size: 22px; font-weight: 800; color: #0B3B2E; }
+    @page { size: A4; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Inter, Arial, sans-serif; margin: 0; color: #0f172a; background: #f8fafc; }
+    .page { background: #ffffff; border: 1px solid #dbe4ee; border-radius: 18px; padding: 28px; }
+    .header { display:flex; justify-content:space-between; gap:24px; border-bottom: 3px solid #0B3B2E; padding-bottom: 18px; margin-bottom: 18px; }
+    .brand-wrap { display:flex; gap:14px; align-items:flex-start; }
+    .logo { width:54px; height:54px; border-radius:16px; background:#0B3B2E; color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:800; }
+    .brand { font-size: 24px; font-weight: 800; color: #0B3B2E; letter-spacing: 0.01em; }
+    .subbrand { margin-top:4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #64748b; font-weight: 700; }
+    .company { margin-top:8px; font-size: 13px; color:#0f172a; line-height:1.6; }
+    .invoice-meta { min-width: 260px; background:#f8fafc; border:1px solid #dbe4ee; border-radius:16px; padding:14px 16px; }
+    .invoice-meta h2 { margin:0 0 10px 0; color:#0B3B2E; font-size: 18px; }
+    .meta-grid { display:grid; grid-template-columns: 110px 1fr; gap:8px 10px; font-size: 12px; }
+    .label { color:#64748b; font-weight:700; }
+    .value { color:#0f172a; font-weight:700; }
+    .section-grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom: 18px; }
+    .panel { border:1px solid #dbe4ee; border-radius:16px; padding:14px 16px; }
+    .panel h3 { margin:0 0 10px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color:#64748b; }
+    .panel .name { font-size:15px; font-weight:800; color:#0f172a; margin-bottom:6px; }
+    .panel .small { font-size: 12px; color:#334155; line-height:1.6; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { border:1px solid #dbe4ee; padding:10px 12px; font-size:12px; vertical-align:top; }
+    th { background:#0B3B2E; color:#ffffff; text-align:left; font-weight:800; }
+    td.num { text-align:right; font-weight:700; }
+    .totals { width: 320px; margin-left:auto; margin-top: 14px; border-collapse: separate; border-spacing: 0; }
+    .totals td { border:1px solid #dbe4ee; padding:10px 12px; font-size:12px; }
+    .totals .label-cell { background:#f8fafc; font-weight:700; color:#475569; }
+    .totals .value-cell { text-align:right; font-weight:800; color:#0f172a; }
+    .totals .grand .label-cell, .totals .grand .value-cell { background:#ecfdf3; color:#0B3B2E; font-size:14px; }
+    .footer { margin-top:22px; display:grid; grid-template-columns: 1.2fr .8fr; gap:16px; }
+    .note-box, .signature-box { border:1px solid #dbe4ee; border-radius:16px; padding:14px 16px; min-height:110px; }
+    .note-box h4, .signature-box h4 { margin:0 0 10px 0; font-size:12px; text-transform:uppercase; letter-spacing:0.14em; color:#64748b; }
+    .note-box p, .signature-box p { margin:0; font-size:12px; color:#334155; line-height:1.7; }
+    .signature-line { margin-top: 34px; border-top: 1px solid #94a3b8; padding-top: 8px; font-size: 11px; color:#475569; }
+    .watermark { margin-top: 16px; text-align:center; font-size:10px; color:#94a3b8; letter-spacing:0.12em; text-transform:uppercase; }
+    @media print {
+      body { background:#ffffff; }
+      .page { border:none; border-radius:0; padding:0; }
+    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="brand-wrap">
-      <div class="logo">M</div>
-      <div>
-        <div class="brand">MILIK Rental Invoice</div>
-        <div class="company">${escapeHtml(companyDisplayName)}</div>
+  <div class="page">
+    <div class="header">
+      <div class="brand-wrap">
+        <div class="logo">M</div>
+        <div>
+          <div class="brand">${escapeHtml(companyDisplayName)}</div>
+          <div class="subbrand">Official Tenant Invoice</div>
+          <div class="company">
+            ${companyAddress ? `${escapeHtml(companyAddress)}<br/>` : ""}
+            ${companyPhone ? `Phone: ${escapeHtml(companyPhone)}<br/>` : ""}
+            ${companyEmail ? `Email: ${escapeHtml(companyEmail)}` : ""}
+          </div>
+        </div>
+      </div>
+      <div class="invoice-meta">
+        <h2>Invoice</h2>
+        <div class="meta-grid">
+          <div class="label">Invoice #</div><div class="value">${escapeHtml(invoice?.id)}</div>
+          <div class="label">Invoice Date</div><div class="value">${escapeHtml(invoiceDateLabel)}</div>
+          <div class="label">Due Date</div><div class="value">${escapeHtml(dueDateLabel)}</div>
+          <div class="label">Period</div><div class="value">${escapeHtml(invoice?.period || "-")}</div>
+          <div class="label">Bill Type</div><div class="value">${escapeHtml(chargeTypeLabel)}</div>
+          <div class="label">Status</div><div class="value">${escapeHtml(invoice?.status || "Issued")}</div>
+          <div class="label">Prepared On</div><div class="value">${escapeHtml(preparedLabel)}</div>
+        </div>
       </div>
     </div>
-    <div class="subtitle">Generated on ${escapeHtml(new Date().toLocaleString())}</div>
+
+    <div class="section-grid">
+      <div class="panel">
+        <h3>Bill To</h3>
+        <div class="name">${escapeHtml(invoice?.tenantName || "Tenant")}</div>
+        <div class="small">
+          Property: ${escapeHtml(invoice?.propertyName || "-")}<br/>
+          Unit: ${escapeHtml(invoice?.unitName || "-")}
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Invoice Summary</h3>
+        <div class="small">
+          ${escapeHtml(sourceInvoice?.description || `${chargeTypeLabel} charge for ${invoice?.period || "selected period"}`)}<br/>
+          ${taxAmount > 0 ? `Tax code: ${escapeHtml(taxSnapshot?.taxCodeName || "Tax")} (${Number(taxSnapshot?.taxRate || 0)}%)` : "No tax applied to this invoice."}
+        </div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:64px;">#</th>
+          <th>Description</th>
+          <th style="width:180px; text-align:right;">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${lineRows}
+      </tbody>
+    </table>
+
+    <table class="totals">
+      <tbody>
+        <tr>
+          <td class="label-cell">Subtotal</td>
+          <td class="value-cell">KES ${subtotal.toLocaleString()}</td>
+        </tr>
+        <tr>
+          <td class="label-cell">Tax</td>
+          <td class="value-cell">KES ${taxAmount.toLocaleString()}</td>
+        </tr>
+        <tr class="grand">
+          <td class="label-cell">Total Due</td>
+          <td class="value-cell">KES ${totalAmount.toLocaleString()}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="footer">
+      <div class="note-box">
+        <h4>Notes</h4>
+        <p>
+          This invoice was generated from the MILIK invoicing workflow. Please settle the amount due by the stated due date to avoid late-penalty processing where applicable.
+        </p>
+      </div>
+      <div class="signature-box">
+        <h4>Authorised By</h4>
+        <p>${escapeHtml(companyDisplayName)}</p>
+        <div class="signature-line">Authorised signature</div>
+      </div>
+    </div>
+
+    <div class="watermark">Milik Property Management System</div>
   </div>
-  <div class="grid">
-    <div class="label">Invoice #</div><div class="value">${escapeHtml(invoice?.id)}</div>
-    <div class="label">Tenant</div><div class="value">${escapeHtml(invoice?.tenantName)}</div>
-    <div class="label">Property</div><div class="value">${escapeHtml(invoice?.propertyName)}</div>
-    <div class="label">Unit</div><div class="value">${escapeHtml(invoice?.unitName)}</div>
-    <div class="label">Period</div><div class="value">${escapeHtml(invoice?.period)}</div>
-    <div class="label">Status</div><div class="value">${escapeHtml(invoice?.status)}</div>
-    <div class="label">Created</div><div class="value">${escapeHtml(createdLabel)}</div>
-  </div>
-  <div class="amount">Amount Due: KES ${amount}</div>
 </body>
 </html>`;
   };
@@ -1100,9 +1309,11 @@ const visibleInvoiceKeys = useMemo(
   <td>${escapeHtml(inv.propertyName)}</td>
   <td>${escapeHtml(inv.unitName)}</td>
   <td>${escapeHtml(inv.period)}</td>
+  <td>${escapeHtml(inv.chargeTypeLabel || getInvoiceChargeTypeLabel(inv.chargeType))}</td>
+  <td>${escapeHtml(inv.invoiceDateLabel || "-")}</td>
+  <td>${escapeHtml(inv.dueDateLabel || "-")}</td>
   <td style="text-align:right;">KES ${Number(inv.amount || 0).toLocaleString()}</td>
   <td>${escapeHtml(inv.status)}</td>
-  <td>${escapeHtml(inv.createdDate || "-")}</td>
 </tr>`
       )
       .join("\n");
@@ -1113,18 +1324,19 @@ const visibleInvoiceKeys = useMemo(
   <meta charset="utf-8" />
   <title>MILIK Rental Invoices List</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; color: #111827; }
-    .header { display:flex; align-items:center; justify-content:space-between; gap:20px; border-bottom:3px solid #0B3B2E; padding-bottom:14px; margin-bottom:14px; }
+    @page { size: A4 landscape; margin: 10mm; }
+    body { font-family: Inter, Arial, sans-serif; margin: 20px; color: #111827; }
+    .header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; border-bottom:3px solid #0B3B2E; padding-bottom:14px; margin-bottom:14px; }
     .brand-wrap { display:flex; align-items:center; gap:14px; }
     .logo { width:74px; height:74px; border-radius:16px; background:#0B3B2E; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:30px; border:1px solid #cbd5e1; }
     h1 { margin: 0; color: #0B3B2E; font-size: 22px; }
     .company { margin-top:4px; color:#111827; font-size:13px; font-weight:700; }
-    .meta { margin: 0; color: #4b5563; font-size: 12px; text-align:right; line-height:1.5; }
+    .meta { margin: 0; color: #4b5563; font-size: 12px; text-align:right; line-height:1.6; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
     th, td { border: 1px solid #d1d5db; padding: 6px 8px; }
     th { background: #0B3B2E; color: white; text-align: left; }
     tfoot td { font-weight: 700; background: #f3f4f6; }
-    @media print { body { margin: 10mm; } }
+    @media print { body { margin: 8mm; } }
   </style>
 </head>
 <body>
@@ -1132,11 +1344,11 @@ const visibleInvoiceKeys = useMemo(
     <div class="brand-wrap">
       <div class="logo">M</div>
       <div>
-        <h1>MILIK Rental Invoices List</h1>
+        <h1>Tenant Invoices Register</h1>
         <div class="company">${escapeHtml(companyDisplayName)}</div>
       </div>
     </div>
-    <div class="meta">Generated: ${escapeHtml(new Date().toLocaleString())}<br/>Count: ${rows.length}<br/>Total: KES ${total.toLocaleString()}</div>
+    <div class="meta">Generated: ${escapeHtml(formatDateTimeDisplay(new Date()))}<br/>Count: ${rows.length}<br/>Total: KES ${total.toLocaleString()}</div>
   </div>
   <table>
     <thead>
@@ -1146,9 +1358,11 @@ const visibleInvoiceKeys = useMemo(
         <th>Property</th>
         <th>Unit</th>
         <th>Period</th>
+        <th>Type</th>
+        <th>Invoice Date</th>
+        <th>Due Date</th>
         <th style="text-align:right;">Amount</th>
         <th>Status</th>
-        <th>Created</th>
       </tr>
     </thead>
     <tbody>
@@ -1156,9 +1370,9 @@ const visibleInvoiceKeys = useMemo(
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="5" style="font-weight:800;">Total</td>
+        <td colspan="8" style="font-weight:800;">Total</td>
         <td style="text-align:right; font-weight:800;">KES ${total.toLocaleString()}</td>
-        <td colspan="2"></td>
+        <td></td>
       </tr>
     </tfoot>
   </table>
@@ -1251,12 +1465,13 @@ const visibleInvoiceKeys = useMemo(
     targetTenant,
     amount,
     paymentType,
-  categoryOverride = null,
+    categoryOverride = null,
     month,
     year,
+    dueDay = 5,
     description,
     metadata,
-  taxSelection = null,
+    taxSelection = null,
   }) => {
   const numericAmount = Number(amount || 0);
 
@@ -1343,7 +1558,7 @@ const visibleInvoiceKeys = useMemo(
     amount: numericAmount,
     description,
     invoiceDate: getStartOfPeriod(month, year),
-    dueDate: getEndOfPeriod(month, year),
+    dueDate: getDueDateForPeriod(month, year, dueDay),
     createdBy,
     chartAccountId: revenueAccountId,
     metadata: metadata && typeof metadata === "object" ? metadata : undefined,
@@ -1360,6 +1575,7 @@ const visibleInvoiceKeys = useMemo(
     categoryOverride,
     month,
     year,
+    dueDay,
     description,
     metadata,
     taxSelection,
@@ -1371,6 +1587,7 @@ const visibleInvoiceKeys = useMemo(
     categoryOverride,
     month,
     year,
+    dueDay,
     description,
     metadata,
     taxSelection,
@@ -1386,6 +1603,7 @@ const visibleInvoiceKeys = useMemo(
     targetTenant,
     month,
     year,
+    dueDay = 5,
     billingMode = "combined",
     taxSelection = null
   ) => {
@@ -1431,6 +1649,7 @@ const visibleInvoiceKeys = useMemo(
           paymentType: "rent",
           month,
           year,
+          dueDay,
           description: `Rent charge (${periodLabel})`,
           taxSelection,
         });
@@ -1445,6 +1664,7 @@ const visibleInvoiceKeys = useMemo(
           paymentType: "utility",
           month,
           year,
+          dueDay,
           description: utilityLabel
             ? `${utilityLabel} charge (${periodLabel})`
             : `Utility charge (${periodLabel})`,
@@ -1484,6 +1704,7 @@ const visibleInvoiceKeys = useMemo(
         categoryOverride: "RENT_CHARGE",
         month,
         year,
+        dueDay,
         description:
           utilityAmount > 0
             ? `Combined rent + utility charge (${periodLabel})`
@@ -1543,6 +1764,7 @@ const visibleInvoiceKeys = useMemo(
         selectedTenant,
         Number(singleBookingForm.month),
         Number(singleBookingForm.year),
+        Number(singleBookingForm.dueDay || 5),
         singleBookingForm.billingMode,
         getBookingTaxSelection(singleBookingForm)
       );
@@ -1584,6 +1806,8 @@ const visibleInvoiceKeys = useMemo(
     const selectedPropertyId = batchBookingForm.propertyId;
     const month = Number(batchBookingForm.month);
     const year = Number(batchBookingForm.year);
+    const dueDay = Number(batchBookingForm.dueDay || 5);
+    const selectedTaxSelection = getBookingTaxSelection(batchBookingForm);
 
     if (isFutureBillingPeriod(month, year)) {
       toast.error("Future invoicing is disabled. Select the current month or an earlier clean period.");
@@ -1634,8 +1858,9 @@ const visibleInvoiceKeys = useMemo(
             tenant,
             month,
             year,
+            dueDay,
             batchBookingForm.billingMode,
-            getBookingTaxSelection(batchBookingForm)
+            selectedTaxSelection
           );
 
           if (result?.created) {
@@ -1713,12 +1938,13 @@ const visibleInvoiceKeys = useMemo(
                 categoryOverride: "RENT_CHARGE",
                 month,
                 year,
+                dueDay,
                 description:
                   utilityAmount > 0
                     ? `Combined rent + utility charge (${periodLabel})`
                     : `Rent charge (${periodLabel})`,
                 metadata: combinedMetadata,
-                taxSelection: getBookingTaxSelection(batchBookingForm),
+                taxSelection: selectedTaxSelection,
               })
             );
             tenantHasBatchItems = true;
@@ -1753,8 +1979,9 @@ const visibleInvoiceKeys = useMemo(
                 paymentType: "rent",
                 month,
                 year,
+                dueDay,
                 description: `Rent charge (${periodLabel})`,
-                taxSelection: getBookingTaxSelection(batchBookingForm),
+                taxSelection: selectedTaxSelection,
               })
             );
             tenantHasBatchItems = true;
@@ -1768,11 +1995,12 @@ const visibleInvoiceKeys = useMemo(
                 paymentType: "utility",
                 month,
                 year,
+                dueDay,
                 description: utilityLabel
                   ? `${utilityLabel} charge (${periodLabel})`
                   : `Utility charge (${periodLabel})`,
                 metadata: utilityMetadata,
-                taxSelection: getBookingTaxSelection(batchBookingForm),
+                taxSelection: selectedTaxSelection,
               })
             );
             tenantHasBatchItems = true;
@@ -2062,16 +2290,6 @@ const visibleInvoiceKeys = useMemo(
                 >
                   Paid
                 </button>
-                <button
-                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "Reversed" }))}
-                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${
-                    draftFilters.status === "Reversed"
-                      ? `${MILIK_GREEN} text-white`
-                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                  }`}
-                >
-                  Reversed
-                </button>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -2206,7 +2424,7 @@ const visibleInvoiceKeys = useMemo(
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1180px] text-xs">
+              <table className="w-full min-w-[1320px] text-xs">
                 <thead>
                   <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
                     <th className="px-3 py-2 text-left">
@@ -2218,6 +2436,8 @@ const visibleInvoiceKeys = useMemo(
                     <th className="px-3 py-2 text-left font-semibold">Unit</th>
                     <th className="px-3 py-2 text-left font-semibold">Period</th>
                     <th className="px-3 py-2 text-left font-semibold">Type</th>
+                    <th className="px-3 py-2 text-center font-semibold">Invoice Date</th>
+                    <th className="px-3 py-2 text-center font-semibold">Due Date</th>
                     <th className="px-3 py-2 text-right font-semibold">Amount</th>
                     <th className="px-3 py-2 text-center font-semibold">Status</th>
                     <th className="px-3 py-2 text-center font-semibold">Created</th>
@@ -2227,7 +2447,7 @@ const visibleInvoiceKeys = useMemo(
                 <tbody>
                   {filteredInvoices.length === 0 ? (
                     <tr>
-                      <td colSpan={tenantId ? "10" : "12"} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={tenantId ? "12" : "14"} className="px-4 py-8 text-center text-gray-500">
                         <FaFileInvoice className="mb-2 inline-block text-4xl text-gray-300" />
                         <p className="mt-1 text-sm font-semibold">No invoices found</p>
                         <p className="mt-1 text-xs text-gray-400">
@@ -2269,9 +2489,11 @@ const visibleInvoiceKeys = useMemo(
                         <td className="px-3 py-2 font-semibold text-orange-700">{invoice.period}</td>
                         <td className="px-3 py-2">
                           <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
-                            {invoice.chargeType || "combined"}
+                            {invoice.chargeTypeLabel || getInvoiceChargeTypeLabel(invoice.chargeType)}
                           </span>
                         </td>
+                        <td className="px-3 py-2 text-center text-gray-700">{invoice.invoiceDateLabel}</td>
+                        <td className="px-3 py-2 text-center text-gray-700">{invoice.dueDateLabel}</td>
                         <td className="px-3 py-2 text-right font-bold text-slate-900">
                           KES {Number(invoice.amount || 0).toLocaleString()}
                         </td>
@@ -2463,6 +2685,33 @@ const visibleInvoiceKeys = useMemo(
                   />
                 </div>
 
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Due Day</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max={getDaysInMonth(Number(singleBookingForm.month), Number(singleBookingForm.year))}
+                      value={singleBookingForm.dueDay}
+                      onChange={(e) =>
+                        setSingleBookingForm((prev) => ({
+                          ...prev,
+                          dueDay: normalizeDueDay(e.target.value, prev.month, prev.year),
+                        }))
+                      }
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSingleBookingForm((prev) => ({ ...prev, dueDay: 5 }))}
+                      className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      Default 5th
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Billing Mode</label>
                   <select
@@ -2551,6 +2800,18 @@ const visibleInvoiceKeys = useMemo(
                       <p className="text-slate-500">Utility</p>
                       <p className="font-semibold text-slate-900">
                         KES {selectedSingleBookingPreview.utilityAmount.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500">Invoice Date</p>
+                      <p className="font-semibold text-slate-900">
+                        {formatDateDisplay(getStartOfPeriod(Number(singleBookingForm.month), Number(singleBookingForm.year)))}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500">Due Date</p>
+                      <p className="font-semibold text-slate-900">
+                        {formatDateDisplay(getDueDateForPeriod(Number(singleBookingForm.month), Number(singleBookingForm.year), Number(singleBookingForm.dueDay || 5)))}
                       </p>
                     </div>
                   </div>
@@ -2681,6 +2942,32 @@ const visibleInvoiceKeys = useMemo(
                 </div>
 
                 <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Due Day</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max={getDaysInMonth(Number(batchBookingForm.month), Number(batchBookingForm.year))}
+                      value={batchBookingForm.dueDay}
+                      onChange={(e) =>
+                        setBatchBookingForm((prev) => ({
+                          ...prev,
+                          dueDay: normalizeDueDay(e.target.value, prev.month, prev.year),
+                        }))
+                      }
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setBatchBookingForm((prev) => ({ ...prev, dueDay: 5 }))}
+                      className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      Default 5th
+                    </button>
+                  </div>
+                </div>
+
+                <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Billing Mode</label>
                   <select
                     value={batchBookingForm.billingMode}
@@ -2751,6 +3038,9 @@ const visibleInvoiceKeys = useMemo(
                 </p>
                 <p className="text-xs text-orange-800 font-semibold mt-1">
                   Mode: {batchBookingForm.billingMode === "separate" ? "Separate invoices" : "Combined invoice"}
+                </p>
+                <p className="text-xs text-orange-800 font-semibold mt-1">
+                  Invoice date: {formatDateDisplay(getStartOfPeriod(Number(batchBookingForm.month), Number(batchBookingForm.year)))} · Due date: {formatDateDisplay(getDueDateForPeriod(Number(batchBookingForm.month), Number(batchBookingForm.year), Number(batchBookingForm.dueDay || 5)))}
                 </p>
                 <p className="text-xs text-orange-800 font-semibold mt-1">
                   Estimated gross booking: KES {Number(batchBookingTaxPreview?.grossAmount || 0).toLocaleString()} (tax: KES {Number(batchBookingTaxPreview?.taxAmount || 0).toLocaleString()})

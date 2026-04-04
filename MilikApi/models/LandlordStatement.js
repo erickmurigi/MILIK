@@ -7,6 +7,15 @@ import mongoose from "mongoose";
 
 const STATEMENT_STATUS = ["draft", "reviewed", "approved", "sent", "revised"];
 
+const isApprovedToSentTransition = ({ originalStatus, currentStatus, doc }) => {
+  if (originalStatus !== "approved" || currentStatus !== "sent") return false;
+
+  const changedPaths = typeof doc?.modifiedPaths === "function" ? doc.modifiedPaths() : [];
+  const allowedPaths = new Set(["status", "sentAt", "sentBy", "updatedAt"]);
+
+  return changedPaths.every((path) => allowedPaths.has(path));
+};
+
 const LandlordStatementSchema = new mongoose.Schema(
   {
     business: {
@@ -174,6 +183,12 @@ LandlordStatementSchema.index(
 LandlordStatementSchema.pre("save", function (next) {
   if (this.isModified() && !this.isNew) {
     const originalStatus = this._original?.status;
+    const currentStatus = this.status;
+
+    if (isApprovedToSentTransition({ originalStatus, currentStatus, doc: this })) {
+      return next();
+    }
+
     if (originalStatus === "approved" || originalStatus === "sent") {
       return next(new Error("Approved or sent statements cannot be modified. Create a revision instead."));
     }
@@ -189,6 +204,24 @@ LandlordStatementSchema.post("init", function () {
 // Block direct updates and deletes on approved statements
 LandlordStatementSchema.pre("findOneAndUpdate", async function (next) {
   const docToUpdate = await this.model.findOne(this.getQuery());
+  const update = this.getUpdate() || {};
+  const nextStatus = update?.$set?.status ?? update?.status;
+  const touchesOnlyAllowedFields = (() => {
+    const directKeys = Object.keys(update).filter((key) => !key.startsWith("$"));
+    const setKeys = Object.keys(update?.$set || {});
+    const allKeys = [...directKeys, ...setKeys];
+    if (allKeys.length === 0) return false;
+    return allKeys.every((key) => ["status", "sentAt", "sentBy", "updatedAt"].includes(key));
+  })();
+
+  if (
+    docToUpdate?.status === "approved" &&
+    nextStatus === "sent" &&
+    touchesOnlyAllowedFields
+  ) {
+    return next();
+  }
+
   if (docToUpdate && (docToUpdate.status === "approved" || docToUpdate.status === "sent")) {
     return next(new Error("Approved or sent statements cannot be updated. Create a revision instead."));
   }
@@ -197,6 +230,24 @@ LandlordStatementSchema.pre("findOneAndUpdate", async function (next) {
 
 LandlordStatementSchema.pre("updateOne", async function (next) {
   const docToUpdate = await this.model.findOne(this.getQuery());
+  const update = this.getUpdate() || {};
+  const nextStatus = update?.$set?.status ?? update?.status;
+  const touchesOnlyAllowedFields = (() => {
+    const directKeys = Object.keys(update).filter((key) => !key.startsWith("$"));
+    const setKeys = Object.keys(update?.$set || {});
+    const allKeys = [...directKeys, ...setKeys];
+    if (allKeys.length === 0) return false;
+    return allKeys.every((key) => ["status", "sentAt", "sentBy", "updatedAt"].includes(key));
+  })();
+
+  if (
+    docToUpdate?.status === "approved" &&
+    nextStatus === "sent" &&
+    touchesOnlyAllowedFields
+  ) {
+    return next();
+  }
+
   if (docToUpdate && (docToUpdate.status === "approved" || docToUpdate.status === "sent")) {
     return next(new Error("Approved or sent statements cannot be updated. Create a revision instead."));
   }

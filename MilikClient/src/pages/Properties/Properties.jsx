@@ -364,7 +364,7 @@ const Properties = () => {
       columns: [
         { label: "Property Code", value: (row) => row?.propertyCode || row?.code || "-" },
         { label: "Property Name", value: (row) => row?.propertyName || row?.name || "-" },
-        { label: "Landlord", value: (row) => row?.landlord?.name || row?.landlordName || "-" },
+        { label: "Landlord", value: (row) => row?.landlord?.name || row?.landlordName || row?.landlords?.[0]?.name || row?.landlords?.[0]?.landlordId?.landlordName || row?.landlords?.[0]?.landlordId?.fullName || "-" },
         { label: "Location", value: (row) => row?.location || row?.address || "-" },
         { label: "Units", value: (row) => row?.unitsCount || row?.totalUnits || row?.units?.length || "-", align: "right" },
         { label: "Status", value: (row) => row?.status || "active" },
@@ -407,8 +407,8 @@ const Properties = () => {
 
   const getPrimaryLandlord = (landlords) => {
     if (!landlords || landlords.length === 0) return "N/A";
-    const primary = landlords.find((l) => l.isPrimary);
-    return primary ? primary.name : landlords[0]?.name || "N/A";
+    const primary = landlords.find((l) => l.isPrimary) || landlords[0];
+    return primary?.name || primary?.landlordId?.landlordName || primary?.landlordId?.fullName || primary?.landlordId?.name || "N/A";
   };
 
   const getFullAddress = (property) => {

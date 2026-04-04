@@ -109,9 +109,21 @@ const getMonthStart = (value = new Date()) => {
   return new Date(dt.getFullYear(), dt.getMonth(), 1, 0, 0, 0, 0);
 };
 
-const getMonthDueDate = (value = new Date()) => {
+const getMonthDueDate = (value = new Date(), preferredDay = 5) => {
   const dt = normalizeDate(value, new Date());
-  return new Date(dt.getFullYear(), dt.getMonth(), 5, 23, 59, 59, 999);
+  const maxDay = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
+  const safePreferredDay = Number.isFinite(Number(preferredDay)) ? Math.trunc(Number(preferredDay)) : 5;
+  const dueDay = Math.min(Math.max(safePreferredDay, 1), maxDay);
+  return new Date(dt.getFullYear(), dt.getMonth(), dueDay, 23, 59, 59, 999);
+};
+
+const resolveMonthlyBillingDueDate = ({ invoiceDate, dueDate }) => {
+  const monthStart = getMonthStart(invoiceDate);
+  const defaultDueDate = getMonthDueDate(monthStart, 5);
+  if (!dueDate) return defaultDueDate;
+
+  const requestedDueDate = normalizeDate(dueDate, defaultDueDate);
+  return getMonthDueDate(monthStart, requestedDueDate.getDate());
 };
 
 const shouldForceMonthlyBillingDates = ({ category, metadata }) => {
@@ -1989,7 +2001,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     ? getMonthStart(requestedInvoiceDate)
     : requestedInvoiceDate;
   let normalizedDueDate = shouldForceMonthlyDates
-    ? getMonthDueDate(normalizedInvoiceDate)
+    ? resolveMonthlyBillingDueDate({ invoiceDate: normalizedInvoiceDate, dueDate })
     : normalizeDate(dueDate, normalizedInvoiceDate);
 
   if (normalizedDueDate < normalizedInvoiceDate) {
@@ -2139,20 +2151,32 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     req?.body?.account;
 
   const statementPeriod = buildStatementPeriod(normalizedInvoiceDate);
+  const monthlyInvoiceCacheKey = [
+    String(businessId),
+    String(accountingContext.propertyId),
+    String(tenant),
+    String(unit),
+    statementPeriod.start.toISOString(),
+  ].join(":");
   const activeMonthlyInvoices = ["RENT_CHARGE", "UTILITY_CHARGE"].includes(normalizedCategory)
-    ? await TenantInvoice.find({
-        business: businessId,
-        property: accountingContext.propertyId,
-        tenant,
-        unit,
-        category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE"] },
-        invoiceDate: {
-          $gte: statementPeriod.start,
-          $lte: statementPeriod.end,
-        },
-      })
-        .select("_id invoiceNumber category status invoiceDate metadata")
-        .lean()
+    ? await getOrLoadCachedValue(
+        batchContext?.monthlyInvoiceCache,
+        monthlyInvoiceCacheKey,
+        () =>
+          TenantInvoice.find({
+            business: businessId,
+            property: accountingContext.propertyId,
+            tenant,
+            unit,
+            category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE"] },
+            invoiceDate: {
+              $gte: statementPeriod.start,
+              $lte: statementPeriod.end,
+            },
+          })
+            .select("_id invoiceNumber category status invoiceDate metadata")
+            .lean()
+      )
     : [];
 
   const conflictingMonthlyInvoice = findConflictingMonthlyInvoice({
@@ -2192,7 +2216,11 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     throw accountError;
   }
 
-  const companyTaxConfig = await getCompanyTaxConfiguration(businessId);
+  const companyTaxConfig = await getOrLoadCachedValue(
+    batchContext?.companyTaxConfigCache,
+    String(businessId),
+    () => getCompanyTaxConfiguration(businessId)
+  );
   const taxSnapshot = buildInvoiceTaxSnapshot({
     amount: Math.abs(Number(amount)),
     category: normalizedCategory,
@@ -2238,6 +2266,21 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     metadata: metadata && typeof metadata === "object" ? metadata : {},
     taxSnapshot,
   });
+
+  if (["RENT_CHARGE", "UTILITY_CHARGE"].includes(normalizedCategory) && batchContext?.monthlyInvoiceCache) {
+    const nextCachedInvoices = [
+      ...activeMonthlyInvoices,
+      {
+        _id: invoice._id,
+        invoiceNumber: invoice.invoiceNumber,
+        category: invoice.category,
+        status: invoice.status,
+        invoiceDate: invoice.invoiceDate,
+        metadata: invoice.metadata || {},
+      },
+    ];
+    batchContext.monthlyInvoiceCache.set(monthlyInvoiceCacheKey, Promise.resolve(nextCachedInvoices));
+  }
 
   try {
     if (ledgerMode === "off_ledger") {
@@ -2380,7 +2423,10 @@ export const updateTakeOnBalance = async (req, res) => {
       ? getMonthStart(requestedInvoiceDate)
       : requestedInvoiceDate;
     let normalizedDueDate = shouldForceMonthlyDates
-      ? getMonthDueDate(normalizedInvoiceDate)
+      ? resolveMonthlyBillingDueDate({
+          invoiceDate: normalizedInvoiceDate,
+          dueDate: req.body.dueDate || invoice.dueDate || null,
+        })
       : normalizeDate(req.body.dueDate || invoice.dueDate || normalizedInvoiceDate, normalizedInvoiceDate);
 
     if (normalizedDueDate < normalizedInvoiceDate) {
@@ -2659,6 +2705,8 @@ export const createTenantInvoicesBatch = async (req, res) => {
       unitDocCache: new Map(),
       tenantDocCache: new Map(),
       postingAccountCache: new Map(),
+      monthlyInvoiceCache: new Map(),
+      companyTaxConfigCache: new Map(),
     };
 
     const touchedTenantIds = new Set();
@@ -2850,6 +2898,29 @@ export const deleteTenantInvoice = async (req, res) => {
     if (activeNotesCount > 0) {
       return res.status(400).json({
         error: "This invoice has active debit or credit notes. Reverse or cancel those notes first.",
+      });
+    }
+
+    const canHardDeleteWithoutAuditReversal =
+      invoice.ledgerMode === "off_ledger" ||
+      (["unposted", "failed", "not_applicable"].includes(String(invoice.postingStatus || "").toLowerCase()) &&
+        Array.isArray(invoice.ledgerEntries) &&
+        invoice.ledgerEntries.length === 0);
+
+    if (canHardDeleteWithoutAuditReversal) {
+      await TenantInvoice.deleteOne({ _id: invoice._id });
+      await recomputeTenantBalance(invoice.tenant, invoice.business);
+      await recomputeInvoiceStatusesForTenant({
+        businessId: invoice.business,
+        tenantId: invoice.tenant,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Invoice deleted permanently.",
+        deletedInvoiceId: invoice._id,
+        invoiceNumber: invoice.invoiceNumber,
+        auditStatus: "hard_deleted",
       });
     }
 

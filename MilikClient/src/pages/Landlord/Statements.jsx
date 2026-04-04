@@ -133,7 +133,9 @@ const getDefaultPeriodStart = ({ month, year, latestProcessedCutoffAt, propertyD
   if (latestProcessedCutoffAt) {
     const latestCutoff = new Date(latestProcessedCutoffAt);
     if (!Number.isNaN(latestCutoff.getTime())) {
-      return toIsoDate(latestCutoff);
+      const nextStatementAnchor = new Date(latestCutoff.getTime() + 1);
+      nextStatementAnchor.setHours(0, 0, 0, 0);
+      return toIsoDate(nextStatementAnchor);
     }
   }
 
@@ -502,7 +504,16 @@ const Statements = () => {
         })
       );
       const full = await dispatch(getStatement(created._id));
-      setDraftStatement(full?.statement || null);
+      const nextStatement = full?.statement || null;
+
+      if (nextStatement?.periodStart) {
+        setPeriodStart(toIsoDate(nextStatement.periodStart));
+      }
+      if (nextStatement?.periodEnd) {
+        setPeriodEnd(toIsoDate(nextStatement.periodEnd));
+      }
+
+      setDraftStatement(nextStatement);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load landlord statement workspace");
       setDraftStatement(null);
@@ -774,7 +785,7 @@ const Statements = () => {
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 <p className="font-medium">Statement period rules</p>
                 <p className="mt-1">
-                  The first statement defaults its start date to the property acquisition date. After a statement is processed, the next statement starts immediately after the last processed cut-off timestamp, so any transaction posted moments later flows into the next statement automatically. Period end does not auto-fill and cannot be in the future.
+                  The first statement defaults its start date to the property acquisition date. After a statement is processed, the next statement defaults to the next valid calendar day after the last processed cut-off timestamp, so transactions already captured in the prior statement are not pulled back into a regenerated draft. Period end does not auto-fill and cannot be in the future.
                 </p>
                 {latestProcessedCutoffAt ? (
                   <p className="mt-2 text-amber-900">

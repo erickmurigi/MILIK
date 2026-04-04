@@ -75,7 +75,14 @@ const endOfDay = (value) => {
  */
 export const createDraft = async (req, res, next) => {
   try {
-    const { propertyId, landlordId: landlordIdFromBody, periodStart, periodEnd, notes } = req.body;
+    const {
+      propertyId,
+      landlordId: landlordIdFromBody,
+      periodStart,
+      periodEnd,
+      notes,
+      statementType = "provisional",
+    } = req.body;
     const propertyContext = await resolvePropertyLandlord(propertyId);
     const businessId = (await resolveBusinessId(req, propertyId)) || propertyContext.businessId;
     const landlordId = landlordIdFromBody || propertyContext.landlordId;
@@ -117,7 +124,7 @@ export const createDraft = async (req, res, next) => {
 
     if (existingDraft) {
       const result = refreshRequested
-        ? await refreshDraftStatement(existingDraft._id, userId, notes || "")
+        ? await refreshDraftStatement(existingDraft._id, userId, notes || "", statementType)
         : { statement: existingDraft, lineCount: existingDraft.lineCount || 0 };
 
       const lines = await LandlordStatementLine.find({ statement: existingDraft._id })
@@ -150,6 +157,7 @@ export const createDraft = async (req, res, next) => {
       landlordId,
       statementPeriodStart: periodStart,
       statementPeriodEnd: periodEnd,
+      statementType,
       userId,
       notes: notes || "",
     });
@@ -368,7 +376,7 @@ export const listStatementsForLandlord = async (req, res, next) => {
       .skip(skip)
       .limit(parseInt(limit))
       .populate("property", "name propertyName address city")
-      .populate("landlord", "firstName lastName email phone")
+      .populate("landlord", "landlordName landlordType email phoneNumber")
       .populate("approvedBy", "surname otherNames email")
       .lean();
 

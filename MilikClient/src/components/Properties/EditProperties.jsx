@@ -211,6 +211,8 @@ const EditProperty = () => {
     [];
 
   const [activeTab, setActiveTab] = useState("general");
+  const draftStorageKey = currentCompany?._id && id ? `milik:edit-property-draft:${currentCompany._id}:${id}` : null;
+  const draftRestoredRef = useRef(false);
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -292,6 +294,11 @@ const EditProperty = () => {
     phone: "",
   });
 
+  const clearDraftState = () => {
+    if (!draftStorageKey) return;
+    sessionStorage.removeItem(draftStorageKey);
+  };
+
   const tabs = [
     { id: "general", label: "General Info", icon: <FaHome /> },
     { id: "space", label: "Space/Units", icon: <FaWarehouse /> },
@@ -361,15 +368,37 @@ const EditProperty = () => {
   // Prefill form when property data loads
   useEffect(() => {
     if (currentProperty) {
-      const landlordArray = Array.isArray(currentProperty.landlords) 
-        ? currentProperty.landlords 
+      const landlordArray = Array.isArray(currentProperty.landlords)
+        ? currentProperty.landlords
         : currentProperty.landlords ? [currentProperty.landlords] : [];
+
+      const normalizedLandlords = landlordArray.length > 0
+        ? landlordArray.map((landlord, index) => ({
+            ...landlord,
+            landlordId:
+              landlord?.landlordId?._id ||
+              landlord?.landlordId ||
+              landlord?._id ||
+              "",
+            name:
+              landlord?.name ||
+              landlord?.landlordName ||
+              landlord?.landlordId?.landlordName ||
+              landlord?.landlordId?.fullName ||
+              landlord?.landlordId?.name ||
+              "",
+            contact:
+              landlord?.contact ||
+              landlord?.landlordId?.email ||
+              landlord?.landlordId?.phone ||
+              "",
+            isPrimary: index === 0 || landlord?.isPrimary === true,
+          }))
+        : [{ landlordId: "", name: "", contact: "", isPrimary: true }];
 
       const transformedData = {
         ...currentProperty,
-        landlords: landlordArray.length > 0 
-          ? landlordArray 
-          : [{ name: "", contact: "", isPrimary: true }],
+        landlords: normalizedLandlords,
         dateAcquired: currentProperty.dateAcquired
           ? new Date(currentProperty.dateAcquired).toISOString().split('T')[0]
           : "",
@@ -378,9 +407,29 @@ const EditProperty = () => {
         smsExemptions: currentProperty.smsExemptions || initialFormData.smsExemptions,
         emailExemptions: currentProperty.emailExemptions || initialFormData.emailExemptions,
       };
-      setFormData(transformedData);
+
+      let nextFormData = transformedData;
+      if (draftStorageKey) {
+        try {
+          const savedDraft = sessionStorage.getItem(draftStorageKey);
+          if (savedDraft) {
+            const parsedDraft = JSON.parse(savedDraft);
+            if (parsedDraft?.formData && typeof parsedDraft.formData === "object") {
+              nextFormData = { ...transformedData, ...parsedDraft.formData };
+            }
+            if (parsedDraft?.activeTab) {
+              setActiveTab(parsedDraft.activeTab);
+            }
+          }
+        } catch (draftError) {
+          console.warn("Failed to restore edit property draft", draftError);
+        }
+      }
+
+      setFormData(nextFormData);
+      draftRestoredRef.current = true;
     }
-  }, [currentProperty, initialFormData]);
+  }, [currentProperty, draftStorageKey, initialFormData]);
 
   const handleChange = (e, section = null, index = null) => {
     const { name, value, type, checked } = e.target;
@@ -593,6 +642,7 @@ const EditProperty = () => {
 
       await dispatch(getLandlords({ company: businessId }));
 
+      clearDraftState();
       toast.success(result?.message || "Property updated successfully!");
       navigate("/properties");
     } catch (err) {
@@ -629,15 +679,24 @@ const EditProperty = () => {
         message: "Are you sure you want to reset all fields to their original values?",
         isDangerous: false,
         onConfirm: () => {
+          clearDraftState();
           const landlordArray = Array.isArray(currentProperty.landlords)
             ? currentProperty.landlords
             : currentProperty.landlords ? [currentProperty.landlords] : [];
 
+          const normalizedLandlords = landlordArray.length > 0
+            ? landlordArray.map((landlord, index) => ({
+                ...landlord,
+                landlordId: landlord?.landlordId?._id || landlord?.landlordId || landlord?._id || "",
+                name: landlord?.name || landlord?.landlordName || landlord?.landlordId?.landlordName || landlord?.landlordId?.fullName || landlord?.landlordId?.name || "",
+                contact: landlord?.contact || landlord?.landlordId?.email || landlord?.landlordId?.phone || "",
+                isPrimary: index === 0 || landlord?.isPrimary === true,
+              }))
+            : [{ landlordId: "", name: "", contact: "", isPrimary: true }];
+
           const transformedData = {
             ...currentProperty,
-            landlords: landlordArray.length > 0
-              ? landlordArray
-              : [{ name: "", contact: "", isPrimary: true }],
+            landlords: normalizedLandlords,
             dateAcquired: currentProperty.dateAcquired
               ? new Date(currentProperty.dateAcquired).toISOString().split('T')[0]
               : "",
@@ -678,15 +737,30 @@ const EditProperty = () => {
     }
   }, [currentCompany, dispatch]);
 
+  useEffect(() => {
+    if (!draftStorageKey || !draftRestoredRef.current) return;
+    try {
+      sessionStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          formData,
+          activeTab,
+        })
+      );
+    } catch (draftError) {
+      console.warn("Failed to persist edit property draft", draftError);
+    }
+  }, [activeTab, draftStorageKey, formData]);
+
   // RENDER FUNCTIONS - identical to AddProperties
   const renderGeneralInfo = () => {
     const landlordItems = Array.isArray(landlordsFromStore) ? landlordsFromStore : [];
 
-    const getLandlordId = (l) => l?._id || l?.id || l?.landlordId || "";
+    const getLandlordId = (l) => l?._id || l?.id || l?.landlordId?._id || l?.landlordId || "";
     const getLandlordLabel = (l) =>
       l?.fullName || l?.name || l?.landlordName || l?.email || "Unnamed";
 
-    const selectedLandlordId = formData.landlords?.[0]?.landlordId || "";
+    const selectedLandlordId = formData.landlords?.[0]?.landlordId?._id || formData.landlords?.[0]?.landlordId || "";
 
     return (
       <div className="space-y-4">
@@ -1732,7 +1806,10 @@ const EditProperty = () => {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => navigate("/properties")}
+              onClick={() => {
+                clearDraftState();
+                navigate("/properties");
+              }}
               className="h-10 px-4 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors"
               disabled={loading}
             >
@@ -1788,7 +1865,10 @@ const EditProperty = () => {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => navigate("/properties")}
+              onClick={() => {
+                clearDraftState();
+                navigate("/properties");
+              }}
               disabled={loading}
               className="h-10 px-5 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
             >

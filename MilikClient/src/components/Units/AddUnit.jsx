@@ -150,6 +150,10 @@ const AddUnit = () => {
   const [generalError, setGeneralError] = useState("");
   const [utilityOptions, setUtilityOptions] = useState([]);
   const [depositTouched, setDepositTouched] = useState(Boolean(isEditMode));
+  const draftStorageKey = currentCompany?._id
+    ? `milik:${isEditMode ? "edit" : "new"}-unit-draft:${currentCompany._id}${unitId ? `:${unitId}` : ""}`
+    : null;
+  const draftRestoredRef = useRef(false);
 
   // Fetch properties and existing unit (if editing) on mount
   useEffect(() => {
@@ -194,6 +198,48 @@ const AddUnit = () => {
       }
     }
   }, [isEditMode, unitId, units]);
+
+  useEffect(() => {
+    if (!draftStorageKey || isEditMode) {
+      draftRestoredRef.current = true;
+      return;
+    }
+    try {
+      const savedDraft = sessionStorage.getItem(draftStorageKey);
+      if (!savedDraft) return;
+      const parsedDraft = JSON.parse(savedDraft);
+      if (parsedDraft?.formData && typeof parsedDraft.formData === "object") {
+        setFormData((prev) => ({ ...prev, ...parsedDraft.formData }));
+      }
+      if (typeof parsedDraft?.depositTouched === "boolean") {
+        setDepositTouched(parsedDraft.depositTouched);
+      }
+    } catch (draftError) {
+      console.warn("Failed to restore unit draft", draftError);
+    } finally {
+      draftRestoredRef.current = true;
+    }
+  }, [draftStorageKey, isEditMode]);
+
+  useEffect(() => {
+    if (!draftStorageKey || !draftRestoredRef.current) return;
+    try {
+      sessionStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          formData,
+          depositTouched,
+        })
+      );
+    } catch (draftError) {
+      console.warn("Failed to persist unit draft", draftError);
+    }
+  }, [depositTouched, draftStorageKey, formData]);
+
+  const clearDraftState = () => {
+    if (!draftStorageKey) return;
+    sessionStorage.removeItem(draftStorageKey);
+  };
 
   // Input classes for consistency
   const inputClass =
@@ -359,6 +405,7 @@ const AddUnit = () => {
         toast.success("Unit created successfully!");
       }
       
+      clearDraftState();
       navigate("/units");
     } catch (err) {
       console.error("Unit operation error:", err);
@@ -376,6 +423,7 @@ const AddUnit = () => {
   };
 
   const handleCancel = () => {
+    clearDraftState();
     navigate(-1);
   };
 
@@ -703,7 +751,7 @@ const AddUnit = () => {
                           .filter((u) => u.isIncluded)
                           .map(
                             (u) =>
-                              utilities.find((util) => util._id === u.utility)?.name || "Unknown"
+                              String(u.utility || "Unknown")
                           )
                           .join(", ")
                       }{" "}
@@ -741,92 +789,6 @@ const AddUnit = () => {
                 className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS} resize-none`}
                 disabled={loading}
               />
-            </div>
-
-            {/* Utilities Section */}
-            <div className="space-y-3 border-t pt-6">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-sm font-bold text-slate-800 tracking-tight">Unit-Specific Utilities</h3>
-                <button
-                  type="button"
-                  onClick={addUtility}
-                  disabled={loading}
-                  className={`h-9 px-3 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md flex items-center gap-2 ${MILIK_ORANGE_BG_HOVER} transition-colors disabled:opacity-50`}
-                >
-                  <FaPlus /> Add Utility
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-500 mb-3">
-                Add utilities specific to this unit (in addition to property-level standing charges)
-              </p>
-
-              {formData.utilities.length === 0 ? (
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-center">
-                  <p className="text-sm text-slate-600">No utilities added yet</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {formData.utilities.map((util, index) => (
-                    <div
-                      key={index}
-                      className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end p-3 border border-slate-200 rounded-lg bg-slate-50/40"
-                    >
-                      <div className="md:col-span-1">
-                        <MilikSelect
-                          label="Utility"
-                          placeholder="Select utility"
-                          items={Array.from(new Set([...utilityOptions, "Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]))}
-                          value={util.utility}
-                          onChange={(val) => updateUtility(index, "utility", val)}
-                          getLabel={(x) => x}
-                          getValue={(x) => x}
-                          disabled={loading}
-                        />
-                      </div>
-
-                      <div className="md:col-span-1">
-                        <label className={labelClass}>Unit Charge (KES)</label>
-                        <input
-                          type="number"
-                          value={util.unitCharge}
-                          onChange={(e) => updateUtility(index, "unitCharge", e.target.value)}
-                          placeholder="0.00"
-                          min="0"
-                          step="0.01"
-                          className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                          disabled={loading}
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <label className="flex items-center gap-2 p-2 hover:bg-white rounded cursor-pointer transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={util.isIncluded}
-                            onChange={(e) => updateUtility(index, "isIncluded", e.target.checked)}
-                            disabled={loading}
-                            className="w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500"
-                          />
-                          <span className="text-sm font-semibold text-slate-700">Include in Rent</span>
-                        </label>
-                      </div>
-
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => removeUtility(index)}
-                          disabled={loading}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
-                          title="Remove utility"
-                        >
-                          <FaTrash className="text-sm" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Action Buttons */}

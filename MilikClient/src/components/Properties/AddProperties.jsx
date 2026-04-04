@@ -198,6 +198,8 @@ const AddProperty = () => {
     [];
 
   const [activeTab, setActiveTab] = useState("general");
+  const draftStorageKey = currentCompany?._id ? `milik:add-property-draft:${currentCompany._id}` : null;
+  const draftRestoredRef = useRef(false);
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -279,6 +281,12 @@ const AddProperty = () => {
     email: "",
     phone: "",
   });
+
+  const clearDraftState = () => {
+    if (!draftStorageKey) return;
+    sessionStorage.removeItem(draftStorageKey);
+  };
+
 
   const tabs = [
     { id: "general", label: "General Info", icon: <FaHome /> },
@@ -543,44 +551,7 @@ const AddProperty = () => {
       return;
     }
 
-    let propertyCode = formData.propertyCode?.trim();
-    if (!propertyCode) {
-      let first2Letters = "PR";
-      const selectedLandlordId = formData.landlords?.[0]?.landlordId;
-
-      if (selectedLandlordId && landlordsFromStore?.length > 0) {
-        const landlordObj = landlordsFromStore.find((l) => l._id === selectedLandlordId);
-        const landlordName = landlordObj?.landlordName || landlordObj?.name || landlordObj?.fullName || "";
-        if (landlordName) {
-          const extracted = landlordName
-            .toUpperCase()
-            .replace(/[^A-Z]/g, "")
-            .substring(0, 2);
-
-          if (extracted.length === 2) first2Letters = extracted;
-          else if (extracted.length === 1) first2Letters = extracted.padEnd(2, "X");
-        }
-      }
-
-      const allNumbers = propertiesFromStore
-        .map((p) => {
-          const match = p.propertyCode?.match(/\d{4}/);
-          return match ? parseInt(match[0]) : 0;
-        })
-        .sort((a, b) => b - a);
-
-      const globalNextNumber = (allNumbers[0] || 0) + 1;
-      const sequentialDigits = String(globalNextNumber).padStart(4, "0");
-
-      const landlordPropertyCount = propertiesFromStore
-        .filter((p) => p.propertyCode?.startsWith(first2Letters))
-        .length;
-
-      const letterIndex = landlordPropertyCount % 26;
-      const letter = String.fromCharCode(65 + letterIndex);
-
-      propertyCode = `${first2Letters}${sequentialDigits}${letter}`;
-    }
+    const propertyCode = formData.propertyCode?.trim();
 
     const businessId = currentCompany?._id;
 
@@ -615,6 +586,7 @@ const AddProperty = () => {
 
       await dispatch(getLandlords({ company: businessId }));
 
+      clearDraftState();
       toast.success(result?.message || "Property created successfully!");
       navigate("/properties");
     } catch (err) {
@@ -642,6 +614,7 @@ const AddProperty = () => {
       message: "Are you sure you want to reset all fields? This action cannot be undone.",
       isDangerous: false,
       onConfirm: () => {
+        clearDraftState();
         setFormData(initialFormData);
         setActiveTab("general");
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
@@ -677,13 +650,51 @@ const AddProperty = () => {
     }
   }, [currentCompany, dispatch]);
 
+  useEffect(() => {
+    if (!draftStorageKey) {
+      draftRestoredRef.current = true;
+      return;
+    }
+    try {
+      const savedDraft = sessionStorage.getItem(draftStorageKey);
+      if (savedDraft) {
+        const parsedDraft = JSON.parse(savedDraft);
+        if (parsedDraft?.formData && typeof parsedDraft.formData === "object") {
+          setFormData((prev) => ({ ...prev, ...parsedDraft.formData }));
+        }
+        if (parsedDraft?.activeTab) {
+          setActiveTab(parsedDraft.activeTab);
+        }
+      }
+    } catch (draftError) {
+      console.warn("Failed to restore add property draft", draftError);
+    } finally {
+      draftRestoredRef.current = true;
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (!draftStorageKey || !draftRestoredRef.current) return;
+    try {
+      sessionStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          formData,
+          activeTab,
+        })
+      );
+    } catch (draftError) {
+      console.warn("Failed to persist add property draft", draftError);
+    }
+  }, [activeTab, draftStorageKey, formData]);
+
   const renderGeneralInfo = () => {
     const landlordItems = Array.isArray(landlordsFromStore) ? landlordsFromStore : [];
 
-    const getLandlordId = (l) => l?._id || l?.id || l?.landlordId || "";
+    const getLandlordId = (l) => l?._id || l?.id || l?.landlordId?._id || l?.landlordId || "";
     const getLandlordLabel = (l) => l?.fullName || l?.name || l?.landlordName || l?.email || "Unnamed";
 
-    const selectedLandlordId = formData.landlords?.[0]?.landlordId || "";
+    const selectedLandlordId = formData.landlords?.[0]?.landlordId?._id || formData.landlords?.[0]?.landlordId || "";
 
     return (
       <div className="space-y-4">
@@ -1745,7 +1756,10 @@ const AddProperty = () => {
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => navigate(-1)}
+                onClick={() => {
+                  clearDraftState();
+                  navigate(-1);
+                }}
                 className="h-10 px-4 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors"
                 disabled={loading}
               >
@@ -1800,7 +1814,10 @@ const AddProperty = () => {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => navigate(-1)}
+                onClick={() => {
+                  clearDraftState();
+                  navigate(-1);
+                }}
                 disabled={loading}
                 className="h-10 px-5 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
               >

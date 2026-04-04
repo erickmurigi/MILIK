@@ -173,6 +173,7 @@ const AddTenant = () => {
   const { isFetching: loading } = useSelector(
     (state) => state.tenant || { isFetching: false }
   );
+  const unitLoading = useSelector((state) => state.unit?.isFetching || false);
   const properties = useSelector((state) => state.property?.properties || []);
   const units = useSelector((state) => state.unit?.units || []);
 
@@ -191,7 +192,6 @@ const AddTenant = () => {
     rent: "",
     depositAmount: "",
     depositHeldBy: "Management Company",
-    paymentMethod: "",
     status: "active",
     emergencyContactName: "",
     emergencyContactPhone: "",
@@ -208,6 +208,9 @@ const AddTenant = () => {
   const [isCreatingInitialInvoices, setIsCreatingInitialInvoices] = useState(false);
   const [openingInvoiceMode, setOpeningInvoiceMode] = useState("separate");
   const [utilityOptions, setUtilityOptions] = useState([]);
+  const draftStorageKey = currentCompany?._id ? `milik:new-tenant-draft:${currentCompany._id}` : null;
+  const draftRestoredRef = useRef(false);
+  const lastPropertyRef = useRef("");
 
   useEffect(() => {
     if (currentCompany?._id) {
@@ -227,9 +230,14 @@ const AddTenant = () => {
 
   useEffect(() => {
     if (!formData.property) {
+      lastPropertyRef.current = "";
       setAvailableUnits([]);
       setFormData((prev) => ({ ...prev, unit: "", utilities: [] }));
       setAdditionalUtilities([]);
+      return;
+    }
+
+    if (unitLoading && (!Array.isArray(units) || units.length === 0)) {
       return;
     }
 
@@ -244,9 +252,14 @@ const AddTenant = () => {
     });
 
     setAvailableUnits(vacant);
-    setFormData((prev) => ({ ...prev, unit: "", utilities: [], rent: "", depositAmount: "" }));
-    setAdditionalUtilities([]);
-  }, [formData.property, units]);
+
+    if (lastPropertyRef.current && lastPropertyRef.current !== formData.property) {
+      setFormData((prev) => ({ ...prev, unit: "", utilities: [], rent: "", depositAmount: "" }));
+      setAdditionalUtilities([]);
+    }
+
+    lastPropertyRef.current = formData.property;
+  }, [formData.property, unitLoading, units]);
 
   useEffect(() => {
     if (!formData.unit || availableUnits.length === 0) return;
@@ -300,6 +313,53 @@ const AddTenant = () => {
       properties.find((property) => normalizeId(property?._id) === normalizeId(formData.property)) || null,
     [properties, formData.property]
   );
+
+  useEffect(() => {
+    if (!draftStorageKey) {
+      draftRestoredRef.current = true;
+      return;
+    }
+    try {
+      const savedDraft = sessionStorage.getItem(draftStorageKey);
+      if (!savedDraft) return;
+      const parsedDraft = JSON.parse(savedDraft);
+      if (parsedDraft?.formData && typeof parsedDraft.formData === "object") {
+        lastPropertyRef.current = parsedDraft.formData.property || "";
+        setFormData((prev) => ({ ...prev, ...parsedDraft.formData }));
+      }
+      if (Array.isArray(parsedDraft?.additionalUtilities)) {
+        setAdditionalUtilities(parsedDraft.additionalUtilities);
+      }
+      if (parsedDraft?.openingInvoiceMode) {
+        setOpeningInvoiceMode(parsedDraft.openingInvoiceMode);
+      }
+    } catch (draftError) {
+      console.warn("Failed to restore tenant draft", draftError);
+    } finally {
+      draftRestoredRef.current = true;
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (!draftStorageKey || !draftRestoredRef.current) return;
+    try {
+      sessionStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          formData,
+          additionalUtilities,
+          openingInvoiceMode,
+        })
+      );
+    } catch (draftError) {
+      console.warn("Failed to persist tenant draft", draftError);
+    }
+  }, [additionalUtilities, draftStorageKey, formData, openingInvoiceMode]);
+
+  const clearDraftState = () => {
+    if (!draftStorageKey) return;
+    sessionStorage.removeItem(draftStorageKey);
+  };
 
   const invoicePreviewItems = useMemo(() => {
     const utilityRows = [...(formData.utilities || []), ...additionalUtilities]
@@ -480,7 +540,6 @@ const AddTenant = () => {
     if (!["Management Company", "Landlord"].includes(formData.depositHeldBy)) {
       errors.depositHeldBy = "Choose who holds the deposit";
     }
-    if (!formData.paymentMethod) errors.paymentMethod = "Payment method is required";
 
     if (formData.leaseType === "fixed" && !formData.moveOutDate) {
       errors.moveOutDate = "Move-out date is required for fixed-term leases";
@@ -526,6 +585,7 @@ const AddTenant = () => {
       };
 
       const result = await dispatch(createTenant(payload)).unwrap();
+      clearDraftState();
       toast.success(result?.message || "Tenant created successfully!");
 
       setAdditionalUtilities([]);
@@ -680,6 +740,7 @@ for (const request of invoiceRequests) {
   };
 
   const handleCancel = () => {
+    clearDraftState();
     navigate("/tenants");
   };
 
@@ -689,7 +750,7 @@ for (const request of invoiceRequests) {
         <div className="max-w-5xl mx-auto">
           <div className="mb-6">
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-              Tenant Details
+              New Tenant
             </h1>
             <p className="mt-1 text-sm text-slate-600">
               Create a new tenant record with billing information
@@ -938,28 +999,6 @@ for (const request of invoiceRequests) {
                           <p className="text-xs text-orange-700 mt-0.5">Rent + Utilities</p>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="md:col-span-4 md:col-start-1">
-                      <label className={labelClass}>
-                        Payment Method <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        name="paymentMethod"
-                        value={formData.paymentMethod}
-                        onChange={handleInputChange}
-                        className={`${inputClass} ${fieldErrors.paymentMethod ? "border-red-500" : ""}`}
-                      >
-                        <option value="">Select Payment Method</option>
-                        <option value="bank_transfer">Bank Transfer</option>
-                        <option value="mobile_money">Mobile Money</option>
-                        <option value="cash">Cash</option>
-                        <option value="check">Check</option>
-                        <option value="credit_card">Credit Card</option>
-                      </select>
-                      {fieldErrors.paymentMethod && (
-                        <p className="mt-1 text-xs text-red-600">{fieldErrors.paymentMethod}</p>
-                      )}
                     </div>
 
                     <div className="md:col-span-2">

@@ -210,7 +210,7 @@ const Vacants = () => {
               <Link to="/tenants/add">
                 <button className="px-4 py-2 bg-white text-emerald-600 rounded-lg font-semibold hover:bg-white/90">
                   <FaUserPlus className="inline mr-2" />
-                  Add New Tenant
+                  New Tenant
                 </button>
               </Link>
               <button className="px-4 py-2 bg-white/20 rounded-lg font-semibold hover:bg-white/30">
@@ -352,7 +352,7 @@ const Vacants = () => {
                   </Link>
                   <Link to={`/tenants/add?unit=${unit.id}`} className="flex-1">
                     <button className="w-full px-3 py-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white rounded-lg text-sm hover:shadow-lg">
-                      Add Tenant
+                      New Tenant
                     </button>
                   </Link>
                 </div>

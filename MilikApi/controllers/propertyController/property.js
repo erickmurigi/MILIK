@@ -7,6 +7,42 @@ import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsServi
 import { ensurePropertyControlAccount } from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
+const PROPERTY_CODE_PREFIX = "PRO";
+
+const normalizePropertyCodeValue = (value = "") => String(value || "").trim().toUpperCase();
+
+const extractPropertyCodeSequence = (value = "") => {
+  const normalized = normalizePropertyCodeValue(value);
+  const match = normalized.match(/^PRO(\d+)$/);
+  return match ? parseInt(match[1], 10) : 0;
+};
+
+const generateNextPropertyCode = (existingCodes = [], reservedCodes = []) => {
+  const takenCodes = new Set(
+    [...existingCodes, ...reservedCodes]
+      .map((code) => normalizePropertyCodeValue(code))
+      .filter(Boolean)
+  );
+
+  let highestSequence = 0;
+  for (const code of takenCodes) {
+    const sequence = extractPropertyCodeSequence(code);
+    if (sequence > highestSequence) {
+      highestSequence = sequence;
+    }
+  }
+
+  let nextSequence = highestSequence + 1;
+  let candidate = `${PROPERTY_CODE_PREFIX}${String(nextSequence).padStart(3, "0")}`;
+
+  while (takenCodes.has(candidate)) {
+    nextSequence += 1;
+    candidate = `${PROPERTY_CODE_PREFIX}${String(nextSequence).padStart(3, "0")}`;
+  }
+
+  return candidate;
+};
+
 const validatePropertyLandlords = async (businessId, landlords = []) => {
   const landlordIds = (Array.isArray(landlords) ? landlords : [])
     .map((item) => item?.landlordId)
@@ -80,7 +116,7 @@ export const createProperty = async (req, res) => {
       business,
     } = req.body;
 
-    const businessId = req.user?.company || business;
+    const businessId = req.user?.company || req.user?.business || business;
 
     if (!businessId) {
       return res.status(400).json({
@@ -96,20 +132,27 @@ export const createProperty = async (req, res) => {
     const normalizedPropertyType = typeof propertyType === "string" ? propertyType.trim() : "";
 
     if (
-      !normalizedPropertyCode ||
       !normalizedPropertyName ||
       !normalizedLrNumber ||
       !normalizedPropertyType
     ) {
       return res.status(400).json({
         success: false,
-        message: "Property Code, Name, LR Number, and Type are required fields",
+        message: "Property Name, LR Number, and Type are required fields",
       });
     }
 
+    const allExistingPropertyCodes = await Property.find({ business: businessId })
+      .select("propertyCode")
+      .lean();
+
+    const resolvedPropertyCode =
+      normalizedPropertyCode ||
+      generateNextPropertyCode(allExistingPropertyCodes.map((item) => item?.propertyCode));
+
     const existingProperty = await Property.findOne({
       business: businessId,
-      propertyCode: normalizedPropertyCode,
+      propertyCode: resolvedPropertyCode,
     });
 
     if (existingProperty) {
@@ -201,7 +244,7 @@ export const createProperty = async (req, res) => {
       dateAcquired: dateAcquired ? new Date(dateAcquired) : null,
       letManage,
       landlords: validLandlords,
-      propertyCode: normalizedPropertyCode,
+      propertyCode: resolvedPropertyCode,
       propertyName: normalizedPropertyName,
       lrNumber: normalizedLrNumber,
       ...cleanedData,
@@ -734,7 +777,7 @@ export const bulkImportProperties = async (req, res, next) => {
         .json({ success: false, message: "Maximum 1000 properties per import" });
     }
 
-    const businessId = req.user?.company || business;
+    const businessId = req.user?.company || req.user?.business || business;
 
     if (!businessId) {
       return res
@@ -797,17 +840,9 @@ export const bulkImportProperties = async (req, res, next) => {
     const existingLRNumbers = new Set(existingByLR.map((p) => p.lrNumber));
     const existingPropertyCodes = new Set(existingByCodes.map((p) => p.propertyCode));
 
-    const allProperties = await Property.find({ business: businessId }).select("propertyCode");
-    let maxCodeNumber = 0;
-
-    allProperties.forEach((prop) => {
-      if (prop.propertyCode && prop.propertyCode.startsWith("PRO")) {
-        const num = parseInt(prop.propertyCode.substring(3), 10);
-        if (!Number.isNaN(num) && num > maxCodeNumber) {
-          maxCodeNumber = num;
-        }
-      }
-    });
+    const allProperties = await Property.find({ business: businessId })
+      .select("propertyCode")
+      .lean();
 
     const results = {
       successful: [],
@@ -856,22 +891,12 @@ export const bulkImportProperties = async (req, res, next) => {
       }
 
       try {
-        let generatedPropertyCode = property.propertyCode;
-
-        if (!generatedPropertyCode) {
-          let counter = maxCodeNumber + 1;
-          generatedPropertyCode = `PRO${String(counter).padStart(3, "0")}`;
-
-          while (
-            existingPropertyCodes.has(generatedPropertyCode) ||
-            seenCodesInBatch.has(generatedPropertyCode)
-          ) {
-            counter++;
-            generatedPropertyCode = `PRO${String(counter).padStart(3, "0")}`;
-          }
-
-          maxCodeNumber = counter;
-        }
+        const generatedPropertyCode =
+          property.propertyCode ||
+          generateNextPropertyCode(
+            allProperties.map((item) => item?.propertyCode),
+            Array.from(new Set([...existingPropertyCodes, ...seenCodesInBatch]))
+          );
 
         seenCodesInBatch.add(generatedPropertyCode);
 

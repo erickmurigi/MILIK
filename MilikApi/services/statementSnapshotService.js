@@ -53,6 +53,7 @@ export const createDraftStatement = async ({
   landlordId,
   statementPeriodStart,
   statementPeriodEnd,
+  statementType = "provisional",
   userId,
   notes = "",
 }) => {
@@ -113,7 +114,11 @@ export const createDraftStatement = async ({
     metadata: {
       generatedBy: userId,
       entryCount: statementData.entries.length,
-      workspace: statementData.metadata || {},
+      statementType,
+      workspace: {
+        ...(statementData.metadata || {}),
+        statementType,
+      },
     },
   });
 
@@ -168,7 +173,7 @@ export const createDraftStatement = async ({
  *
  * @returns {Promise<Object>} Refreshed draft with latest lines
  */
-export const refreshDraftStatement = async (statementId, userId, notes = "") => {
+export const refreshDraftStatement = async (statementId, userId, notes = "", statementType = null) => {
   if (!statementId || !userId) {
     throw new Error("refreshDraftStatement requires statementId and userId");
   }
@@ -181,6 +186,9 @@ export const refreshDraftStatement = async (statementId, userId, notes = "") => 
   if (draft.status !== "draft") {
     throw new Error("Only draft statements can be refreshed");
   }
+
+  const resolvedStatementType =
+    statementType || draft?.metadata?.statementType || draft?.metadata?.workspace?.statementType || "provisional";
 
   const statementData = await generateLandlordStatement({
     propertyId: draft.property,
@@ -243,7 +251,11 @@ export const refreshDraftStatement = async (statementId, userId, notes = "") => 
     refreshedBy: userId,
     refreshedAt: new Date(),
     entryCount: statementData.entries.length,
-    workspace: statementData.metadata || {},
+    statementType: resolvedStatementType,
+    workspace: {
+      ...(statementData.metadata || {}),
+      statementType: resolvedStatementType,
+    },
   };
 
   await draft.save();
