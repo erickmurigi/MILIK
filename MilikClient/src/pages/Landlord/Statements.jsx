@@ -922,7 +922,7 @@ const Statements = () => {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 px-6 py-5 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-4 px-6 py-5 md:grid-cols-2 xl:grid-cols-5">
                     <div className="rounded-xl bg-slate-50 p-4">
                       <p className="text-sm text-slate-500">Opening Balance</p>
                       <p className="mt-2 text-lg font-semibold text-slate-900">{currency(summary.openingBalance)}</p>
@@ -935,11 +935,22 @@ const Statements = () => {
                       <p className="text-sm text-slate-500">Occupied Units</p>
                       <p className="mt-2 text-lg font-semibold text-slate-900">{Number(summary.occupiedUnits || 0)}</p>
                     </div>
+                    <div className="rounded-xl bg-amber-50 p-4">
+                      <p className="text-sm text-amber-700">Unapplied Tenant Credits</p>
+                      <p className="mt-2 text-lg font-semibold text-amber-800">{currency(summary.unappliedPayments || 0)}</p>
+                    </div>
                     <div className={`rounded-xl p-4 ${settlement.isNegative ? "bg-red-50" : "bg-slate-900 text-white"}`}>
                       <p className={`text-sm ${settlement.isNegative ? "text-red-600" : "text-slate-200"}`}>{settlement.label}</p>
                       <p className={`mt-2 text-lg font-semibold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</p>
                     </div>
                   </div>
+                  {Number(summary.unappliedPayments || 0) > 0 && (
+                    <div className="px-6 pb-2">
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        Unapplied tenant credits are being carried separately from allocated rent and utility receipts. They reduce the tenant net position but do not count as paid in the landlord statement until they are allocated to actual bills.
+                      </div>
+                    </div>
+                  )}
 
                   <div className="px-6 pb-6">
                     <div className="overflow-hidden rounded-2xl border border-slate-200">

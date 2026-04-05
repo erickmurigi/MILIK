@@ -18,7 +18,9 @@ import Dashboard from "./pages/Dashboard/Dashboard";
 import Landlords from "./pages/Landlord/Landlord";
 import AddLandlord from "./components/Landlord/AddLandlord";
 import LandlordPayments from "./pages/Landlord/LandlordPayments";
+import LandlordReceipts from "./pages/Landlord/LandlordReceipts";
 import LandlordCommissionsStatement from "./pages/Landlord/LandlordCommissionsStatement";
+import LandlordStandingOrders from "./pages/Landlord/LandlordStandingOrders";
 import ProcessedStatements from "./pages/Landlord/ProcessedStatements";
 import Properties from "./pages/Properties/Properties";
 import PropertyCommissionSettings from "./pages/Properties/PropertyCommissionSettings";
@@ -33,9 +35,9 @@ import Receipts from "./pages/Tenants/Receipts";
 import InvoiceNotes from "./pages/Tenants/InvoiceNotes";
 import AddReceipt from "./pages/Tenants/AddReceipt";
 import TenantDeposits from "./pages/Tenants/TenantDeposits";
-import TakeOnBalances from "./pages/Tenants/TakeOnBalances";
-import MpesaBatchImport from "./pages/Tenants/MpesaBatchImport";
 import TenantPrepayments from "./pages/Tenants/TenantPrepayments";
+import InstantReceipts from "./pages/Tenants/InstantReceipts";
+import TakeOnBalances from "./pages/Tenants/TakeOnBalances";
 import UnitTypesPage from "./pages/Lease/Lease";
 import Vacants from "./pages/Vacants/Vacants";
 import Maintenances from "./pages/Maintenances/Maintenances";
@@ -50,25 +52,26 @@ import AddCompanyWizard from "./pages/SystemSetup/AddCompanyWizard";
 import AddUserPage from "./pages/SystemSetup/AddUsers";
 import CompanySettings from "./pages/SystemSetup/CompanySettings";
 import PaymentVouchers from "./pages/Financial/PaymentVouchers";
+import ServiceProviders from "./pages/Financial/ServiceProviders";
+import ExpenseRequisition from "./pages/Financial/ExpenseRequisition";
 import ChartOfAccounts from "./pages/Financial/ChartOfAccounts";
 import LedgerAccountActivity from "./pages/Financial/LedgerAccountActivity";
 import RentalCollectionReport from "./pages/Reports/RentalCollectionReport";
+import RentalInvoiceVATReport from "./pages/Reports/RentalInvoiceVATReport";
+import RentalAgedAnalysisReport from "./pages/Reports/RentalAgedAnalysisReport";
 import PaidBalanceReport from "./pages/Reports/PaidBalanceReport";
 import AgedAnalysisReport from "./pages/Reports/AgedAnalysisReport";
-import RentalAgedAnalysisReport from "./pages/Reports/RentalAgedAnalysisReport";
-import RentalInvoiceVATReport from "./pages/Reports/RentalInvoiceVATReport";
 import CommissionReports from "./pages/Reports/CommissionReports";
 import TrialBalanceReport from "./pages/Reports/TrialBalanceReport";
 import IncomeStatementReport from "./pages/Reports/IncomeStatementReport";
 import BalanceSheetReport from "./pages/Reports/BalanceSheetReport";
 import TaxReports from "./pages/Reports/TaxReports";
 import JournalEntries from "./pages/Financial/JournalEntries";
-import ExpenseRequisition from "./pages/Financial/ExpenseRequisition";
 import MeterReadings from "./pages/Tools/MeterReadings";
 import LatePenalties from "./pages/Tools/LatePenalties";
+import MpesaBatchImport from "./pages/Tenants/MpesaBatchImport";
 import SupportDocumentation from "./pages/Help/SupportDocumentation";
 import AboutMilik from "./pages/Help/AboutMilik";
-import LandlordStandingOrders from "./pages/Landlord/LandlordStandingOrders";
 
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
 const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
@@ -357,6 +360,7 @@ function App() {
         <Route path="/landlords/new" element={<ProtectedRoute><AddLandlord /></ProtectedRoute>} />
         <Route path="/landlord-payments" element={<ProtectedRoute><LandlordPayments /></ProtectedRoute>} />
         <Route path="/financial/landlord-statement" element={<ProtectedRoute><LandlordCommissionsStatement /></ProtectedRoute>} />
+        <Route path="/invoices/landlord" element={<ProtectedRoute><Navigate to="/landlord/statements" replace /></ProtectedRoute>} />
         <Route path="/landlord/processed-statements" element={<PermissionRoute resource="processedStatements" moduleKey="accounts"><ProcessedStatements /></PermissionRoute>} />
         <Route path="/landlord/statements" element={<PermissionRoute resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></PermissionRoute>} />
         <Route path="/properties" element={<PermissionRoute resource="properties" moduleKey="propertyManagement"><Properties /></PermissionRoute>} />
@@ -364,26 +368,38 @@ function App() {
         <Route path="/units/new" element={<ProtectedRoute><AddUnit /></ProtectedRoute>} />
         <Route path="/units/:id" element={<ProtectedRoute><AddUnit /></ProtectedRoute>} />
         <Route path="/units/space-types" element={<PermissionRoute resource="units" moduleKey="propertyManagement"><UnitTypesPage /></PermissionRoute>} />
+        <Route path="/agreements" element={<ProtectedRoute><Navigate to="/units/space-types" replace /></ProtectedRoute>} />
         <Route path="/tenants" element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><Tenants /></PermissionRoute>} />
         <Route path="/tenant/new" element={<ProtectedRoute><AddTenant /></ProtectedRoute>} />
         <Route path="/tenant/:id/statement" element={<ProtectedRoute><TenantStatement /></ProtectedRoute>} />
         <Route path="/tenant/:id/edit" element={<ProtectedRoute><AddTenant /></ProtectedRoute>} />
         <Route path="/tenants/deposits" element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TenantDeposits /></PermissionRoute>} />
         <Route path="/tenants/take-on-balances" element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TakeOnBalances /></PermissionRoute>} />
+        <Route path="/tenants/financing" element={<ProtectedRoute><Navigate to="/tenants/take-on-balances" replace /></ProtectedRoute>} />
+        <Route path="/tenants/journals" element={<ProtectedRoute><Navigate to="/financial/journals" replace /></ProtectedRoute>} />
         <Route path="/invoices/rental" element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices /></PermissionRoute>} />
+        <Route path="/invoices/new" element={<ProtectedRoute><Navigate to="/invoices/rental" replace /></ProtectedRoute>} />
         <Route path="/invoices/rental/:id" element={<ProtectedRoute><RentalInvoices /></ProtectedRoute>} />
         <Route path="/invoices/notes" element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><InvoiceNotes /></PermissionRoute>} />
+        <Route path="/invoices/vat" element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoiceVATReport /></PermissionRoute>} />
+        <Route path="/invoices/withholding-vat" element={<ProtectedRoute><Navigate to="/reports/tax-reports" replace /></ProtectedRoute>} />
+        <Route path="/invoices/withholding-tax" element={<ProtectedRoute><Navigate to="/reports/tax-reports" replace /></ProtectedRoute>} />
         <Route path="/receipts" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><Receipts /></PermissionRoute>} />
         <Route path="/receipts/new" element={<PermissionRoute resource="receipts" action="create" moduleKey="propertyManagement"><AddReceipt /></PermissionRoute>} />
-        <Route path="/receipts/mpesa-import" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><MpesaBatchImport /></PermissionRoute>} />
         <Route path="/receipts/prepayments" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><TenantPrepayments /></PermissionRoute>} />
+        <Route path="/receipts/mpesa-import" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><MpesaBatchImport /></PermissionRoute>} />
+        <Route path="/receipts/instant" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><InstantReceipts /></PermissionRoute>} />
+        <Route path="/receipts/landlord" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><LandlordReceipts /></PermissionRoute>} />
         <Route path="/receipts/:id" element={<ProtectedRoute><Receipts /></ProtectedRoute>} />
         <Route path="/financial/payment-vouchers" element={<PermissionRoute resource="paymentVouchers" moduleKey="accounts"><PaymentVouchers /></PermissionRoute>} />
+        <Route path="/financial/service-providers" element={<ProtectedRoute><ServiceProviders /></ProtectedRoute>} />
         <Route path="/expenses/requisition" element={<ProtectedRoute><ExpenseRequisition /></ProtectedRoute>} />
         <Route path="/landlords/standing-orders" element={<ProtectedRoute><LandlordStandingOrders /></ProtectedRoute>} />
+        <Route path="/landlords/advancement" element={<ProtectedRoute><Navigate to="/landlord-payments" replace /></ProtectedRoute>} />
         <Route path="/financial/journals" element={<PermissionRoute resource="journals" moduleKey="accounts"><JournalEntries /></PermissionRoute>} />
         <Route path="/financial/chart-of-accounts" element={<PermissionRoute resource="chartOfAccounts" moduleKey="accounts"><ChartOfAccounts /></PermissionRoute>} />
         <Route path="/financial/chart-of-accounts/:accountId/activity" element={<ProtectedRoute><LedgerAccountActivity /></ProtectedRoute>} />
+        <Route path="/financial/ledger-entries" element={<ProtectedRoute><Navigate to="/financial/chart-of-accounts" replace /></ProtectedRoute>} />
         <Route path="/expenses/payment-vouchers" element={<ProtectedRoute><PaymentVouchers /></ProtectedRoute>} />
         <Route path="/vacants" element={<ProtectedRoute><Vacants /></ProtectedRoute>} />
         <Route path="/maintenances" element={<ProtectedRoute><Maintenances /></ProtectedRoute>} />
@@ -400,10 +416,10 @@ function App() {
         <Route path="/settings" element={<PermissionRoute resource="companySettings" action="view"><CompanySettings /></PermissionRoute>} />
         <Route path="/reports/rental-collection" element={<ProtectedRoute><RentalCollectionReport /></ProtectedRoute>} />
         <Route path="/reports/export" element={<ProtectedRoute><RentalCollectionReport /></ProtectedRoute>} />
+        <Route path="/tools/import-export" element={<ProtectedRoute><Navigate to="/reports/export" replace /></ProtectedRoute>} />
         <Route path="/reports/paid-balance" element={<ProtectedRoute><PaidBalanceReport /></ProtectedRoute>} />
         <Route path="/reports/aged-analysis" element={<ProtectedRoute><AgedAnalysisReport /></ProtectedRoute>} />
         <Route path="/reports/rental-aged-analysis" element={<ProtectedRoute><RentalAgedAnalysisReport /></ProtectedRoute>} />
-        <Route path="/invoices/vat" element={<ProtectedRoute><RentalInvoiceVATReport /></ProtectedRoute>} />
         <Route path="/reports/commissions" element={<ProtectedRoute><CommissionReports /></ProtectedRoute>} />
         <Route path="/reports/trial-balance" element={<PermissionRoute resource="financialReports" moduleKey="accounts"><TrialBalanceReport /></PermissionRoute>} />
         <Route path="/reports/income-statement" element={<PermissionRoute resource="financialReports" moduleKey="accounts"><IncomeStatementReport /></PermissionRoute>} />

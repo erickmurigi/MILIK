@@ -154,6 +154,7 @@ const ChartOfAccounts = () => {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showControlAccounts, setShowControlAccounts] = useState(true);
 
   const [selectedIds, setSelectedIds] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -212,9 +213,15 @@ const ChartOfAccounts = () => {
   const normalizedSearch = search.trim().toLowerCase();
 
   const filteredAccounts = useMemo(() => {
-    if (!normalizedSearch) return accounts;
-
     return accounts.filter((account) => {
+      const isControlAccount =
+        String(account?.subGroup || "").toLowerCase().includes("control") ||
+        String(account?.name || "").toLowerCase().includes("control") ||
+        String(account?.code || "").toLowerCase().includes("ctrl");
+
+      if (!showControlAccounts && isControlAccount) return false;
+      if (!normalizedSearch) return true;
+
       const haystack = [
         account.code,
         account.name,
@@ -231,7 +238,7 @@ const ChartOfAccounts = () => {
 
       return haystack.includes(normalizedSearch);
     });
-  }, [accounts, normalizedSearch]);
+  }, [accounts, normalizedSearch, showControlAccounts]);
 
   const groupedAccounts = useMemo(() => {
     return ACCOUNT_GROUPS.map((group) => ({
@@ -522,9 +529,20 @@ const ChartOfAccounts = () => {
                 />
               </div>
 
-              <div className="text-sm text-slate-600 flex items-center gap-2">
-                <FaFolderOpen className="text-[#0B3B2E]" />
-                {selectedAccounts.length} selected
+              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+                <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={showControlAccounts}
+                    onChange={(e) => setShowControlAccounts(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                  />
+                  Show Control Accounts
+                </label>
+                <div className="text-sm text-slate-600 flex items-center gap-2">
+                  <FaFolderOpen className="text-[#0B3B2E]" />
+                  {selectedAccounts.length} selected
+                </div>
               </div>
             </div>
           </div>

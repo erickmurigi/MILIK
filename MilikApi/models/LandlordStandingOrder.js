@@ -11,6 +11,25 @@ const destinationSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const runHistorySchema = new mongoose.Schema(
+  {
+    runDate: { type: Date, required: true },
+    dueDate: { type: Date, default: null },
+    amount: { type: Number, required: true, min: 0 },
+    note: { type: String, default: "", trim: true },
+    referenceNo: { type: String, default: "", trim: true },
+    processedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+  },
+  {
+    _id: true,
+    timestamps: true,
+  }
+);
+
 const LandlordStandingOrderSchema = new mongoose.Schema(
   {
     business: {
@@ -43,7 +62,7 @@ const LandlordStandingOrderSchema = new mongoose.Schema(
     },
     frequency: {
       type: String,
-      enum: ["monthly", "quarterly", "semi_annually", "annually", "custom"],
+      enum: ["weekly", "monthly", "quarterly", "semi_annually", "annually", "yearly", "custom"],
       default: "monthly",
       index: true,
     },
@@ -63,7 +82,7 @@ const LandlordStandingOrderSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["bank_transfer", "mobile_money", "cash", "check", "credit_card"],
+      enum: ["bank_transfer", "mobile_money", "mpesa", "cash", "check", "cheque", "credit_card", "other"],
       default: "bank_transfer",
     },
     destination: {
@@ -95,6 +114,12 @@ const LandlordStandingOrderSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
     notes: {
       type: String,
       default: "",
@@ -106,13 +131,54 @@ const LandlordStandingOrderSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    standingOrderNo: {
+      type: String,
+      trim: true,
+      default: "",
+      index: true,
+    },
+    runHistory: {
+      type: [runHistorySchema],
+      default: () => [],
+    },
+    totalRuns: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    totalProcessedAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    lastRunAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );
 
+LandlordStandingOrderSchema.pre("validate", function syncCompatibilityFields(next) {
+  if (!this.referenceNo && this.standingOrderNo) {
+    this.referenceNo = this.standingOrderNo;
+  }
+  if (!this.standingOrderNo && this.referenceNo) {
+    this.standingOrderNo = this.referenceNo;
+  }
+  if (!this.lastRunDate && this.lastRunAt) {
+    this.lastRunDate = this.lastRunAt;
+  }
+  if (!this.lastRunAt && this.lastRunDate) {
+    this.lastRunAt = this.lastRunDate;
+  }
+  next();
+});
+
 LandlordStandingOrderSchema.index({ business: 1, createdAt: -1 });
 LandlordStandingOrderSchema.index({ business: 1, landlord: 1, status: 1, createdAt: -1 });
 LandlordStandingOrderSchema.index({ business: 1, referenceNo: 1 }, { unique: true });
+LandlordStandingOrderSchema.index({ business: 1, standingOrderNo: 1 });
 
 const LandlordStandingOrder =
   mongoose.models.LandlordStandingOrder ||

@@ -1,157 +1,304 @@
 import mongoose from "mongoose";
 import ExpenseRequisition from "../../models/ExpenseRequisition.js";
+import ServiceProvider from "../../models/ServiceProvider.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
-const getBusinessId = (req) => req.query.business || req.body.business || req.params.businessId || null;
+const resolveBusinessId = (req) =>
+  req?.query?.business ||
+  req?.query?.company ||
+  req?.body?.business ||
+  req?.body?.company ||
+  req?.user?.company?._id ||
+  req?.user?.company ||
+  null;
 
-const buildReference = async (businessId) => {
-  const year = new Date().getFullYear();
-  const count = await ExpenseRequisition.countDocuments({ business: businessId });
-  return `ERQ-${year}-${String(count + 1).padStart(4, "0")}`;
+const resolveActorUserId = (req) =>
+  req?.user?._id || req?.user?.id || req?.user?.userId || null;
+
+const parseDate = (value, fallback = null) => {
+  if (!value) return fallback;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : date;
 };
 
-export const listExpenseRequisitions = async (req, res) => {
-  try {
-    const business = getBusinessId(req);
-    if (!isValidObjectId(business)) {
-      return res.status(400).json({ success: false, message: "Valid business is required." });
-    }
-
-    const filter = { business };
-    if (req.query.status && req.query.status !== "all") filter.status = req.query.status;
-    if (req.query.priority && req.query.priority !== "all") filter.priority = req.query.priority;
-    if (isValidObjectId(req.query.property)) filter.property = req.query.property;
-
-    const rows = await ExpenseRequisition.find(filter)
-      .populate("property", "propertyName name")
-      .populate("unit", "unitNumber")
-      .populate("landlord", "landlordName")
-      .populate("requestedBy", "firstname lastname username")
-      .populate("approvedBy", "firstname lastname username")
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return res.status(200).json({ success: true, data: rows });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message || "Failed to load expense requisitions." });
+const normalizeCategory = (value) => {
+  const normalized = String(value || "other").trim().toLowerCase();
+  if (["maintenance", "repair", "utility", "tax", "insurance", "supplies", "other", "general"].includes(normalized)) {
+    return normalized;
   }
+  return "other";
 };
 
-export const createExpenseRequisition = async (req, res) => {
+const normalizeStatus = (value, fallback = "draft") => {
+  const normalized = String(value || fallback).trim().toLowerCase();
+  if (["draft", "submitted", "approved", "rejected", "converted", "cancelled"].includes(normalized)) {
+    return normalized;
+  }
+  return fallback;
+};
+
+const populateQuery = (query) =>
+  query
+    .populate("property", "propertyName propertyCode name")
+    .populate("unit", "unitNumber name")
+    .populate("landlord", "landlordName firstName lastName")
+    .populate("serviceProvider", "name providerCode phone email category")
+    .populate("requestedBy", "username email firstName lastName")
+    .populate("approvedBy", "username email firstName lastName")
+    .populate("rejectedBy", "username email firstName lastName")
+    .populate("linkedVoucher", "voucherNo status amount dueDate");
+
+const generateRequisitionNo = async (businessId) => {
+  const prefix = "ERQ";
+  const last = await ExpenseRequisition.findOne(
+    {
+      business: businessId,
+      $or: [
+        { requisitionNo: { $regex: `^${prefix}\\d+$` } },
+        { referenceNo: { $regex: `^${prefix}\\d+$` } },
+      ],
+    },
+    { requisitionNo: 1, referenceNo: 1 },
+    { sort: { createdAt: -1 } }
+  ).lean();
+
+  const lastNo = last?.requisitionNo || last?.referenceNo || "";
+  const seq = lastNo ? (parseInt(String(lastNo).replace(prefix, ""), 10) || 0) + 1 : 1;
+  return `${prefix}${String(seq).padStart(4, "0")}`;
+};
+
+const resolveVendorName = async (serviceProviderId, fallbackVendorName = "") => {
+  if (isValidObjectId(serviceProviderId)) {
+    const provider = await ServiceProvider.findById(serviceProviderId).select("name").lean();
+    if (provider?.name) return provider.name;
+  }
+  return String(fallbackVendorName || "").trim();
+};
+
+export const createExpenseRequisition = async (req, res, next) => {
   try {
-    const business = getBusinessId(req);
-    if (!isValidObjectId(business)) {
-      return res.status(400).json({ success: false, message: "Valid business is required." });
+    const businessId = resolveBusinessId(req);
+    const actorUserId = resolveActorUserId(req);
+
+    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+    if (!actorUserId) return res.status(400).json({ success: false, message: "Authenticated user is required" });
+    if (!isValidObjectId(req.body?.property)) {
+      return res.status(400).json({ success: false, message: "Property is required" });
     }
 
-    if (!isValidObjectId(req.body.property)) {
-      return res.status(400).json({ success: false, message: "Property is required." });
+    const amount = Number(req.body?.amount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ success: false, message: "Valid requisition amount is required" });
     }
 
-    const payload = {
-      business,
+    const title = String(req.body?.title || "").trim();
+    if (!title) {
+      return res.status(400).json({ success: false, message: "Requisition title is required" });
+    }
+
+    const requisitionNo = String(req.body?.requisitionNo || req.body?.referenceNo || "").trim() || (await generateRequisitionNo(businessId));
+    const requestedDate = parseDate(req.body?.requestDate, new Date());
+    const neededBy = parseDate(req.body?.neededBy || req.body?.neededByDate, null);
+    const serviceProviderId = isValidObjectId(req.body?.serviceProvider) ? req.body.serviceProvider : null;
+    const status = normalizeStatus(req.body?.status, "draft");
+
+    const doc = await ExpenseRequisition.create({
+      business: businessId,
+      requisitionNo,
+      referenceNo: requisitionNo,
       property: req.body.property,
-      unit: isValidObjectId(req.body.unit) ? req.body.unit : null,
-      landlord: isValidObjectId(req.body.landlord) ? req.body.landlord : null,
-      title: String(req.body.title || "").trim(),
-      category: req.body.category || "other",
-      amount: Number(req.body.amount || 0),
-      neededByDate: req.body.neededByDate || null,
-      priority: req.body.priority || "normal",
-      status: req.body.status || "draft",
-      description: req.body.description || "",
-      vendorName: req.body.vendorName || "",
-      requestedBy: req.user?.id,
-      referenceNo: await buildReference(business),
-    };
+      unit: isValidObjectId(req.body?.unit) ? req.body.unit : null,
+      landlord: isValidObjectId(req.body?.landlord) ? req.body.landlord : null,
+      serviceProvider: serviceProviderId,
+      title,
+      description: String(req.body?.description || "").trim(),
+      amount,
+      requestDate: requestedDate,
+      neededBy,
+      neededByDate: neededBy,
+      priority: ["low", "normal", "high", "urgent"].includes(String(req.body?.priority || "").toLowerCase())
+        ? String(req.body?.priority || "").toLowerCase()
+        : "normal",
+      category: normalizeCategory(req.body?.category),
+      status,
+      notes: String(req.body?.notes || "").trim(),
+      vendorName: await resolveVendorName(serviceProviderId, req.body?.vendorName),
+      requestedBy: actorUserId,
+    });
 
-    if (!payload.title) {
-      return res.status(400).json({ success: false, message: "Title is required." });
-    }
-    if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
-      return res.status(400).json({ success: false, message: "Amount must be greater than zero." });
-    }
-
-    const saved = await ExpenseRequisition.create(payload);
-    const row = await ExpenseRequisition.findById(saved._id)
-      .populate("property", "propertyName name")
-      .populate("unit", "unitNumber")
-      .populate("landlord", "landlordName")
-      .populate("requestedBy", "firstname lastname username")
-      .lean();
-
-    return res.status(201).json({ success: true, data: row });
+    const populated = await populateQuery(ExpenseRequisition.findById(doc._id));
+    return res.status(201).json(await populated);
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message || "Failed to create expense requisition." });
+    next(error);
   }
 };
 
-export const updateExpenseRequisition = async (req, res) => {
+export const getExpenseRequisitions = async (req, res, next) => {
   try {
-    const business = getBusinessId(req);
-    const { id } = req.params;
-    if (!isValidObjectId(business) || !isValidObjectId(id)) {
-      return res.status(400).json({ success: false, message: "Valid business and record id are required." });
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+
+    const filter = { business: businessId };
+    if (req.query?.status && req.query.status !== "all") filter.status = req.query.status;
+    if (req.query?.property && isValidObjectId(req.query.property)) filter.property = req.query.property;
+    if (req.query?.serviceProvider && isValidObjectId(req.query.serviceProvider)) filter.serviceProvider = req.query.serviceProvider;
+    if (req.query?.search) {
+      const term = String(req.query.search).trim();
+      filter.$or = [
+        { requisitionNo: { $regex: term, $options: "i" } },
+        { referenceNo: { $regex: term, $options: "i" } },
+        { title: { $regex: term, $options: "i" } },
+        { description: { $regex: term, $options: "i" } },
+        { category: { $regex: term, $options: "i" } },
+        { vendorName: { $regex: term, $options: "i" } },
+        { notes: { $regex: term, $options: "i" } },
+      ];
     }
 
-    const row = await ExpenseRequisition.findOne({ _id: id, business });
-    if (!row) {
-      return res.status(404).json({ success: false, message: "Expense requisition not found." });
+    const rows = await populateQuery(ExpenseRequisition.find(filter).sort({ createdAt: -1 }));
+    res.status(200).json(await rows);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateExpenseRequisition = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+
+    const row = await ExpenseRequisition.findOne({ _id: req.params.id, business: businessId });
+    if (!row) return res.status(404).json({ success: false, message: "Expense requisition not found" });
+    if (!["draft", "submitted"].includes(String(row.status))) {
+      return res.status(400).json({ success: false, message: "Only draft or submitted requisitions can be edited." });
     }
 
-    const currentStatus = String(row.status || "draft");
-    const nextStatus = req.body.status ? String(req.body.status) : currentStatus;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "title")) {
+      const title = String(req.body?.title || "").trim();
+      if (!title) return res.status(400).json({ success: false, message: "Requisition title is required" });
+      row.title = title;
+    }
 
-    row.property = isValidObjectId(req.body.property) ? req.body.property : row.property;
-    row.unit = req.body.unit === "" ? null : isValidObjectId(req.body.unit) ? req.body.unit : row.unit;
-    row.landlord = req.body.landlord === "" ? null : isValidObjectId(req.body.landlord) ? req.body.landlord : row.landlord;
-    row.title = req.body.title !== undefined ? String(req.body.title || "").trim() : row.title;
-    row.category = req.body.category || row.category;
-    row.amount = req.body.amount !== undefined ? Number(req.body.amount || 0) : row.amount;
-    row.neededByDate = req.body.neededByDate !== undefined ? req.body.neededByDate || null : row.neededByDate;
-    row.priority = req.body.priority || row.priority;
-    row.description = req.body.description !== undefined ? req.body.description || "" : row.description;
-    row.vendorName = req.body.vendorName !== undefined ? req.body.vendorName || "" : row.vendorName;
-    row.status = nextStatus;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "description")) row.description = String(req.body?.description || "").trim();
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "notes")) row.notes = String(req.body?.notes || "").trim();
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "category")) row.category = normalizeCategory(req.body?.category);
 
-    if (["approved", "rejected"].includes(nextStatus) && currentStatus !== nextStatus) {
-      row.approvedBy = req.user?.id || null;
-      row.approvedAt = new Date();
-      row.rejectionReason = nextStatus === "rejected" ? String(req.body.rejectionReason || "").trim() : "";
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "priority")) {
+      row.priority = ["low", "normal", "high", "urgent"].includes(String(req.body?.priority || "").toLowerCase())
+        ? String(req.body?.priority || "").toLowerCase()
+        : "normal";
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "amount")) {
+      const amount = Number(req.body?.amount || 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({ success: false, message: "Valid requisition amount is required" });
+      }
+      row.amount = amount;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "property")) {
+      if (!isValidObjectId(req.body?.property)) {
+        return res.status(400).json({ success: false, message: "Property is required" });
+      }
+      row.property = req.body.property;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "unit")) {
+      row.unit = isValidObjectId(req.body?.unit) ? req.body.unit : null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "landlord")) {
+      row.landlord = isValidObjectId(req.body?.landlord) ? req.body.landlord : null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "requestDate")) {
+      const requestDate = parseDate(req.body?.requestDate, null);
+      if (!requestDate) return res.status(400).json({ success: false, message: "Valid request date is required" });
+      row.requestDate = requestDate;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "neededBy") || Object.prototype.hasOwnProperty.call(req.body || {}, "neededByDate")) {
+      const neededBy = parseDate(req.body?.neededBy || req.body?.neededByDate, null);
+      row.neededBy = neededBy;
+      row.neededByDate = neededBy;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "serviceProvider")) {
+      row.serviceProvider = isValidObjectId(req.body?.serviceProvider) ? req.body.serviceProvider : null;
+      row.vendorName = await resolveVendorName(row.serviceProvider, req.body?.vendorName || row.vendorName);
+    } else if (Object.prototype.hasOwnProperty.call(req.body || {}, "vendorName")) {
+      row.vendorName = String(req.body?.vendorName || "").trim();
     }
 
     await row.save();
-
-    const refreshed = await ExpenseRequisition.findById(row._id)
-      .populate("property", "propertyName name")
-      .populate("unit", "unitNumber")
-      .populate("landlord", "landlordName")
-      .populate("requestedBy", "firstname lastname username")
-      .populate("approvedBy", "firstname lastname username")
-      .lean();
-
-    return res.status(200).json({ success: true, data: refreshed });
+    const populated = await populateQuery(ExpenseRequisition.findById(row._id));
+    res.status(200).json(await populated);
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message || "Failed to update expense requisition." });
+    next(error);
   }
 };
 
-export const deleteExpenseRequisition = async (req, res) => {
+export const updateExpenseRequisitionStatus = async (req, res, next) => {
   try {
-    const business = getBusinessId(req);
-    const { id } = req.params;
-    if (!isValidObjectId(business) || !isValidObjectId(id)) {
-      return res.status(400).json({ success: false, message: "Valid business and record id are required." });
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+
+    const status = normalizeStatus(req.body?.status, "");
+    if (!status) {
+      return res.status(400).json({ success: false, message: "Invalid requisition status" });
     }
 
-    const deleted = await ExpenseRequisition.findOneAndDelete({ _id: id, business });
-    if (!deleted) {
-      return res.status(404).json({ success: false, message: "Expense requisition not found." });
+    const row = await ExpenseRequisition.findOne({ _id: req.params.id, business: businessId });
+    if (!row) return res.status(404).json({ success: false, message: "Expense requisition not found" });
+
+    row.status = status;
+
+    if (status === "approved") {
+      row.approvedAt = new Date();
+      row.approvedBy = resolveActorUserId(req);
+      row.rejectedAt = null;
+      row.rejectedBy = null;
+      row.rejectionReason = "";
+    } else if (status === "rejected") {
+      row.rejectedAt = new Date();
+      row.rejectedBy = resolveActorUserId(req);
+      row.rejectionReason = String(req.body?.reason || "Rejected").trim();
+    } else if (status === "draft" || status === "submitted" || status === "cancelled") {
+      if (status === "draft") {
+        row.approvedAt = null;
+        row.approvedBy = null;
+      }
+      if (status !== "rejected") {
+        row.rejectedAt = null;
+        row.rejectedBy = null;
+        row.rejectionReason = "";
+      }
     }
 
-    return res.status(200).json({ success: true, message: "Expense requisition deleted." });
+    await row.save();
+    const populated = await populateQuery(ExpenseRequisition.findById(row._id));
+    res.status(200).json(await populated);
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message || "Failed to delete expense requisition." });
+    next(error);
+  }
+};
+
+export const deleteExpenseRequisition = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+
+    const row = await ExpenseRequisition.findOne({ _id: req.params.id, business: businessId });
+    if (!row) return res.status(404).json({ success: false, message: "Expense requisition not found" });
+    if (["approved", "converted"].includes(String(row.status))) {
+      return res.status(400).json({ success: false, message: "Approved or converted requisitions cannot be deleted." });
+    }
+
+    await ExpenseRequisition.deleteOne({ _id: row._id, business: businessId });
+    res.status(200).json({ success: true, message: "Expense requisition deleted" });
+  } catch (error) {
+    next(error);
   }
 };

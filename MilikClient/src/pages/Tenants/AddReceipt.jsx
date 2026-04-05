@@ -93,12 +93,20 @@ const AddReceipt = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
+  const receiptMode = searchParams.get("mode") || "tenant";
+  const isLandlordMode = receiptMode === "landlord";
+  const isInstantMode = receiptMode === "instant";
   const preselectedTenantId = searchParams.get("tenant") || "";
+  const prefilledTenantCode = searchParams.get("tnt") || searchParams.get("tenantCode") || "";
   const prefilledAmount = searchParams.get("amount") || "";
   const prefilledReference = searchParams.get("reference") || "";
   const prefilledMethod = searchParams.get("paymentMethod") || searchParams.get("method") || "";
   const prefilledPaymentType = searchParams.get("paymentType") || "";
   const prefilledDescription = searchParams.get("description") || "";
+  const prefilledCollectionId = searchParams.get("collectionId") || "";
+  const prefilledAccountReference = searchParams.get("accountReference") || "";
+  const prefilledMsisdn = searchParams.get("msisdn") || "";
+  const prefilledPayerName = searchParams.get("payerName") || "";
   const { currentCompany } = useSelector((state) => state.company || {});
   const rawProperties = useSelector((state) => state.property?.properties);
   const rawTenants = useSelector((state) => state.tenant?.tenants);
@@ -115,7 +123,7 @@ const AddReceipt = () => {
     paymentType: ["rent", "deposit", "utility", "late_fee", "other"].includes(prefilledPaymentType) ? prefilledPaymentType : "rent",
     paymentMethod: ["bank_transfer", "mobile_money", "cash", "check", "credit_card"].includes(prefilledMethod) ? prefilledMethod : "mobile_money",
     cashbook: "Main Cashbook",
-    paidDirectToLandlord: false,
+    paidDirectToLandlord: isLandlordMode,
     paymentDate: todayInput(),
     dueDate: todayInput(),
     referenceNumber: prefilledReference,
@@ -194,7 +202,36 @@ const AddReceipt = () => {
     [formData.tenantId, tenants]
   );
 
+  useEffect(() => {
+    if (preselectedTenantId || formData.tenantId || !prefilledTenantCode || tenants.length === 0) return;
+    const matchedTenant = tenants.find((tenant) => String(tenant?.tenantCode || "").trim().toLowerCase() === String(prefilledTenantCode || "").trim().toLowerCase());
+    if (!matchedTenant?._id) return;
+    setFormData((prev) => ({ ...prev, tenantId: String(matchedTenant._id) }));
+  }, [formData.tenantId, prefilledTenantCode, preselectedTenantId, tenants]);
+
   const isDirectToLandlord = Boolean(formData.paidDirectToLandlord);
+  const backToPath = isLandlordMode
+    ? "/receipts/landlord"
+    : isInstantMode
+    ? "/receipts/instant"
+    : preselectedTenantId
+    ? `/receipts/${preselectedTenantId}`
+    : "/receipts";
+  const pageEyebrow = isLandlordMode
+    ? "Landlord Receipting"
+    : isInstantMode
+    ? "Instant Receipting"
+    : "Rental Receipting";
+  const pageTitle = isLandlordMode
+    ? "Add Landlord Receipt"
+    : isInstantMode
+    ? "Add Instant Receipt"
+    : "Add Receipt";
+  const pageDescription = isLandlordMode
+    ? "Capture landlord-directed receipt records cleanly while preserving the existing ledger safety rules."
+    : isInstantMode
+    ? "Capture an M-Pesa instant notification into the normal receipt workflow without bypassing controls."
+    : "Capture tenant collections cleanly, allocate safely, and preserve ledger integrity.";
 
   const getCreatedInvoicesForTenant = (targetTenantId) => {
     if (!targetTenantId) return [];
@@ -436,12 +473,24 @@ const AddReceipt = () => {
       month: paymentDateObj.getMonth() + 1,
       year: paymentDateObj.getFullYear(),
       business: currentCompany._id,
+      metadata: prefilledCollectionId
+        ? {
+            mpesa: {
+              collectionId: prefilledCollectionId,
+              transactionCode: String(formData.referenceNumber || "").trim(),
+              accountReference: prefilledAccountReference || "",
+              msisdn: prefilledMsisdn || "",
+              payerName: prefilledPayerName || "",
+              source: isInstantMode ? "instant_receipts" : "prefilled",
+            },
+          }
+        : undefined,
     };
 
     try {
       await createRentPayment(dispatch, payload);
       toast.success("Receipt created successfully");
-      navigate(preselectedTenantId ? `/receipts/${preselectedTenantId}` : "/receipts");
+      navigate(backToPath);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to create receipt");
     }
@@ -455,15 +504,15 @@ const AddReceipt = () => {
             <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-4 py-4 md:px-6">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <button
-                onClick={() => navigate(preselectedTenantId ? `/receipts/${preselectedTenantId}` : "/receipts")}
+                onClick={() => navigate(backToPath)}
                 className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
               >
                 <FaArrowLeft /> Back to Receipts
               </button>
                 <div className="text-white md:text-right">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-100">Rental Receipting</p>
-                  <h1 className="mt-1 text-xl font-black tracking-tight md:text-2xl">Add Receipt</h1>
-                  <p className="mt-1 text-sm text-slate-200">Capture tenant collections cleanly, allocate safely, and preserve ledger integrity.</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-100">{pageEyebrow}</p>
+                  <h1 className="mt-1 text-xl font-black tracking-tight md:text-2xl">{pageTitle}</h1>
+                  <p className="mt-1 text-sm text-slate-200">{pageDescription}</p>
                 </div>
               </div>
             </div>
@@ -884,7 +933,7 @@ const AddReceipt = () => {
 
             <div className="mt-5 flex justify-end gap-2">
               <button
-                onClick={() => navigate(preselectedTenantId ? `/receipts/${preselectedTenantId}` : "/receipts")}
+                onClick={() => navigate(backToPath)}
                 className="rounded-xl border border-slate-300 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-50"
               >
                 Cancel

@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { FaCheck, FaFileInvoiceDollar, FaFilter, FaPlus, FaRedoAlt, FaSearch, FaTrash, FaUndo } from "react-icons/fa";
+import {
+  FaCheck,
+  FaEdit,
+  FaFileInvoiceDollar,
+  FaFilter,
+  FaPlus,
+  FaSave,
+  FaSearch,
+  FaSquare,
+  FaTrash,
+  FaUndo,
+} from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -10,6 +21,7 @@ import {
   getChartOfAccounts,
   getLandlords,
   getPaymentVouchers,
+  updatePaymentVoucher,
   updatePaymentVoucherStatus,
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
@@ -27,39 +39,50 @@ const statusColors = {
   reversed: "bg-amber-100 text-amber-700 border-amber-200",
 };
 
+const blankForm = {
+  category: "landlord_maintenance",
+  propertyId: "",
+  landlordId: "",
+  liabilityAccountId: "",
+  amount: "",
+  dueDate: new Date().toISOString().split("T")[0],
+  narration: "",
+  status: "draft",
+  reference: "",
+};
+
 const PaymentVouchers = () => {
   const dispatch = useDispatch();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
+  const properties = useSelector((state) => state.property?.properties || []);
+  const landlords = useSelector((state) => state.landlord?.landlords || []);
+
   const canCreateVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "create", "accounts");
   const canUpdateVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "update", "accounts");
   const canApproveVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "approve", "accounts");
   const canReverseVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "reverse", "accounts");
   const canDeleteVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "delete", "accounts");
-  const properties = useSelector((state) => state.property?.properties || []);
-  const landlords = useSelector((state) => state.landlord?.landlords || []);
 
-  const [filters, setFilters] = useState({
-    search: "",
-    category: "all",
-    status: "all",
-    propertyId: "all",
-  });
+  const [filters, setFilters] = useState({ search: "", category: "all", status: "all", propertyId: "all" });
   const [vouchers, setVouchers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [rowActionKey, setRowActionKey] = useState("");
   const [liabilityAccounts, setLiabilityAccounts] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [editingVoucherId, setEditingVoucherId] = useState("");
+  const [form, setForm] = useState(blankForm);
 
-  const [form, setForm] = useState({
-    category: "landlord_maintenance",
-    propertyId: "",
-    landlordId: "",
-    liabilityAccountId: "",
-    amount: "",
-    dueDate: new Date().toISOString().split("T")[0],
-    narration: "",
-    status: "draft",
-    reference: "",
+  const normalizeVoucher = (voucher) => ({
+    ...voucher,
+    propertyId: voucher?.property?._id || voucher?.property || voucher?.propertyId || "",
+    propertyName: voucher?.property?.propertyName || voucher?.property?.name || voucher?.propertyName || "N/A",
+    landlordId: voucher?.landlord?._id || voucher?.landlord || voucher?.landlordId || "",
+    landlordName: voucher?.landlord?.landlordName || voucher?.landlord?.name || voucher?.landlordName || "N/A",
+    liabilityAccountId: voucher?.liabilityAccount?._id || voucher?.liabilityAccount || voucher?.liabilityAccountId || "",
+    liabilityAccountName: voucher?.liabilityAccount?.name || voucher?.liabilityAccountName || "N/A",
   });
 
   useEffect(() => {
@@ -72,52 +95,21 @@ const PaymentVouchers = () => {
     const loadLiabilityAccounts = async () => {
       if (!currentCompany?._id) return;
       try {
-        const rows = await getChartOfAccounts({
-          business: currentCompany._id,
-          type: "liability",
-        });
+        const rows = await getChartOfAccounts({ business: currentCompany._id, type: "liability" });
         setLiabilityAccounts(Array.isArray(rows) ? rows.filter((row) => row?.isPosting !== false) : []);
       } catch (error) {
-        console.error("Failed to load chart of accounts", error);
-        toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to load liability accounts");
+        toast.error(error?.response?.data?.message || "Failed to load liability accounts");
       }
     };
-
     loadLiabilityAccounts();
   }, [currentCompany?._id]);
-
-  const normalizeVoucher = (voucher) => ({
-    ...voucher,
-    propertyId: voucher?.property?._id || voucher?.property || voucher?.propertyId || "",
-    propertyName:
-      voucher?.property?.propertyName ||
-      voucher?.property?.name ||
-      voucher?.propertyName ||
-      "N/A",
-    landlordId: voucher?.landlord?._id || voucher?.landlord || voucher?.landlordId || "",
-    landlordName:
-      voucher?.landlord?.landlordName ||
-      voucher?.landlord?.name ||
-      voucher?.landlordName ||
-      "N/A",
-    liabilityAccountId:
-      voucher?.liabilityAccount?._id || voucher?.liabilityAccount || voucher?.liabilityAccountId || "",
-    liabilityAccountName:
-      voucher?.liabilityAccount?.name ||
-      voucher?.liabilityAccountName ||
-      "N/A",
-  });
 
   const loadVouchers = async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
-      const rows = await getPaymentVouchers({
-        ...filters,
-        business: currentCompany._id,
-        company: currentCompany._id,
-      });
-      setVouchers((rows || []).map(normalizeVoucher));
+      const rows = await getPaymentVouchers({ ...filters, business: currentCompany._id, company: currentCompany._id });
+      setVouchers((Array.isArray(rows) ? rows : []).map(normalizeVoucher));
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load payment vouchers");
     } finally {
@@ -127,48 +119,53 @@ const PaymentVouchers = () => {
 
   useEffect(() => {
     loadVouchers();
-  }, [currentCompany?._id, filters]);
+  }, [currentCompany?._id, filters.search, filters.category, filters.status, filters.propertyId]);
 
-  const filtered = useMemo(() => {
-    return vouchers.filter((voucher) => {
-      const haystack = `${voucher.voucherNo} ${voucher.reference} ${voucher.narration} ${voucher.landlordName} ${voucher.propertyName} ${voucher.liabilityAccountName}`.toLowerCase();
-      const term = filters.search.trim().toLowerCase();
-      if (term && !haystack.includes(term)) return false;
-      if (filters.category !== "all" && voucher.category !== filters.category) return false;
-      if (filters.status !== "all" && voucher.status !== filters.status) return false;
-      if (filters.propertyId !== "all" && voucher.propertyId !== filters.propertyId) return false;
-      return true;
-    });
-  }, [vouchers, filters]);
+  const filtered = useMemo(() => vouchers, [vouchers]);
 
   const stats = useMemo(() => {
-    const total = filtered.reduce((sum, v) => sum + Number(v.amount || 0), 0);
-    const paid = filtered.filter((v) => v.status === "paid").reduce((sum, v) => sum + Number(v.amount || 0), 0);
-    return { count: filtered.length, total, paid };
+    const total = filtered.reduce((sum, voucher) => sum + Number(voucher.amount || 0), 0);
+    const paid = filtered.filter((voucher) => voucher.status === "paid").reduce((sum, voucher) => sum + Number(voucher.amount || 0), 0);
+    const draft = filtered.filter((voucher) => voucher.status === "draft").length;
+    return { count: filtered.length, total, paid, draft };
   }, [filtered]);
 
-  const createVoucher = async () => {
-    if (!form.propertyId) {
-      toast.warning("Property is required");
-      return;
-    }
+  const selectedRows = useMemo(() => filtered.filter((voucher) => selectedIds.includes(voucher._id)), [filtered, selectedIds]);
 
-    if (!form.liabilityAccountId) {
-      toast.warning("Credit liability posting account is required");
-      return;
-    }
+  const openCreate = () => {
+    setEditingVoucherId("");
+    setForm(blankForm);
+    setShowModal(true);
+  };
 
-    if (!form.amount || Number(form.amount) <= 0) {
-      toast.warning("Valid amount is required");
-      return;
-    }
+  const openEdit = (voucher) => {
+    setEditingVoucherId(voucher._id);
+    setForm({
+      category: voucher.category || "landlord_maintenance",
+      propertyId: voucher.propertyId || "",
+      landlordId: voucher.landlordId || "",
+      liabilityAccountId: voucher.liabilityAccountId || "",
+      amount: voucher.amount || "",
+      dueDate: voucher.dueDate ? new Date(voucher.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+      narration: voucher.narration || "",
+      status: voucher.status || "draft",
+      reference: voucher.reference || "",
+    });
+    setShowModal(true);
+  };
 
-    if (form.category === "deposit_refund") {
-      const property = properties.find((p) => p._id === form.propertyId);
-      if (!property) {
-        toast.warning("Select a valid property for the deposit refund voucher.");
-        return;
-      }
+  const validateForm = () => {
+    if (!form.propertyId) return "Property is required";
+    if (!form.liabilityAccountId) return "Credit liability posting account is required";
+    if (!form.amount || Number(form.amount) <= 0) return "Valid amount is required";
+    return "";
+  };
+
+  const handleSave = async () => {
+    const errorMessage = validateForm();
+    if (errorMessage) {
+      toast.warning(errorMessage);
+      return;
     }
 
     const payload = {
@@ -185,32 +182,29 @@ const PaymentVouchers = () => {
       reference: form.reference || undefined,
     };
 
+    setSaving(true);
     try {
-      const saved = await createPaymentVoucher(payload);
-      setVouchers((prev) => [normalizeVoucher(saved), ...prev]);
-      setForm((prev) => ({
-        ...prev,
-        landlordId: "",
-        amount: "",
-        narration: "",
-        reference: "",
-        status: "draft",
-      }));
-      toast.success(`Voucher ${saved?.voucherNo || "created"} saved`);
+      const saved = editingVoucherId
+        ? await updatePaymentVoucher(editingVoucherId, payload, { business: currentCompany?._id, company: currentCompany?._id })
+        : await createPaymentVoucher(payload);
+      const normalized = normalizeVoucher(saved);
+      setVouchers((prev) => editingVoucherId ? prev.map((row) => row._id === editingVoucherId ? normalized : row) : [normalized, ...prev]);
+      setShowModal(false);
+      setEditingVoucherId("");
+      setForm(blankForm);
+      toast.success(`Voucher ${editingVoucherId ? "updated" : "saved"} successfully`);
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to save payment voucher");
+      toast.error(error?.response?.data?.message || `Failed to ${editingVoucherId ? "update" : "save"} payment voucher`);
+    } finally {
+      setSaving(false);
     }
   };
 
   const updateStatus = async (id, status) => {
     setRowActionKey(`${id}:${status}`);
     try {
-      const updated = await updatePaymentVoucherStatus(
-        id,
-        { status },
-        { business: currentCompany?._id, company: currentCompany?._id }
-      );
-      setVouchers((prev) => prev.map((v) => (v._id === id ? normalizeVoucher(updated) : v)));
+      const updated = await updatePaymentVoucherStatus(id, { status }, { business: currentCompany?._id, company: currentCompany?._id });
+      setVouchers((prev) => prev.map((voucher) => voucher._id === id ? normalizeVoucher(updated) : voucher));
       toast.success(`Voucher marked ${status}`);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to update voucher status");
@@ -220,16 +214,12 @@ const PaymentVouchers = () => {
   };
 
   const removeVoucher = async (voucher) => {
-    const ok = window.confirm(`Delete voucher ${voucher?.voucherNo || ""}? This cannot be undone.`);
-    if (!ok) return;
-
+    if (!window.confirm(`Delete voucher ${voucher?.voucherNo || ""}?`)) return;
     setRowActionKey(`${voucher._id}:delete`);
     try {
-      await deletePaymentVoucher(voucher._id, {
-        business: currentCompany?._id,
-        company: currentCompany?._id,
-      });
+      await deletePaymentVoucher(voucher._id, { business: currentCompany?._id, company: currentCompany?._id });
       setVouchers((prev) => prev.filter((row) => row._id !== voucher._id));
+      setSelectedIds((prev) => prev.filter((id) => id !== voucher._id));
       toast.success("Voucher deleted");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to delete voucher");
@@ -238,270 +228,136 @@ const PaymentVouchers = () => {
     }
   };
 
+  const toggleSelect = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]);
+  const toggleSelectAll = () => setSelectedIds((prev) => prev.length === filtered.length ? [] : filtered.map((voucher) => voucher._id));
+
+  const bulkDeleteSelected = async () => {
+    if (selectedRows.length === 0) return toast.info("Select vouchers first");
+    if (!window.confirm(`Delete ${selectedRows.length} selected vouchers?`)) return;
+    for (const voucher of selectedRows) {
+      // eslint-disable-next-line no-await-in-loop
+      await deletePaymentVoucher(voucher._id, { business: currentCompany?._id, company: currentCompany?._id }).catch(() => null);
+    }
+    await loadVouchers();
+    setSelectedIds([]);
+    toast.success("Selected vouchers deleted where allowed");
+  };
+
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-3">
-        <div className="mx-auto" style={{ maxWidth: "96%" }}>
-          <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-2.5 mb-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h1 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                <FaFileInvoiceDollar /> Payment Vouchers
-              </h1>
-              <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                <span className="px-2 py-0.5 rounded border border-slate-300 bg-slate-50 font-semibold">Count: {stats.count}</span>
-                <span className="px-2 py-0.5 rounded border border-blue-300 bg-blue-50 font-semibold text-blue-700">Total: Ksh {stats.total.toLocaleString()}</span>
-                <span className="px-2 py-0.5 rounded border border-green-300 bg-green-50 font-semibold text-green-700">Paid: Ksh {stats.paid.toLocaleString()}</span>
-                <button
-                  onClick={loadVouchers}
-                  className="px-2 py-0.5 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-semibold inline-flex items-center gap-1"
-                >
-                  <FaRedoAlt size={10} /> Refresh
-                </button>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
+        <div className="mx-auto max-w-[96%] space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Financial Operations</p>
+                <h1 className="mt-1 flex items-center gap-3 text-2xl font-black text-slate-900"><FaFileInvoiceDollar className="text-[#0B3B2E]" /> Payment Vouchers</h1>
+                <p className="mt-1 text-sm text-slate-500">Create, edit, approve, pay, reverse, select, and delete vouchers with stronger operational controls.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={bulkDeleteSelected} className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-black text-rose-700">Delete Selected</button>
+                <button onClick={openCreate} disabled={!canCreateVoucher} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus /> New Voucher</button>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-3">
-            <div className="xl:col-span-2 bg-white border border-slate-200 rounded-lg shadow-sm p-3 space-y-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase">
-                <FaPlus /> New Voucher
-              </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Count</p><p className="mt-2 text-2xl font-black text-slate-900">{stats.count}</p></div>
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Total</p><p className="mt-2 text-2xl font-black text-blue-700">KES {stats.total.toLocaleString()}</p></div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Paid</p><p className="mt-2 text-2xl font-black text-emerald-700">KES {stats.paid.toLocaleString()}</p></div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Draft</p><p className="mt-2 text-2xl font-black text-amber-700">{stats.draft}</p></div>
+          </div>
 
-              <select
-                value={form.category}
-                onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              >
-                {categories.map((c) => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
-              </select>
-
-              <select
-                value={form.propertyId}
-                onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              >
-                <option value="">Select Property</option>
-                {properties.map((p) => (
-                  <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>
-                ))}
-              </select>
-
-              <select
-                value={form.landlordId}
-                onChange={(e) => setForm((prev) => ({ ...prev, landlordId: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              >
-                <option value="">Select Landlord (optional)</option>
-                {landlords.map((l) => (
-                  <option key={l._id} value={l._id}>{l.landlordName || l.name || "Landlord"}</option>
-                ))}
-              </select>
-
-              <select
-                value={form.liabilityAccountId}
-                onChange={(e) => setForm((prev) => ({ ...prev, liabilityAccountId: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              >
-                <option value="">Select Credit Liability Account</option>
-                {liabilityAccounts.map((account) => (
-                  <option key={account._id} value={account._id}>
-                    {account.code} - {account.name}
-                  </option>
-                ))}
-              </select>
-
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="Amount"
-                  value={form.amount}
-                  onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-                />
-                <input
-                  type="date"
-                  value={form.dueDate}
-                  onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-                />
-              </div>
-
-              <input
-                placeholder="Reference (optional)"
-                value={form.reference}
-                onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              />
-
-              <textarea
-                rows={2}
-                placeholder="Narration"
-                value={form.narration}
-                onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              />
-
-              <button
-                onClick={createVoucher}
-                disabled={!canCreateVoucher}
-                className="w-full px-3 py-2 text-xs rounded text-white font-semibold bg-[#0B3B2E] hover:bg-[#0A3127]"
-              >
-                Save Payment Voucher
-              </button>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr,220px,220px,220px,150px]">
+              <div className="relative"><FaSearch className="absolute left-3 top-3.5 text-slate-400" /><input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search voucher, narration, landlord, property" className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></div>
+              <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="all">All categories</option>{categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+              <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="all">All statuses</option><option value="draft">Draft</option><option value="approved">Approved</option><option value="paid">Paid</option><option value="reversed">Reversed</option></select>
+              <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="all">All properties</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}</select>
+              <button onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50"><FaFilter /> Reset</button>
             </div>
+          </div>
 
-            <div className="xl:col-span-3 bg-white border border-slate-200 rounded-lg shadow-sm p-3">
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <div className="relative flex-1 min-w-[180px]">
-                  <FaSearch className="absolute left-2 top-2.5 text-[10px] text-slate-400" />
-                  <input
-                    value={filters.search}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Search voucher, narration, landlord"
-                    className="w-full pl-7 pr-2 py-2 text-xs border border-slate-300 rounded"
-                  />
-                </div>
-
-                <select
-                  value={filters.category}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
-                  className="px-2 py-2 text-xs border border-slate-300 rounded"
-                >
-                  <option value="all">All Categories</option>
-                  {categories.map((c) => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="px-2 py-2 text-xs border border-slate-300 rounded"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="approved">Approved</option>
-                  <option value="paid">Paid</option>
-                  <option value="reversed">Reversed</option>
-                </select>
-
-                <select
-                  value={filters.propertyId}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                  className="px-2 py-2 text-xs border border-slate-300 rounded"
-                >
-                  <option value="all">All Properties</option>
-                  {properties.map((p) => (
-                    <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>
-                  ))}
-                </select>
-
-                <button
-                  onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })}
-                  className="px-2 py-2 text-xs border border-slate-300 rounded text-slate-700 hover:bg-slate-50 flex items-center gap-1"
-                >
-                  <FaFilter /> Reset
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] text-xs">
-                  <thead>
-                    <tr className="bg-[#0B3B2E] text-white">
-                      <th className="px-2 py-1 text-left">Voucher</th>
-                      <th className="px-2 py-1 text-left">Category</th>
-                      <th className="px-2 py-1 text-left">Property</th>
-                      <th className="px-2 py-1 text-left">Landlord</th>
-                      <th className="px-2 py-1 text-right">Amount</th>
-                      <th className="px-2 py-1 text-left">Due</th>
-                      <th className="px-2 py-1 text-left">Status</th>
-                      <th className="px-2 py-1 text-left">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <tr>
-                        <td colSpan={8} className="px-2 py-6 text-center text-slate-500">Loading vouchers...</td>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-[#0B3B2E] text-white">
+                  <tr>
+                    <th className="px-4 py-3 text-left"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filtered.length && filtered.length > 0 ? <FaCheck /> : <FaSquare />}</button></th>
+                    <th className="px-4 py-3 text-left">Voucher</th>
+                    <th className="px-4 py-3 text-left">Category</th>
+                    <th className="px-4 py-3 text-left">Property</th>
+                    <th className="px-4 py-3 text-left">Landlord</th>
+                    <th className="px-4 py-3 text-right">Amount</th>
+                    <th className="px-4 py-3 text-left">Due Date</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan="9" className="px-4 py-10 text-center text-slate-500">Loading vouchers...</td></tr>
+                  ) : filtered.length === 0 ? (
+                    <tr><td colSpan="9" className="px-4 py-10 text-center text-slate-500">No payment vouchers found.</td></tr>
+                  ) : filtered.map((voucher, index) => {
+                    const isBusy = (action) => rowActionKey === `${voucher._id}:${action}`;
+                    return (
+                      <tr key={voucher._id} className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                        <td className="px-4 py-3"><button type="button" onClick={() => toggleSelect(voucher._id)}>{selectedIds.includes(voucher._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
+                        <td className="px-4 py-3"><div className="font-black text-slate-900">{voucher.voucherNo}</div><div className="text-xs text-slate-500">{voucher.reference || voucher.narration || "No reference"}</div></td>
+                        <td className="px-4 py-3 text-slate-700">{categories.find((item) => item.value === voucher.category)?.label || voucher.category}</td>
+                        <td className="px-4 py-3 text-slate-700">{voucher.propertyName}</td>
+                        <td className="px-4 py-3 text-slate-700">{voucher.landlordName}</td>
+                        <td className="px-4 py-3 text-right font-black text-slate-900">KES {Number(voucher.amount || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-slate-700">{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString() : "-"}</td>
+                        <td className="px-4 py-3"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span></td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="inline-flex flex-wrap justify-end gap-2">
+                            {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"><FaEdit /> Edit</button>}
+                            {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher._id, "approved")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700 disabled:opacity-60"><FaCheck /> {isBusy("approved") ? "Working..." : "Approve"}</button>}
+                            {(voucher.status === "draft" || voucher.status === "approved") && canUpdateVoucher && <button onClick={() => updateStatus(voucher._id, "paid")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 disabled:opacity-60"><FaCheck /> {isBusy("paid") ? "Working..." : "Mark Paid"}</button>}
+                            {voucher.status !== "reversed" && canReverseVoucher && <button onClick={() => updateStatus(voucher._id, "reversed")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700 disabled:opacity-60"><FaUndo /> {isBusy("reversed") ? "Working..." : "Reverse"}</button>}
+                            {canDeleteVoucher && <button onClick={() => removeVoucher(voucher)} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60"><FaTrash /> {isBusy("delete") ? "Working..." : "Delete"}</button>}
+                          </div>
+                        </td>
                       </tr>
-                    ) : filtered.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="px-2 py-6 text-center text-slate-500">No payment vouchers yet.</td>
-                      </tr>
-                    ) : (
-                      filtered.map((v) => {
-                        const isBusy = (action) => rowActionKey === `${v._id}:${action}`;
-                        return (
-                          <tr key={v._id} className="border-b border-slate-200 hover:bg-slate-50">
-                            <td className="px-2 py-1.5 font-bold text-slate-900">{v.voucherNo}</td>
-                            <td className="px-2 py-1.5">{categories.find((c) => c.value === v.category)?.label || v.category}</td>
-                            <td className="px-2 py-1.5">{v.propertyName}</td>
-                            <td className="px-2 py-1.5">{v.landlordName}</td>
-                            <td className="px-2 py-1.5 text-right font-semibold">{Number(v.amount || 0).toLocaleString()}</td>
-                            <td className="px-2 py-1.5">{v.dueDate ? new Date(v.dueDate).toLocaleDateString() : "-"}</td>
-                            <td className="px-2 py-1.5">
-                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusColors[v.status] || statusColors.draft}`}>
-                                {v.status}
-                              </span>
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <div className="flex flex-wrap gap-1">
-                                {v.status === "draft" && canApproveVoucher && (
-                                  <button
-                                    onClick={() => updateStatus(v._id, "approved")}
-                                    disabled={!!rowActionKey}
-                                    className="inline-flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 disabled:opacity-60"
-                                  >
-                                    <FaCheck size={10} /> {isBusy("approved") ? "Working..." : "Approve"}
-                                  </button>
-                                )}
-
-                                {(v.status === "draft" || v.status === "approved") && canUpdateVoucher && (
-                                  <button
-                                    onClick={() => updateStatus(v._id, "paid")}
-                                    disabled={!!rowActionKey}
-                                    className="inline-flex items-center gap-1 rounded border border-green-300 bg-green-50 px-2 py-1 text-[11px] font-semibold text-green-700 disabled:opacity-60"
-                                  >
-                                    <FaCheck size={10} /> {isBusy("paid") ? "Working..." : "Mark Paid"}
-                                  </button>
-                                )}
-
-                                {v.status !== "reversed" && canReverseVoucher && (
-                                  <button
-                                    onClick={() => {
-                                      const ok = window.confirm(`Reverse voucher ${v.voucherNo}?`);
-                                      if (!ok) return;
-                                      updateStatus(v._id, "reversed");
-                                    }}
-                                    disabled={!!rowActionKey}
-                                    className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 disabled:opacity-60"
-                                  >
-                                    <FaUndo size={10} /> {isBusy("reversed") ? "Working..." : "Reverse"}
-                                  </button>
-                                )}
-
-                                {canDeleteVoucher && (<button
-                                  onClick={() => removeVoucher(v)}
-                                  disabled={!!rowActionKey}
-                                  className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 disabled:opacity-60"
-                                >
-                                  <FaTrash size={10} /> {isBusy("delete") ? "Working..." : "Delete"}
-                                </button>)}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       </div>
+
+      {showModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/45 p-4">
+          <div className="w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Payment Voucher</p>
+                <h3 className="text-xl font-black">{editingVoucherId ? "Edit Voucher" : "New Voucher"}</h3>
+              </div>
+              <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10">×</button>
+            </div>
+            <div className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
+              <label className="block"><span className="text-sm font-bold text-slate-700">Category</span><select value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20">{categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Property</span><select value={form.propertyId} onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select property</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}</select></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Landlord</span><select value={form.landlordId} onChange={(e) => setForm((prev) => ({ ...prev, landlordId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select landlord</option>{landlords.map((landlord) => <option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.name}</option>)}</select></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Liability Account</span><select value={form.liabilityAccountId} onChange={(e) => setForm((prev) => ({ ...prev, liabilityAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select liability account</option>{liabilityAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Amount</span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Due Date</span><input type="date" value={form.dueDate} onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              {!editingVoucherId && <label className="block"><span className="text-sm font-bold text-slate-700">Initial Status</span><select value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="draft">Draft</option><option value="approved">Approved</option><option value="paid">Paid</option></select></label>}
+              <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Reference</span><input value={form.reference} onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Narration</span><textarea rows={3} value={form.narration} onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700">Cancel</button>
+              <button onClick={handleSave} disabled={saving || (editingVoucherId ? !canUpdateVoucher : !canCreateVoucher)} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60"><FaSave /> {saving ? "Saving..." : editingVoucherId ? "Update Voucher" : "Save Voucher"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

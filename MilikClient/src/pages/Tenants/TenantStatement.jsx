@@ -739,16 +739,37 @@ const TenantStatement = () => {
     const totalCharges = transactions
       .filter((t) => ["CHARGE", "DEBIT_NOTE"].includes(t.type))
       .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+    const totalCreditNotes = transactions
+      .filter((t) => ["CREDIT_NOTE"].includes(t.type))
+      .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
     const totalPayments = transactions
       .filter((t) => ["PAYMENT", "CREDIT_NOTE"].includes(t.type))
       .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
-    const currentBalance = round2(totalCharges - totalPayments);
+    const totalAllocatedReceipts = activeTenantReceipts.reduce((sum, receipt) => {
+      const summary = receipt?.allocationSummary || {};
+      const allocated = Number(summary?.rent || 0) + Number(summary?.utility || 0) + Number(summary?.deposit || 0) + Number(summary?.latePenalty || 0) + Number(summary?.debitNote || 0);
+      return sum + Math.abs(allocated);
+    }, 0);
+    const unappliedCredits = activeTenantReceipts.reduce((sum, receipt) => {
+      const summary = receipt?.allocationSummary || {};
+      const direct = summary?.unapplied;
+      const allocated = Number(summary?.rent || 0) + Number(summary?.utility || 0) + Number(summary?.deposit || 0) + Number(summary?.latePenalty || 0) + Number(summary?.debitNote || 0);
+      const derived = Math.max(0, Math.abs(Number(receipt?.amount || 0)) - Math.abs(allocated));
+      return sum + Math.abs(Number((direct ?? derived) || 0));
+    }, 0);
+    const operationalOutstanding = round2(totalCharges - totalCreditNotes - totalAllocatedReceipts);
+    const netPosition = round2(operationalOutstanding - unappliedCredits);
 
     return {
       transactions,
       totalCharges,
       totalPayments,
-      currentBalance,
+      totalCreditNotes: round2(totalCreditNotes),
+      totalAllocatedReceipts: round2(totalAllocatedReceipts),
+      unappliedCredits: round2(unappliedCredits),
+      currentBalance: netPosition,
+      operationalOutstanding,
+      netPosition,
     };
   }, [validTenantInvoices, tenantInvoiceNotes, activeTenantReceipts, maintenanceFromStore, tenantId]);
 
@@ -1281,7 +1302,7 @@ const TenantStatement = () => {
 
   const renderStatement = () => (
     <div className="statement-tab space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
         <div className="bg-blue-50 border-l-4 border-blue-600 rounded-lg px-4 py-3 shadow-sm">
           <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">
             Monthly Rent
@@ -1300,33 +1321,55 @@ const TenantStatement = () => {
           </p>
         </div>
 
+        <div className="bg-amber-50 border-l-4 border-amber-600 rounded-lg px-4 py-3 shadow-sm">
+          <p className="text-[10px] font-bold text-amber-600 uppercase tracking-tight">
+            Outstanding Charges
+          </p>
+          <p className="text-xl font-bold text-amber-900 mt-1">
+            Ksh {Math.abs(statementData?.operationalOutstanding || 0).toLocaleString()}
+          </p>
+        </div>
+
         <div
           className={`border-l-4 rounded-lg px-4 py-3 shadow-sm ${
-            statementData?.currentBalance >= 0
+            statementData?.unappliedCredits > 0
+              ? "bg-sky-50 border-sky-600"
+              : statementData?.currentBalance >= 0
               ? "bg-green-50 border-green-600"
               : "bg-red-50 border-red-600"
           }`}
         >
           <p
             className={`text-[10px] font-bold uppercase tracking-tight ${
-              statementData?.currentBalance >= 0 ? "text-green-600" : "text-red-600"
+              statementData?.unappliedCredits > 0
+                ? "text-sky-600"
+                : statementData?.currentBalance >= 0
+                ? "text-green-600"
+                : "text-red-600"
             }`}
           >
-            Current Balance
+            Net Position
           </p>
           <p
             className={`text-xl font-bold mt-1 ${
-              statementData?.currentBalance >= 0 ? "text-green-900" : "text-red-900"
+              statementData?.unappliedCredits > 0
+                ? "text-sky-900"
+                : statementData?.currentBalance >= 0
+                ? "text-green-900"
+                : "text-red-900"
             }`}
           >
             Ksh {Math.abs(statementData?.currentBalance || 0).toLocaleString()}
           </p>
+          {statementData?.unappliedCredits > 0 && (
+            <p className="mt-1 text-[11px] font-semibold text-sky-700">Unapplied credits Ksh {(statementData?.unappliedCredits || 0).toLocaleString()}</p>
+          )}
         </div>
       </div>
 
       <div className="filter-section bg-white rounded-lg shadow-sm border border-slate-200 px-4 py-3">
         <h3 className="text-sm font-bold text-slate-900 mb-2">Filter Period</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">
               Start Date
@@ -1476,7 +1519,7 @@ const TenantStatement = () => {
 
         {statementData?.transactions && statementData.transactions.length > 0 && (
           <div className="px-4 py-2 bg-slate-100 border-t border-slate-200 flex-shrink-0">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
               <div>
                 <p className="text-[10px] font-bold text-gray-600">Total Charges</p>
                 <p className="text-base font-bold text-red-600 mt-0.5">
@@ -1490,7 +1533,19 @@ const TenantStatement = () => {
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-gray-600">Net Balance</p>
+                <p className="text-[10px] font-bold text-gray-600">Outstanding Charges</p>
+                <p className="text-base font-bold mt-0.5 text-amber-600">
+                  Ksh {(statementData?.operationalOutstanding || 0).toLocaleString()}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-600">Unapplied Credits</p>
+                <p className="text-base font-bold mt-0.5 text-sky-600">
+                  Ksh {(statementData?.unappliedCredits || 0).toLocaleString()}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-600">Net Position</p>
                 <p
                   className={`text-base font-bold mt-0.5 ${
                     statementData?.currentBalance >= 0 ? "text-green-600" : "text-red-600"
@@ -1730,7 +1785,7 @@ const TenantStatement = () => {
         </div>
 
         <div className="px-4 py-3 border-b border-slate-200 bg-emerald-50/60">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2">
               <p className="text-[10px] font-bold uppercase tracking-tight text-emerald-700">Deposit Amount</p>
               <p className="text-sm font-bold text-slate-900 mt-1">KES {tenantDepositAmount.toLocaleString()}</p>

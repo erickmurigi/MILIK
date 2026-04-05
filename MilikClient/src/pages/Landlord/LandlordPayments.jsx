@@ -33,7 +33,7 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString();
 };
 
-const LandlordPayments = () => {
+const LandlordPayments = ({ mode = "payments" }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
@@ -193,6 +193,13 @@ const LandlordPayments = () => {
   );
 
   // Summary stats
+  const activeDetailHistory = useMemo(() => {
+    if (!activeDetail?._id) return [];
+    return landlordPayments
+      .filter((payment) => String(payment?.landlord?._id || payment?.landlord || payment?.landlordId || "") === String(activeDetail._id))
+      .sort((a, b) => new Date(b?.paidDate || b?.createdAt || 0) - new Date(a?.paidDate || a?.createdAt || 0));
+  }, [activeDetail, landlordPayments]);
+
   const stats = useMemo(() => {
     const total = filteredLandlords.reduce((sum, ll) => sum + ll.rentCollected, 0);
     const paid = filteredLandlords.reduce((sum, ll) => sum + ll.paymentsMade, 0);
@@ -663,7 +670,7 @@ const LandlordPayments = () => {
                 >
                   <FaArrowLeft /> Back to Landlords
                 </button>
-                <h1 className="text-xl font-bold text-slate-900">Landlord Payments</h1>
+                <h1 className="text-xl font-bold text-slate-900">{mode === "advancement" ? "Landlord Advancement" : "Landlord Payments"}</h1>
               </div>
 
               <button
@@ -1159,13 +1166,43 @@ const LandlordPayments = () => {
                 </div>
               </div>
 
-              {/* Payment History Placeholder */}
               <div>
                 <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
                   💳 Payment History
                 </h4>
-                <div className="border border-slate-200 rounded-lg p-6 text-center text-slate-500 text-xs bg-slate-50">
-                  Payment history will be displayed here once landlord payment module is connected to backend
+                <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                  <div className="max-h-64 overflow-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-100 text-slate-600 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-2 text-left">Date</th>
+                          <th className="px-4 py-2 text-left">Voucher</th>
+                          <th className="px-4 py-2 text-left">Reference</th>
+                          <th className="px-4 py-2 text-right">Amount</th>
+                          <th className="px-4 py-2 text-left">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeDetailHistory.length === 0 ? (
+                          <tr>
+                            <td colSpan="5" className="px-4 py-6 text-center text-slate-500">No landlord payments recorded yet.</td>
+                          </tr>
+                        ) : activeDetailHistory.map((payment, index) => (
+                          <tr key={payment._id || index} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
+                            <td className="px-4 py-2">{formatDate(payment.paidDate || payment.createdAt)}</td>
+                            <td className="px-4 py-2 font-semibold text-slate-800">{payment.voucherNo || '-'}</td>
+                            <td className="px-4 py-2 text-slate-600">{payment.reference || payment.referenceNumber || '-'}</td>
+                            <td className="px-4 py-2 text-right font-bold text-slate-900">Ksh {Number(payment.amount || 0).toLocaleString()}</td>
+                            <td className="px-4 py-2">
+                              <span className={`inline-flex rounded-full px-2 py-1 font-semibold ${payment.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : payment.status === 'approved' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>
+                                {payment.status || 'draft'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>

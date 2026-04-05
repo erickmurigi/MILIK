@@ -501,7 +501,7 @@ const TopToolbar = ({
         { id: "mpesa-import", label: "M-Pesa Batch Import", icon: FaPhone },
         { id: "tenant-prepayments", label: "Tenants Prepayments", icon: FaCoins },
         { id: "instant-receipts", label: "Instant Receipts", icon: FaReceipt },
-        { id: "landlord-receipt", label: "Landlord Receipt", icon: FaReceipt },
+        { id: "landlord-receipt", label: "Landlord Receipts", icon: FaReceipt },
       ],
       expenses: [
         { id: "expense-requisition", label: "Expense Requisition", icon: FaFileInvoice },

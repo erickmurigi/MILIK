@@ -26,6 +26,12 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    serviceProvider: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ServiceProvider",
+      default: null,
+      index: true,
+    },
     title: {
       type: String,
       required: true,
@@ -33,7 +39,7 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ["maintenance", "repair", "utility", "tax", "insurance", "supplies", "other"],
+      enum: ["maintenance", "repair", "utility", "tax", "insurance", "supplies", "other", "general"],
       default: "other",
       index: true,
     },
@@ -41,6 +47,14 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
       type: Number,
       required: true,
       min: 0,
+    },
+    requestDate: {
+      type: Date,
+      default: Date.now,
+    },
+    neededBy: {
+      type: Date,
+      default: null,
     },
     neededByDate: {
       type: Date,
@@ -54,7 +68,7 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["draft", "submitted", "approved", "rejected", "converted"],
+      enum: ["draft", "submitted", "approved", "rejected", "converted", "cancelled"],
       default: "draft",
       index: true,
     },
@@ -64,6 +78,11 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
       trim: true,
     },
     vendorName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    notes: {
       type: String,
       default: "",
       trim: true,
@@ -80,6 +99,15 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
       default: null,
     },
     approvedAt: {
+      type: Date,
+      default: null,
+    },
+    rejectedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    rejectedAt: {
       type: Date,
       default: null,
     },
@@ -100,13 +128,37 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    requisitionNo: {
+      type: String,
+      trim: true,
+      default: "",
+      index: true,
+    },
   },
   { timestamps: true }
 );
 
+ExpenseRequisitionSchema.pre("validate", function syncCompatibilityFields(next) {
+  if (!this.referenceNo && this.requisitionNo) {
+    this.referenceNo = this.requisitionNo;
+  }
+  if (!this.requisitionNo && this.referenceNo) {
+    this.requisitionNo = this.referenceNo;
+  }
+  if (!this.neededByDate && this.neededBy) {
+    this.neededByDate = this.neededBy;
+  }
+  if (!this.neededBy && this.neededByDate) {
+    this.neededBy = this.neededByDate;
+  }
+  next();
+});
+
 ExpenseRequisitionSchema.index({ business: 1, createdAt: -1 });
 ExpenseRequisitionSchema.index({ business: 1, property: 1, status: 1, createdAt: -1 });
 ExpenseRequisitionSchema.index({ business: 1, referenceNo: 1 }, { unique: true });
+ExpenseRequisitionSchema.index({ business: 1, requisitionNo: 1 });
+ExpenseRequisitionSchema.index({ business: 1, serviceProvider: 1, createdAt: -1 });
 
 const ExpenseRequisition =
   mongoose.models.ExpenseRequisition ||

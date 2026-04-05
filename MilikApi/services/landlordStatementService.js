@@ -765,6 +765,7 @@ export const generateLandlordStatement = async ({
         paidRent: 0,
         paidGarbage: 0,
         paidWater: 0,
+        unappliedCredits: 0,
         utilities: {},
         balanceCF: 0,
         unitUtilities: Array.isArray(unit.utilities) ? unit.utilities : [],
@@ -1129,6 +1130,7 @@ export const generateLandlordStatement = async ({
     const rentAllocated = getReceiptSummaryAmount(receipt, "rent");
     const depositAllocated = getReceiptSummaryAmount(receipt, "deposit");
     const utilityAllocated = getReceiptSummaryAmount(receipt, "utility");
+    const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
 
     if (rentAllocated !== 0) {
       row.paidRent += rentAllocated;
@@ -1177,6 +1179,10 @@ export const generateLandlordStatement = async ({
       } else {
         totalUtilityReceivedManager += utilityAllocated;
       }
+    }
+
+    if (unappliedAllocated !== 0) {
+      row.unappliedCredits += unappliedAllocated;
     }
 
     if (
@@ -1490,6 +1496,7 @@ export const generateLandlordStatement = async ({
       row.paidRent = round2(row.paidRent);
       row.paidGarbage = round2(row.paidGarbage);
       row.paidWater = round2(row.paidWater);
+      row.unappliedCredits = round2(row.unappliedCredits);
       row.utilities = Object.fromEntries(
         Object.entries(row.utilities || {}).map(([key, item]) => [
           key,
@@ -1802,6 +1809,7 @@ export const generateLandlordStatement = async ({
       openingBalance: row.balanceBF,
       closingBalance: row.balanceCF,
       totalPaid: round2(row.paidRent + row.totalUtilityPaid),
+      unappliedCredits: round2(row.unappliedCredits || 0),
       balance: row.balanceCF,
     })),
     totals: {
@@ -1860,6 +1868,7 @@ export const generateLandlordStatement = async ({
       totalRentReceivedManager: totalRentReceivedManager,
       totalRentReceivedLandlord: totalRentReceivedLandlord,
       totalUtilityCollected,
+      unappliedPayments: round2(tenantRows.reduce((sum, row) => sum + Number(row.unappliedCredits || 0), 0)),
       directToLandlordCollections,
       totalDirectToLandlordCollections: directToLandlordCollections,
       openingLandlordSettlementBalance: openingSettlementBalance,

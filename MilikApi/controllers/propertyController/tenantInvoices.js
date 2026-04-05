@@ -153,6 +153,43 @@ const isFutureInvoiceDate = (value) => {
 
 const isActiveInvoiceStatus = (status = "") => !["cancelled", "reversed"].includes(safeLower(status));
 
+const releaseMeterReadingLinkedToInvoice = async (invoice, actorUserId = null, reason = "") => {
+  const meterReadingId =
+    invoice?.metadata?.meterReadingId ||
+    invoice?.metadata?.meterReading?._id ||
+    invoice?.metadata?.meterReading ||
+    null;
+
+  if (!meterReadingId || !mongoose.Types.ObjectId.isValid(String(meterReadingId))) {
+    return null;
+  }
+
+  const reading = await MeterReading.findById(meterReadingId);
+  if (!reading) return null;
+
+  const linkedInvoiceId = reading?.billedInvoice ? String(reading.billedInvoice) : null;
+  if (linkedInvoiceId && linkedInvoiceId !== String(invoice?._id || "")) {
+    return reading;
+  }
+
+  reading.status = "draft";
+  reading.billedInvoice = null;
+  reading.billedAt = null;
+  if (actorUserId) {
+    reading.updatedBy = actorUserId;
+  }
+
+  const auditNote = String(reason || "").trim() || `Released from invoice ${invoice?.invoiceNumber || invoice?._id || ""}`;
+  const existingNotes = String(reading.notes || "").trim();
+  reading.notes = existingNotes
+    ? `${existingNotes}
+[Rebill enabled] ${auditNote}`
+    : `[Rebill enabled] ${auditNote}`;
+
+  await reading.save();
+  return reading;
+};
+
 const getInvoiceDuplicateBucket = ({ category, metadata = {} } = {}) => {
   const normalizedCategory = String(category || "").toUpperCase();
 
@@ -2909,6 +2946,11 @@ export const deleteTenantInvoice = async (req, res) => {
 
     if (canHardDeleteWithoutAuditReversal) {
       await TenantInvoice.deleteOne({ _id: invoice._id });
+      await releaseMeterReadingLinkedToInvoice(
+        invoice,
+        null,
+        `Invoice ${invoice.invoiceNumber || invoice._id} was permanently deleted`
+      );
       await recomputeTenantBalance(invoice.tenant, invoice.business);
       await recomputeInvoiceStatusesForTenant({
         businessId: invoice.business,
@@ -2981,6 +3023,12 @@ export const deleteTenantInvoice = async (req, res) => {
     invoice.postingError = null;
     invoice.metadata = nextMetadata;
     await invoice.save();
+
+    await releaseMeterReadingLinkedToInvoice(
+      invoice,
+      actorUserId,
+      `Invoice ${invoice.invoiceNumber || invoice._id} was ${cancellationStatus}`
+    );
 
     await recomputeTenantBalance(invoice.tenant, invoice.business);
     await recomputeInvoiceStatusesForTenant({

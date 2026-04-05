@@ -271,7 +271,7 @@ const buildJournalEntriesForReceipt = (receipt) => {
   ];
 };
 
-const Receipts = () => {
+const Receipts = ({ viewMode = "tenant" }) => {
   const { id: tenantId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -279,6 +279,11 @@ const Receipts = () => {
 
   const { currentCompany } = useSelector((state) => state.company || {});
   const { currentUser } = useSelector((state) => state.auth || {});
+  const isLandlordReceiptView = viewMode === "landlord";
+  const isDefaultTenantView = !isLandlordReceiptView;
+  const backPath = isLandlordReceiptView ? "/landlords" : "/tenants";
+  const pageLabel = isLandlordReceiptView ? "Landlord Receipts" : "Rental Receipts";
+  const pageCreateLabel = isLandlordReceiptView ? "New Landlord Receipt" : "New Receipt";
   const rawTenants = useSelector((state) => state.tenant?.tenants);
   const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
 
@@ -415,6 +420,8 @@ const Receipts = () => {
       if (payment?.ledgerType !== "receipts") return false;
       if (payment?.reversalOf) return false;
       if (payment?.isCancelled === true) return false;
+      if (isLandlordReceiptView && payment?.paidDirectToLandlord !== true) return false;
+      if (isDefaultTenantView && payment?.paidDirectToLandlord === true) return false;
 
       const isReversedReceipt =
         payment?.isReversed === true ||
@@ -470,7 +477,7 @@ const Receipts = () => {
 
       return true;
     });
-  }, [rentPayments, appliedFilters, tenants]);
+  }, [rentPayments, appliedFilters, tenants, isLandlordReceiptView, isDefaultTenantView]);
 
 
 const totalPages = Math.max(1, Math.ceil(filteredReceipts.length / ITEMS_PER_PAGE));
@@ -628,11 +635,11 @@ const visibleReceiptIds = useMemo(
   };
 
   const openCreateForm = () => {
-    if (tenantId) {
-      navigate(`/receipts/new?tenant=${tenantId}`);
-      return;
-    }
-    navigate("/receipts/new");
+    const params = new URLSearchParams();
+    if (tenantId) params.set("tenant", tenantId);
+    if (isLandlordReceiptView) params.set("mode", "landlord");
+    const query = params.toString();
+    navigate(`/receipts/new${query ? `?${query}` : ""}`);
   };
 
   const openEditForm = (receipt) => {
@@ -1441,10 +1448,10 @@ const visibleReceiptIds = useMemo(
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-2.5 mb-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <button
-                onClick={() => navigate("/tenants")}
+                onClick={() => navigate(backPath)}
                 className="text-slate-600 hover:text-slate-900 flex items-center gap-2 font-semibold text-xs"
               >
-                <FaArrowLeft /> Back to Tenants
+                <FaArrowLeft /> {isLandlordReceiptView ? "Back to Landlords" : "Back to Tenants"}
               </button>
 
               <div className="flex items-center gap-2">
@@ -1458,12 +1465,14 @@ const visibleReceiptIds = useMemo(
                   onClick={openCreateForm}
                   className={`px-3 py-1 text-xs text-white rounded-md font-semibold flex items-center gap-2 ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
                 >
-                  <FaPlus /> New Receipt
+                  <FaPlus /> {pageCreateLabel}
                 </button>
               </div>
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <div className="text-sm font-black tracking-tight text-slate-900">{pageLabel}</div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-slate-300 bg-slate-50 font-semibold text-slate-700">
                 Receipts: <strong className="text-slate-900">{stats.count}</strong>
               </span>
@@ -1476,6 +1485,7 @@ const visibleReceiptIds = useMemo(
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-orange-300 bg-orange-50 font-semibold text-orange-700">
                 Pending: <strong>{stats.pendingCount}</strong>
               </span>
+              </div>
             </div>
           </div>
 

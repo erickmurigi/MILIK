@@ -42,6 +42,7 @@ import financialReportsRoutes from "./routes/propertyRoutes/financialReports.js"
 import mpesaCollectionsRoutes from "./routes/propertyRoutes/mpesaCollections.js";
 import expenseRequisitionRoutes from "./routes/propertyRoutes/expenseRequisitions.js";
 import landlordStandingOrdersRoutes from "./routes/propertyRoutes/landlordStandingOrders.js";
+import landlordReceiptsRoutes from "./routes/propertyRoutes/landlordReceipts.js";
 import { blockDemoWrites } from "./utils/demoAccess.js";
 import {
   canAccessCompanyId,
@@ -361,6 +362,7 @@ app.get("/api", (req, res) => {
       landlords: "/api/landlords",
       leases: "/api/leases",
       rentPayments: "/api/rent-payments",
+      landlordReceipts: "/api/landlord-receipts",
       mpesaCollections: "/api/mpesa-collections",
       maintenance: "/api/maintenances",
       expenses: "/api/propertyexpenses",
@@ -394,6 +396,7 @@ app.use("/api/tenants", tenantRoutes);
 app.use("/api/rent-payments", rentPaymentRoutes);
 app.use("/api/mpesa-collections", mpesaCollectionsRoutes);
 app.use("/api/expense-requisitions", expenseRequisitionRoutes);
+app.use("/api/landlord-receipts", landlordReceiptsRoutes);
 app.use("/api/landlord-standing-orders", landlordStandingOrdersRoutes);
 app.use("/api/maintenances", maintenanceRoutes);
 app.use("/api/leases", leaseRoutes);

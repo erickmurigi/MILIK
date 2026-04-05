@@ -3,15 +3,17 @@ import { verifyUser } from "../../controllers/verifyToken.js";
 import {
   createExpenseRequisition,
   deleteExpenseRequisition,
-  listExpenseRequisitions,
+  getExpenseRequisitions,
   updateExpenseRequisition,
+  updateExpenseRequisitionStatus,
 } from "../../controllers/propertyController/expenseRequisition.js";
 
 const router = express.Router();
 
-router.get("/", verifyUser, listExpenseRequisitions);
+router.get("/", verifyUser, getExpenseRequisitions);
 router.post("/", verifyUser, createExpenseRequisition);
 router.put("/:id", verifyUser, updateExpenseRequisition);
+router.put("/:id/status", verifyUser, updateExpenseRequisitionStatus);
 router.delete("/:id", verifyUser, deleteExpenseRequisition);
 
 export default router;

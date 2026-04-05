@@ -558,3 +558,33 @@ export const mpesaConfirmationCallback = async (req, res) => {
     });
   }
 };
+
+
+export const deleteMpesaCollection = async (req, res) => {
+  try {
+    const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    if (!isValidObjectId(businessId)) {
+      return res.status(400).json({ success: false, message: "Valid business id is required" });
+    }
+
+    const row = await MpesaCollection.findOne({ _id: req.params.id, business: businessId })
+      .populate({ path: "matchedReceipt", select: "_id isConfirmed" })
+      .lean();
+
+    if (!row) {
+      return res.status(404).json({ success: false, message: "M-Pesa collection row not found" });
+    }
+
+    if (row?.matchedReceipt?._id) {
+      return res.status(400).json({
+        success: false,
+        message: "This M-Pesa notification is already linked to a receipt. Delete or reverse the receipt first.",
+      });
+    }
+
+    await MpesaCollection.deleteOne({ _id: row._id, business: businessId });
+    return res.status(200).json({ success: true, message: "M-Pesa notification removed successfully." });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to delete M-Pesa notification" });
+  }
+};

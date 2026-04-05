@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { getRentPayments } from '../../redux/apiCalls';
+import { getRentPayments, getLandlords } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { getTenants } from '../../redux/tenantsRedux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
@@ -15,16 +15,22 @@ const RentalCollectionReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const { rentPayments } = useSelector((state) => state.rentPayment);
-  const { properties } = useSelector((state) => state.property);
-  const { tenants } = useSelector((state) => state.tenants);
+  const { rentPayments = [] } = useSelector((state) => state.rentPayment || {});
+  const properties = useSelector((state) => state.property?.properties || []);
+  const tenants = useSelector((state) => state.tenant?.tenants || []);
+  const landlords = useSelector((state) => state.landlord?.landlords || []);
 
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     propertyId: '',
-    paymentMethod: ''
+    propertyId: '',
+    tenantId: '',
+    landlordId: '',
+    unitId: '',
+    paymentMethod: '',
+    cashbook: ''
   });
 
   useEffect(() => {
@@ -34,21 +40,40 @@ const RentalCollectionReport = () => {
       Promise.all([
         getRentPayments(dispatch, businessId),
         dispatch(getProperties({ business: businessId })),
-        dispatch(getTenants({ business: businessId }))
+        dispatch(getTenants({ business: businessId })),
+        getLandlords(dispatch, businessId)
       ]).finally(() => setLoading(false));
     }
   }, [currentCompany?._id, currentUser?.company, dispatch]);
 
-  const filteredPayments = rentPayments?.filter(payment => {
-    const paymentDate = new Date(payment.paymentDate);
+  const filteredPayments = rentPayments?.filter((payment) => {
+    const paymentDate = new Date(payment.paymentDate || payment.createdAt || Date.now());
     const start = new Date(filters.startDate);
     const end = new Date(filters.endDate);
-    
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+
+    const propertyId = payment.property?._id || payment.property || payment.unit?.property || "";
+    const tenantId = payment.tenant?._id || payment.tenant || "";
+    const unitId = payment.unit?._id || payment.unit || "";
+    const propertyData = properties?.find((p) => p._id === propertyId);
+    const matchedLandlord = landlords?.find((landlord) => {
+      const entries = Array.isArray(propertyData?.landlords) ? propertyData.landlords : [];
+      return entries.some((entry) => String(entry?.landlordId || "") === String(landlord._id));
+    });
+
+    const paymentMethod = String(payment.paymentMethod || "").toLowerCase();
+    const cashbook = String(payment.cashbook || "").toLowerCase();
+
     const matchesDate = paymentDate >= start && paymentDate <= end;
-    const matchesProperty = !filters.propertyId || payment.property?._id === filters.propertyId || payment.property === filters.propertyId;
-    const matchesMethod = !filters.paymentMethod || payment.paymentMethod === filters.paymentMethod;
-    
-    return matchesDate && matchesProperty && matchesMethod;
+    const matchesProperty = !filters.propertyId || String(propertyId) === String(filters.propertyId);
+    const matchesTenant = !filters.tenantId || String(tenantId) === String(filters.tenantId);
+    const matchesLandlord = !filters.landlordId || String(matchedLandlord?._id || "") === String(filters.landlordId);
+    const matchesUnit = !filters.unitId || String(unitId) === String(filters.unitId);
+    const matchesMethod = !filters.paymentMethod || paymentMethod === String(filters.paymentMethod).toLowerCase();
+    const matchesCashbook = !filters.cashbook || cashbook === String(filters.cashbook).toLowerCase();
+
+    return matchesDate && matchesProperty && matchesTenant && matchesLandlord && matchesUnit && matchesMethod && matchesCashbook;
   }) || [];
 
   // Group by property
@@ -66,7 +91,7 @@ const RentalCollectionReport = () => {
     }
     
     acc[propertyName].payments.push(payment);
-    acc[propertyName].total += payment.amountPaid || 0;
+    acc[propertyName].total += Number(payment.amount || payment.amountPaid || 0);
     acc[propertyName].count += 1;
     
     return acc;
@@ -74,10 +99,10 @@ const RentalCollectionReport = () => {
 
   // Calculate stats
   const stats = {
-    totalCollected: filteredPayments.reduce((sum, p) => sum + (p.amountPaid || 0), 0),
+    totalCollected: filteredPayments.reduce((sum, p) => sum + Number(p.amount || p.amountPaid || 0), 0),
     totalPayments: filteredPayments.length,
     properties: Object.keys(groupedByProperty).length,
-    avgPayment: filteredPayments.length > 0 ? filteredPayments.reduce((sum, p) => sum + (p.amountPaid || 0), 0) / filteredPayments.length : 0
+    avgPayment: filteredPayments.length > 0 ? filteredPayments.reduce((sum, p) => sum + Number(p.amount || p.amountPaid || 0), 0) / filteredPayments.length : 0
   };
 
   const handlePrint = () => {
@@ -96,9 +121,9 @@ const RentalCollectionReport = () => {
         return [
           new Date(payment.paymentDate).toLocaleDateString(),
           propertyData?.propertyName || 'N/A',
-          tenantData?.tenantName || 'N/A',
+          tenantData?.name || tenantData?.tenantName || 'N/A',
           payment.unit?.unitNumber || 'N/A',
-          payment.amountPaid || 0,
+          Number(payment.amount || payment.amountPaid || 0),
           payment.paymentMethod || 'N/A',
           payment.receiptNumber || 'N/A'
         ].join(',');
@@ -151,7 +176,7 @@ const RentalCollectionReport = () => {
               <FaFilter style={{ color: MILIK_ORANGE }} />
               Filters
             </h3>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Start Date</label>
                 <input
@@ -196,6 +221,59 @@ const RentalCollectionReport = () => {
                   <option value="bank">Bank Transfer</option>
                   <option value="cheque">Cheque</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Tenant</label>
+                <select
+                  value={filters.tenantId}
+                  onChange={(e) => setFilters(prev => ({ ...prev, tenantId: e.target.value, unitId: '' }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                  <option value="">All Tenants</option>
+                  {tenants?.map((tenant) => (
+                    <option key={tenant._id} value={tenant._id}>{tenant.name || tenant.tenantName}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Unit</label>
+                <select
+                  value={filters.unitId}
+                  onChange={(e) => setFilters(prev => ({ ...prev, unitId: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                  <option value="">All Units</option>
+                  {tenants
+                    ?.filter((tenant) => !filters.tenantId || String(tenant._id) === String(filters.tenantId))
+                    .map((tenant) => {
+                      const unitId = tenant.unit?._id || tenant.unit;
+                      const unitNumber = tenant.unit?.unitNumber || 'Unit';
+                      return <option key={unitId} value={unitId}>{unitNumber}</option>;
+                    })}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Landlord</label>
+                <select
+                  value={filters.landlordId}
+                  onChange={(e) => setFilters(prev => ({ ...prev, landlordId: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                  <option value="">All Landlords</option>
+                  {landlords?.map((landlord) => (
+                    <option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Cashbook</label>
+                <input
+                  type="text"
+                  value={filters.cashbook}
+                  onChange={(e) => setFilters(prev => ({ ...prev, cashbook: e.target.value }))}
+                  placeholder="Filter cashbook"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                />
               </div>
             </div>
           </div>

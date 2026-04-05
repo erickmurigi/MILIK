@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
   FaSave,
@@ -14,7 +14,7 @@ import {
 import { toast } from "react-toastify";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits } from "../../redux/unitRedux";
-import { createTenant, getTenants } from "../../redux/tenantsRedux";
+import { createTenant, getTenants, updateTenant } from "../../redux/tenantsRedux";
 import { createTenantInvoice } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 
@@ -167,6 +167,8 @@ function MilikSelect({
 const AddTenant = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { id: routeTenantId } = useParams();
+  const isEditMode = Boolean(routeTenantId);
 
   const { currentCompany } = useSelector((state) => state.company);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
@@ -206,6 +208,7 @@ const AddTenant = () => {
   const [showInvoicePrompt, setShowInvoicePrompt] = useState(false);
   const [pendingInvoiceContext, setPendingInvoiceContext] = useState(null);
   const [isCreatingInitialInvoices, setIsCreatingInitialInvoices] = useState(false);
+  const [tenantLoading, setTenantLoading] = useState(false);
   const [openingInvoiceMode, setOpeningInvoiceMode] = useState("separate");
   const [utilityOptions, setUtilityOptions] = useState([]);
   const draftStorageKey = currentCompany?._id ? `milik:new-tenant-draft:${currentCompany._id}` : null;
@@ -251,7 +254,16 @@ const AddTenant = () => {
       return status === "vacant" && u.isVacant !== false;
     });
 
-    setAvailableUnits(vacant);
+    const activeUnitId = normalizeId(formData.unit);
+    const selectedOccupiedUnit = activeUnitId
+      ? propertyUnits.find((u) => normalizeId(u?._id) === activeUnitId)
+      : null;
+
+    const unitOptions = selectedOccupiedUnit && !vacant.some((u) => normalizeId(u?._id) === activeUnitId)
+      ? [selectedOccupiedUnit, ...vacant]
+      : vacant;
+
+    setAvailableUnits(unitOptions);
 
     if (lastPropertyRef.current && lastPropertyRef.current !== formData.property) {
       setFormData((prev) => ({ ...prev, unit: "", utilities: [], rent: "", depositAmount: "" }));
@@ -315,7 +327,7 @@ const AddTenant = () => {
   );
 
   useEffect(() => {
-    if (!draftStorageKey) {
+    if (isEditMode || !draftStorageKey) {
       draftRestoredRef.current = true;
       return;
     }
@@ -338,10 +350,10 @@ const AddTenant = () => {
     } finally {
       draftRestoredRef.current = true;
     }
-  }, [draftStorageKey]);
+  }, [draftStorageKey, isEditMode]);
 
   useEffect(() => {
-    if (!draftStorageKey || !draftRestoredRef.current) return;
+    if (isEditMode || !draftStorageKey || !draftRestoredRef.current) return;
     try {
       sessionStorage.setItem(
         draftStorageKey,
@@ -354,10 +366,10 @@ const AddTenant = () => {
     } catch (draftError) {
       console.warn("Failed to persist tenant draft", draftError);
     }
-  }, [additionalUtilities, draftStorageKey, formData, openingInvoiceMode]);
+  }, [additionalUtilities, draftStorageKey, formData, isEditMode, openingInvoiceMode]);
 
   const clearDraftState = () => {
-    if (!draftStorageKey) return;
+    if (isEditMode || !draftStorageKey) return;
     sessionStorage.removeItem(draftStorageKey);
   };
 
@@ -573,6 +585,7 @@ const AddTenant = () => {
         rent: parseFloat(formData.rent),
         depositAmount: parseFloat(formData.depositAmount || 0),
         business: currentCompany?._id,
+        paymentMethod: formData.paymentMethod || "bank_transfer",
         utilities: [
           ...formData.utilities,
           ...additionalUtilities.filter((u) => u.utility),
@@ -584,12 +597,19 @@ const AddTenant = () => {
         },
       };
 
-      const result = await dispatch(createTenant(payload)).unwrap();
+      const result = isEditMode
+        ? await dispatch(updateTenant({ id: routeTenantId, tenantData: payload })).unwrap()
+        : await dispatch(createTenant(payload)).unwrap();
       clearDraftState();
-      toast.success(result?.message || "Tenant created successfully!");
+      toast.success(result?.message || `Tenant ${isEditMode ? "updated" : "created"} successfully!`);
 
       setAdditionalUtilities([]);
       dispatch(getTenants({ business: currentCompany?._id }));
+
+      if (isEditMode) {
+        navigate("/tenants");
+        return;
+      }
 
       const nextInvoiceContext = buildTenantInvoiceContext(result);
       if (!nextInvoiceContext.items.length) {
@@ -604,7 +624,7 @@ const AddTenant = () => {
         err?.message ||
         err?.error ||
         err?.data?.message ||
-        "Failed to create tenant";
+        `Failed to ${isEditMode ? "update" : "create"} tenant`;
       setGeneralError(errorMsg);
       toast.error(errorMsg);
     }
