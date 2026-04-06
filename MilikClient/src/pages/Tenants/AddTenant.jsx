@@ -53,6 +53,44 @@ const normalizeId = (value) => {
   return String(value);
 };
 
+const formatDateInput = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+};
+
+const normalizeUtilityEntry = (util = {}) => {
+  let utilityLabel = "Unknown Utility";
+  let utilityValue = "";
+
+  if (util.utility && typeof util.utility === "object" && !Array.isArray(util.utility)) {
+    utilityValue = util.utility._id || util.utility.name || util.utility.utilityName || "";
+    utilityLabel = util.utility.name || util.utility.utilityName || "Unknown Utility";
+  } else if (typeof util.utility === "string" && util.utility.trim() !== "") {
+    utilityValue = util.utility.trim();
+    utilityLabel = util.utilityLabel || util.utility.trim();
+  } else if (typeof util.utilityLabel === "string" && util.utilityLabel.trim() !== "") {
+    utilityLabel = util.utilityLabel.trim();
+  }
+
+  return {
+    utility: utilityValue,
+    utilityLabel,
+    isIncluded: !!util.isIncluded,
+    unitCharge: Number(util.unitCharge || 0),
+  };
+};
+
+const buildUtilitySignature = (item = {}) => {
+  return [
+    String(item.utility || "").trim().toLowerCase(),
+    String(item.utilityLabel || "").trim().toLowerCase(),
+    Number(item.unitCharge || 0).toFixed(2),
+    item.isIncluded ? "1" : "0",
+  ].join("|");
+};
+
 /**
  * Custom dropdown with Milik styling
  */
@@ -214,6 +252,7 @@ const AddTenant = () => {
   const draftStorageKey = currentCompany?._id ? `milik:new-tenant-draft:${currentCompany._id}` : null;
   const draftRestoredRef = useRef(false);
   const lastPropertyRef = useRef("");
+  const skipNextUnitAutofillRef = useRef(false);
 
   useEffect(() => {
     if (currentCompany?._id) {
@@ -282,25 +321,12 @@ const AddTenant = () => {
 
     if (!selectedUnit) return;
 
-    const mappedUtilities = (selectedUnit.utilities || []).map((util) => {
-      let utilityLabel = "Unknown Utility";
-      let utilityValue = "";
+    const mappedUtilities = (selectedUnit.utilities || []).map((util) => normalizeUtilityEntry(util));
 
-      if (util.utility && typeof util.utility === "object" && !Array.isArray(util.utility)) {
-        utilityValue = util.utility._id || "";
-        utilityLabel = util.utility.name || util.utility.utilityName || "Unknown Utility";
-      } else if (util.utility && typeof util.utility === "string" && util.utility.trim() !== "") {
-        utilityValue = util.utility;
-        utilityLabel = util.utility;
-      }
-
-      return {
-        utility: utilityValue,
-        utilityLabel,
-        isIncluded: util.isIncluded,
-        unitCharge: util.unitCharge || 0,
-      };
-    });
+    if (skipNextUnitAutofillRef.current) {
+      skipNextUnitAutofillRef.current = false;
+      return;
+    }
 
     setFormData((prev) => ({
       ...prev,
@@ -367,6 +393,106 @@ const AddTenant = () => {
       console.warn("Failed to persist tenant draft", draftError);
     }
   }, [additionalUtilities, draftStorageKey, formData, isEditMode, openingInvoiceMode]);
+
+
+  useEffect(() => {
+    if (!isEditMode || !routeTenantId) return;
+
+    let isMounted = true;
+
+    const loadTenantForEdit = async () => {
+      setTenantLoading(true);
+      setGeneralError("");
+
+      try {
+        const response = await adminRequests.get(`/tenants/${routeTenantId}`, {
+          params: currentCompany?._id ? { business: currentCompany._id } : undefined,
+        });
+
+        const tenant = response?.data?.data || response?.data?.tenant || response?.data;
+        if (!tenant?._id) {
+          throw new Error("Tenant record could not be loaded for editing.");
+        }
+
+        const unitId = normalizeId(tenant.unit?._id || tenant.unit);
+        const propertyId = normalizeId(tenant.unit?.property?._id || tenant.unit?.property);
+        const normalizedTenantUtilities = Array.isArray(tenant.utilities)
+          ? tenant.utilities.map((item) => normalizeUtilityEntry(item))
+          : [];
+        const normalizedUnitUtilities = Array.isArray(tenant.unit?.utilities)
+          ? tenant.unit.utilities.map((item) => normalizeUtilityEntry(item))
+          : [];
+
+        const unitUtilityCounts = normalizedUnitUtilities.reduce((map, item) => {
+          const signature = buildUtilitySignature(item);
+          map.set(signature, (map.get(signature) || 0) + 1);
+          return map;
+        }, new Map());
+
+        const derivedAdditionalUtilities = [];
+        normalizedTenantUtilities.forEach((item) => {
+          const signature = buildUtilitySignature(item);
+          const currentCount = unitUtilityCounts.get(signature) || 0;
+          if (currentCount > 0) {
+            unitUtilityCounts.set(signature, currentCount - 1);
+          } else {
+            derivedAdditionalUtilities.push(item);
+          }
+        });
+
+        if (!isMounted) return;
+
+        skipNextUnitAutofillRef.current = true;
+        lastPropertyRef.current = propertyId || "";
+        setFormData((prev) => ({
+          ...prev,
+          tenantCode: tenant.tenantCode || "",
+          name: tenant.name || "",
+          phone: tenant.phone || "",
+          idNumber: tenant.idNumber || "",
+          property: propertyId,
+          unit: unitId,
+          moveInDate: formatDateInput(tenant.moveInDate),
+          moveOutDate: formatDateInput(tenant.moveOutDate),
+          leaseType: tenant.leaseType || "at_will",
+          rent:
+            tenant.rent !== undefined && tenant.rent !== null ? String(tenant.rent) : "",
+          depositAmount:
+            tenant.depositAmount !== undefined && tenant.depositAmount !== null
+              ? String(tenant.depositAmount)
+              : "",
+          depositHeldBy: tenant.depositHeldBy || "Management Company",
+          status: tenant.status || "active",
+          emergencyContactName: tenant.emergencyContact?.name || "",
+          emergencyContactPhone: tenant.emergencyContact?.phone || "",
+          emergencyContactRelationship:
+            tenant.emergencyContact?.relationship || "Family",
+          utilities: normalizedUnitUtilities.length
+            ? normalizedUnitUtilities
+            : normalizedTenantUtilities,
+        }));
+        setAdditionalUtilities(derivedAdditionalUtilities);
+      } catch (error) {
+        if (!isMounted) return;
+        const message =
+          error?.response?.data?.message ||
+          error?.message ||
+          "Failed to load tenant details for editing.";
+        setGeneralError(message);
+        toast.error(message);
+      } finally {
+        if (isMounted) {
+          setTenantLoading(false);
+        }
+      }
+    };
+
+    loadTenantForEdit();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentCompany?._id, isEditMode, routeTenantId]);
 
   const clearDraftState = () => {
     if (isEditMode || !draftStorageKey) return;
@@ -770,10 +896,12 @@ for (const request of invoiceRequests) {
         <div className="max-w-5xl mx-auto">
           <div className="mb-6">
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-              New Tenant
+              {isEditMode ? "Edit Tenant" : "New Tenant"}
             </h1>
             <p className="mt-1 text-sm text-slate-600">
-              Create a new tenant record with billing information
+              {isEditMode
+                ? "Update tenant record and billing information"
+                : "Create a new tenant record with billing information"}
             </p>
           </div>
 
@@ -783,6 +911,12 @@ for (const request of invoiceRequests) {
             </div>
           )}
 
+          {isEditMode && tenantLoading ? (
+            <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-6 py-10 flex items-center justify-center gap-3 text-slate-700">
+              <FaSpinner className="animate-spin text-orange-600" />
+              <span className="font-semibold">Loading tenant details...</span>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit}>
             <div className="bg-white shadow-sm rounded-lg border border-slate-200 overflow-hidden">
               <div className="p-6 space-y-6">
@@ -882,7 +1016,7 @@ for (const request of invoiceRequests) {
                     />
 
                     <MilikSelect
-                      label="Unit (Vacant Only)"
+                      label={isEditMode ? "Unit" : "Unit (Vacant Only)"}
                       required
                       placeholder="Select Unit"
                       items={availableUnits}
@@ -1145,7 +1279,7 @@ for (const request of invoiceRequests) {
                               onChange={(val) => updateAdditionalUtility(idx, "utility", val)}
                               getLabel={(x) => x}
                               getValue={(x) => x}
-                              disabled={loading}
+                              disabled={loading || tenantLoading}
                             />
                           </div>
 
@@ -1255,7 +1389,7 @@ for (const request of invoiceRequests) {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || tenantLoading}
                   className={`w-full sm:w-auto h-10 px-5 rounded-md text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors ${
                     loading
                       ? "bg-slate-400 cursor-not-allowed"
@@ -1264,17 +1398,18 @@ for (const request of invoiceRequests) {
                 >
                   {loading ? (
                     <>
-                      <FaSpinner className="animate-spin" /> Saving...
+                      <FaSpinner className="animate-spin" /> {isEditMode ? "Updating..." : "Saving..."}
                     </>
                   ) : (
                     <>
-                      <FaSave /> Save Tenant
+                      <FaSave /> {isEditMode ? "Update Tenant" : "Save Tenant"}
                     </>
                   )}
                 </button>
               </div>
             </div>
           </form>
+          )}
         </div>
       </div>
 

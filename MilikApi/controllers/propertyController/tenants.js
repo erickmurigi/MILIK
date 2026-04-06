@@ -514,10 +514,51 @@ export const updateTenant = async (req, res, next) => {
       );
     }
 
+    const currentUnitId = tenant.unit ? String(tenant.unit) : "";
+    let targetUnit = null;
+    const requestedUnitId =
+      normalizedPayload.unit !== undefined && normalizedPayload.unit !== null
+        ? String(normalizedPayload.unit)
+        : currentUnitId;
+    const isChangingUnit = !!requestedUnitId && requestedUnitId !== currentUnitId;
+
+    if (normalizedPayload.unit !== undefined) {
+      if (!mongoose.Types.ObjectId.isValid(requestedUnitId)) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid unit is required",
+        });
+      }
+
+      targetUnit = await Unit.findOne({
+        _id: requestedUnitId,
+        business: tenant.business,
+      }).populate("property", "depositHeldBy");
+
+      if (!targetUnit) {
+        return res.status(404).json({
+          success: false,
+          message: "Unit not found for the selected company",
+        });
+      }
+
+      if (isChangingUnit) {
+        const normalizedStatus = String(targetUnit.status || "").trim().toLowerCase();
+        const normalizedIsVacant = targetUnit.isVacant !== false;
+
+        if (normalizedStatus !== "vacant" || !normalizedIsVacant) {
+          return res.status(400).json({
+            success: false,
+            message: "Selected unit is not available",
+          });
+        }
+      }
+    }
+
     if (Object.prototype.hasOwnProperty.call(normalizedPayload, "depositHeldBy")) {
-      const unit = tenant.unit
+      const unit = targetUnit || (tenant.unit
         ? await Unit.findById(tenant.unit).populate("property", "depositHeldBy")
-        : null;
+        : null);
 
       normalizedPayload.depositHeldBy = normalizeDepositHolder(
         normalizedPayload.depositHeldBy,
@@ -570,8 +611,15 @@ export const updateTenant = async (req, res, next) => {
       { $set: normalizedPayload },
       { new: true, runValidators: true }
     )
-      .populate("unit", "unitNumber property")
+      .populate("unit", "unitNumber property rent status utilities")
       .populate("unit.property", "propertyName propertyCode depositHeldBy");
+
+    if (isChangingUnit) {
+      if (currentUnitId) {
+        await setUnitVacant(currentUnitId, tenant._id, new Date());
+      }
+      await setUnitOccupied(requestedUnitId, tenant._id);
+    }
 
     return res.status(200).json({
       success: true,
