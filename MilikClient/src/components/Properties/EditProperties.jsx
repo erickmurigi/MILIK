@@ -305,8 +305,6 @@ const EditProperty = () => {
     { id: "accounting", label: "Accounting", icon: <FaCalculator /> },
     { id: "charges", label: "Standing Charges", icon: <FaChartBar /> },
     { id: "communications", label: "Communications", icon: <FaBell /> },
-    { id: "banking", label: "Banking", icon: <FaFileInvoice /> },
-    { id: "notes", label: "Notes", icon: <FaStickyNote /> },
   ];
 
   const propertyTypes = [
@@ -1079,42 +1077,6 @@ const EditProperty = () => {
             getValue={(x) => x}
           />
         </div>
-
-        <div>
-          <label className={labelClass}>Primary Bank/Cash (Operating Account)</label>
-          <input
-            type="text"
-            name="primaryBank"
-            value={formData.primaryBank}
-            onChange={handleChange}
-            className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            placeholder="Bank name and account"
-          />
-        </div>
-
-        <div>
-          <label className={labelClass}>Alternative Tax PIN</label>
-          <input
-            type="text"
-            name="alternativeTaxPin"
-            value={formData.alternativeTaxPin}
-            onChange={handleChange}
-            className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            placeholder="e.g., A001234567Z"
-          />
-        </div>
-
-        <div>
-          <label className={labelClass}>Property Invoicing No. Prefix</label>
-          <input
-            type="text"
-            name="invoicePrefix"
-            value={formData.invoicePrefix}
-            onChange={handleChange}
-            className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            placeholder="e.g., INV"
-          />
-        </div>
       </div>
 
       <div>
@@ -1160,147 +1122,126 @@ const EditProperty = () => {
           </div>
         </div>
       </div>
-
-      <div className={`${sectionCard} p-4`}>
-        <h3 className={sectionHeader}>M-PESA RECEIPTING PREFERENCE</h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-          <div className="flex items-center gap-3">
-            <label className={helperLabelClass}>M-Pesa Property Paybill:</label>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm text-slate-700 font-semibold">
-                <input
-                  type="radio"
-                  name="mpesaPaybill"
-                  checked={formData.mpesaPaybill}
-                  onChange={() => setFormData((p) => ({ ...p, mpesaPaybill: true }))}
-                />
-                Yes
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-700 font-semibold">
-                <input
-                  type="radio"
-                  name="mpesaPaybill"
-                  checked={!formData.mpesaPaybill}
-                  onChange={() => setFormData((p) => ({ ...p, mpesaPaybill: false }))}
-                />
-                No
-              </label>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <label className={helperLabelClass}>Disable Mpesa STK Push?:</label>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm text-slate-700 font-semibold">
-                <input
-                  type="radio"
-                  name="disableMpesaStkPush"
-                  checked={formData.disableMpesaStkPush}
-                  onChange={() => setFormData((p) => ({ ...p, disableMpesaStkPush: true }))}
-                />
-                Yes
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-700 font-semibold">
-                <input
-                  type="radio"
-                  name="disableMpesaStkPush"
-                  checked={!formData.disableMpesaStkPush}
-                  onChange={() => setFormData((p) => ({ ...p, disableMpesaStkPush: false }))}
-                />
-                No
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <label className={labelClass}>Disable Mpesa STK Push Narration</label>
-          <input
-            type="text"
-            name="mpesaNarration"
-            value={formData.mpesaNarration}
-            onChange={handleChange}
-            className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-          />
-        </div>
-      </div>
     </div>
   );
 
-  const renderSpaceUnits = () => (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        <div>
-          <label className={labelClass}>Gross Lettable Area</label>
-          <input
-            type="number"
-            name="grossLettableArea"
-            value={formData.grossLettableArea}
-            onChange={handleChange}
-            className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            placeholder="0"
-            step="0.01"
-          />
+  const renderSpaceUnits = () => {
+    const basisArea = parseFloat(formData.netLettableArea || formData.grossLettableArea || 0) || 0;
+    const ratePerMeasure = parseFloat(formData.rentPerMeasure || 0) || 0;
+    const estimatedRent = basisArea * ratePerMeasure;
+
+    return (
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div>
+            <label className={labelClass}>Gross Lettable Area</label>
+            <input
+              type="number"
+              name="grossLettableArea"
+              value={formData.grossLettableArea}
+              onChange={handleChange}
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+              placeholder="0"
+              step="0.01"
+              min="0"
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Net Lettable Area</label>
+            <input
+              type="number"
+              name="netLettableArea"
+              value={formData.netLettableArea}
+              onChange={handleChange}
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+              placeholder="0"
+              step="0.01"
+              min="0"
+            />
+          </div>
+
+          <div>
+            <MilikSelect
+              label="Unit Measurement"
+              placeholder="Select Measurement"
+              items={["Sq Ft", "Sq M", "Acres", "Hectares"]}
+              value={formData.unitMeasurement}
+              onChange={(val) => handleChange({ target: { name: "unitMeasurement", value: val } })}
+              getLabel={(x) => x}
+              getValue={(x) => x}
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Rent Per Measure</label>
+            <input
+              type="number"
+              name="rentPerMeasure"
+              value={formData.rentPerMeasure}
+              onChange={handleChange}
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+              placeholder="0.00"
+              step="0.01"
+              min="0"
+            />
+          </div>
+
+          <div>
+            <MilikSelect
+              label="Rent Currency"
+              placeholder="Select Currency"
+              items={[
+                "Kenyan Shilling [KES]",
+                "US Dollar [USD]",
+                "Euro [EUR]",
+                "British Pound [GBP]",
+              ]}
+              value={formData.rentCurrency}
+              onChange={(val) => handleChange({ target: { name: "rentCurrency", value: val } })}
+              getLabel={(x) => x}
+              getValue={(x) => x}
+            />
+          </div>
         </div>
 
-        <div>
-          <label className={labelClass}>Net Lettable Area</label>
-          <input
-            type="number"
-            name="netLettableArea"
-            value={formData.netLettableArea}
-            onChange={handleChange}
-            className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            placeholder="0"
-            step="0.01"
-          />
-        </div>
+        <div className={`${sectionCard} p-4`}>
+          <h3 className={sectionHeader}>MEASUREMENT-BASED RENT PREVIEW</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pricing Basis Area</div>
+              <div className="mt-1 text-lg font-extrabold text-slate-900">
+                {basisArea.toLocaleString()} {formData.unitMeasurement}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                Uses net lettable area when present, otherwise gross lettable area.
+              </div>
+            </div>
 
-        <div>
-          <MilikSelect
-            label="Unit Measurement"
-            placeholder="Select Measurement"
-            items={["Sq Ft", "Sq M", "Acres", "Hectares"]}
-            value={formData.unitMeasurement}
-            onChange={(val) => handleChange({ target: { name: "unitMeasurement", value: val } })}
-            getLabel={(x) => x}
-            getValue={(x) => x}
-          />
-        </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rate Per Measure</div>
+              <div className="mt-1 text-lg font-extrabold text-slate-900">
+                {ratePerMeasure.toLocaleString()} {formData.rentCurrency}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                This default rate is available when pricing units from their measured area.
+              </div>
+            </div>
 
-        <div>
-          <label className={labelClass}>Rent Per Measure</label>
-          <input
-            type="number"
-            name="rentPerMeasure"
-            value={formData.rentPerMeasure}
-            onChange={handleChange}
-            className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            placeholder="0.00"
-            step="0.01"
-          />
-        </div>
-
-        <div>
-          <MilikSelect
-            label="Rent Currency"
-            placeholder="Select Currency"
-            items={[
-              "Kenyan Shilling [KES]",
-              "US Dollar [USD]",
-              "Euro [EUR]",
-              "British Pound [GBP]",
-            ]}
-            value={formData.rentCurrency}
-            onChange={(val) => handleChange({ target: { name: "rentCurrency", value: val } })}
-            getLabel={(x) => x}
-            getValue={(x) => x}
-          />
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Estimated Monthly Rent</div>
+              <div className="mt-1 text-lg font-extrabold text-emerald-900">
+                {estimatedRent.toLocaleString()} {formData.rentCurrency}
+              </div>
+              <div className="mt-1 text-xs text-emerald-700">
+                Saved property defaults can now feed unit rent calculation when a unit area is entered.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderStandingCharges = () => (
     <div className="space-y-6">
@@ -1456,6 +1397,10 @@ const EditProperty = () => {
           >
             <FaPlus /> Add Security Deposit
           </button>
+        </div>
+
+        <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+          The rent security deposit configured here now feeds the main unit deposit default when creating a unit for this property.
         </div>
 
         <div className="space-y-3">

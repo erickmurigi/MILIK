@@ -38,6 +38,49 @@ const sanitizeAmenities = (amenities = []) => {
     .filter(Boolean);
 };
 
+const roundCurrency = (value) => Number(Number(value || 0).toFixed(2));
+
+const calculateRentFromPropertyDefaults = (propertyDoc, areaValue, explicitRent) => {
+  const providedRent = Number(explicitRent || 0);
+  if (providedRent > 0) return roundCurrency(providedRent);
+
+  const rate = Number(propertyDoc?.rentPerMeasure || 0);
+  const area = Number(areaValue || 0);
+  if (rate <= 0 || area <= 0) return 0;
+
+  return roundCurrency(rate * area);
+};
+
+const calculateDepositFromPropertyDefaults = (propertyDoc, rentAmount, explicitDeposit) => {
+  const providedDeposit = explicitDeposit === "" || explicitDeposit === null || explicitDeposit === undefined
+    ? Number.NaN
+    : Number(explicitDeposit);
+
+  if (Number.isFinite(providedDeposit) && providedDeposit >= 0) {
+    return roundCurrency(providedDeposit);
+  }
+
+  const deposits = Array.isArray(propertyDoc?.securityDeposits) ? propertyDoc.securityDeposits : [];
+  const rentDeposit =
+    deposits.find(
+      (item) => String(item?.depositType || "").trim().toLowerCase() === "rent security deposit"
+    ) ||
+    deposits.find((item) => String(item?.depositType || "").toLowerCase().includes("rent")) ||
+    null;
+
+  const normalizedRent = Number(rentAmount || 0);
+  if (!rentDeposit) {
+    return normalizedRent > 0 ? roundCurrency(normalizedRent) : 0;
+  }
+
+  const amount = Number(rentDeposit.amount || 0);
+  if (String(rentDeposit.chargeMode || "Fixed Amount") === "Percentage") {
+    return normalizedRent > 0 ? roundCurrency((normalizedRent * amount) / 100) : 0;
+  }
+
+  return roundCurrency(amount);
+};
+
 export const calculateTotalMonthlyAmount = async (unitOrId) => {
   try {
     const unit =
@@ -171,11 +214,25 @@ export const createUnit = async (req, res, next) => {
       });
     }
 
+    const resolvedRent = calculateRentFromPropertyDefaults(
+      property,
+      req.body.areaSqFt,
+      req.body.rent
+    );
+    const resolvedDeposit = calculateDepositFromPropertyDefaults(
+      property,
+      resolvedRent,
+      req.body.deposit
+    );
+
     const newUnit = new Unit({
       ...req.body,
       unitNumber: normalizedUnitNumber,
       property: property._id,
       business: businessId,
+      rent: resolvedRent,
+      deposit: resolvedDeposit,
+      areaSqFt: Number(req.body.areaSqFt || 0),
       amenities: sanitizeAmenities(req.body.amenities),
       utilities: sanitizeUtilities(req.body.utilities),
       status: req.body.status || "vacant",
@@ -317,6 +374,7 @@ export const updateUnit = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
     const previousPropertyId = normalizePropertyId(unit.property);
 
+    let resolvedProperty = null;
     if (req.body.property && String(req.body.property) !== String(previousPropertyId)) {
       const nextProperty = await Property.findOne({
         _id: req.body.property,
@@ -329,6 +387,13 @@ export const updateUnit = async (req, res, next) => {
           message: "Selected property was not found.",
         });
       }
+
+      resolvedProperty = nextProperty;
+    } else {
+      resolvedProperty = await Property.findOne({
+        _id: previousPropertyId,
+        business: businessId,
+      });
     }
 
     const protectedFields = ["business", "_id", "createdAt", "updatedAt"];
@@ -349,6 +414,27 @@ export const updateUnit = async (req, res, next) => {
 
     if (Array.isArray(req.body.utilities)) {
       unit.utilities = sanitizeUtilities(req.body.utilities);
+    }
+
+    if (req.body.areaSqFt !== undefined) {
+      unit.areaSqFt = Number(req.body.areaSqFt || 0);
+    }
+
+    const nextRent = calculateRentFromPropertyDefaults(
+      resolvedProperty,
+      req.body.areaSqFt !== undefined ? req.body.areaSqFt : unit.areaSqFt,
+      req.body.rent !== undefined ? req.body.rent : unit.rent
+    );
+    if (nextRent > 0) {
+      unit.rent = nextRent;
+    }
+
+    if (req.body.deposit !== undefined || req.body.areaSqFt !== undefined || req.body.rent !== undefined || resolvedProperty) {
+      unit.deposit = calculateDepositFromPropertyDefaults(
+        resolvedProperty,
+        unit.rent,
+        req.body.deposit !== undefined ? req.body.deposit : unit.deposit
+      );
     }
 
     if (req.body.status) {

@@ -38,6 +38,11 @@ const standingChargeSchema = new mongoose.Schema(
 const securityDepositSchema = new mongoose.Schema(
   {
     depositType: { type: String, required: true, trim: true },
+    chargeMode: {
+      type: String,
+      enum: ["Percentage", "Fixed Amount"],
+      default: "Fixed Amount",
+    },
     amount: { type: Number, required: true },
     currency: {
       type: String,
@@ -180,6 +185,21 @@ const PropertySchema = new mongoose.Schema(
     roadStreet: { type: String, trim: true },
     zoneRegion: { type: String, trim: true },
     address: { type: String, trim: true },
+
+    grossLettableArea: { type: Number, default: 0, min: 0 },
+    netLettableArea: { type: Number, default: 0, min: 0 },
+    unitMeasurement: {
+      type: String,
+      enum: ["Sq Ft", "Sq M", "Acres", "Hectares"],
+      default: "Sq Ft",
+      trim: true,
+    },
+    rentPerMeasure: { type: Number, default: 0, min: 0 },
+    rentCurrency: {
+      type: String,
+      default: "Kenyan Shilling [KES]",
+      trim: true,
+    },
 
     accountLedgerType: {
       type: String,
@@ -400,6 +420,16 @@ PropertySchema.pre("save", function (next) {
   if (typeof this.address === "string") {
     this.address = this.address.trim();
   }
+  if (typeof this.unitMeasurement === "string") {
+    this.unitMeasurement = this.unitMeasurement.trim();
+  }
+  if (typeof this.rentCurrency === "string") {
+    this.rentCurrency = this.rentCurrency.trim();
+  }
+
+  this.grossLettableArea = Number(this.grossLettableArea || 0);
+  this.netLettableArea = Number(this.netLettableArea || 0);
+  this.rentPerMeasure = Number(this.rentPerMeasure || 0);
 
   if (this.landlords && this.landlords.length > 0) {
     this.landlords = this.landlords.filter(

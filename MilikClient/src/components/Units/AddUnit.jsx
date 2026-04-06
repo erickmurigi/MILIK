@@ -137,6 +137,7 @@ const AddUnit = () => {
     unitNumber: "",
     property: "",
     unitType: "",
+    areaSqFt: "",
     rent: "",
     deposit: "",
     status: "vacant",
@@ -150,6 +151,7 @@ const AddUnit = () => {
   const [generalError, setGeneralError] = useState("");
   const [utilityOptions, setUtilityOptions] = useState([]);
   const [depositTouched, setDepositTouched] = useState(Boolean(isEditMode));
+  const [rentTouched, setRentTouched] = useState(Boolean(isEditMode));
   const draftStorageKey = currentCompany?._id
     ? `milik:${isEditMode ? "edit" : "new"}-unit-draft:${currentCompany._id}${unitId ? `:${unitId}` : ""}`
     : null;
@@ -183,10 +185,12 @@ const AddUnit = () => {
       const existingUnit = units.find((u) => u._id === unitId);
       if (existingUnit) {
         setDepositTouched(true);
+        setRentTouched(true);
         setFormData({
           unitNumber: existingUnit.unitNumber || "",
           property: existingUnit.property?._id || existingUnit.property || "",
           unitType: existingUnit.unitType || "",
+          areaSqFt: existingUnit.areaSqFt?.toString() || "",
           rent: existingUnit.rent?.toString() || "",
           deposit: existingUnit.deposit?.toString() || "",
           status: existingUnit.status || "vacant",
@@ -214,6 +218,9 @@ const AddUnit = () => {
       if (typeof parsedDraft?.depositTouched === "boolean") {
         setDepositTouched(parsedDraft.depositTouched);
       }
+      if (typeof parsedDraft?.rentTouched === "boolean") {
+        setRentTouched(parsedDraft.rentTouched);
+      }
     } catch (draftError) {
       console.warn("Failed to restore unit draft", draftError);
     } finally {
@@ -229,17 +236,85 @@ const AddUnit = () => {
         JSON.stringify({
           formData,
           depositTouched,
+          rentTouched,
         })
       );
     } catch (draftError) {
       console.warn("Failed to persist unit draft", draftError);
     }
-  }, [depositTouched, draftStorageKey, formData]);
+  }, [depositTouched, draftStorageKey, formData, rentTouched]);
 
   const clearDraftState = () => {
     if (!draftStorageKey) return;
     sessionStorage.removeItem(draftStorageKey);
   };
+
+  const selectedProperty = useMemo(
+    () => properties.find((item) => String(item?._id) === String(formData.property || "")) || null,
+    [formData.property, properties]
+  );
+
+  const measurementLabel = selectedProperty?.unitMeasurement || "Sq Ft";
+
+  const roundMoneyString = (value) => {
+    const numericValue = Number(value || 0);
+    if (!Number.isFinite(numericValue) || numericValue <= 0) return "";
+    return numericValue.toFixed(2);
+  };
+
+  const calculateRentFromPropertyDefaults = (propertyDoc, areaValue) => {
+    const area = Number(areaValue || 0);
+    const rate = Number(propertyDoc?.rentPerMeasure || 0);
+    if (!Number.isFinite(area) || area <= 0 || !Number.isFinite(rate) || rate <= 0) {
+      return 0;
+    }
+    return Number((area * rate).toFixed(2));
+  };
+
+  const calculateDepositFromPropertyDefaults = (propertyDoc, rentAmount) => {
+    const normalizedRent = Number(rentAmount || 0);
+    const deposits = Array.isArray(propertyDoc?.securityDeposits) ? propertyDoc.securityDeposits : [];
+    const rentDeposit =
+      deposits.find(
+        (item) => String(item?.depositType || "").trim().toLowerCase() === "rent security deposit"
+      ) ||
+      deposits.find((item) => String(item?.depositType || "").toLowerCase().includes("rent")) ||
+      null;
+
+    if (!rentDeposit) {
+      return normalizedRent > 0 ? normalizedRent : 0;
+    }
+
+    const amount = Number(rentDeposit.amount || 0);
+    if (String(rentDeposit.chargeMode || "Fixed Amount") === "Percentage") {
+      return normalizedRent > 0 ? Number(((normalizedRent * amount) / 100).toFixed(2)) : 0;
+    }
+
+    return Number(amount.toFixed(2));
+  };
+
+  useEffect(() => {
+    if (!selectedProperty || isEditMode || rentTouched) return;
+    const calculatedRent = calculateRentFromPropertyDefaults(selectedProperty, formData.areaSqFt);
+    if (calculatedRent > 0) {
+      setFormData((prev) => {
+        if (String(prev.rent || "") === roundMoneyString(calculatedRent)) return prev;
+        return { ...prev, rent: roundMoneyString(calculatedRent) };
+      });
+    }
+  }, [formData.areaSqFt, isEditMode, rentTouched, selectedProperty]);
+
+  useEffect(() => {
+    if (!selectedProperty || isEditMode || depositTouched) return;
+    const baselineRent = Number(formData.rent || calculateRentFromPropertyDefaults(selectedProperty, formData.areaSqFt) || 0);
+    const calculatedDeposit = calculateDepositFromPropertyDefaults(selectedProperty, baselineRent);
+    if (calculatedDeposit >= 0) {
+      setFormData((prev) => {
+        if (String(prev.deposit || "") === roundMoneyString(calculatedDeposit)) return prev;
+        return { ...prev, deposit: roundMoneyString(calculatedDeposit) };
+      });
+    }
+  }, [depositTouched, formData.areaSqFt, formData.rent, isEditMode, selectedProperty]);
 
   // Input classes for consistency
   const inputClass =
@@ -249,6 +324,19 @@ const AddUnit = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+
+    if (name === "rent") {
+      setRentTouched(true);
+    }
+    if (name === "deposit") {
+      setDepositTouched(true);
+    }
+
+    if (name === "property") {
+      setRentTouched(false);
+      setDepositTouched(false);
+    }
+
     setFormData((prev) => {
       const next = { ...prev, [name]: value };
       if (name === "rent" && !depositTouched && !isEditMode) {
@@ -256,10 +344,6 @@ const AddUnit = () => {
       }
       return next;
     });
-
-    if (name === "deposit") {
-      setDepositTouched(true);
-    }
 
     // Clear errors
     if (fieldErrors[name]) {
@@ -371,6 +455,7 @@ const AddUnit = () => {
       unitNumber: formData.unitNumber.trim(),
       property: formData.property,
       unitType: formData.unitType,
+      areaSqFt: parseFloat(formData.areaSqFt) || 0,
       rent: parseFloat(formData.rent),
       deposit: parseFloat(formData.deposit),
       status: formData.status || "vacant",
@@ -473,6 +558,38 @@ const AddUnit = () => {
               />
             </div>
 
+            {selectedProperty && (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-orange-700">Measurement Basis</div>
+                    <div className="mt-1 font-bold text-slate-900">{measurementLabel}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-orange-700">Default Rent Rate</div>
+                    <div className="mt-1 font-bold text-slate-900">
+                      {Number(selectedProperty.rentPerMeasure || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {" "}{selectedProperty.rentCurrency || "KES"} / {measurementLabel}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-orange-700">Default Rent Deposit</div>
+                    <div className="mt-1 font-bold text-slate-900">
+                      {(() => {
+                        const rentDeposit = (selectedProperty.securityDeposits || []).find(
+                          (item) => String(item?.depositType || "").toLowerCase().includes("rent")
+                        );
+                        if (!rentDeposit) return "Falls back to unit rent";
+                        return String(rentDeposit.chargeMode || "Fixed Amount") === "Percentage"
+                          ? `${Number(rentDeposit.amount || 0).toLocaleString()}% of rent`
+                          : `${Number(rentDeposit.amount || 0).toLocaleString()} ${rentDeposit.currency || "KES"}`;
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Unit Number and Type */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -511,8 +628,26 @@ const AddUnit = () => {
               </div>
             </div>
 
-            {/* Rent and Deposit */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Area, Rent and Deposit */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className={labelClass}>Area ({measurementLabel})</label>
+                <input
+                  type="number"
+                  name="areaSqFt"
+                  value={formData.areaSqFt}
+                  onChange={handleInputChange}
+                  placeholder={`e.g., ${measurementLabel === "Sq Ft" ? "500" : "100"}`}
+                  min="0"
+                  step="0.01"
+                  className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                  disabled={loading}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Enter the measured unit area to let the property pricing defaults calculate rent.
+                </p>
+              </div>
+
               <div>
                 <label className={labelClass}>
                   Monthly Rent (KES) <span className="text-red-500">*</span>

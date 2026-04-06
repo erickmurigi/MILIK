@@ -290,23 +290,44 @@ const Units = () => {
   const normalize = (v) => String(v ?? "").toLowerCase().trim();
 
   const filteredUnits = useMemo(() => {
-    return transformedUnits.filter((u) => {
-      if (appliedFilters.property !== "any" && u.property !== appliedFilters.property) return false;
-      if (appliedFilters.status === "active" && u.status === "archived") return false;
-      if (
-        appliedFilters.status !== "any" &&
-        appliedFilters.status !== "active" &&
-        u.status !== appliedFilters.status
-      ) {
-        return false;
-      }
-      if (appliedFilters.unitType !== "any" && u.unitType !== appliedFilters.unitType) return false;
+    const sortByPropertyThenUnit = (a, b) => {
+      const propertyCompare = String(a.propertyName || "").localeCompare(String(b.propertyName || ""), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+      if (propertyCompare !== 0) return propertyCompare;
 
-      const unitNoOk = appliedFilters.unitNo ? normalize(u.unitNo).includes(normalize(appliedFilters.unitNo)) : true;
-      const tenantOk = appliedFilters.tenant ? normalize(u.tenant).includes(normalize(appliedFilters.tenant)) : true;
+      const unitCompare = String(a.unitNo || "").localeCompare(String(b.unitNo || ""), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+      if (unitCompare !== 0) return unitCompare;
 
-      return unitNoOk && tenantOk;
-    });
+      return String(a.unitCode || "").localeCompare(String(b.unitCode || ""), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    };
+
+    return transformedUnits
+      .filter((u) => {
+        if (appliedFilters.property !== "any" && u.property !== appliedFilters.property) return false;
+        if (appliedFilters.status === "active" && u.status === "archived") return false;
+        if (
+          appliedFilters.status !== "any" &&
+          appliedFilters.status !== "active" &&
+          u.status !== appliedFilters.status
+        ) {
+          return false;
+        }
+        if (appliedFilters.unitType !== "any" && u.unitType !== appliedFilters.unitType) return false;
+
+        const unitNoOk = appliedFilters.unitNo ? normalize(u.unitNo).includes(normalize(appliedFilters.unitNo)) : true;
+        const tenantOk = appliedFilters.tenant ? normalize(u.tenant).includes(normalize(appliedFilters.tenant)) : true;
+
+        return unitNoOk && tenantOk;
+      })
+      .sort(sortByPropertyThenUnit);
   }, [transformedUnits, appliedFilters]);
 
   const propertiesGrouped = useMemo(() => {

@@ -90,6 +90,11 @@ export const createProperty = async (req, res) => {
       roadStreet,
       zoneRegion,
       address,
+      grossLettableArea,
+      netLettableArea,
+      unitMeasurement,
+      rentPerMeasure,
+      rentCurrency,
       accountLedgerType,
       primaryBank,
       alternativeTaxPin,
@@ -229,6 +234,7 @@ export const createProperty = async (req, res) => {
       .filter((deposit) => deposit?.depositType?.trim())
       .map((deposit) => ({
         depositType: deposit.depositType.trim(),
+        chargeMode: deposit.chargeMode || "Fixed Amount",
         amount: Math.max(0, parseFloat(deposit.amount) || 0),
         currency: deposit.currency || "KES",
         refundable: deposit.refundable !== false,
@@ -260,6 +266,11 @@ export const createProperty = async (req, res) => {
         `${roadStreet || ""}, ${estateArea || ""}, ${townCityState || ""}`
           .replace(/^,\s*|,\s*$/g, "")
           .replace(/,\s*,/g, ","),
+      grossLettableArea: Math.max(0, parseFloat(grossLettableArea) || 0),
+      netLettableArea: Math.max(0, parseFloat(netLettableArea) || 0),
+      unitMeasurement: unitMeasurement || "Sq Ft",
+      rentPerMeasure: Math.max(0, parseFloat(rentPerMeasure) || 0),
+      rentCurrency: rentCurrency || "Kenyan Shilling [KES]",
       accountLedgerType,
       primaryBank,
       alternativeTaxPin,
@@ -590,6 +601,49 @@ export const updateProperty = async (req, res, next) => {
     }
     if (req.body.propertyType !== undefined && typeof req.body.propertyType === "string") {
       req.body.propertyType = req.body.propertyType.trim();
+    }
+
+    if (req.body.grossLettableArea !== undefined) {
+      req.body.grossLettableArea = Math.max(0, parseFloat(req.body.grossLettableArea) || 0);
+    }
+    if (req.body.netLettableArea !== undefined) {
+      req.body.netLettableArea = Math.max(0, parseFloat(req.body.netLettableArea) || 0);
+    }
+    if (req.body.rentPerMeasure !== undefined) {
+      req.body.rentPerMeasure = Math.max(0, parseFloat(req.body.rentPerMeasure) || 0);
+    }
+    if (req.body.unitMeasurement !== undefined && typeof req.body.unitMeasurement === "string") {
+      req.body.unitMeasurement = req.body.unitMeasurement.trim() || "Sq Ft";
+    }
+    if (req.body.rentCurrency !== undefined && typeof req.body.rentCurrency === "string") {
+      req.body.rentCurrency = req.body.rentCurrency.trim() || "Kenyan Shilling [KES]";
+    }
+
+    if (Array.isArray(req.body.standingCharges)) {
+      req.body.standingCharges = req.body.standingCharges
+        .filter((charge) => charge?.serviceCharge?.trim())
+        .map((charge) => ({
+          serviceCharge: charge.serviceCharge.trim(),
+          chargeMode: charge.chargeMode || "Monthly",
+          billingCurrency: charge.billingCurrency || "KES",
+          costPerArea: charge?.costPerArea?.trim() || "",
+          chargeValue: Math.max(0, parseFloat(charge.chargeValue) || 0),
+          vatRate: charge.vatRate || "16%",
+          escalatesWithRent: !!charge.escalatesWithRent,
+        }));
+    }
+
+    if (Array.isArray(req.body.securityDeposits)) {
+      req.body.securityDeposits = req.body.securityDeposits
+        .filter((deposit) => deposit?.depositType?.trim())
+        .map((deposit) => ({
+          depositType: deposit.depositType.trim(),
+          chargeMode: deposit.chargeMode || "Fixed Amount",
+          amount: Math.max(0, parseFloat(deposit.amount) || 0),
+          currency: deposit.currency || "KES",
+          refundable: deposit.refundable !== false,
+          terms: deposit?.terms?.trim() || "",
+        }));
     }
 
     Object.keys(req.body).forEach((key) => {
