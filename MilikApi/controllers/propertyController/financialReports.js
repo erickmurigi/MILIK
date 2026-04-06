@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import Tenant from "../../models/Tenant.js";
+import TenantInvoice from "../../models/TenantInvoice.js";
+import RentPayment from "../../models/RentPayment.js";
+import { computeTenantInvoiceSnapshotsBatch } from "./tenantInvoices.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import { computeAccountBalance, getNormalBalanceSide } from "../../services/accountingClassificationService.js";
 
@@ -523,8 +527,420 @@ export const getBalanceSheetReport = async (req, res, next) => {
   }
 };
 
+
+
+const safeLower = (value = "") => String(value || "").trim().toLowerCase();
+
+const normalizeArray = (value) => (Array.isArray(value) ? value : []);
+
+const pickPrimaryLandlord = (property = {}) => {
+  const landlords = normalizeArray(property?.landlords);
+  return landlords.find((entry) => entry?.isPrimary) || landlords[0] || null;
+};
+
+const categoryBucketKey = (category = "") => {
+  const normalized = String(category || "").toUpperCase();
+  if (normalized === "RENT_CHARGE") return "rentApplied";
+  if (normalized === "UTILITY_CHARGE") return "utilityApplied";
+  if (normalized === "LATE_PENALTY_CHARGE") return "penaltyApplied";
+  if (normalized === "DEPOSIT_CHARGE") return "depositApplied";
+  return "otherApplied";
+};
+
+const addCategorizedAmount = (target, category, amount) => {
+  const key = categoryBucketKey(category);
+  target[key] = round2(Number(target[key] || 0) + Number(amount || 0));
+};
+
+const emptyAllocationTotals = () => ({
+  rentApplied: 0,
+  utilityApplied: 0,
+  penaltyApplied: 0,
+  depositApplied: 0,
+  otherApplied: 0,
+});
+
+const buildReceiptAllocationTotals = (receipt = {}) => {
+  const totals = emptyAllocationTotals();
+  const allocationRows = normalizeArray(receipt?.allocations);
+  let allocatedAmount = 0;
+
+  allocationRows.forEach((row) => {
+    const amount = round2(Number(row?.appliedAmount || 0));
+    if (amount <= 0) return;
+    allocatedAmount += amount;
+    addCategorizedAmount(totals, row?.category, amount);
+  });
+
+  return {
+    ...totals,
+    allocatedAmount: round2(allocatedAmount),
+    unappliedAmount: round2(Math.max(0, Math.abs(Number(receipt?.amount || 0)) - allocatedAmount)),
+  };
+};
+
+const buildReceiptRow = (receipt = {}) => {
+  const unit = receipt?.unit || {};
+  const property = unit?.property || {};
+  const tenant = receipt?.tenant || {};
+  const landlord = pickPrimaryLandlord(property);
+  const allocationTotals = buildReceiptAllocationTotals(receipt);
+
+  return {
+    receiptId: String(receipt?._id || ""),
+    receiptNumber: receipt?.receiptNumber || "",
+    paymentDate: receipt?.paymentDate || receipt?.createdAt || null,
+    paymentMethod: receipt?.paymentMethod || "",
+    cashbook: receipt?.cashbook || "",
+    amount: round2(Math.abs(Number(receipt?.amount || 0))),
+    allocatedAmount: allocationTotals.allocatedAmount,
+    unappliedAmount: allocationTotals.unappliedAmount,
+    rentApplied: allocationTotals.rentApplied,
+    utilityApplied: allocationTotals.utilityApplied,
+    penaltyApplied: allocationTotals.penaltyApplied,
+    depositApplied: allocationTotals.depositApplied,
+    otherApplied: allocationTotals.otherApplied,
+    tenantId: String(tenant?._id || receipt?.tenant || ""),
+    tenantName: tenant?.tenantName || tenant?.name || "Unknown Tenant",
+    unitId: String(unit?._id || receipt?.unit || ""),
+    unitNumber: unit?.unitNumber || unit?.name || "N/A",
+    propertyId: String(property?._id || unit?.property || ""),
+    propertyName: property?.propertyName || property?.name || "Unknown Property",
+    landlordId: String(landlord?.landlordId || ""),
+    landlordName: landlord?.name || "N/A",
+    referenceNumber: receipt?.referenceNumber || "",
+    description: receipt?.description || "",
+  };
+};
+
+const matchesText = (source = "", query = "") => {
+  if (!query) return true;
+  return safeLower(source).includes(safeLower(query));
+};
+
+export const getRentalCollectionReport = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: "A valid business id is required." });
+    }
+
+    const startDate = normalizeDate(req.query.startDate || req.query.dateFrom || req.query.from);
+    const endDate = normalizeDate(req.query.endDate || req.query.dateTo || req.query.to, true);
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, error: "Valid start and end dates are required." });
+    }
+
+    const paymentQuery = {
+      business: businessId,
+      ledgerType: "receipts",
+      isReversed: { $ne: true },
+      paymentDate: { $gte: startDate, $lte: endDate },
+    };
+
+    if (req.query.tenantId) paymentQuery.tenant = toObjectId(req.query.tenantId);
+    if (req.query.unitId) paymentQuery.unit = toObjectId(req.query.unitId);
+    if (req.query.paymentMethod) paymentQuery.paymentMethod = req.query.paymentMethod;
+
+    const receipts = await RentPayment.find(paymentQuery)
+      .populate("tenant", "name tenantName")
+      .populate({
+        path: "unit",
+        select: "unitNumber name property",
+        populate: { path: "property", select: "propertyName name landlords" },
+      })
+      .sort({ paymentDate: -1, createdAt: -1 })
+      .lean();
+
+    const filteredRows = receipts
+      .map(buildReceiptRow)
+      .filter((row) => {
+        if (req.query.propertyId && String(row.propertyId) !== String(req.query.propertyId)) return false;
+        if (req.query.landlordId && String(row.landlordId) !== String(req.query.landlordId)) return false;
+        if (req.query.cashbook && !matchesText(row.cashbook, req.query.cashbook)) return false;
+        return true;
+      });
+
+    const propertySummaryMap = new Map();
+    const tenantSet = new Set();
+    const propertySet = new Set();
+    const summary = {
+      totalCollected: 0,
+      allocatedAmount: 0,
+      unappliedAmount: 0,
+      rentApplied: 0,
+      utilityApplied: 0,
+      penaltyApplied: 0,
+      depositApplied: 0,
+      otherApplied: 0,
+      totalPayments: filteredRows.length,
+      propertyCount: 0,
+      tenantCount: 0,
+      periodInvoiced: 0,
+      collectionRate: null,
+    };
+
+    filteredRows.forEach((row) => {
+      summary.totalCollected += row.amount;
+      summary.allocatedAmount += row.allocatedAmount;
+      summary.unappliedAmount += row.unappliedAmount;
+      summary.rentApplied += row.rentApplied;
+      summary.utilityApplied += row.utilityApplied;
+      summary.penaltyApplied += row.penaltyApplied;
+      summary.depositApplied += row.depositApplied;
+      summary.otherApplied += row.otherApplied;
+      if (row.tenantId) tenantSet.add(String(row.tenantId));
+      if (row.propertyId) propertySet.add(String(row.propertyId));
+
+      const key = String(row.propertyId || row.propertyName || "unknown");
+      const bucket = propertySummaryMap.get(key) || {
+        propertyId: row.propertyId,
+        propertyName: row.propertyName,
+        paymentCount: 0,
+        totalCollected: 0,
+        allocatedAmount: 0,
+        unappliedAmount: 0,
+        rentApplied: 0,
+        utilityApplied: 0,
+        penaltyApplied: 0,
+        tenantIds: new Set(),
+        unitIds: new Set(),
+      };
+      bucket.paymentCount += 1;
+      bucket.totalCollected += row.amount;
+      bucket.allocatedAmount += row.allocatedAmount;
+      bucket.unappliedAmount += row.unappliedAmount;
+      bucket.rentApplied += row.rentApplied;
+      bucket.utilityApplied += row.utilityApplied;
+      bucket.penaltyApplied += row.penaltyApplied;
+      if (row.tenantId) bucket.tenantIds.add(String(row.tenantId));
+      if (row.unitId) bucket.unitIds.add(String(row.unitId));
+      propertySummaryMap.set(key, bucket);
+    });
+
+    const invoiceQuery = {
+      business: businessId,
+      category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"] },
+      status: { $nin: ["cancelled", "reversed"] },
+      invoiceDate: { $gte: startDate, $lte: endDate },
+    };
+    if (req.query.propertyId) invoiceQuery.property = toObjectId(req.query.propertyId);
+    if (req.query.tenantId) invoiceQuery.tenant = toObjectId(req.query.tenantId);
+    if (req.query.unitId) invoiceQuery.unit = toObjectId(req.query.unitId);
+    if (req.query.landlordId) invoiceQuery.landlord = toObjectId(req.query.landlordId);
+
+    const periodInvoiced = await TenantInvoice.aggregate([
+      { $match: invoiceQuery },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]);
+
+    summary.totalCollected = round2(summary.totalCollected);
+    summary.allocatedAmount = round2(summary.allocatedAmount);
+    summary.unappliedAmount = round2(summary.unappliedAmount);
+    summary.rentApplied = round2(summary.rentApplied);
+    summary.utilityApplied = round2(summary.utilityApplied);
+    summary.penaltyApplied = round2(summary.penaltyApplied);
+    summary.depositApplied = round2(summary.depositApplied);
+    summary.otherApplied = round2(summary.otherApplied);
+    summary.propertyCount = propertySet.size;
+    summary.tenantCount = tenantSet.size;
+    summary.periodInvoiced = round2(periodInvoiced?.[0]?.total || 0);
+    summary.collectionRate = summary.periodInvoiced > 0 ? round2((summary.totalCollected / summary.periodInvoiced) * 100) : null;
+
+    const byProperty = Array.from(propertySummaryMap.values())
+      .map((bucket) => ({
+        propertyId: bucket.propertyId,
+        propertyName: bucket.propertyName,
+        paymentCount: bucket.paymentCount,
+        tenantCount: bucket.tenantIds.size,
+        unitCount: bucket.unitIds.size,
+        totalCollected: round2(bucket.totalCollected),
+        allocatedAmount: round2(bucket.allocatedAmount),
+        unappliedAmount: round2(bucket.unappliedAmount),
+        rentApplied: round2(bucket.rentApplied),
+        utilityApplied: round2(bucket.utilityApplied),
+        penaltyApplied: round2(bucket.penaltyApplied),
+      }))
+      .sort((a, b) => a.propertyName.localeCompare(b.propertyName));
+
+    return res.status(200).json({
+      success: true,
+      filters: {
+        startDate,
+        endDate,
+        propertyId: req.query.propertyId || "",
+        tenantId: req.query.tenantId || "",
+        unitId: req.query.unitId || "",
+        landlordId: req.query.landlordId || "",
+        paymentMethod: req.query.paymentMethod || "",
+        cashbook: req.query.cashbook || "",
+      },
+      summary,
+      byProperty,
+      rows: filteredRows,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getTenantPaidBalanceReport = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: "A valid business id is required." });
+    }
+
+    const asOfDate = normalizeDate(req.query.asOfDate, true) || normalizeDate(null, true);
+    const tenantQuery = { business: businessId };
+    if (req.query.tenantId) tenantQuery._id = toObjectId(req.query.tenantId);
+
+    const tenants = await Tenant.find(tenantQuery)
+      .populate({
+        path: "unit",
+        select: "unitNumber name property",
+        populate: { path: "property", select: "propertyName name landlords" },
+      })
+      .sort({ name: 1, createdAt: 1 })
+      .lean();
+
+    const baseRows = tenants.map((tenant) => {
+      const unit = tenant?.unit || {};
+      const property = unit?.property || {};
+      const landlord = pickPrimaryLandlord(property);
+      return {
+        tenantId: String(tenant?._id || ""),
+        tenantName: tenant?.tenantName || tenant?.name || "Unknown Tenant",
+        unitId: String(unit?._id || tenant?.unit || ""),
+        unitNumber: unit?.unitNumber || unit?.name || "N/A",
+        propertyId: String(property?._id || unit?.property || ""),
+        propertyName: property?.propertyName || property?.name || "N/A",
+        landlordId: String(landlord?.landlordId || ""),
+        landlordName: landlord?.name || "N/A",
+      };
+    }).filter((row) => !req.query.propertyId || String(row.propertyId) === String(req.query.propertyId))
+      .filter((row) => !req.query.landlordId || String(row.landlordId) === String(req.query.landlordId));
+
+    const tenantIds = baseRows.map((row) => row.tenantId).filter(Boolean);
+    const snapshotMap = await computeTenantInvoiceSnapshotsBatch({
+      businessId,
+      tenantIds,
+      asOfDate,
+      invoiceQuery: { category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"] } },
+    });
+
+    const rows = baseRows.map((row) => {
+      const snapshot = snapshotMap.get(String(row.tenantId)) || { invoiceSnapshots: [], receiptAllocations: [] };
+      const invoices = normalizeArray(snapshot.invoiceSnapshots).filter((invoice) => ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"].includes(String(invoice?.category || "")));
+      const receipts = normalizeArray(snapshot.receiptAllocations);
+
+      let totalInvoiced = 0;
+      let totalPaidApplied = 0;
+      let outstanding = 0;
+      let rentBalance = 0;
+      let utilityBalance = 0;
+      let penaltyBalance = 0;
+      let oldestDueDate = null;
+
+      invoices.forEach((invoice) => {
+        const amount = Number(invoice?.amount || 0);
+        const applied = Number(invoice?.applied || 0);
+        const remaining = Number(invoice?.outstanding || 0);
+        totalInvoiced += amount;
+        totalPaidApplied += applied;
+        outstanding += remaining;
+        if (String(invoice?.category) === "RENT_CHARGE") rentBalance += remaining;
+        if (String(invoice?.category) === "UTILITY_CHARGE") utilityBalance += remaining;
+        if (String(invoice?.category) === "LATE_PENALTY_CHARGE") penaltyBalance += remaining;
+        if (remaining > 0 && invoice?.dueDate && (!oldestDueDate || new Date(invoice.dueDate) < new Date(oldestDueDate))) {
+          oldestDueDate = invoice.dueDate;
+        }
+      });
+
+      let unappliedCredit = 0;
+      let lastPaymentDate = null;
+      receipts.forEach((receipt) => {
+        unappliedCredit += Number(receipt?.unappliedAmount || 0);
+        if (receipt?.paymentDate && (!lastPaymentDate || new Date(receipt.paymentDate) > new Date(lastPaymentDate))) {
+          lastPaymentDate = receipt.paymentDate;
+        }
+      });
+
+      const netBalance = round2(outstanding - unappliedCredit);
+      const status = netBalance > 0.009 ? "owing" : netBalance < -0.009 ? "credit" : "settled";
+
+      return {
+        ...row,
+        totalInvoiced: round2(totalInvoiced),
+        totalPaidApplied: round2(totalPaidApplied),
+        outstanding: round2(outstanding),
+        unappliedCredit: round2(unappliedCredit),
+        netBalance,
+        rentBalance: round2(rentBalance),
+        utilityBalance: round2(utilityBalance),
+        penaltyBalance: round2(penaltyBalance),
+        oldestDueDate: oldestDueDate || null,
+        lastPaymentDate: lastPaymentDate || null,
+        status,
+      };
+    }).filter((row) => {
+      const search = safeLower(req.query.search || "");
+      if (search) {
+        const haystack = `${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase();
+        if (!haystack.includes(search)) return false;
+      }
+      if (req.query.status && req.query.status !== "all" && row.status !== req.query.status) return false;
+      return true;
+    });
+
+    const summary = rows.reduce((acc, row) => {
+      acc.totalInvoiced += row.totalInvoiced;
+      acc.totalPaidApplied += row.totalPaidApplied;
+      acc.totalOutstanding += row.outstanding;
+      acc.totalUnappliedCredit += row.unappliedCredit;
+      acc.netBalance += row.netBalance;
+      if (row.status === "owing") acc.owingCount += 1;
+      if (row.status === "credit") acc.creditCount += 1;
+      if (row.status === "settled") acc.settledCount += 1;
+      return acc;
+    }, {
+      totalInvoiced: 0,
+      totalPaidApplied: 0,
+      totalOutstanding: 0,
+      totalUnappliedCredit: 0,
+      netBalance: 0,
+      owingCount: 0,
+      creditCount: 0,
+      settledCount: 0,
+      tenantCount: rows.length,
+    });
+
+    Object.keys(summary).forEach((key) => {
+      if (typeof summary[key] === "number" && !key.endsWith("Count") && key !== "tenantCount") summary[key] = round2(summary[key]);
+    });
+
+    return res.status(200).json({
+      success: true,
+      filters: {
+        asOfDate,
+        propertyId: req.query.propertyId || "",
+        landlordId: req.query.landlordId || "",
+        tenantId: req.query.tenantId || "",
+        status: req.query.status || "all",
+        search: req.query.search || "",
+      },
+      summary,
+      rows,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   getTrialBalanceReport,
   getIncomeStatementReport,
   getBalanceSheetReport,
+  getRentalCollectionReport,
+  getTenantPaidBalanceReport,
 };

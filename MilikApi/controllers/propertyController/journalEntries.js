@@ -162,6 +162,24 @@ const populateJournalQuery = (query) =>
     .populate("reversedBy", "surname otherNames email")
     .populate("createdBy", "surname otherNames email");
 
+const normalizeJournalPayload = (payload = {}) => {
+  const journalType = String(payload?.journalType || "").trim().toLowerCase();
+
+  if (journalType !== "internal_account_transfer") {
+    return {
+      ...payload,
+      landlord: payload?.landlord || null,
+      includeInLandlordStatement: Boolean(payload?.includeInLandlordStatement),
+    };
+  }
+
+  return {
+    ...payload,
+    landlord: null,
+    includeInLandlordStatement: false,
+  };
+};
+
 const resolveStatementPostingConfig = (journal = {}) => {
   const journalType = String(journal?.journalType || "").trim().toLowerCase();
 
@@ -339,25 +357,27 @@ export const createJournalEntry = async (req, res, next) => {
 
     const actorUserId = await resolveActorUserId(req, businessId);
 
+    const normalizedPayload = normalizeJournalPayload(req.body || {});
+
     await validateJournalPayload({
       businessId,
-      payload: req.body || {},
+      payload: normalizedPayload,
     });
 
     const journalNo = await generateJournalNo(businessId);
 
     const journal = await JournalEntry.create({
       journalNo,
-      date: req.body.date,
-      journalType: req.body.journalType,
-      property: req.body.property,
-      landlord: req.body.landlord || null,
-      debitAccount: req.body.debitAccount,
-      creditAccount: req.body.creditAccount,
-      amount: Number(req.body.amount || 0),
-      reference: req.body.reference || "",
-      narration: req.body.narration || "",
-      includeInLandlordStatement: Boolean(req.body.includeInLandlordStatement),
+      date: normalizedPayload.date,
+      journalType: normalizedPayload.journalType,
+      property: normalizedPayload.property,
+      landlord: normalizedPayload.landlord || null,
+      debitAccount: normalizedPayload.debitAccount,
+      creditAccount: normalizedPayload.creditAccount,
+      amount: Number(normalizedPayload.amount || 0),
+      reference: normalizedPayload.reference || "",
+      narration: normalizedPayload.narration || "",
+      includeInLandlordStatement: Boolean(normalizedPayload.includeInLandlordStatement),
       status: req.body.status === "posted" ? "draft" : "draft",
       createdBy: actorUserId,
       business: businessId,
@@ -453,21 +473,26 @@ export const updateJournalEntry = async (req, res, next) => {
       });
     }
 
-    await validateJournalPayload({
-      businessId,
-      payload: req.body || {},
+    const normalizedPayload = normalizeJournalPayload({
+      ...existing.toObject(),
+      ...(req.body || {}),
     });
 
-    existing.date = req.body.date || existing.date;
-    existing.journalType = req.body.journalType || existing.journalType;
-    existing.property = req.body.property || existing.property;
-    existing.landlord = req.body.landlord || null;
-    existing.debitAccount = req.body.debitAccount || existing.debitAccount;
-    existing.creditAccount = req.body.creditAccount || existing.creditAccount;
-    existing.amount = Number(req.body.amount || existing.amount || 0);
-    existing.reference = req.body.reference || "";
-    existing.narration = req.body.narration || "";
-    existing.includeInLandlordStatement = Boolean(req.body.includeInLandlordStatement);
+    await validateJournalPayload({
+      businessId,
+      payload: normalizedPayload,
+    });
+
+    existing.date = normalizedPayload.date || existing.date;
+    existing.journalType = normalizedPayload.journalType || existing.journalType;
+    existing.property = normalizedPayload.property || existing.property;
+    existing.landlord = normalizedPayload.landlord || null;
+    existing.debitAccount = normalizedPayload.debitAccount || existing.debitAccount;
+    existing.creditAccount = normalizedPayload.creditAccount || existing.creditAccount;
+    existing.amount = Number(normalizedPayload.amount || existing.amount || 0);
+    existing.reference = normalizedPayload.reference || "";
+    existing.narration = normalizedPayload.narration || "";
+    existing.includeInLandlordStatement = Boolean(normalizedPayload.includeInLandlordStatement);
 
     await existing.save();
 

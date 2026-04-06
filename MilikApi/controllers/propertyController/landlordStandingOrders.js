@@ -1,7 +1,27 @@
 import mongoose from "mongoose";
+import ChartOfAccount from "../../models/ChartOfAccount.js";
 import LandlordStandingOrder from "../../models/LandlordStandingOrder.js";
+import ProcessedStatement from "../../models/ProcessedStatement.js";
+import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
+import { postEntry } from "../../services/ledgerPostingService.js";
+import { resolveLandlordRemittancePayableAccount, resolvePropertyAccountingContext } from "../../services/propertyAccountingService.js";
+import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import {
+  addFrequency,
+  buildRunSchedule,
+  comparePeriodOrder,
+  filterEligibleSchedule,
+  getPeriodKey,
+  normalizeFrequency,
+  normalizeToEndOfDay,
+  normalizeToStartOfDay,
+  parseDate,
+  round2,
+} from "../../utils/recurringSchedule.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
+const oid = (value) => new mongoose.Types.ObjectId(String(value));
+
 const resolveBusinessId = (req) =>
   req?.query?.business ||
   req?.query?.company ||
@@ -11,26 +31,6 @@ const resolveBusinessId = (req) =>
   req?.user?.company ||
   null;
 
-const resolveRequestUserId = (req) => req?.user?._id || req?.user?.id || null;
-
-const parseDate = (value, fallback = null) => {
-  if (!value) return fallback;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? fallback : date;
-};
-
-const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
-
-const normalizeFrequency = (value) => {
-  const normalized = String(value || "monthly").trim().toLowerCase();
-  if (["weekly", "monthly", "quarterly", "semi_annually", "annually", "yearly", "custom"].includes(normalized)) {
-    return normalized;
-  }
-  if (normalized === "semi-annually" || normalized === "semiannually") return "semi_annually";
-  if (normalized === "annual") return "annually";
-  return "monthly";
-};
-
 const normalizePaymentMethod = (value) => {
   const normalized = String(value || "bank_transfer").trim().toLowerCase();
   if (normalized === "mpesa") return "mobile_money";
@@ -39,36 +39,6 @@ const normalizePaymentMethod = (value) => {
     return normalized;
   }
   return "bank_transfer";
-};
-
-const addFrequency = (dateValue, frequency, dayOfMonth = null) => {
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return null;
-  const next = new Date(date);
-  const normalized = normalizeFrequency(frequency);
-
-  if (normalized === "weekly") {
-    next.setDate(next.getDate() + 7);
-    return next;
-  }
-
-  if (normalized === "quarterly") {
-    next.setMonth(next.getMonth() + 3);
-  } else if (normalized === "semi_annually") {
-    next.setMonth(next.getMonth() + 6);
-  } else if (normalized === "annually" || normalized === "yearly") {
-    next.setFullYear(next.getFullYear() + 1);
-  } else {
-    next.setMonth(next.getMonth() + 1);
-  }
-
-  if (Number.isFinite(Number(dayOfMonth)) && Number(dayOfMonth) >= 1 && Number(dayOfMonth) <= 31) {
-    const desiredDay = Number(dayOfMonth);
-    const maxDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
-    next.setDate(Math.min(desiredDay, maxDay));
-  }
-
-  return next;
 };
 
 const buildDestination = (payload = {}) => ({
@@ -102,18 +72,176 @@ const populateQuery = (query) =>
   query
     .populate("landlord", "landlordName firstName lastName email phoneNumber")
     .populate("property", "propertyName propertyCode name")
+    .populate("cashbook", "code accountCode name accountName")
     .populate("createdBy", "username email firstName lastName")
     .populate("updatedBy", "username email firstName lastName")
     .populate("runHistory.processedBy", "username email firstName lastName");
 
+const resolveActorUserId = async (req, businessId) =>
+  resolveAuditActorUserId({
+    req,
+    businessId,
+    fallbackErrorMessage: "No valid company user could be resolved for landlord standing order posting.",
+  });
+
+const resolveCashbookAccount = async ({ businessId, cashbook, paymentMethod }) => {
+  await ensureSystemChartOfAccounts(businessId);
+
+  const baseQuery = {
+    business: businessId,
+    isPosting: { $ne: false },
+    isHeader: { $ne: true },
+    $or: [
+      { type: "asset" },
+      { type: "Asset" },
+      { accountType: "asset" },
+      { accountType: "Asset" },
+      { nature: "asset" },
+      { nature: "Asset" },
+      { accountNature: "asset" },
+      { accountNature: "Asset" },
+    ],
+  };
+
+  if (isValidObjectId(cashbook)) {
+    const byId = await ChartOfAccount.findOne({ ...baseQuery, _id: cashbook }).lean();
+    if (byId) return byId;
+  }
+
+  const fallbackCode =
+    paymentMethod === "cash"
+      ? "1100"
+      : paymentMethod === "mobile_money"
+      ? "1130"
+      : "1110";
+
+  const systemFallback = await findSystemAccountByCode(businessId, fallbackCode);
+  if (systemFallback) return systemFallback;
+
+  return ChartOfAccount.findOne(baseQuery).sort({ createdAt: 1 }).lean();
+};
+
+const statementCursorFor = (statement) => {
+  const cursor = statement?.cutoffAt || statement?.periodEnd || null;
+  return cursor ? normalizeToEndOfDay(cursor) : null;
+};
+
+const isPeriodClosedByProcessedStatement = async ({ businessId, propertyId, landlordId, periodStart, periodEnd }) => {
+  if (!isValidObjectId(businessId) || !isValidObjectId(propertyId) || !isValidObjectId(landlordId)) return false;
+
+  const candidates = await ProcessedStatement.find({
+    business: oid(businessId),
+    property: oid(propertyId),
+    landlord: oid(landlordId),
+    status: { $ne: "reversed" },
+    periodStart: { $lte: normalizeToStartOfDay(periodStart) },
+    $or: [
+      { cutoffAt: { $gte: normalizeToEndOfDay(periodEnd) } },
+      { cutoffAt: null, periodEnd: { $gte: normalizeToEndOfDay(periodEnd) } },
+    ],
+  })
+    .select("_id periodStart periodEnd cutoffAt status")
+    .lean();
+
+  return candidates.some((item) => {
+    const start = normalizeToStartOfDay(item.periodStart);
+    const end = statementCursorFor(item);
+    return start && end && start.getTime() <= normalizeToStartOfDay(periodStart).getTime() && end.getTime() >= normalizeToEndOfDay(periodEnd).getTime();
+  });
+};
+
+const serializeStandingOrder = (row) => {
+  const plain = typeof row?.toObject === "function" ? row.toObject({ virtuals: true }) : { ...(row || {}) };
+  const schedule = buildRunSchedule({
+    startDate: plain.startDate,
+    endDate: plain.endDate,
+    frequency: plain.frequency,
+    dayOfMonth: plain.dayOfMonth,
+    capAt: new Date(),
+  });
+  const eligiblePeriods = filterEligibleSchedule({
+    schedule,
+    runHistory: plain.runHistory,
+    now: new Date(),
+    frequency: plain.frequency,
+  });
+
+  const processedPeriods = (Array.isArray(plain.runHistory) ? plain.runHistory : [])
+    .map((run) => ({
+      periodKey: String(run?.periodKey || getPeriodKey(run?.dueDate || run?.runDate, plain.frequency) || ""),
+      periodLabel: String(run?.periodLabel || "").trim() || null,
+      runDate: run?.runDate || null,
+      dueDate: run?.dueDate || null,
+      periodStart: run?.periodStart || null,
+      periodEnd: run?.periodEnd || null,
+      amount: round2(run?.amount || 0),
+      referenceNo: run?.referenceNo || "",
+      note: run?.note || "",
+    }))
+    .filter((item) => item.periodKey)
+    .sort(comparePeriodOrder);
+
+  return {
+    ...plain,
+    eligiblePeriods: eligiblePeriods.map((item) => ({
+      periodKey: item.periodKey,
+      periodLabel: item.periodLabel,
+      dueDate: item.dueDate,
+      periodStart: item.periodStart,
+      periodEnd: item.periodEnd,
+    })),
+    processedPeriods,
+    processedPeriodsCount: processedPeriods.length,
+    unprocessedPeriodsCount: Math.max(schedule.length - processedPeriods.length, 0),
+    nextEligiblePeriod: eligiblePeriods[0] || null,
+  };
+};
+
+const serializeRows = (rows = []) => rows.map((row) => serializeStandingOrder(row));
+
+const resolveSelectedScheduleItem = (row, payload = {}) => {
+  const schedule = buildRunSchedule({
+    startDate: row.startDate,
+    endDate: row.endDate,
+    frequency: row.frequency,
+    dayOfMonth: row.dayOfMonth,
+    capAt: new Date(),
+  });
+  const eligiblePeriods = filterEligibleSchedule({
+    schedule,
+    runHistory: row.runHistory,
+    now: new Date(),
+    frequency: row.frequency,
+  });
+
+  const requestedKey = String(payload?.periodKey || payload?.schedulePeriod || "").trim();
+  if (requestedKey) {
+    return eligiblePeriods.find((item) => item.periodKey === requestedKey) || null;
+  }
+
+  const requestedDate = parseDate(payload?.runDate, null);
+  if (requestedDate) {
+    const derivedKey = getPeriodKey(requestedDate, row.frequency);
+    return eligiblePeriods.find((item) => item.periodKey === derivedKey) || null;
+  }
+
+  return eligiblePeriods[0] || null;
+};
+
 export const createLandlordStandingOrder = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    const actorUserId = resolveRequestUserId(req);
-
     if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
-    if (!actorUserId) return res.status(400).json({ success: false, message: "Authenticated user is required" });
+
+    const actorUserId = await resolveActorUserId(req, businessId);
     if (!isValidObjectId(req.body?.landlord)) return res.status(400).json({ success: false, message: "Landlord is required" });
+    if (!isValidObjectId(req.body?.property)) return res.status(400).json({ success: false, message: "Property is required" });
+
+    const accountingContext = await resolvePropertyAccountingContext({
+      businessId,
+      propertyId: req.body.property,
+      landlordId: req.body.landlord,
+    });
 
     const amount = Number(req.body?.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -137,14 +265,13 @@ export const createLandlordStandingOrder = async (req, res, next) => {
       : "draft";
     const referenceNo = String(req.body?.referenceNo || "").trim() || (await generateOrderNo(businessId));
     const dayOfMonth = Number(req.body?.dayOfMonth || startDate.getDate() || 5);
-    const seedRunDate = parseDate(req.body?.nextRunDate, startDate) || startDate;
 
     const doc = await LandlordStandingOrder.create({
-      business: businessId,
+      business: accountingContext.businessId,
       referenceNo,
       standingOrderNo: referenceNo,
-      landlord: req.body.landlord,
-      property: isValidObjectId(req.body?.property) ? req.body.property : null,
+      landlord: accountingContext.landlordId,
+      property: accountingContext.propertyId,
       title,
       narration: String(req.body?.narration || "").trim(),
       amount: round2(amount),
@@ -152,9 +279,10 @@ export const createLandlordStandingOrder = async (req, res, next) => {
       dayOfMonth: Math.max(1, Math.min(31, dayOfMonth)),
       startDate,
       endDate,
-      nextRunDate: status === "stopped" ? null : seedRunDate,
+      nextRunDate: status === "stopped" ? null : startDate,
       status,
       paymentMethod: normalizePaymentMethod(req.body?.paymentMethod),
+      cashbook: isValidObjectId(req.body?.cashbook) ? req.body.cashbook : null,
       destination: buildDestination(req.body?.destination || req.body),
       createdBy: actorUserId,
       updatedBy: actorUserId,
@@ -164,7 +292,7 @@ export const createLandlordStandingOrder = async (req, res, next) => {
     });
 
     const populated = await populateQuery(LandlordStandingOrder.findById(doc._id));
-    res.status(201).json(await populated);
+    res.status(201).json(serializeStandingOrder(await populated));
   } catch (error) {
     next(error);
   }
@@ -191,7 +319,7 @@ export const getLandlordStandingOrders = async (req, res, next) => {
     }
 
     const rows = await populateQuery(LandlordStandingOrder.find(filter).sort({ createdAt: -1 }));
-    res.status(200).json(await rows);
+    res.status(200).json(serializeRows(await rows));
   } catch (error) {
     next(error);
   }
@@ -202,6 +330,7 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
     if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
 
+    const actorUserId = await resolveActorUserId(req, businessId);
     const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
 
@@ -230,6 +359,10 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
       row.paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
     }
 
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "cashbook")) {
+      row.cashbook = isValidObjectId(req.body?.cashbook) ? req.body.cashbook : null;
+    }
+
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "startDate")) {
       const startDate = parseDate(req.body?.startDate, null);
       if (!startDate) return res.status(400).json({ success: false, message: "Valid start date is required" });
@@ -250,15 +383,19 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
       row.dayOfMonth = Math.max(1, Math.min(31, dayOfMonth || row.dayOfMonth || 5));
     }
 
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "landlord")) {
-      if (!isValidObjectId(req.body?.landlord)) {
-        return res.status(400).json({ success: false, message: "Landlord is required" });
-      }
-      row.landlord = req.body.landlord;
-    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "landlord") || Object.prototype.hasOwnProperty.call(req.body || {}, "property")) {
+      const targetLandlord = Object.prototype.hasOwnProperty.call(req.body || {}, "landlord") ? req.body?.landlord : row.landlord;
+      const targetProperty = Object.prototype.hasOwnProperty.call(req.body || {}, "property") ? req.body?.property : row.property;
+      if (!isValidObjectId(targetLandlord)) return res.status(400).json({ success: false, message: "Landlord is required" });
+      if (!isValidObjectId(targetProperty)) return res.status(400).json({ success: false, message: "Property is required" });
 
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "property")) {
-      row.property = isValidObjectId(req.body?.property) ? req.body.property : null;
+      const accountingContext = await resolvePropertyAccountingContext({
+        businessId,
+        propertyId: targetProperty,
+        landlordId: targetLandlord,
+      });
+      row.landlord = accountingContext.landlordId;
+      row.property = accountingContext.propertyId;
     }
 
     if (
@@ -270,14 +407,14 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
       row.destination = buildDestination(req.body?.destination || req.body);
     }
 
-    row.updatedBy = resolveRequestUserId(req) || row.updatedBy || null;
+    row.updatedBy = actorUserId;
 
     if (!row.referenceNo && row.standingOrderNo) row.referenceNo = row.standingOrderNo;
     if (!row.standingOrderNo && row.referenceNo) row.standingOrderNo = row.referenceNo;
 
     await row.save();
     const populated = await populateQuery(LandlordStandingOrder.findById(row._id));
-    res.status(200).json(await populated);
+    res.status(200).json(serializeStandingOrder(await populated));
   } catch (error) {
     next(error);
   }
@@ -293,14 +430,16 @@ export const updateLandlordStandingOrderStatus = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Invalid standing order status" });
     }
 
+    const actorUserId = await resolveActorUserId(req, businessId);
     const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
 
     row.status = status;
-    row.updatedBy = resolveRequestUserId(req) || row.updatedBy || null;
+    row.updatedBy = actorUserId;
 
+    const serialized = serializeStandingOrder(row);
     if (status === "active" && !row.nextRunDate) {
-      row.nextRunDate = row.startDate || new Date();
+      row.nextRunDate = serialized.nextEligiblePeriod?.dueDate || row.startDate || new Date();
     }
     if (status === "stopped") {
       row.nextRunDate = null;
@@ -308,7 +447,7 @@ export const updateLandlordStandingOrderStatus = async (req, res, next) => {
 
     await row.save();
     const populated = await populateQuery(LandlordStandingOrder.findById(row._id));
-    res.status(200).json(await populated);
+    res.status(200).json(serializeStandingOrder(await populated));
   } catch (error) {
     next(error);
   }
@@ -319,6 +458,7 @@ export const runLandlordStandingOrder = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
     if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
 
+    const actorUserId = await resolveActorUserId(req, businessId);
     const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
 
@@ -326,14 +466,45 @@ export const runLandlordStandingOrder = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "This standing order cannot be run in its current state." });
     }
 
-    const runDate = parseDate(req.body?.runDate, new Date());
-    if (!runDate) return res.status(400).json({ success: false, message: "Valid run date is required" });
+    if (!isValidObjectId(row.property) || !isValidObjectId(row.landlord)) {
+      return res.status(400).json({ success: false, message: "Standing order must have a valid property and landlord before it can run." });
+    }
 
-    if (row.endDate && runDate > row.endDate) {
+    const selectedPeriod = resolveSelectedScheduleItem(row, req.body || {});
+    if (!selectedPeriod) {
+      return res.status(400).json({
+        success: false,
+        message: "No eligible standing order period is available to run. Future periods and already processed periods are blocked.",
+      });
+    }
+
+    const alreadyProcessed = (Array.isArray(row.runHistory) ? row.runHistory : []).some(
+      (item) => String(item?.periodKey || getPeriodKey(item?.dueDate || item?.runDate, row.frequency)) === selectedPeriod.periodKey
+    );
+    if (alreadyProcessed) {
+      return res.status(400).json({ success: false, message: `Standing order already processed for ${selectedPeriod.periodLabel}.` });
+    }
+
+    if (row.endDate && normalizeToStartOfDay(selectedPeriod.periodStart) > normalizeToEndOfDay(row.endDate)) {
       row.status = "stopped";
       row.nextRunDate = null;
       await row.save();
       return res.status(400).json({ success: false, message: "This standing order is already past its end date." });
+    }
+
+    const closedPeriod = await isPeriodClosedByProcessedStatement({
+      businessId,
+      propertyId: row.property,
+      landlordId: row.landlord,
+      periodStart: selectedPeriod.periodStart,
+      periodEnd: selectedPeriod.periodEnd,
+    });
+
+    if (closedPeriod) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot process ${selectedPeriod.periodLabel} because that statement period has already been processed/closed. Reverse or reopen the affected statement first.`,
+      });
     }
 
     const amount = Number(req.body?.amount || row.amount || 0);
@@ -341,16 +512,107 @@ export const runLandlordStandingOrder = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Valid run amount is required" });
     }
 
-    const dueDate = row.nextRunDate || row.startDate || runDate;
-    const nextRunDate = addFrequency(dueDate, row.frequency, row.dayOfMonth);
+    const accountingContext = await resolvePropertyAccountingContext({
+      businessId,
+      propertyId: row.property,
+      landlordId: row.landlord,
+    });
+    const remittancePayableAccount = await resolveLandlordRemittancePayableAccount(businessId);
+    const cashbookAccount = await resolveCashbookAccount({
+      businessId,
+      cashbook: req.body?.cashbook || row.cashbook,
+      paymentMethod: normalizePaymentMethod(req.body?.paymentMethod || row.paymentMethod),
+    });
+
+    if (!remittancePayableAccount?._id || !cashbookAccount?._id) {
+      return res.status(400).json({ success: false, message: "Standing order posting accounts could not be resolved." });
+    }
+
+    const runDate = normalizeToStartOfDay(req.body?.runDate || selectedPeriod.dueDate || new Date());
+    const journalGroupId = new mongoose.Types.ObjectId();
+    const sourceTransactionId = `${row._id}:${selectedPeriod.periodKey}`;
+    const notes = String(req.body?.note || row.narration || row.title || "Standing order deduction").trim();
+
+    const visibleEntry = await postEntry({
+      business: accountingContext.businessId,
+      property: accountingContext.propertyId,
+      landlord: accountingContext.landlordId,
+      sourceTransactionType: "recurring_deduction",
+      sourceTransactionId,
+      transactionDate: runDate,
+      statementPeriodStart: selectedPeriod.periodStart,
+      statementPeriodEnd: selectedPeriod.periodEnd,
+      category: "ADJUSTMENT",
+      amount: round2(amount),
+      direction: "debit",
+      accountId: remittancePayableAccount._id,
+      journalGroupId,
+      payer: "manager",
+      receiver: "landlord",
+      notes,
+      metadata: {
+        includeInLandlordStatement: true,
+        statementBucket: "deduction",
+        standingOrderId: String(row._id),
+        standingOrderNo: row.standingOrderNo || row.referenceNo,
+        periodKey: selectedPeriod.periodKey,
+        periodLabel: selectedPeriod.periodLabel,
+        postingKind: "standing_order_run",
+        description: notes,
+        referenceNo: row.referenceNo,
+      },
+      createdBy: actorUserId,
+      approvedBy: actorUserId,
+      approvedAt: runDate,
+      status: "approved",
+    });
+
+    const offsetEntry = await postEntry({
+      business: accountingContext.businessId,
+      property: accountingContext.propertyId,
+      landlord: accountingContext.landlordId,
+      sourceTransactionType: "recurring_deduction",
+      sourceTransactionId,
+      transactionDate: runDate,
+      statementPeriodStart: selectedPeriod.periodStart,
+      statementPeriodEnd: selectedPeriod.periodEnd,
+      category: "RECURRING_DEDUCTION",
+      amount: round2(amount),
+      direction: "credit",
+      accountId: cashbookAccount._id,
+      journalGroupId,
+      payer: "manager",
+      receiver: "system",
+      notes,
+      metadata: {
+        includeInLandlordStatement: false,
+        standingOrderId: String(row._id),
+        standingOrderNo: row.standingOrderNo || row.referenceNo,
+        periodKey: selectedPeriod.periodKey,
+        periodLabel: selectedPeriod.periodLabel,
+        postingKind: "standing_order_cashbook_offset",
+        paymentMethod: normalizePaymentMethod(req.body?.paymentMethod || row.paymentMethod),
+      },
+      createdBy: actorUserId,
+      approvedBy: actorUserId,
+      approvedAt: runDate,
+      status: "approved",
+    });
 
     row.runHistory.unshift({
       runDate,
-      dueDate,
+      dueDate: selectedPeriod.dueDate,
+      periodStart: selectedPeriod.periodStart,
+      periodEnd: selectedPeriod.periodEnd,
+      periodKey: selectedPeriod.periodKey,
+      periodLabel: selectedPeriod.periodLabel,
       amount: round2(amount),
-      note: String(req.body?.note || row.narration || row.title || "").trim(),
-      referenceNo: `${row.standingOrderNo || row.referenceNo}-RUN-${String(Number(row.totalRuns || 0) + 1).padStart(3, "0")}`,
-      processedBy: resolveRequestUserId(req),
+      note: notes,
+      referenceNo: `${row.standingOrderNo || row.referenceNo}-${selectedPeriod.periodKey}`,
+      processedBy: actorUserId,
+      journalGroupId,
+      visibleStatementEntryId: visibleEntry._id,
+      offsetEntryId: offsetEntry._id,
     });
 
     row.totalRuns = Number(row.totalRuns || 0) + 1;
@@ -358,18 +620,25 @@ export const runLandlordStandingOrder = async (req, res, next) => {
     row.lastRunAt = runDate;
     row.lastRunDate = runDate;
     row.status = row.status === "draft" ? "active" : row.status;
-    row.nextRunDate = nextRunDate;
 
-    if (row.endDate && row.nextRunDate && new Date(row.nextRunDate) > new Date(row.endDate)) {
+    const serializedAfterRun = serializeStandingOrder(row);
+    row.nextRunDate = serializedAfterRun.nextEligiblePeriod?.dueDate || addFrequency(selectedPeriod.dueDate, row.frequency, row.dayOfMonth) || null;
+
+    if (row.endDate && row.nextRunDate && normalizeToStartOfDay(row.nextRunDate) > normalizeToEndOfDay(row.endDate)) {
       row.status = "stopped";
       row.nextRunDate = null;
     }
 
-    row.updatedBy = resolveRequestUserId(req) || row.updatedBy || null;
+    if (!serializedAfterRun.nextEligiblePeriod) {
+      row.nextRunDate = null;
+      if (row.status === "active") row.status = "stopped";
+    }
+
+    row.updatedBy = actorUserId;
     await row.save();
 
     const populated = await populateQuery(LandlordStandingOrder.findById(row._id));
-    res.status(200).json(await populated);
+    res.status(200).json(serializeStandingOrder(await populated));
   } catch (error) {
     next(error);
   }
@@ -382,6 +651,10 @@ export const deleteLandlordStandingOrder = async (req, res, next) => {
 
     const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
+
+    if (Array.isArray(row.runHistory) && row.runHistory.length > 0) {
+      return res.status(400).json({ success: false, message: "Standing order with processed runs cannot be deleted. Stop it instead to preserve audit history." });
+    }
 
     await LandlordStandingOrder.deleteOne({ _id: row._id, business: businessId });
     res.status(200).json({ success: true, message: "Standing order deleted" });

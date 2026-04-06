@@ -1,34 +1,57 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   FaBookOpen,
+  FaCheck,
+  FaEdit,
+  FaFilter,
   FaPlus,
   FaRedoAlt,
   FaSearch,
+  FaTimes,
   FaTrash,
-  FaCheck,
   FaUndo,
-  FaFilter,
 } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getProperties } from "../../redux/propertyRedux";
 import {
-  getLandlords,
+  createJournalEntry,
+  deleteJournalEntry,
   getChartOfAccounts,
   getJournalEntries,
-  createJournalEntry,
-  updateJournalEntry,
+  getLandlords,
   postJournalEntry,
   reverseJournalEntry,
-  deleteJournalEntry,
+  updateJournalEntry,
 } from "../../redux/apiCalls";
 
 const JOURNAL_TYPES = [
-  { value: "landlord_credit_adjustment", label: "Landlord Credit Adjustment" },
-  { value: "landlord_debit_adjustment", label: "Landlord Debit Adjustment" },
-  { value: "property_expense_accrual", label: "Property Expense Accrual" },
-  { value: "general_manual_journal", label: "General Manual Journal" },
+  {
+    value: "general_manual_journal",
+    label: "General Manual Journal",
+    description: "Use for controlled manual adjustments between two same-company ledger accounts.",
+  },
+  {
+    value: "internal_account_transfer",
+    label: "Internal Ledger Transfer (Same Company)",
+    description: "Moves value between two ledger accounts inside the selected company only. Cross-company transfers are intentionally blocked.",
+  },
+  {
+    value: "landlord_credit_adjustment",
+    label: "Landlord Credit Adjustment",
+    description: "Raises a landlord-facing addition while preserving a balanced manual journal.",
+  },
+  {
+    value: "landlord_debit_adjustment",
+    label: "Landlord Debit Adjustment",
+    description: "Posts a landlord-facing deduction while preserving a balanced manual journal.",
+  },
+  {
+    value: "property_expense_accrual",
+    label: "Property Expense Accrual",
+    description: "Accrues a property expense in a draft journal before posting to the ledger.",
+  },
 ];
 
 const STATUS_STYLES = {
@@ -36,6 +59,19 @@ const STATUS_STYLES = {
   posted: "bg-green-100 text-green-700 border-green-200",
   reversed: "bg-amber-100 text-amber-700 border-amber-200",
 };
+
+const buildInitialForm = () => ({
+  date: new Date().toISOString().split("T")[0],
+  journalType: "general_manual_journal",
+  property: "",
+  landlord: "",
+  debitAccount: "",
+  creditAccount: "",
+  amount: "",
+  reference: "",
+  narration: "",
+  includeInLandlordStatement: false,
+});
 
 const JournalEntries = () => {
   const dispatch = useDispatch();
@@ -47,6 +83,9 @@ const JournalEntries = () => {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [rowActionKey, setRowActionKey] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingJournalId, setEditingJournalId] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const [filters, setFilters] = useState({
     search: "",
@@ -55,18 +94,7 @@ const JournalEntries = () => {
     propertyId: "all",
   });
 
-  const [form, setForm] = useState({
-    date: new Date().toISOString().split("T")[0],
-    journalType: "landlord_credit_adjustment",
-    property: "",
-    landlord: "",
-    debitAccount: "",
-    creditAccount: "",
-    amount: "",
-    reference: "",
-    narration: "",
-    includeInLandlordStatement: true,
-  });
+  const [form, setForm] = useState(buildInitialForm());
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -115,7 +143,7 @@ const JournalEntries = () => {
 
   useEffect(() => {
     loadJournals();
-  }, [currentCompany?._id, filters]);
+  }, [currentCompany?._id, filters.search, filters.status, filters.journalType, filters.propertyId]);
 
   const totals = useMemo(() => {
     return journals.reduce(
@@ -131,42 +159,96 @@ const JournalEntries = () => {
     );
   }, [journals]);
 
-  const propertyOptions = properties.map((p) => ({
-    value: p._id,
-    label: p.propertyName || p.name || "Property",
-  }));
+  const propertyOptions = useMemo(
+    () =>
+      properties.map((p) => ({
+        value: p._id,
+        label: p.propertyName || p.name || "Property",
+      })),
+    [properties]
+  );
 
-  const landlordOptions = landlords.map((l) => ({
-    value: l._id,
-    label: l.landlordName || l.name || "Landlord",
-  }));
+  const landlordOptions = useMemo(
+    () =>
+      landlords.map((l) => ({
+        value: l._id,
+        label: l.landlordName || l.name || "Landlord",
+      })),
+    [landlords]
+  );
 
-  const accountOptions = accounts.map((a) => ({
-    value: a._id,
-    label: `${a.code} - ${a.name}`,
-    type: a.type,
-  }));
+  const accountOptions = useMemo(
+    () =>
+      accounts.map((a) => ({
+        value: a._id,
+        label: `${a.code} - ${a.name}`,
+      })),
+    [accounts]
+  );
+
+  const activeJournalType = useMemo(
+    () => JOURNAL_TYPES.find((type) => type.value === form.journalType) || JOURNAL_TYPES[0],
+    [form.journalType]
+  );
 
   const isLandlordJournal =
     form.journalType === "landlord_credit_adjustment" ||
     form.journalType === "landlord_debit_adjustment";
+  const isInternalTransferJournal = form.journalType === "internal_account_transfer";
 
-  const resetForm = () => {
-    setForm({
-      date: new Date().toISOString().split("T")[0],
-      journalType: "landlord_credit_adjustment",
-      property: "",
-      landlord: "",
-      debitAccount: "",
-      creditAccount: "",
-      amount: "",
-      reference: "",
-      narration: "",
-      includeInLandlordStatement: true,
-    });
+  const applyJournalTypeDefaults = (journalType) => {
+    const landlordStatementJournal =
+      journalType === "landlord_credit_adjustment" ||
+      journalType === "landlord_debit_adjustment";
+
+    setForm((prev) => ({
+      ...prev,
+      journalType,
+      landlord: journalType === "internal_account_transfer" ? "" : prev.landlord,
+      includeInLandlordStatement:
+        journalType === "internal_account_transfer" ? false : landlordStatementJournal,
+    }));
   };
 
-  const handleCreateJournal = async () => {
+  const resetForm = () => {
+    setEditingJournalId("");
+    setForm(buildInitialForm());
+  };
+
+  const openCreateModal = () => {
+    setEditingJournalId("");
+    setForm(buildInitialForm());
+    setShowCreateModal(true);
+  };
+
+  const openEditModal = (journal) => {
+    if (journal?.status !== "draft") {
+      toast.info("Only draft journals can be edited directly. Reverse posted journals and recreate them if needed.");
+      return;
+    }
+
+    setEditingJournalId(String(journal._id || ""));
+    setForm({
+      date: journal?.date ? new Date(journal.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+      journalType: journal?.journalType || "general_manual_journal",
+      property: journal?.property?._id || journal?.property || "",
+      landlord: journal?.landlord?._id || journal?.landlord || "",
+      debitAccount: journal?.debitAccount?._id || journal?.debitAccount || "",
+      creditAccount: journal?.creditAccount?._id || journal?.creditAccount || "",
+      amount: journal?.amount || "",
+      reference: journal?.reference || "",
+      narration: journal?.narration || "",
+      includeInLandlordStatement: Boolean(journal?.includeInLandlordStatement),
+    });
+    setShowCreateModal(true);
+  };
+
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    resetForm();
+  };
+
+  const handleSaveJournal = async () => {
     if (!currentCompany?._id) {
       toast.warning("Please select a company first");
       return;
@@ -208,22 +290,41 @@ const JournalEntries = () => {
       date: form.date,
       journalType: form.journalType,
       property: form.property,
-      landlord: form.landlord || undefined,
+      landlord: isInternalTransferJournal ? undefined : form.landlord || undefined,
       debitAccount: form.debitAccount,
       creditAccount: form.creditAccount,
       amount: Number(form.amount),
       reference: form.reference,
       narration: form.narration,
-      includeInLandlordStatement: Boolean(form.includeInLandlordStatement),
+      includeInLandlordStatement: isInternalTransferJournal
+        ? false
+        : Boolean(form.includeInLandlordStatement),
     };
 
+    setSaving(true);
     try {
-      const saved = await createJournalEntry(payload);
-      setJournals((prev) => [saved, ...prev]);
-      toast.success(`Journal ${saved?.journalNo || ""} created`);
-      resetForm();
+      const saved = editingJournalId
+        ? await updateJournalEntry(editingJournalId, payload)
+        : await createJournalEntry(payload);
+
+      setJournals((prev) =>
+        editingJournalId
+          ? prev.map((row) => (row._id === editingJournalId ? saved : row))
+          : [saved, ...prev]
+      );
+      toast.success(
+        editingJournalId
+          ? `Journal ${saved?.journalNo || ""} updated`
+          : `Journal ${saved?.journalNo || ""} created`
+      );
+      closeCreateModal();
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to create journal");
+      toast.error(
+        error?.response?.data?.message ||
+          (editingJournalId ? "Failed to update journal" : "Failed to create journal")
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -284,76 +385,100 @@ const JournalEntries = () => {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-3">
-        <div className="mx-auto" style={{ maxWidth: "96%" }}>
-          <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-2.5 mb-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h1 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                <FaBookOpen /> Journal Entries
-              </h1>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
+        <div className="mx-auto max-w-[96%] space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Financial Accounts</p>
+                <h1 className="mt-1 flex items-center gap-3 text-2xl font-black text-slate-900">
+                  <FaBookOpen className="text-[#0B3B2E]" /> Journal Entries
+                </h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  Review existing journals, post balanced drafts, and capture controlled same-company internal transfers from a popup form.
+                </p>
+              </div>
               <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                <span className="px-2 py-0.5 rounded border border-slate-300 bg-slate-50 font-semibold">
-                  Total: Ksh {totals.total.toLocaleString()}
-                </span>
-                <span className="px-2 py-0.5 rounded border border-slate-300 bg-slate-50 font-semibold">
-                  Draft: Ksh {totals.draft.toLocaleString()}
-                </span>
-                <span className="px-2 py-0.5 rounded border border-green-300 bg-green-50 font-semibold text-green-700">
-                  Posted: Ksh {totals.posted.toLocaleString()}
-                </span>
-                <span className="px-2 py-0.5 rounded border border-amber-300 bg-amber-50 font-semibold text-amber-700">
-                  Reversed: Ksh {totals.reversed.toLocaleString()}
+                <span className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-50 px-2 py-0.5 font-semibold text-slate-700">
+                  Count: <strong className="text-slate-900">{journals.length}</strong>
                 </span>
                 <button
                   onClick={loadJournals}
-                  className="px-2 py-0.5 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-semibold inline-flex items-center gap-1"
+                  className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   <FaRedoAlt size={10} /> Refresh
+                </button>
+                <button
+                  onClick={openCreateModal}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white hover:bg-[#0A3127]"
+                >
+                  <FaPlus /> New Journal
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-3">
-            <div className="xl:col-span-2 bg-white border border-slate-200 rounded-lg shadow-sm p-3 space-y-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase">
-                <FaPlus /> New Journal
-              </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Total</p>
+              <p className="mt-2 text-2xl font-black text-slate-900">KES {totals.total.toLocaleString()}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Draft</p>
+              <p className="mt-2 text-2xl font-black text-slate-900">KES {totals.draft.toLocaleString()}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Posted</p>
+              <p className="mt-2 text-2xl font-black text-emerald-800">KES {totals.posted.toLocaleString()}</p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-700">Reversed</p>
+              <p className="mt-2 text-2xl font-black text-amber-800">KES {totals.reversed.toLocaleString()}</p>
+            </div>
+          </div>
 
-              <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
+              <div className="relative md:col-span-2">
+                <FaSearch className="absolute left-3 top-2.5 text-xs text-slate-400" />
                 <input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
+                  value={filters.search}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                  placeholder="Search journal no, reference, narration"
+                  className="w-full rounded-md border border-slate-300 py-2 pl-8 pr-3 text-xs"
                 />
-                <select
-                  value={form.journalType}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      journalType: e.target.value,
-                      includeInLandlordStatement:
-                        e.target.value === "landlord_credit_adjustment" ||
-                        e.target.value === "landlord_debit_adjustment",
-                    }))
-                  }
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-                >
-                  {JOURNAL_TYPES.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
               </div>
 
               <select
-                value={form.property}
-                onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
+                value={filters.status}
+                onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
               >
-                <option value="">Select Property</option>
+                <option value="all">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="posted">Posted</option>
+                <option value="reversed">Reversed</option>
+              </select>
+
+              <select
+                value={filters.journalType}
+                onChange={(e) => setFilters((prev) => ({ ...prev, journalType: e.target.value }))}
+                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+              >
+                <option value="all">All Journal Types</option>
+                {JOURNAL_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filters.propertyId}
+                onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
+                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+              >
+                <option value="all">All Properties</option>
                 {propertyOptions.map((item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}
@@ -361,277 +486,354 @@ const JournalEntries = () => {
                 ))}
               </select>
 
-              <select
-                value={form.landlord}
-                onChange={(e) => setForm((prev) => ({ ...prev, landlord: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              >
-                <option value="">Select Landlord {isLandlordJournal ? "" : "(optional)"}</option>
-                {landlordOptions.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={form.debitAccount}
-                onChange={(e) => setForm((prev) => ({ ...prev, debitAccount: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              >
-                <option value="">Select Debit Account</option>
-                {accountOptions.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={form.creditAccount}
-                onChange={(e) => setForm((prev) => ({ ...prev, creditAccount: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              >
-                <option value="">Select Credit Account</option>
-                {accountOptions.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="number"
-                min="0"
-                placeholder="Amount"
-                value={form.amount}
-                onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              />
-
-              <input
-                type="text"
-                placeholder="Reference"
-                value={form.reference}
-                onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              />
-
-              <textarea
-                rows={3}
-                placeholder="Narration"
-                value={form.narration}
-                onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded"
-              />
-
-              <label className="flex items-center gap-2 text-xs text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={form.includeInLandlordStatement}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      includeInLandlordStatement: e.target.checked,
-                    }))
-                  }
-                />
-                Include in landlord statement metadata
-              </label>
-
               <button
-                onClick={handleCreateJournal}
-                className="w-full px-3 py-2 text-xs rounded text-white font-semibold bg-[#0B3B2E] hover:bg-[#0A3127]"
+                onClick={() =>
+                  setFilters({
+                    search: "",
+                    status: "all",
+                    journalType: "all",
+                    propertyId: "all",
+                  })
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Save Draft Journal
+                <FaFilter /> Reset
               </button>
             </div>
+          </div>
 
-            <div className="xl:col-span-3 bg-white border border-slate-200 rounded-lg shadow-sm p-3">
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <div className="relative flex-1 min-w-[180px]">
-                  <FaSearch className="absolute left-2 top-2.5 text-[10px] text-slate-400" />
-                  <input
-                    value={filters.search}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Search journal no, reference, narration"
-                    className="w-full pl-7 pr-2 py-2 text-xs border border-slate-300 rounded"
-                  />
-                </div>
-
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="px-2 py-2 text-xs border border-slate-300 rounded"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="posted">Posted</option>
-                  <option value="reversed">Reversed</option>
-                </select>
-
-                <select
-                  value={filters.journalType}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, journalType: e.target.value }))}
-                  className="px-2 py-2 text-xs border border-slate-300 rounded"
-                >
-                  <option value="all">All Journal Types</option>
-                  {JOURNAL_TYPES.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={filters.propertyId}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                  className="px-2 py-2 text-xs border border-slate-300 rounded"
-                >
-                  <option value="all">All Properties</option>
-                  {propertyOptions.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  onClick={() =>
-                    setFilters({
-                      search: "",
-                      status: "all",
-                      journalType: "all",
-                      propertyId: "all",
-                    })
-                  }
-                  className="px-2 py-2 text-xs border border-slate-300 rounded text-slate-700 hover:bg-slate-50 flex items-center gap-1"
-                >
-                  <FaFilter /> Reset
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1100px] text-xs">
-                  <thead>
-                    <tr className="bg-[#0B3B2E] text-white">
-                      <th className="px-2 py-1 text-left">Journal</th>
-                      <th className="px-2 py-1 text-left">Date</th>
-                      <th className="px-2 py-1 text-left">Type</th>
-                      <th className="px-2 py-1 text-left">Property</th>
-                      <th className="px-2 py-1 text-left">Landlord</th>
-                      <th className="px-2 py-1 text-left">Debit</th>
-                      <th className="px-2 py-1 text-left">Credit</th>
-                      <th className="px-2 py-1 text-right">Amount</th>
-                      <th className="px-2 py-1 text-left">Status</th>
-                      <th className="px-2 py-1 text-left">Action</th>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-[#0B3B2E] text-white">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Journal</th>
+                    <th className="px-4 py-3 text-left">Date</th>
+                    <th className="px-4 py-3 text-left">Type</th>
+                    <th className="px-4 py-3 text-left">Property</th>
+                    <th className="px-4 py-3 text-left">Landlord</th>
+                    <th className="px-4 py-3 text-left">Debit</th>
+                    <th className="px-4 py-3 text-left">Credit</th>
+                    <th className="px-4 py-3 text-right">Amount</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
+                        Loading journals...
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <tr>
-                        <td colSpan={10} className="px-2 py-6 text-center text-slate-500">
-                          Loading journals...
-                        </td>
-                      </tr>
-                    ) : journals.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="px-2 py-6 text-center text-slate-500">
-                          No journals found.
-                        </td>
-                      </tr>
-                    ) : (
-                      journals.map((journal) => {
-                        const busyPost = rowActionKey === `${journal._id}:post`;
-                        const busyReverse = rowActionKey === `${journal._id}:reverse`;
-                        const busyDelete = rowActionKey === `${journal._id}:delete`;
+                  ) : journals.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
+                        No journals found.
+                      </td>
+                    </tr>
+                  ) : (
+                    journals.map((journal, index) => {
+                      const busyPost = rowActionKey === `${journal._id}:post`;
+                      const busyReverse = rowActionKey === `${journal._id}:reverse`;
+                      const busyDelete = rowActionKey === `${journal._id}:delete`;
 
-                        return (
-                          <tr
-                            key={journal._id}
-                            className="border-b border-slate-200 hover:bg-slate-50"
-                          >
-                            <td className="px-2 py-1.5 font-bold text-slate-900">
-                              {journal.journalNo}
-                            </td>
-                            <td className="px-2 py-1.5">
-                              {journal.date ? new Date(journal.date).toLocaleDateString() : "-"}
-                            </td>
-                            <td className="px-2 py-1.5">
-                              {JOURNAL_TYPES.find((t) => t.value === journal.journalType)?.label ||
-                                journal.journalType}
-                            </td>
-                            <td className="px-2 py-1.5">
-                              {journal.property?.propertyName || journal.property?.name || "N/A"}
-                            </td>
-                            <td className="px-2 py-1.5">
-                              {journal.landlord?.landlordName || journal.landlord?.name || "-"}
-                            </td>
-                            <td className="px-2 py-1.5">
-                              {journal.debitAccount?.code} - {journal.debitAccount?.name}
-                            </td>
-                            <td className="px-2 py-1.5">
-                              {journal.creditAccount?.code} - {journal.creditAccount?.name}
-                            </td>
-                            <td className="px-2 py-1.5 text-right font-semibold">
-                              {Number(journal.amount || 0).toLocaleString()}
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <span
-                                className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                                  STATUS_STYLES[journal.status] || STATUS_STYLES.draft
-                                }`}
-                              >
-                                {journal.status}
-                              </span>
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <div className="flex flex-wrap gap-1">
-                                {journal.status === "draft" && (
-                                  <>
-                                    <button
-                                      onClick={() => handlePostJournal(journal)}
-                                      disabled={!!rowActionKey}
-                                      className="inline-flex items-center gap-1 rounded border border-green-300 bg-green-50 px-2 py-1 text-[11px] font-semibold text-green-700 disabled:opacity-60"
-                                    >
-                                      <FaCheck size={10} />
-                                      {busyPost ? "Posting..." : "Post"}
-                                    </button>
-
-                                    <button
-                                      onClick={() => handleDeleteJournal(journal)}
-                                      disabled={!!rowActionKey}
-                                      className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 disabled:opacity-60"
-                                    >
-                                      <FaTrash size={10} />
-                                      {busyDelete ? "Deleting..." : "Delete"}
-                                    </button>
-                                  </>
-                                )}
-
-                                {journal.status === "posted" && (
+                      return (
+                        <tr
+                          key={journal._id}
+                          className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}
+                        >
+                          <td className="px-4 py-3">
+                            <div className="font-black text-slate-900">{journal.journalNo}</div>
+                            <div className="text-xs text-slate-500">{journal.reference || journal.narration || "No reference"}</div>
+                          </td>
+                          <td className="px-4 py-3 text-slate-700">
+                            {journal.date ? new Date(journal.date).toLocaleDateString() : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-slate-700">
+                            {JOURNAL_TYPES.find((type) => type.value === journal.journalType)?.label || journal.journalType}
+                          </td>
+                          <td className="px-4 py-3 text-slate-700">
+                            {journal.property?.propertyName || journal.property?.name || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 text-slate-700">
+                            {journal.landlord?.landlordName || journal.landlord?.name || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-slate-700">
+                            {journal.debitAccount?.code} - {journal.debitAccount?.name}
+                          </td>
+                          <td className="px-4 py-3 text-slate-700">
+                            {journal.creditAccount?.code} - {journal.creditAccount?.name}
+                          </td>
+                          <td className="px-4 py-3 text-right font-black text-slate-900">
+                            KES {Number(journal.amount || 0).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>
+                              {journal.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="inline-flex flex-wrap justify-end gap-2">
+                              {journal.status === "draft" && (
+                                <>
                                   <button
-                                    onClick={() => handleReverseJournal(journal)}
+                                    onClick={() => openEditModal(journal)}
                                     disabled={!!rowActionKey}
-                                    className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 disabled:opacity-60"
+                                    className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 disabled:opacity-60"
                                   >
-                                    <FaUndo size={10} />
-                                    {busyReverse ? "Reversing..." : "Reverse"}
+                                    <FaEdit /> Edit
                                   </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+
+                                  <button
+                                    onClick={() => handlePostJournal(journal)}
+                                    disabled={!!rowActionKey}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-xs font-black text-green-700 disabled:opacity-60"
+                                  >
+                                    <FaCheck /> {busyPost ? "Posting..." : "Post"}
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleDeleteJournal(journal)}
+                                    disabled={!!rowActionKey}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60"
+                                  >
+                                    <FaTrash /> {busyDelete ? "Deleting..." : "Delete"}
+                                  </button>
+                                </>
+                              )}
+
+                              {journal.status === "posted" && (
+                                <button
+                                  onClick={() => handleReverseJournal(journal)}
+                                  disabled={!!rowActionKey}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700 disabled:opacity-60"
+                                >
+                                  <FaUndo /> {busyReverse ? "Reversing..." : "Reverse"}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/45 p-4">
+          <div className="w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Financial Accounts</p>
+                <h3 className="text-xl font-black">{editingJournalId ? "Edit Draft Journal" : "Create Journal Entry"}</h3>
+                <p className="mt-1 text-sm text-emerald-50">{editingJournalId ? "Only draft journals can be edited directly. Posted journals must be reversed to preserve audit integrity." : "Draft first, then review and post from the journal list."}</p>
+              </div>
+              <button
+                onClick={closeCreateModal}
+                className="rounded-full border border-white/30 p-2 hover:bg-white/10"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="grid gap-4 p-6 lg:grid-cols-[1.15fr,0.85fr]">
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Journal type</p>
+                  <select
+                    value={form.journalType}
+                    onChange={(e) => applyJournalTypeDefaults(e.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  >
+                    {JOURNAL_TYPES.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">{activeJournalType.description}</p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-bold text-slate-700">Journal Date</span>
+                    <input
+                      type="date"
+                      value={form.date}
+                      onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-bold text-slate-700">Property</span>
+                    <select
+                      value={form.property}
+                      onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))}
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    >
+                      <option value="">Select property</option>
+                      {propertyOptions.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {isInternalTransferJournal
+                        ? "Property stays required because posted ledger entries in the current architecture are property-scoped. The linked landlord is derived automatically during posting."
+                        : "Select the property context this journal belongs to."}
+                    </p>
+                  </label>
+
+                  {isInternalTransferJournal ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 md:col-span-2">
+                      Landlord selection is not needed for internal ledger transfers. MILIK derives the landlord automatically from the selected property's accounting context when the balanced ledger entries are posted.
+                    </div>
+                  ) : (
+                    <label className="block md:col-span-2">
+                      <span className="text-sm font-bold text-slate-700">Landlord</span>
+                      <select
+                        value={form.landlord}
+                        onChange={(e) => setForm((prev) => ({ ...prev, landlord: e.target.value }))}
+                        className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                      >
+                        <option value="">Select landlord {isLandlordJournal ? "" : "(optional)"}</option>
+                        {landlordOptions.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {isLandlordJournal
+                          ? "Required because this journal affects a landlord-facing adjustment."
+                          : "Optional unless the journal touches landlord-specific balances."}
+                      </p>
+                    </label>
+                  )}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-bold text-slate-700">Debit Account</span>
+                    <select
+                      value={form.debitAccount}
+                      onChange={(e) => setForm((prev) => ({ ...prev, debitAccount: e.target.value }))}
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    >
+                      <option value="">Select debit account</option>
+                      {accountOptions.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-bold text-slate-700">Credit Account</span>
+                    <select
+                      value={form.creditAccount}
+                      onChange={(e) => setForm((prev) => ({ ...prev, creditAccount: e.target.value }))}
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    >
+                      <option value="">Select credit account</option>
+                      {accountOptions.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <label className="block">
+                  <span className="text-sm font-bold text-slate-700">Amount</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.amount}
+                    onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-bold text-slate-700">Reference</span>
+                  <input
+                    value={form.reference}
+                    onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-bold text-slate-700">Narration</span>
+                  <textarea
+                    rows={5}
+                    value={form.narration}
+                    onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  />
+                </label>
+
+                <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={isInternalTransferJournal ? false : form.includeInLandlordStatement}
+                    disabled={isInternalTransferJournal}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        includeInLandlordStatement: e.target.checked,
+                      }))
+                    }
+                    className="mt-1"
+                  />
+                  <span>
+                    Include in landlord statement metadata
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Disabled for internal ledger transfers because those remain same-company ledger movements only.
+                    </span>
+                  </span>
+                </label>
+
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <p className="font-black">Control note</p>
+                  <p className="mt-1 leading-6">
+                    Internal Ledger Transfer posts only within the current company. Property remains required because the current immutable ledger architecture stores each posting with property and landlord scope. No cross-company movement tool was added because the current journal architecture is company-scoped and cross-company transfer automation would need separate due-to / due-from controls.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button
+                onClick={closeCreateModal}
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveJournal}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60"
+              >
+                <FaPlus /> {saving ? "Saving..." : editingJournalId ? "Update Draft Journal" : "Save Draft Journal"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

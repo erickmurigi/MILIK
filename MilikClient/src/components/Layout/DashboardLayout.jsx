@@ -420,7 +420,7 @@ const TopToolbar = ({
       },
       {
         id: "financial",
-        label: "Financial",
+        label: "Financial Accounts",
         icon: FaMoneyBillWave,
         submenu: [
           { id: "rental-invoicing", label: "Rental Invoicing", hasSubmenu: true, icon: FaFileInvoice, category: "invoicing", categoryColor: "#4F46E5" },
@@ -433,12 +433,11 @@ const TopToolbar = ({
           { type: "separator" },
           { id: "chart-of-accounts", label: "Chart of Accounts", icon: FaBook, category: "ledger", categoryColor: "#0B3B2E" },
           { id: "journals", label: "Journals", icon: FaBook, category: "ledger", categoryColor: "#0B3B2E" },
-          { id: "ledger-entries", label: "Ledger Entries", icon: FaBook, category: "ledger", categoryColor: "#0B3B2E" },
         ],
       },
       {
         id: "reports",
-        label: "Reports",
+        label: "Financial Reports",
         icon: FaChartBar,
         submenu: [
           { id: "rental-collection", label: "Rental Collection Report", icon: FaChartBar },
@@ -619,7 +618,7 @@ const TopToolbar = ({
   const FinancialDropdown = ({ categoryId, items }) => {
     const category = menuColorMap[categoryId] || {
       color: "#0B3B2E",
-      label: "Financial",
+      label: "Financial Accounts",
       icon: FaBook,
     };
 

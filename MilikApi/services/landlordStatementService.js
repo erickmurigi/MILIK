@@ -716,7 +716,7 @@ export const generateLandlordStatement = async ({
       transactionDate: { $gte: periodStart, $lte: periodEnd },
       status: "approved",
       sourceTransactionType: {
-        $in: ["manual_adjustment", "other", "processed_statement"],
+        $in: ["manual_adjustment", "other", "processed_statement", "recurring_deduction"],
       },
       $or: [
         { "metadata.includeInLandlordStatement": true },
@@ -1389,10 +1389,18 @@ export const generateLandlordStatement = async ({
       Number(adjustment.credit || 0) > 0 ||
       adjustment.direction === "credit";
 
+    const isStandingOrderDeduction =
+      String(adjustment?.metadata?.postingKind || "").toLowerCase() === "standing_order_run" ||
+      String(adjustment?.sourceTransactionType || "").toLowerCase() === "recurring_deduction";
+
     const description =
       adjustment.notes ||
       adjustment?.metadata?.description ||
-      (isAddition ? "Statement addition" : "Statement deduction");
+      (isStandingOrderDeduction
+        ? "Standing order deduction"
+        : isAddition
+        ? "Statement addition"
+        : "Statement deduction");
 
     if (isAddition) {
       totalAdditions += amount;
@@ -1424,7 +1432,7 @@ export const generateLandlordStatement = async ({
         date: adjustment.transactionDate,
         description,
         amount: round2(amount),
-        category: "adjustment_deduction",
+        category: isStandingOrderDeduction ? "standing_order_deduction" : "adjustment_deduction",
         sourceId: String(adjustment._id),
       });
 
@@ -1440,7 +1448,10 @@ export const generateLandlordStatement = async ({
           adjustment.sourceTransactionType || "manual_adjustment",
         sourceTransactionId:
           adjustment.sourceTransactionId || String(adjustment._id),
-        metadata: { statementBucket: "deduction" },
+        metadata: {
+          statementBucket: "deduction",
+          ...(isStandingOrderDeduction ? { postingKind: "standing_order_run" } : {}),
+        },
       });
     }
   }

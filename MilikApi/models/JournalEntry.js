@@ -20,6 +20,7 @@ const JournalEntrySchema = new mongoose.Schema(
         "landlord_credit_adjustment",
         "landlord_debit_adjustment",
         "property_expense_accrual",
+        "internal_account_transfer",
         "general_manual_journal",
       ],
       required: true,

@@ -1501,6 +1501,46 @@ export const deleteLandlordStandingOrder = async (id, context = {}) => {
   return res.data;
 };
 
+export const getLandlordAdvancements = async (filters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.business) params.append("business", filters.business);
+  if (filters.company) params.append("company", filters.company);
+  if (filters.status && filters.status !== "all") params.append("status", filters.status);
+  if (filters.landlordId && filters.landlordId !== "all") params.append("landlord", filters.landlordId);
+  if (filters.propertyId && filters.propertyId !== "all") params.append("property", filters.propertyId);
+  if (filters.search) params.append("search", filters.search);
+  const res = await adminRequests.get(`/landlord-advancements${params.toString() ? `?${params.toString()}` : ""}`);
+  return extractList(res.data);
+};
+
+export const createLandlordAdvancement = async (payload) => {
+  const res = await adminRequests.post("/landlord-advancements", payload);
+  return res.data;
+};
+
+export const updateLandlordAdvancement = async (id, payload) => {
+  const res = await adminRequests.put(`/landlord-advancements/${id}`, payload);
+  return res.data;
+};
+
+export const updateLandlordAdvancementStatus = async (id, payload) => {
+  const res = await adminRequests.put(`/landlord-advancements/${id}/status`, payload);
+  return res.data;
+};
+
+export const processLandlordAdvancementRecovery = async (id, payload) => {
+  const res = await adminRequests.post(`/landlord-advancements/${id}/recover`, payload);
+  return res.data;
+};
+
+export const deleteLandlordAdvancement = async (id, context = {}) => {
+  const params = new URLSearchParams();
+  if (context.business) params.append("business", context.business);
+  if (context.company) params.append("company", context.company);
+  const res = await adminRequests.delete(`/landlord-advancements/${id}${params.toString() ? `?${params.toString()}` : ""}`);
+  return res.data;
+};
+
 
 
 
@@ -2476,6 +2516,34 @@ export const getBalanceSheetReport = async (params = {}) => {
 
   const query = search.toString();
   const res = await adminRequests.get(`/financial-reports/balance-sheet${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
+export const getRentalCollectionReport = async (params = {}) => {
+  const search = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") {
+      search.append(key, value);
+    }
+  });
+
+  const query = search.toString();
+  const res = await adminRequests.get(`/financial-reports/rental-collection${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
+export const getTenantPaidBalanceReport = async (params = {}) => {
+  const search = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") {
+      search.append(key, value);
+    }
+  });
+
+  const query = search.toString();
+  const res = await adminRequests.get(`/financial-reports/tenant-paid-balance${query ? `?${query}` : ""}`);
   return res.data;
 };
 // Communications

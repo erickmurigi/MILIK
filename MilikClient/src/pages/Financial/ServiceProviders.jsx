@@ -25,21 +25,47 @@ const blankForm = {
   notes: "",
 };
 
+const CATEGORY_OPTIONS = [
+  { value: "all", label: "All categories" },
+  { value: "general", label: "General" },
+  { value: "maintenance", label: "Maintenance" },
+  { value: "utilities", label: "Utilities" },
+  { value: "security", label: "Security" },
+  { value: "cleaning", label: "Cleaning" },
+  { value: "legal", label: "Legal" },
+  { value: "contractor", label: "Contractor" },
+  { value: "other", label: "Other" },
+];
+
 const ServiceProviders = () => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [nameFilter, setNameFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(blankForm);
 
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingId("");
+    setForm(blankForm);
+  };
+
   const loadRows = async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
-      const data = await getServiceProviders({ business: currentCompany._id, company: currentCompany._id, search });
+      const data = await getServiceProviders({
+        business: currentCompany._id,
+        company: currentCompany._id,
+        search,
+        name: nameFilter,
+        category: categoryFilter,
+      });
       setRows(Array.isArray(data) ? data : []);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load service providers");
@@ -50,13 +76,29 @@ const ServiceProviders = () => {
 
   useEffect(() => {
     loadRows();
-  }, [currentCompany?._id]);
+  }, [currentCompany?._id, search, nameFilter, categoryFilter]);
 
   const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return rows;
-    return rows.filter((row) => `${row.providerCode} ${row.name} ${row.contactPerson} ${row.phone} ${row.email} ${row.category}`.toLowerCase().includes(term));
-  }, [rows, search]);
+    return rows.filter((row) => {
+      if (nameFilter.trim()) {
+        const providerName = String(row?.name || "").toLowerCase();
+        if (!providerName.includes(nameFilter.trim().toLowerCase())) return false;
+      }
+
+      if (categoryFilter !== "all") {
+        if (String(row?.category || "").toLowerCase() !== categoryFilter.toLowerCase()) {
+          return false;
+        }
+      }
+
+      if (search.trim()) {
+        const haystack = `${row.providerCode} ${row.name} ${row.contactPerson} ${row.phone} ${row.email} ${row.category}`.toLowerCase();
+        if (!haystack.includes(search.trim().toLowerCase())) return false;
+      }
+
+      return true;
+    });
+  }, [rows, search, nameFilter, categoryFilter]);
 
   const openCreate = () => {
     setEditingId("");
@@ -88,17 +130,25 @@ const ServiceProviders = () => {
       toast.warning("Service provider name is required");
       return;
     }
+
     setSaving(true);
     try {
-      const payload = { ...form, business: currentCompany?._id, company: currentCompany?._id };
+      const payload = {
+        ...form,
+        business: currentCompany?._id,
+        company: currentCompany?._id,
+      };
+
       const saved = editingId
         ? await updateServiceProvider(editingId, payload)
         : await createServiceProvider(payload);
 
-      setRows((prev) => editingId ? prev.map((row) => row._id === editingId ? saved : row) : [saved, ...prev]);
-      setShowModal(false);
-      setEditingId("");
-      setForm(blankForm);
+      setRows((prev) =>
+        editingId
+          ? prev.map((row) => (row._id === editingId ? saved : row))
+          : [saved, ...prev]
+      );
+      closeModal();
       toast.success(`Service provider ${editingId ? "updated" : "saved"}`);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to save service provider");
@@ -110,12 +160,21 @@ const ServiceProviders = () => {
   const handleDelete = async (row) => {
     if (!window.confirm(`Delete service provider ${row.name}?`)) return;
     try {
-      await deleteServiceProvider(row._id, { business: currentCompany?._id, company: currentCompany?._id });
+      await deleteServiceProvider(row._id, {
+        business: currentCompany?._id,
+        company: currentCompany?._id,
+      });
       setRows((prev) => prev.filter((item) => item._id !== row._id));
       toast.success("Service provider deleted");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to delete service provider");
     }
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setNameFilter("");
+    setCategoryFilter("all");
   };
 
   return (
@@ -125,25 +184,75 @@ const ServiceProviders = () => {
           <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Financial Master Data</p>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">
+                  Financial Master Data
+                </p>
                 <h1 className="mt-1 text-2xl font-black text-slate-900">Service Providers</h1>
-                <p className="mt-1 text-sm text-slate-500">Maintain vendors and service providers for expenses, requisitions, and operational reference.</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Maintain vendors and service providers for expenses, requisitions, and operational reference.
+                </p>
               </div>
-              <button onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white hover:bg-[#0A3127]">
+              <button
+                onClick={openCreate}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white hover:bg-[#0A3127]"
+              >
                 <FaPlus /> Add Service Provider
               </button>
             </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="relative max-w-xl">
-              <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search provider code, name, category, phone, email"
-                className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-              />
+            <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-[1.3fr_1fr_220px_auto] xl:items-end">
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+                  Search
+                </span>
+                <div className="relative mt-1">
+                  <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Provider code, contact, phone, email"
+                    className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  />
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+                  Name Filter
+                </span>
+                <input
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  placeholder="Filter by provider name"
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+                  Category Filter
+                </span>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                >
+                  {CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button
+                onClick={clearFilters}
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50"
+              >
+                Clear Filters
+              </button>
             </div>
           </div>
 
@@ -163,35 +272,70 @@ const ServiceProviders = () => {
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">Loading service providers...</td></tr>
-                  ) : filtered.length === 0 ? (
-                    <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">No service providers found.</td></tr>
-                  ) : filtered.map((row, index) => (
-                    <tr key={row._id} className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                      <td className="px-4 py-3 font-mono font-bold text-slate-900">{row.providerCode}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-bold text-slate-900">{row.name}</div>
-                        <div className="text-xs text-slate-500">{row.notes || "No notes"}</div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        <div>{row.contactPerson || "-"}</div>
-                        <div className="text-xs text-slate-500">{row.phone || row.email || "No contact"}</div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">{row.category || "general"}</td>
-                      <td className="px-4 py-3 text-slate-700">{row.bankName || row.paybillNumber || row.accountNumber || "-"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${row.isActive !== false ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
-                          {row.isActive !== false ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="inline-flex gap-2">
-                          <button onClick={() => openEdit(row)} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"><FaEdit /> Edit</button>
-                          <button onClick={() => handleDelete(row)} className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"><FaTrash /> Delete</button>
-                        </div>
+                    <tr>
+                      <td colSpan="7" className="px-4 py-10 text-center text-slate-500">
+                        Loading service providers...
                       </td>
                     </tr>
-                  ))}
+                  ) : filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="px-4 py-10 text-center text-slate-500">
+                        No service providers found.
+                      </td>
+                    </tr>
+                  ) : (
+                    filtered.map((row, index) => (
+                      <tr
+                        key={row._id}
+                        className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}
+                      >
+                        <td className="px-4 py-3 font-mono font-bold text-slate-900">
+                          {row.providerCode}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-slate-900">{row.name}</div>
+                          <div className="text-xs text-slate-500">{row.notes || "No notes"}</div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          <div>{row.contactPerson || "-"}</div>
+                          <div className="text-xs text-slate-500">
+                            {row.phone || row.email || "No contact"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">{row.category || "general"}</td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {row.bankName || row.paybillNumber || row.accountNumber || "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                              row.isActive !== false
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-200 text-slate-600"
+                            }`}
+                          >
+                            {row.isActive !== false ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="inline-flex gap-2">
+                            <button
+                              onClick={() => openEdit(row)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"
+                            >
+                              <FaEdit /> Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(row)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"
+                            >
+                              <FaTrash /> Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -204,10 +348,17 @@ const ServiceProviders = () => {
           <div className="w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Service Provider</p>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">
+                  Service Provider
+                </p>
                 <h3 className="text-xl font-black">{editingId ? "Edit Provider" : "Add Provider"}</h3>
               </div>
-              <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
+              <button
+                onClick={closeModal}
+                className="rounded-full border border-white/30 p-2 hover:bg-white/10"
+              >
+                <FaTimes />
+              </button>
             </div>
             <div className="grid gap-4 p-6 md:grid-cols-2">
               {[
@@ -224,21 +375,59 @@ const ServiceProviders = () => {
               ].map(([field, label]) => (
                 <label key={field} className="block">
                   <span className="text-sm font-bold text-slate-700">{label}</span>
-                  <input value={form[field]} onChange={(e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" />
+                  <input
+                    value={form[field]}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        [field]: e.target.value,
+                      }))
+                    }
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  />
                 </label>
               ))}
               <label className="md:col-span-2 block">
                 <span className="text-sm font-bold text-slate-700">Notes</span>
-                <textarea rows={3} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" />
+                <textarea
+                  rows={3}
+                  value={form.notes}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      notes: e.target.value,
+                    }))
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                />
               </label>
               <label className="inline-flex items-center gap-3">
-                <input type="checkbox" checked={form.isActive} onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))} className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]" />
+                <input
+                  type="checkbox"
+                  checked={form.isActive}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      isActive: e.target.checked,
+                    }))
+                  }
+                  className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                />
                 <span className="text-sm font-bold text-slate-700">Active provider</span>
               </label>
             </div>
             <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60">
+              <button
+                onClick={closeModal}
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60"
+              >
                 <FaSave /> {saving ? "Saving..." : editingId ? "Update Provider" : "Save Provider"}
               </button>
             </div>

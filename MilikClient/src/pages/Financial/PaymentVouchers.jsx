@@ -19,7 +19,6 @@ import {
   createPaymentVoucher,
   deletePaymentVoucher,
   getChartOfAccounts,
-  getLandlords,
   getPaymentVouchers,
   updatePaymentVoucher,
   updatePaymentVoucherStatus,
@@ -42,7 +41,6 @@ const statusColors = {
 const blankForm = {
   category: "landlord_maintenance",
   propertyId: "",
-  landlordId: "",
   liabilityAccountId: "",
   amount: "",
   dueDate: new Date().toISOString().split("T")[0],
@@ -56,7 +54,6 @@ const PaymentVouchers = () => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const properties = useSelector((state) => state.property?.properties || []);
-  const landlords = useSelector((state) => state.landlord?.landlords || []);
 
   const canCreateVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "create", "accounts");
   const canUpdateVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "update", "accounts");
@@ -79,7 +76,6 @@ const PaymentVouchers = () => {
     ...voucher,
     propertyId: voucher?.property?._id || voucher?.property || voucher?.propertyId || "",
     propertyName: voucher?.property?.propertyName || voucher?.property?.name || voucher?.propertyName || "N/A",
-    landlordId: voucher?.landlord?._id || voucher?.landlord || voucher?.landlordId || "",
     landlordName: voucher?.landlord?.landlordName || voucher?.landlord?.name || voucher?.landlordName || "N/A",
     liabilityAccountId: voucher?.liabilityAccount?._id || voucher?.liabilityAccount || voucher?.liabilityAccountId || "",
     liabilityAccountName: voucher?.liabilityAccount?.name || voucher?.liabilityAccountName || "N/A",
@@ -88,7 +84,6 @@ const PaymentVouchers = () => {
   useEffect(() => {
     if (!currentCompany?._id) return;
     dispatch(getProperties({ business: currentCompany._id }));
-    dispatch(getLandlords({ company: currentCompany._id }));
   }, [dispatch, currentCompany?._id]);
 
   useEffect(() => {
@@ -143,7 +138,6 @@ const PaymentVouchers = () => {
     setForm({
       category: voucher.category || "landlord_maintenance",
       propertyId: voucher.propertyId || "",
-      landlordId: voucher.landlordId || "",
       liabilityAccountId: voucher.liabilityAccountId || "",
       amount: voucher.amount || "",
       dueDate: voucher.dueDate ? new Date(voucher.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
@@ -173,7 +167,6 @@ const PaymentVouchers = () => {
       company: currentCompany?._id,
       category: form.category,
       property: form.propertyId,
-      landlord: form.landlordId || undefined,
       liabilityAccount: form.liabilityAccountId,
       amount: Number(form.amount),
       dueDate: form.dueDate,
@@ -269,12 +262,61 @@ const PaymentVouchers = () => {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr,220px,220px,220px,150px]">
-              <div className="relative"><FaSearch className="absolute left-3 top-3.5 text-slate-400" /><input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search voucher, narration, landlord, property" className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></div>
-              <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="all">All categories</option>{categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
-              <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="all">All statuses</option><option value="draft">Draft</option><option value="approved">Approved</option><option value="paid">Paid</option><option value="reversed">Reversed</option></select>
-              <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="all">All properties</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}</select>
-              <button onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50"><FaFilter /> Reset</button>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
+              <div className="relative md:col-span-2">
+                <FaSearch className="absolute left-3 top-2.5 text-xs text-slate-400" />
+                <input
+                  value={filters.search}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                  placeholder="Search voucher, narration, landlord, property"
+                  className="w-full rounded-md border border-slate-300 py-2 pl-8 pr-3 text-xs"
+                />
+              </div>
+
+              <select
+                value={filters.category}
+                onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
+                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+              >
+                <option value="all">All categories</option>
+                {categories.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+              >
+                <option value="all">All statuses</option>
+                <option value="draft">Draft</option>
+                <option value="approved">Approved</option>
+                <option value="paid">Paid</option>
+                <option value="reversed">Reversed</option>
+              </select>
+
+              <select
+                value={filters.propertyId}
+                onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
+                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+              >
+                <option value="all">All properties</option>
+                {properties.map((property) => (
+                  <option key={property._id} value={property._id}>
+                    {property.propertyName || property.name}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <FaFilter /> Reset
+              </button>
             </div>
           </div>
 
@@ -343,7 +385,6 @@ const PaymentVouchers = () => {
             <div className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
               <label className="block"><span className="text-sm font-bold text-slate-700">Category</span><select value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20">{categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Property</span><select value={form.propertyId} onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select property</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}</select></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Landlord</span><select value={form.landlordId} onChange={(e) => setForm((prev) => ({ ...prev, landlordId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select landlord</option>{landlords.map((landlord) => <option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.name}</option>)}</select></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Liability Account</span><select value={form.liabilityAccountId} onChange={(e) => setForm((prev) => ({ ...prev, liabilityAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select liability account</option>{liabilityAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Amount</span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Due Date</span><input type="date" value={form.dueDate} onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>

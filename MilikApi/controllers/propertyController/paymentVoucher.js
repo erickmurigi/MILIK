@@ -60,6 +60,13 @@ const resolveActorUserId = async (req, businessId) =>
     fallbackErrorMessage: "No valid company user could be resolved for voucher posting.",
   });
 
+const resolveVoucherLandlordContext = async ({ businessId, propertyId, landlordId = null }) =>
+  resolvePropertyAccountingContext({
+    propertyId,
+    landlordId,
+    businessId,
+  });
+
 const generateVoucherNo = async (businessId) => {
   const prefix = "PM";
   const lastVoucher = await PaymentVoucher.findOne(
@@ -569,10 +576,16 @@ export const createPaymentVoucher = async (req, res, next) => {
     }
 
     const voucherNo = await generateVoucherNo(businessId);
+    const accountingContext = await resolveVoucherLandlordContext({
+      businessId,
+      propertyId: req.body.property,
+      landlordId: req.body.landlord || null,
+    });
+
     const payload = {
       category: req.body.category,
       property: req.body.property,
-      landlord: req.body.landlord || null,
+      landlord: accountingContext.landlordId,
       liabilityAccount: req.body.liabilityAccount,
       amount,
       dueDate: req.body.dueDate,
@@ -702,6 +715,15 @@ export const updatePaymentVoucher = async (req, res, next) => {
         message: "Only draft vouchers can be edited.",
       });
     }
+
+    const propertyId = payload.property || existing.property;
+    const accountingContext = await resolveVoucherLandlordContext({
+      businessId: business,
+      propertyId,
+      landlordId: payload.landlord || existing.landlord || null,
+    });
+
+    payload.landlord = accountingContext.landlordId;
 
     const updated = await populateVoucherQuery(
       PaymentVoucher.findOneAndUpdate(

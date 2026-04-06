@@ -207,20 +207,33 @@ const ExpenseRequisition = () => {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr,220px] xl:grid-cols-[1fr,220px,180px]">
-              <div className="relative">
-                <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
-                <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search by requisition number, title, description, category" className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" />
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="grid w-full max-w-4xl grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.4fr),200px] xl:grid-cols-[minmax(0,1.5fr),200px,160px]">
+                <div className="relative">
+                  <FaSearch className="absolute left-3 top-3 text-sm text-slate-400" />
+                  <input
+                    value={filters.search}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                    placeholder="Search requisition no, title, description, category"
+                    className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  />
+                </div>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="draft">Draft</option>
+                  <option value="submitted">Submitted</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <div className="hidden xl:flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-black text-slate-600">
+                  {selectedIds.length} selected
+                </div>
               </div>
-              <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20">
-                <option value="all">All statuses</option>
-                <option value="draft">Draft</option>
-                <option value="submitted">Submitted</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-              <div className="hidden xl:flex items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-600">{selectedIds.length} selected</div>
             </div>
           </div>
 

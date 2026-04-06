@@ -13,6 +13,7 @@ const RULES = [
   { prefix: "/api/payment-vouchers", resource: "paymentVouchers", moduleKey: "accounts" },
   { prefix: "/api/expense-requisitions", resource: "expenses", moduleKey: "accounts" },
   { prefix: "/api/landlord-standing-orders", resource: "landlordPayments", moduleKey: "accounts" },
+  { prefix: "/api/landlord-advancements", resource: "landlordPayments", moduleKey: "accounts" },
   { prefix: "/api/service-providers", resource: "expenses", moduleKey: "accounts" },
   { prefix: "/api/ledger", resource: "ledger", moduleKey: "accounts" },
   { prefix: "/api/landlord-payments", resource: "landlordPayments", moduleKey: "accounts" },

@@ -1005,6 +1005,7 @@ const buildTenantSnapshotBundle = ({ invoices = [], receipts = [], notes = [] })
       amount: Math.abs(Number(receipt.amount || 0)),
       allocatedAmount,
       unappliedAmount: Math.max(0, Math.abs(Number(receipt.amount || 0)) - allocatedAmount),
+      paymentDate: receipt.paymentDate || receipt.createdAt || null,
       rows,
     });
   }
@@ -1027,7 +1028,7 @@ const buildTenantSnapshotBundle = ({ invoices = [], receipts = [], notes = [] })
   };
 };
 
-const computeTenantInvoiceSnapshotsBatch = async ({ businessId, tenantIds = [], asOfDate = null, invoiceQuery = {}, receiptQuery = {}, noteQuery = {} }) => {
+export const computeTenantInvoiceSnapshotsBatch = async ({ businessId, tenantIds = [], asOfDate = null, invoiceQuery = {}, receiptQuery = {}, noteQuery = {} }) => {
   const normalizedTenantIds = [...new Set((Array.isArray(tenantIds) ? tenantIds : []).filter(Boolean).map(String))];
   if (!businessId || normalizedTenantIds.length === 0) return new Map();
 

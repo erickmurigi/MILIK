@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import ExpenseRequisition from "../../models/ExpenseRequisition.js";
 import ServiceProvider from "../../models/ServiceProvider.js";
+import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -13,8 +14,12 @@ const resolveBusinessId = (req) =>
   req?.user?.company ||
   null;
 
-const resolveActorUserId = (req) =>
-  req?.user?._id || req?.user?.id || req?.user?.userId || null;
+const resolveActorUserId = async (req, businessId) =>
+  resolveAuditActorUserId({
+    req,
+    businessId,
+    fallbackErrorMessage: "No valid company user could be resolved for expense requisition attribution.",
+  });
 
 const parseDate = (value, fallback = null) => {
   if (!value) return fallback;
@@ -79,7 +84,7 @@ const resolveVendorName = async (serviceProviderId, fallbackVendorName = "") => 
 export const createExpenseRequisition = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    const actorUserId = resolveActorUserId(req);
+    const actorUserId = await resolveActorUserId(req, businessId);
 
     if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
     if (!actorUserId) return res.status(400).json({ success: false, message: "Authenticated user is required" });
@@ -253,17 +258,19 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
     const row = await ExpenseRequisition.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Expense requisition not found" });
 
+    const actorUserId = await resolveActorUserId(req, businessId);
+
     row.status = status;
 
     if (status === "approved") {
       row.approvedAt = new Date();
-      row.approvedBy = resolveActorUserId(req);
+      row.approvedBy = actorUserId;
       row.rejectedAt = null;
       row.rejectedBy = null;
       row.rejectionReason = "";
     } else if (status === "rejected") {
       row.rejectedAt = new Date();
-      row.rejectedBy = resolveActorUserId(req);
+      row.rejectedBy = actorUserId;
       row.rejectionReason = String(req.body?.reason || "Rejected").trim();
     } else if (status === "draft" || status === "submitted" || status === "cancelled") {
       if (status === "draft") {

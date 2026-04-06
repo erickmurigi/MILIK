@@ -1,19 +1,8 @@
 import mongoose from "mongoose";
 
-const destinationSchema = new mongoose.Schema(
+const recoveryHistorySchema = new mongoose.Schema(
   {
-    accountName: { type: String, default: "", trim: true },
-    accountNumber: { type: String, default: "", trim: true },
-    bankName: { type: String, default: "", trim: true },
-    branchName: { type: String, default: "", trim: true },
-    mobileNumber: { type: String, default: "", trim: true },
-  },
-  { _id: false }
-);
-
-const runHistorySchema = new mongoose.Schema(
-  {
-    runDate: { type: Date, required: true },
+    processedAt: { type: Date, required: true },
     dueDate: { type: Date, default: null },
     periodStart: { type: Date, default: null },
     periodEnd: { type: Date, default: null },
@@ -43,13 +32,10 @@ const runHistorySchema = new mongoose.Schema(
       default: null,
     },
   },
-  {
-    _id: true,
-    timestamps: true,
-  }
+  { _id: true, timestamps: true }
 );
 
-const LandlordStandingOrderSchema = new mongoose.Schema(
+const LandlordAdvancementSchema = new mongoose.Schema(
   {
     business: {
       type: mongoose.Schema.Types.ObjectId,
@@ -66,7 +52,7 @@ const LandlordStandingOrderSchema = new mongoose.Schema(
     property: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Property",
-      default: null,
+      required: true,
       index: true,
     },
     title: {
@@ -74,9 +60,25 @@ const LandlordStandingOrderSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    referenceNo: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
+    },
     amount: {
       type: Number,
       required: true,
+      min: 0,
+    },
+    recoveredAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    balanceOutstanding: {
+      type: Number,
+      default: 0,
       min: 0,
     },
     frequency: {
@@ -90,6 +92,10 @@ const LandlordStandingOrderSchema = new mongoose.Schema(
       min: 1,
       max: 31,
       default: 5,
+    },
+    disbursementDate: {
+      type: Date,
+      required: true,
     },
     startDate: {
       type: Date,
@@ -109,26 +115,38 @@ const LandlordStandingOrderSchema = new mongoose.Schema(
       ref: "ChartOfAccount",
       default: null,
     },
-    destination: {
-      type: destinationSchema,
-      default: () => ({}),
+    status: {
+      type: String,
+      enum: ["draft", "active", "paused", "completed", "cancelled"],
+      default: "draft",
+      index: true,
     },
     narration: {
       type: String,
       default: "",
       trim: true,
     },
-    status: {
+    notes: {
       type: String,
-      enum: ["draft", "active", "paused", "stopped"],
-      default: "draft",
-      index: true,
+      default: "",
+      trim: true,
     },
-    nextRunDate: {
-      type: Date,
+    disbursementJournalGroupId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "JournalGroup",
       default: null,
     },
-    lastRunDate: {
+    disbursementEntryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FinancialLedgerEntry",
+      default: null,
+    },
+    disbursementOffsetEntryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FinancialLedgerEntry",
+      default: null,
+    },
+    disbursedAt: {
       type: Date,
       default: null,
     },
@@ -144,69 +162,28 @@ const LandlordStandingOrderSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
-    notes: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-    referenceNo: {
-      type: String,
-      trim: true,
-      required: true,
-      index: true,
-    },
-    standingOrderNo: {
-      type: String,
-      trim: true,
-      default: "",
-      index: true,
-    },
-    runHistory: {
-      type: [runHistorySchema],
+    recoveryHistory: {
+      type: [recoveryHistorySchema],
       default: () => [],
-    },
-    totalRuns: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    totalProcessedAmount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    lastRunAt: {
-      type: Date,
-      default: null,
     },
   },
   { timestamps: true }
 );
 
-LandlordStandingOrderSchema.pre("validate", function syncCompatibilityFields(next) {
-  if (!this.referenceNo && this.standingOrderNo) {
-    this.referenceNo = this.standingOrderNo;
-  }
-  if (!this.standingOrderNo && this.referenceNo) {
-    this.standingOrderNo = this.referenceNo;
-  }
-  if (!this.lastRunDate && this.lastRunAt) {
-    this.lastRunDate = this.lastRunAt;
-  }
-  if (!this.lastRunAt && this.lastRunDate) {
-    this.lastRunAt = this.lastRunDate;
-  }
+LandlordAdvancementSchema.pre("validate", function syncBalance(next) {
+  const amount = Number(this.amount || 0);
+  const recoveredAmount = Number(this.recoveredAmount || 0);
+  this.balanceOutstanding = Math.max(Math.round((amount - recoveredAmount + Number.EPSILON) * 100) / 100, 0);
   next();
 });
 
-LandlordStandingOrderSchema.index({ business: 1, createdAt: -1 });
-LandlordStandingOrderSchema.index({ business: 1, landlord: 1, status: 1, createdAt: -1 });
-LandlordStandingOrderSchema.index({ business: 1, referenceNo: 1 }, { unique: true });
-LandlordStandingOrderSchema.index({ business: 1, standingOrderNo: 1 });
-LandlordStandingOrderSchema.index({ business: 1, landlord: 1, property: 1, "runHistory.periodKey": 1 });
+LandlordAdvancementSchema.index({ business: 1, referenceNo: 1 }, { unique: true });
+LandlordAdvancementSchema.index({ business: 1, landlord: 1, status: 1, createdAt: -1 });
+LandlordAdvancementSchema.index({ business: 1, property: 1, status: 1, createdAt: -1 });
+LandlordAdvancementSchema.index({ business: 1, landlord: 1, property: 1, "recoveryHistory.periodKey": 1 });
 
-const LandlordStandingOrder =
-  mongoose.models.LandlordStandingOrder ||
-  mongoose.model("LandlordStandingOrder", LandlordStandingOrderSchema);
+const LandlordAdvancement =
+  mongoose.models.LandlordAdvancement ||
+  mongoose.model("LandlordAdvancement", LandlordAdvancementSchema);
 
-export default LandlordStandingOrder;
+export default LandlordAdvancement;

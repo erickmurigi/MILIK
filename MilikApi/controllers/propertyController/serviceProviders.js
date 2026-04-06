@@ -61,15 +61,26 @@ export const getServiceProviders = async (req, res, next) => {
     const filter = { business: businessId };
     if (req.query?.active === "true") filter.isActive = true;
     if (req.query?.active === "false") filter.isActive = false;
-    if (req.query?.search) {
-      const term = String(req.query.search).trim();
+    const searchTerm = String(req.query?.search || "").trim();
+    const nameFilter = String(req.query?.name || "").trim();
+    const categoryFilter = String(req.query?.category || "").trim();
+
+    if (nameFilter) {
+      filter.name = { $regex: nameFilter, $options: "i" };
+    }
+
+    if (categoryFilter && categoryFilter !== "all") {
+      filter.category = { $regex: `^${categoryFilter}$`, $options: "i" };
+    }
+
+    if (searchTerm) {
       filter.$or = [
-        { providerCode: { $regex: term, $options: "i" } },
-        { name: { $regex: term, $options: "i" } },
-        { contactPerson: { $regex: term, $options: "i" } },
-        { email: { $regex: term, $options: "i" } },
-        { phone: { $regex: term, $options: "i" } },
-        { category: { $regex: term, $options: "i" } },
+        { providerCode: { $regex: searchTerm, $options: "i" } },
+        { name: { $regex: searchTerm, $options: "i" } },
+        { contactPerson: { $regex: searchTerm, $options: "i" } },
+        { email: { $regex: searchTerm, $options: "i" } },
+        { phone: { $regex: searchTerm, $options: "i" } },
+        { category: { $regex: searchTerm, $options: "i" } },
       ];
     }
 
@@ -90,8 +101,17 @@ export const updateServiceProvider = async (req, res, next) => {
 
     const allowed = ["name", "contactPerson", "email", "phone", "category", "kraPin", "accountNumber", "paybillNumber", "bankName", "accountName", "isActive", "notes"];
     allowed.forEach((field) => {
-      if (Object.prototype.hasOwnProperty.call(req.body || {}, field)) row[field] = req.body[field];
+      if (!Object.prototype.hasOwnProperty.call(req.body || {}, field)) return;
+      if (field === "name") {
+        row[field] = String(req.body[field] || "").trim();
+        return;
+      }
+      row[field] = req.body[field];
     });
+
+    if (!String(row.name || "").trim()) {
+      return res.status(400).json({ success: false, message: "Service provider name is required" });
+    }
     await row.save();
     res.status(200).json(row);
   } catch (error) {

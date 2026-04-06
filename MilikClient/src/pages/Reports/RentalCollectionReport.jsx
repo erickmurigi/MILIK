@@ -1,410 +1,252 @@
-import React, { useState, useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { getRentPayments, getLandlords } from '../../redux/apiCalls';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import DashboardLayout from '../../components/Layout/DashboardLayout';
+import { getLandlords, getRentalCollectionReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { getTenants } from '../../redux/tenantsRedux';
-import DashboardLayout from '../../components/Layout/DashboardLayout';
-import { FaPrint, FaFileDownload, FaCalendar, FaFilter, FaChartBar } from 'react-icons/fa';
+import { FaChartBar, FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 
-const MILIK_GREEN = "#0B3B2E";
-const MILIK_GREEN_BG = "bg-[#0B3B2E]";
-const MILIK_ORANGE = "#FF8C00";
+const MILIK_GREEN = '#0B3B2E';
+const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
+const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 
 const RentalCollectionReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const { rentPayments = [] } = useSelector((state) => state.rentPayment || {});
   const properties = useSelector((state) => state.property?.properties || []);
   const tenants = useSelector((state) => state.tenant?.tenants || []);
   const landlords = useSelector((state) => state.landlord?.landlords || []);
 
+  const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({
-    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
-    propertyId: '',
+    startDate: toDateInputValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
+    endDate: toDateInputValue(new Date()),
     propertyId: '',
     tenantId: '',
-    landlordId: '',
     unitId: '',
+    landlordId: '',
     paymentMethod: '',
-    cashbook: ''
+    cashbook: '',
   });
+  const [report, setReport] = useState({ summary: {}, byProperty: [], rows: [] });
 
   useEffect(() => {
-    const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company;
-    if (businessId) {
-      setLoading(true);
-      Promise.all([
-        getRentPayments(dispatch, businessId),
-        dispatch(getProperties({ business: businessId })),
-        dispatch(getTenants({ business: businessId })),
-        getLandlords(dispatch, businessId)
-      ]).finally(() => setLoading(false));
+    if (!businessId) return;
+    dispatch(getProperties({ business: businessId }));
+    dispatch(getTenants({ business: businessId }));
+    dispatch(getLandlords({ company: businessId }));
+  }, [businessId, dispatch]);
+
+  const loadReport = async () => {
+    if (!businessId) return;
+    setLoading(true);
+    try {
+      const data = await getRentalCollectionReport({ business: businessId, ...filters });
+      setReport({
+        summary: data?.summary || {},
+        byProperty: Array.isArray(data?.byProperty) ? data.byProperty : [],
+        rows: Array.isArray(data?.rows) ? data.rows : [],
+      });
+    } catch (error) {
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || 'Failed to load rental collection report.');
+    } finally {
+      setLoading(false);
     }
-  }, [currentCompany?._id, currentUser?.company, dispatch]);
-
-  const filteredPayments = rentPayments?.filter((payment) => {
-    const paymentDate = new Date(payment.paymentDate || payment.createdAt || Date.now());
-    const start = new Date(filters.startDate);
-    const end = new Date(filters.endDate);
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
-
-    const propertyId = payment.property?._id || payment.property || payment.unit?.property || "";
-    const tenantId = payment.tenant?._id || payment.tenant || "";
-    const unitId = payment.unit?._id || payment.unit || "";
-    const propertyData = properties?.find((p) => p._id === propertyId);
-    const matchedLandlord = landlords?.find((landlord) => {
-      const entries = Array.isArray(propertyData?.landlords) ? propertyData.landlords : [];
-      return entries.some((entry) => String(entry?.landlordId || "") === String(landlord._id));
-    });
-
-    const paymentMethod = String(payment.paymentMethod || "").toLowerCase();
-    const cashbook = String(payment.cashbook || "").toLowerCase();
-
-    const matchesDate = paymentDate >= start && paymentDate <= end;
-    const matchesProperty = !filters.propertyId || String(propertyId) === String(filters.propertyId);
-    const matchesTenant = !filters.tenantId || String(tenantId) === String(filters.tenantId);
-    const matchesLandlord = !filters.landlordId || String(matchedLandlord?._id || "") === String(filters.landlordId);
-    const matchesUnit = !filters.unitId || String(unitId) === String(filters.unitId);
-    const matchesMethod = !filters.paymentMethod || paymentMethod === String(filters.paymentMethod).toLowerCase();
-    const matchesCashbook = !filters.cashbook || cashbook === String(filters.cashbook).toLowerCase();
-
-    return matchesDate && matchesProperty && matchesTenant && matchesLandlord && matchesUnit && matchesMethod && matchesCashbook;
-  }) || [];
-
-  // Group by property
-  const groupedByProperty = filteredPayments.reduce((acc, payment) => {
-    const propertyId = payment.property?._id || payment.property;
-    const propertyData = properties?.find(p => p._id === propertyId);
-    const propertyName = propertyData?.propertyName || 'Unknown Property';
-    
-    if (!acc[propertyName]) {
-      acc[propertyName] = {
-        payments: [],
-        total: 0,
-        count: 0
-      };
-    }
-    
-    acc[propertyName].payments.push(payment);
-    acc[propertyName].total += Number(payment.amount || payment.amountPaid || 0);
-    acc[propertyName].count += 1;
-    
-    return acc;
-  }, {});
-
-  // Calculate stats
-  const stats = {
-    totalCollected: filteredPayments.reduce((sum, p) => sum + Number(p.amount || p.amountPaid || 0), 0),
-    totalPayments: filteredPayments.length,
-    properties: Object.keys(groupedByProperty).length,
-    avgPayment: filteredPayments.length > 0 ? filteredPayments.reduce((sum, p) => sum + Number(p.amount || p.amountPaid || 0), 0) / filteredPayments.length : 0
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  useEffect(() => {
+    loadReport();
+  }, [businessId, filters.startDate, filters.endDate, filters.propertyId, filters.tenantId, filters.unitId, filters.landlordId, filters.paymentMethod, filters.cashbook]);
+
+  const units = useMemo(() => {
+    return tenants
+      .filter((tenant) => !filters.tenantId || String(tenant?._id) === String(filters.tenantId))
+      .map((tenant) => {
+        const unit = tenant?.unit || {};
+        return {
+          _id: unit?._id || unit,
+          unitNumber: unit?.unitNumber || unit?.name || 'Unit',
+        };
+      })
+      .filter((unit, index, arr) => unit._id && arr.findIndex((entry) => String(entry._id) === String(unit._id)) === index);
+  }, [tenants, filters.tenantId]);
+
+  const summary = report.summary || {};
 
   const handleExportCSV = () => {
-    const csvData = [
-      ['Date', 'Property', 'Tenant', 'Unit', 'Amount', 'Payment Method', 'Receipt No'].join(','),
-      ...filteredPayments.map(payment => {
-        const propertyId = payment.property?._id || payment.property;
-        const propertyData = properties?.find(p => p._id === propertyId);
-        const tenantId = payment.tenant?._id || payment.tenant;
-        const tenantData = tenants?.find(t => t._id === tenantId);
-        
-        return [
-          new Date(payment.paymentDate).toLocaleDateString(),
-          propertyData?.propertyName || 'N/A',
-          tenantData?.name || tenantData?.tenantName || 'N/A',
-          payment.unit?.unitNumber || 'N/A',
-          Number(payment.amount || payment.amountPaid || 0),
-          payment.paymentMethod || 'N/A',
-          payment.receiptNumber || 'N/A'
-        ].join(',');
-      })
-    ].join('\n');
+    const header = ['Date', 'Receipt #', 'Property', 'Tenant', 'Unit', 'Method', 'Collected', 'Allocated', 'Rent Applied', 'Utility Applied', 'Penalty Applied', 'Unapplied', 'Cashbook'];
+    const rows = (report.rows || []).map((row) => [
+      row.paymentDate ? new Date(row.paymentDate).toLocaleDateString() : '',
+      row.receiptNumber || '',
+      row.propertyName || '',
+      row.tenantName || '',
+      row.unitNumber || '',
+      row.paymentMethod || '',
+      row.amount || 0,
+      row.allocatedAmount || 0,
+      row.rentApplied || 0,
+      row.utilityApplied || 0,
+      row.penaltyApplied || 0,
+      row.unappliedAmount || 0,
+      row.cashbook || '',
+    ]);
 
-    const blob = new Blob([csvData], { type: 'text/csv' });
+    const csv = [header, ...rows]
+      .map((line) => line.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `rental_collection_${filters.startDate}_to_${filters.endDate}.csv`;
+    a.download = `rental_collection_report_${filters.startDate}_to_${filters.endDate}.csv`;
     a.click();
-    toast.success('Report exported successfully');
+    URL.revokeObjectURL(url);
   };
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gray-100 p-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                  <FaChartBar style={{ color: MILIK_GREEN }} />
-                  Rental Collection Report
-                </h1>
-                <p className="text-gray-600 mt-1">Analyze rent collection trends and performance</p>
-              </div>
-              <div className="flex gap-3 print:hidden">
-                <button
-                  onClick={handleExportCSV}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition"
-                >
-                  <FaFileDownload /> Export CSV
-                </button>
-                <button
-                  onClick={handlePrint}
-                  className={`flex items-center gap-2 px-4 py-2 ${MILIK_GREEN_BG} hover:bg-[#0A3127] text-white rounded-lg font-semibold transition`}
-                >
-                  <FaPrint /> Print
-                </button>
+      <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+        <div className="mx-auto max-w-[96%] print:max-w-full">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm print:border-0 print:shadow-none">
+            <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-5 py-5 text-white">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-100">Property manager collections</p>
+                  <h1 className="mt-1 flex items-center gap-3 text-2xl font-black tracking-tight"><FaChartBar /> Rental Collection Report</h1>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-200">
+                    Built from real receipts and receipt allocations so property managers can see total cash collected, what has been applied to rent, utilities and penalties, and what is still unapplied.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 print:hidden">
+                  <button onClick={handleExportCSV} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaFileDownload /> Export CSV</button>
+                  <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaPrint /> Print</button>
+                  <button onClick={loadReport} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Filters */}
-          <div className="bg-white rounded-lg shadow p-6 mb-6 print:hidden">
-            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <FaFilter style={{ color: MILIK_ORANGE }} />
-              Filters
-            </h3>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Start Date</label>
-                <input
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
-                <input
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Property</label>
-                <select
-                  value={filters.propertyId}
-                  onChange={(e) => setFilters(prev => ({ ...prev, propertyId: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                >
-                  <option value="">All Properties</option>
-                  {properties?.map(prop => (
-                    <option key={prop._id} value={prop._id}>{prop.propertyName}</option>
-                  ))}
+            <div className="border-b border-slate-200 bg-slate-50 p-4 print:hidden">
+              <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700"><FaFilter className="text-amber-600" /> Filters</div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
+                <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                  <option value="">All properties</option>
+                  {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Payment Method</label>
-                <select
-                  value={filters.paymentMethod}
-                  onChange={(e) => setFilters(prev => ({ ...prev, paymentMethod: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                >
-                  <option value="">All Methods</option>
+                <select value={filters.paymentMethod} onChange={(e) => setFilters((prev) => ({ ...prev, paymentMethod: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                  <option value="">All methods</option>
                   <option value="cash">Cash</option>
-                  <option value="mpesa">M-Pesa</option>
-                  <option value="bank">Bank Transfer</option>
-                  <option value="cheque">Cheque</option>
+                  <option value="mobile_money">Mobile money</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="check">Cheque</option>
+                  <option value="credit_card">Card</option>
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Tenant</label>
-                <select
-                  value={filters.tenantId}
-                  onChange={(e) => setFilters(prev => ({ ...prev, tenantId: e.target.value, unitId: '' }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                >
-                  <option value="">All Tenants</option>
-                  {tenants?.map((tenant) => (
-                    <option key={tenant._id} value={tenant._id}>{tenant.name || tenant.tenantName}</option>
-                  ))}
+                <select value={filters.tenantId} onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value, unitId: '' }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                  <option value="">All tenants</option>
+                  {tenants.map((tenant) => <option key={tenant._id} value={tenant._id}>{tenant.tenantName || tenant.name}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Unit</label>
-                <select
-                  value={filters.unitId}
-                  onChange={(e) => setFilters(prev => ({ ...prev, unitId: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                >
-                  <option value="">All Units</option>
-                  {tenants
-                    ?.filter((tenant) => !filters.tenantId || String(tenant._id) === String(filters.tenantId))
-                    .map((tenant) => {
-                      const unitId = tenant.unit?._id || tenant.unit;
-                      const unitNumber = tenant.unit?.unitNumber || 'Unit';
-                      return <option key={unitId} value={unitId}>{unitNumber}</option>;
-                    })}
+                <select value={filters.unitId} onChange={(e) => setFilters((prev) => ({ ...prev, unitId: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                  <option value="">All units</option>
+                  {units.map((unit) => <option key={unit._id} value={unit._id}>{unit.unitNumber}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Landlord</label>
-                <select
-                  value={filters.landlordId}
-                  onChange={(e) => setFilters(prev => ({ ...prev, landlordId: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                >
-                  <option value="">All Landlords</option>
-                  {landlords?.map((landlord) => (
-                    <option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.name}</option>
-                  ))}
+                <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                  <option value="">All landlords</option>
+                  {landlords.map((landlord) => <option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.name}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Cashbook</label>
-                <input
-                  type="text"
-                  value={filters.cashbook}
-                  onChange={(e) => setFilters(prev => ({ ...prev, cashbook: e.target.value }))}
-                  placeholder="Filter cashbook"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                />
+                <input value={filters.cashbook} onChange={(e) => setFilters((prev) => ({ ...prev, cashbook: e.target.value }))} placeholder="Cashbook contains..." className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
               </div>
             </div>
-          </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-sm text-gray-600 mb-1">Total Collected</div>
-              <div className="text-3xl font-bold" style={{ color: MILIK_GREEN }}>
-                KES {stats.totalCollected.toLocaleString()}
-              </div>
+            <div className="grid gap-3 border-b border-slate-200 bg-white p-4 md:grid-cols-3 xl:grid-cols-6">
+              {[
+                { label: 'Total Collected', value: formatMoney(summary.totalCollected), accent: 'text-emerald-700' },
+                { label: 'Allocated', value: formatMoney(summary.allocatedAmount), accent: 'text-slate-900' },
+                { label: 'Unapplied', value: formatMoney(summary.unappliedAmount), accent: 'text-amber-600' },
+                { label: 'Rent Applied', value: formatMoney(summary.rentApplied), accent: 'text-slate-900' },
+                { label: 'Utilities Applied', value: formatMoney(summary.utilityApplied), accent: 'text-slate-900' },
+                { label: 'Collection Rate', value: formatPercent(summary.collectionRate), accent: 'text-slate-900' },
+              ].map((card) => (
+                <div key={card.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{card.label}</div>
+                  <div className={`mt-2 text-2xl font-black ${card.accent}`}>{card.value}</div>
+                </div>
+              ))}
             </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-sm text-gray-600 mb-1">Total Payments</div>
-              <div className="text-3xl font-bold text-gray-900">{stats.totalPayments}</div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-sm text-gray-600 mb-1">Properties</div>
-              <div className="text-3xl font-bold" style={{ color: MILIK_ORANGE }}>{stats.properties}</div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-sm text-gray-600 mb-1">Avg Payment</div>
-              <div className="text-3xl font-bold text-gray-900">
-                KES {stats.avgPayment.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-              </div>
-            </div>
-          </div>
 
-          {/* Summary by Property */}
-          <div className="bg-white rounded-lg shadow overflow-hidden mb-6">
-            <div className={`${MILIK_GREEN_BG} text-white px-6 py-4`}>
-              <h3 className="text-lg font-bold">Collection Summary by Property</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Property</th>
-                    <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">Payments</th>
-                    <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">Total Collected</th>
-                    <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">Avg Payment</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(groupedByProperty).map(([propertyName, data]) => (
-                    <tr key={propertyName} className="border-t border-gray-200 hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">{propertyName}</td>
-                      <td className="px-6 py-4 text-sm text-right text-gray-700">{data.count}</td>
-                      <td className="px-6 py-4 text-sm text-right font-semibold" style={{ color: MILIK_GREEN }}>
-                        KES {data.total.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-right text-gray-700">
-                        KES {(data.total / data.count).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-gray-100 font-bold">
-                  <tr>
-                    <td className="px-6 py-4 text-sm">TOTAL</td>
-                    <td className="px-6 py-4 text-sm text-right">{stats.totalPayments}</td>
-                    <td className="px-6 py-4 text-sm text-right" style={{ color: MILIK_GREEN }}>
-                      KES {stats.totalCollected.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-right">
-                      KES {stats.avgPayment.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-
-          {/* Detailed Transactions */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className={`${MILIK_GREEN_BG} text-white px-6 py-4`}>
-              <h3 className="text-lg font-bold">Detailed Transactions</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Property</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Tenant</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Unit</th>
-                    <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">Amount</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Method</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Receipt #</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredPayments.length === 0 ? (
-                    <tr>
-                      <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
-                        No payments found for the selected period
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredPayments.map((payment) => {
-                      const propertyId = payment.property?._id || payment.property;
-                      const propertyData = properties?.find(p => p._id === propertyId);
-                      const tenantId = payment.tenant?._id || payment.tenant;
-                      const tenantData = tenants?.find(t => t._id === tenantId);
-                      
-                      return (
-                        <tr key={payment._id} className="border-t border-gray-200 hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-gray-700">
-                            {new Date(payment.paymentDate).toLocaleDateString()}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-700">{propertyData?.propertyName || 'N/A'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700">{tenantData?.tenantName || 'N/A'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700">{payment.unit?.unitNumber || 'N/A'}</td>
-                          <td className="px-6 py-4 text-sm text-right font-semibold" style={{ color: MILIK_GREEN }}>
-                            KES {(payment.amountPaid || 0).toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-700 capitalize">{payment.paymentMethod || 'N/A'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700">{payment.receiptNumber || 'N/A'}</td>
+            <div className="grid gap-6 p-4">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <div className="bg-[#0B3B2E] px-4 py-3 text-sm font-bold text-white">Collection Summary by Property</div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-100 text-slate-700">
+                      <tr>
+                        {['Property', 'Receipts', 'Tenants', 'Collected', 'Rent', 'Utilities', 'Penalty', 'Unapplied'].map((header) => <th key={header} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em]">{header}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(report.byProperty || []).length === 0 ? (
+                        <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">No collection rows found for the selected filters.</td></tr>
+                      ) : (report.byProperty || []).map((row) => (
+                        <tr key={row.propertyId || row.propertyName} className="border-t border-slate-200 hover:bg-slate-50/80">
+                          <td className="px-4 py-3 font-semibold text-slate-900">{row.propertyName}</td>
+                          <td className="px-4 py-3 text-slate-700">{row.paymentCount}</td>
+                          <td className="px-4 py-3 text-slate-700">{row.tenantCount}</td>
+                          <td className="px-4 py-3 font-semibold text-emerald-700">{formatMoney(row.totalCollected)}</td>
+                          <td className="px-4 py-3 text-slate-700">{formatMoney(row.rentApplied)}</td>
+                          <td className="px-4 py-3 text-slate-700">{formatMoney(row.utilityApplied)}</td>
+                          <td className="px-4 py-3 text-slate-700">{formatMoney(row.penaltyApplied)}</td>
+                          <td className="px-4 py-3 text-amber-700">{formatMoney(row.unappliedAmount)}</td>
                         </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
-          {/* Print Footer */}
-          <div className="hidden print:block mt-8 text-center text-sm text-gray-600">
-            <p>Generated on {new Date().toLocaleString()} | {currentCompany?.name || 'Milik Property Management'}</p>
-            <p className="mt-1">Period: {new Date(filters.startDate).toLocaleDateString()} - {new Date(filters.endDate).toLocaleDateString()}</p>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <div className="bg-[#0B3B2E] px-4 py-3 text-sm font-bold text-white">Detailed Receipts</div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-100 text-slate-700">
+                      <tr>
+                        {['Date', 'Receipt #', 'Property', 'Tenant', 'Unit', 'Method', 'Collected', 'Allocated', 'Rent', 'Utilities', 'Penalty', 'Unapplied', 'Cashbook'].map((header) => <th key={header} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em]">{header}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(report.rows || []).length === 0 ? (
+                        <tr><td colSpan={13} className="px-4 py-10 text-center text-slate-500">No receipts found for the current filters.</td></tr>
+                      ) : (report.rows || []).map((row) => (
+                        <tr key={row.receiptId} className="border-t border-slate-200 hover:bg-slate-50/80">
+                          <td className="px-4 py-3 text-slate-700">{row.paymentDate ? new Date(row.paymentDate).toLocaleDateString() : '—'}</td>
+                          <td className="px-4 py-3 font-semibold text-slate-900">{row.receiptNumber || '—'}</td>
+                          <td className="px-4 py-3 text-slate-700">{row.propertyName}</td>
+                          <td className="px-4 py-3 text-slate-700">{row.tenantName}</td>
+                          <td className="px-4 py-3 text-slate-700">{row.unitNumber}</td>
+                          <td className="px-4 py-3 capitalize text-slate-700">{String(row.paymentMethod || '').replace(/_/g, ' ') || '—'}</td>
+                          <td className="px-4 py-3 font-semibold text-emerald-700">{formatMoney(row.amount)}</td>
+                          <td className="px-4 py-3 text-slate-700">{formatMoney(row.allocatedAmount)}</td>
+                          <td className="px-4 py-3 text-slate-700">{formatMoney(row.rentApplied)}</td>
+                          <td className="px-4 py-3 text-slate-700">{formatMoney(row.utilityApplied)}</td>
+                          <td className="px-4 py-3 text-slate-700">{formatMoney(row.penaltyApplied)}</td>
+                          <td className="px-4 py-3 font-semibold text-amber-700">{formatMoney(row.unappliedAmount)}</td>
+                          <td className="px-4 py-3 text-slate-700">{row.cashbook || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="hidden border-t border-slate-200 px-5 py-4 text-xs text-slate-500 print:block">
+              Generated on {new Date().toLocaleString()} • Period {new Date(filters.startDate).toLocaleDateString()} to {new Date(filters.endDate).toLocaleDateString()}
+            </div>
           </div>
         </div>
       </div>

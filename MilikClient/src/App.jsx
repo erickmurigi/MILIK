@@ -21,6 +21,7 @@ import LandlordPayments from "./pages/Landlord/LandlordPayments";
 import LandlordReceipts from "./pages/Landlord/LandlordReceipts";
 import LandlordCommissionsStatement from "./pages/Landlord/LandlordCommissionsStatement";
 import LandlordStandingOrders from "./pages/Landlord/LandlordStandingOrders";
+import LandlordAdvancements from "./pages/Landlord/LandlordAdvancements";
 import ProcessedStatements from "./pages/Landlord/ProcessedStatements";
 import Properties from "./pages/Properties/Properties";
 import PropertyCommissionSettings from "./pages/Properties/PropertyCommissionSettings";
@@ -392,10 +393,10 @@ function App() {
         <Route path="/receipts/landlord" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><LandlordReceipts /></PermissionRoute>} />
         <Route path="/receipts/:id" element={<ProtectedRoute><Receipts /></ProtectedRoute>} />
         <Route path="/financial/payment-vouchers" element={<PermissionRoute resource="paymentVouchers" moduleKey="accounts"><PaymentVouchers /></PermissionRoute>} />
-        <Route path="/financial/service-providers" element={<ProtectedRoute><ServiceProviders /></ProtectedRoute>} />
+        <Route path="/financial/service-providers" element={<PermissionRoute resource="expenses" moduleKey="accounts"><ServiceProviders /></PermissionRoute>} />
         <Route path="/expenses/requisition" element={<ProtectedRoute><ExpenseRequisition /></ProtectedRoute>} />
         <Route path="/landlords/standing-orders" element={<ProtectedRoute><LandlordStandingOrders /></ProtectedRoute>} />
-        <Route path="/landlords/advancement" element={<ProtectedRoute><Navigate to="/landlord-payments" replace /></ProtectedRoute>} />
+        <Route path="/landlords/advancement" element={<ProtectedRoute><LandlordAdvancements /></ProtectedRoute>} />
         <Route path="/financial/journals" element={<PermissionRoute resource="journals" moduleKey="accounts"><JournalEntries /></PermissionRoute>} />
         <Route path="/financial/chart-of-accounts" element={<PermissionRoute resource="chartOfAccounts" moduleKey="accounts"><ChartOfAccounts /></PermissionRoute>} />
         <Route path="/financial/chart-of-accounts/:accountId/activity" element={<ProtectedRoute><LedgerAccountActivity /></ProtectedRoute>} />
