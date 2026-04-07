@@ -618,6 +618,34 @@ const matchesText = (source = "", query = "") => {
   return safeLower(source).includes(safeLower(query));
 };
 
+
+const buildEffectiveReceiptQuery = ({ businessId, startDate = null, endDate = null, dateField = "paymentDate" } = {}) => {
+  const query = {
+    business: businessId,
+    ledgerType: "receipts",
+    isConfirmed: true,
+    isCancelled: { $ne: true },
+    isReversed: { $ne: true },
+    reversalOf: null,
+    isCancellationEntry: { $ne: true },
+    $or: [
+      { postingStatus: { $exists: false } },
+      { postingStatus: null },
+      { postingStatus: "" },
+      { postingStatus: "posted" },
+    ],
+  };
+
+  if (startDate || endDate) {
+    query[dateField] = {};
+    if (startDate) query[dateField].$gte = startDate;
+    if (endDate) query[dateField].$lte = endDate;
+  }
+
+  return query;
+};
+
+
 export const getRentalCollectionReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -631,12 +659,12 @@ export const getRentalCollectionReport = async (req, res, next) => {
       return res.status(400).json({ success: false, error: "Valid start and end dates are required." });
     }
 
-    const paymentQuery = {
-      business: businessId,
-      ledgerType: "receipts",
-      isReversed: { $ne: true },
-      paymentDate: { $gte: startDate, $lte: endDate },
-    };
+    const paymentQuery = buildEffectiveReceiptQuery({
+      businessId,
+      startDate,
+      endDate,
+      dateField: "paymentDate",
+    });
 
     if (req.query.tenantId) paymentQuery.tenant = toObjectId(req.query.tenantId);
     if (req.query.unitId) paymentQuery.unit = toObjectId(req.query.unitId);

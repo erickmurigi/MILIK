@@ -878,7 +878,7 @@ const TakeOnBalances = () => {
   return (
     <DashboardLayout>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl space-y-6">
+        <div className="mx-auto flex w-full max-w-[96%] flex-col gap-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#FF8C00]">
@@ -1064,7 +1064,7 @@ const TakeOnBalances = () => {
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
+              <table className="min-w-[1180px] w-full divide-y divide-slate-200 table-auto">
                 <thead className="bg-slate-50">
                   <tr>
                     {[
@@ -1080,7 +1080,7 @@ const TakeOnBalances = () => {
                     ].map((header) => (
                       <th
                         key={header}
-                        className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500"
+                        className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500"
                       >
                         {header}
                       </th>
@@ -1107,26 +1107,26 @@ const TakeOnBalances = () => {
 
                       return (
                         <tr key={row.invoiceId} className="transition hover:bg-slate-50/80">
-                          <td className="px-4 py-4 text-sm font-semibold text-slate-900">
+                          <td className="min-w-[220px] px-4 py-4 text-sm font-semibold text-slate-900">
                             {getTenantDisplayName(row.tenant)}
                           </td>
-                          <td className="px-4 py-4 text-sm text-slate-700">
+                          <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-700">
                             {getUnitDisplay(row.unit)}
                           </td>
-                          <td className="px-4 py-4 text-sm text-slate-700">
+                          <td className="min-w-[240px] px-4 py-4 text-sm text-slate-700">
                             <div className="font-semibold text-slate-900">{row.billItemLabel}</div>
                             <div className="mt-1 text-xs text-slate-500">
                               {row.invoiceNumber || "No invoice number"}
                             </div>
                           </td>
-                          <td className="px-4 py-4 text-sm text-slate-700">{row.type}</td>
-                          <td className="px-4 py-4 text-sm font-semibold text-slate-900">
+                          <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-700">{row.type}</td>
+                          <td className="whitespace-nowrap px-4 py-4 text-sm font-semibold text-slate-900">
                             {formatCurrency(row.amount)}
                           </td>
-                          <td className="px-4 py-4 text-sm text-slate-700">
+                          <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-700">
                             {formatCurrency(row.allocated)}
                           </td>
-                          <td className="px-4 py-4 text-sm">
+                          <td className="whitespace-nowrap px-4 py-4 text-sm">
                             <div className="font-semibold text-slate-900">
                               {formatCurrency(row.balance)}
                             </div>
@@ -1136,10 +1136,10 @@ const TakeOnBalances = () => {
                               {meta.label}
                             </span>
                           </td>
-                          <td className="px-4 py-4 text-sm text-slate-700">
+                          <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-700">
                             {formatDate(row.effectiveDate)}
                           </td>
-                          <td className="px-4 py-4 text-sm">
+                          <td className="whitespace-nowrap px-4 py-4 text-sm">
                             <div className="flex items-center gap-2 action-buttons">
                               <button
                                 type="button"

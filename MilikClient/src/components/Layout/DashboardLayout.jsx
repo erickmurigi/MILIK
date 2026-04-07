@@ -493,7 +493,6 @@ const TopToolbar = ({
         { type: "separator" },
         { id: "rental-invoices-vat", label: "Rental Invoices V.A.T", icon: FaFileInvoice },
         { id: "rental-aged-analysis", label: "Rental Aged Analysis", icon: FaChartBar },
-        { id: "landlord-invoices", label: "Landlord Invoices", icon: FaFileInvoice },
       ],
       "rental-receipting": [
         { id: "rental-receipts", label: "Rental Receipts", icon: FaReceipt },
