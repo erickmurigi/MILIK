@@ -16,9 +16,11 @@ import {
   FaHome,
   FaLayerGroup,
   FaMobileAlt,
+  FaPhoneAlt,
   FaShieldAlt,
   FaUserFriends,
   FaWallet,
+  FaWhatsapp,
 } from "react-icons/fa";
 import FreeTrialModal from "../../components/FreeTrialModal";
 import { loginSuccess } from "../../redux/authSlice";
@@ -423,7 +425,7 @@ function Home() {
         <div className="hero-gridlines" aria-hidden="true" />
         <div className="hero-orb hero-orb-left" aria-hidden="true" />
         <div className="hero-orb hero-orb-right" aria-hidden="true" />
-        <div className="mx-auto grid max-w-7xl gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[0.98fr_1.02fr] lg:items-center lg:px-8 lg:py-24">
+        <div className="mx-auto grid max-w-[1500px] gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:items-center xl:gap-20 lg:px-8 lg:py-24">
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#0B3B2E]/10 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.28em] text-[#0B3B2E] shadow-sm">
               <FaBolt className="text-[#FF8C00]" /> Built for confident property operations
@@ -450,6 +452,25 @@ function Home() {
               >
                 Existing customer sign in
               </Link>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <a
+                href="tel:+254797281781"
+                className="inline-flex items-center gap-2 rounded-full border border-[#0B3B2E]/15 bg-white/90 px-5 py-3 text-sm font-bold text-[#0B3B2E] shadow-sm transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"
+              >
+                <FaPhoneAlt />
+                Call 0797281781
+              </a>
+              <a
+                href="https://wa.me/254797281781?text=Hello%20Milik,%20I%20need%20help."
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-[#18a06f]/20 bg-[#18a06f]/10 px-5 py-3 text-sm font-bold text-[#0B3B2E] shadow-sm transition hover:border-[#18a06f] hover:bg-[#18a06f] hover:text-white"
+              >
+                <FaWhatsapp className="text-base" />
+                WhatsApp 0797281781
+              </a>
             </div>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-2">

@@ -115,8 +115,10 @@ body {
 
 .hero-device-shell {
   position: relative;
+  z-index: 4;
   width: min(100%, 760px);
-  padding-inline: 12px;
+  padding-inline: 0;
+  transform: translateX(-72px);
 }
 
 .hero-device-frame {
@@ -220,10 +222,10 @@ body {
 
 .hero-proof-card {
   position: absolute;
-  right: -8px;
-  bottom: 36px;
-  z-index: 3;
-  width: min(100%, 372px);
+  right: -18px;
+  bottom: -8px;
+  z-index: 2;
+  width: min(100%, 350px);
   border: 1px solid rgba(226, 232, 240, 0.95);
   border-radius: 28px;
   padding: 18px;
@@ -311,7 +313,7 @@ body {
 }
 
 .hero-proof-chip-bottom {
-  left: 42px;
+  left: 84px;
   bottom: 0;
 }
 
@@ -334,9 +336,14 @@ body {
   }
 
   .hero-device-stage {
-    display: block;
-    padding: 0 0 24px;
-  }
+  position: relative;
+  z-index: 2;
+  min-height: 620px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 34px 8px 64px 8px;
+}
 
   .hero-device-badge,
   .hero-proof-chip {
@@ -348,6 +355,7 @@ body {
   .hero-device-shell {
     width: 100%;
     padding-inline: 0;
+    transform: none;
   }
 
   .hero-proof-card {
