@@ -4,7 +4,7 @@ import {
   resolveMailSender,
   resolvePrimaryNotificationRecipient,
 } from "./smtpMailer.js";
-import { buildPublicHomeUrl } from "./onboardingAccess.js";
+import { buildPublicDemoAccessUrl } from "./onboardingAccess.js";
 
 function buildMailUnavailableResponse(error) {
   return {
@@ -94,8 +94,7 @@ export async function sendTrialAccessEmail({ trialRequest, accessToken, demoExpi
   const transporter = buildSmtpTransporter();
   const from = resolveMailSender("TRIAL_FROM_EMAIL");
   const replyTo = resolvePrimaryNotificationRecipient() || undefined;
-  const publicHomeUrl = buildPublicHomeUrl();
-  const accessLink = `${publicHomeUrl}?demoAccess=${encodeURIComponent(accessToken)}`;
+  const accessLink = buildPublicDemoAccessUrl(accessToken);
   const expiresLabel = demoExpiresAt
     ? new Date(demoExpiresAt).toLocaleString("en-KE", {
         dateStyle: "medium",

@@ -23,6 +23,8 @@ import {
 import FreeTrialModal from "../../components/FreeTrialModal";
 import { loginSuccess } from "../../redux/authSlice";
 import { getCompanySuccess } from "../../redux/companiesRedux";
+import heroDashboardImage from "../../assets/landing/hero-dashboard.webp";
+import heroStatementImage from "../../assets/landing/hero-landlord-statement.webp";
 import "./home.css";
 
 const heroHighlights = [
@@ -119,6 +121,49 @@ const erpSnapshots = [
   },
 ];
 
+const pricingTiers = [
+  {
+    label: "Starter",
+    units: "Up to 50 units",
+    price: "KES 2,500",
+    helper: "Best for smaller portfolios that need disciplined billing, receipting and landlord reporting.",
+    cta: "Get Started",
+    featured: false,
+  },
+  {
+    label: "Growth",
+    units: "51–250 units",
+    price: "KES 4,500",
+    helper: "A strong fit for growing teams that want tighter operational visibility without leaving the browser.",
+    cta: "Request Demo",
+    featured: true,
+  },
+  {
+    label: "Scale",
+    units: "251–500 units",
+    price: "KES 8,000",
+    helper: "For firms running heavier monthly billing and landlord reporting volumes across multiple properties.",
+    cta: "Request Demo",
+    featured: false,
+  },
+  {
+    label: "Enterprise",
+    units: "501–1000 units",
+    price: "KES 10,000",
+    helper: "Built for wider portfolios that need stronger controls, workflow consistency and reporting confidence.",
+    cta: "Talk to Sales",
+    featured: false,
+  },
+  {
+    label: "Large Portfolio",
+    units: "1001–10000 units",
+    price: "Request Quote",
+    helper: "Get a tailored commercial setup when your operation needs deeper onboarding and portfolio-specific planning.",
+    cta: "Request Quote",
+    featured: false,
+  },
+];
+
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
 const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
 const API_BASE = String(import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
@@ -128,134 +173,60 @@ function HeroWorkspaceVisual() {
     <div className="hero-workspace-visual" aria-hidden="true">
       <div className="hero-scene-glow hero-scene-glow-left" />
       <div className="hero-scene-glow hero-scene-glow-right" />
-      <div className="hero-scene-shell">
-        <div className="hero-scene-chip hero-scene-chip-top">
-          <span className="hero-chip-dot" />
-          Property manager in control
+
+      <div className="hero-device-stage">
+        <div className="hero-device-badge">
+          <span className="hero-device-badge-dot" />
+          Live dashboard and landlord statement
         </div>
 
-        <div className="hero-scene-card hero-scene-card-collections">
-          <div className="hero-scene-card-icon hero-card-green">
-            <FaWallet />
+        <div className="hero-device-shell">
+          <div className="hero-device-frame">
+            <div className="hero-device-topbar">
+              <div className="hero-device-controls">
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className="hero-device-title">MILIK operations desk</div>
+            </div>
+
+            <div className="hero-device-screen">
+              <img
+                src={heroDashboardImage}
+                alt="Milik dashboard preview"
+                className="hero-device-screen-image"
+                loading="eager"
+              />
+            </div>
           </div>
-          <div>
-            <p className="hero-scene-card-label">Monthly collections</p>
-            <p className="hero-scene-card-value">KES 4.8M</p>
-            <p className="hero-scene-card-meta">Tracked from invoices to reports</p>
+
+          <div className="hero-device-base">
+            <span className="hero-device-base-strip" />
           </div>
         </div>
 
-        <div className="hero-scene-card hero-scene-card-reports">
-          <div className="hero-scene-card-icon hero-card-amber">
-            <FaClipboardList />
-          </div>
-          <div>
-            <p className="hero-scene-card-label">Reporting status</p>
-            <p className="hero-scene-card-value">24 statements processed</p>
-            <p className="hero-scene-card-meta">Owner reporting and finance visibility</p>
-          </div>
-        </div>
-
-        <div className="hero-scene-main">
-          <div className="hero-scene-header">
+        <div className="hero-proof-card">
+          <div className="hero-proof-card-header">
             <div>
-              <p className="hero-scene-kicker">Milik live workspace</p>
-              <h2 className="hero-scene-title">Property operations guided by people, powered by ERP discipline.</h2>
+              <p className="hero-proof-eyebrow">Landlord reporting proof</p>
+              <h3 className="hero-proof-title">Statement ready for review and remittance</h3>
             </div>
-            <div className="hero-scene-status">
-              <span className="hero-scene-status-dot" />
-              Live overview
-            </div>
+            <div className="hero-proof-status">Live sample</div>
           </div>
 
-          <div className="hero-scene-canvas">
-            <div className="hero-scene-metrics">
-              <div className="hero-metric-card hero-metric-card-primary">
-                <p className="hero-metric-label">Occupancy</p>
-                <p className="hero-metric-value">92%</p>
-                <div className="hero-metric-bar">
-                  <span style={{ width: "92%" }} />
-                </div>
-              </div>
-              <div className="hero-metric-grid">
-                <div className="hero-metric-card">
-                  <FaFileInvoice className="hero-metric-icon" />
-                  <p className="hero-metric-label">Open invoices</p>
-                  <p className="hero-metric-mini">318</p>
-                </div>
-                <div className="hero-metric-card">
-                  <FaCoins className="hero-metric-icon" />
-                  <p className="hero-metric-label">Receipts posted</p>
-                  <p className="hero-metric-mini">211</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="hero-person-stage">
-              <div className="hero-building-skyline">
-                <span className="hero-building-tower hero-building-tall" />
-                <span className="hero-building-tower hero-building-mid" />
-                <span className="hero-building-tower hero-building-short" />
-                <span className="hero-building-tower hero-building-mid" />
-              </div>
-
-              <div className="hero-person-card">
-                <div className="hero-person-badge">Portfolio desk</div>
-                <svg viewBox="0 0 480 420" className="hero-person-svg" role="img" aria-label="Property manager using a laptop beside a building operations dashboard">
-                  <defs>
-                    <linearGradient id="deskGlow" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#EAF6F1" />
-                      <stop offset="100%" stopColor="#FDF1E1" />
-                    </linearGradient>
-                    <linearGradient id="jacketTone" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#0B3B2E" />
-                      <stop offset="100%" stopColor="#145744" />
-                    </linearGradient>
-                    <linearGradient id="screenTone" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#123C33" />
-                      <stop offset="100%" stopColor="#1C6A54" />
-                    </linearGradient>
-                  </defs>
-
-                  <rect x="40" y="32" width="400" height="276" rx="40" fill="url(#deskGlow)" />
-                  <rect x="78" y="66" width="132" height="96" rx="22" fill="#FFFFFF" opacity="0.96" />
-                  <rect x="96" y="88" width="74" height="14" rx="7" fill="#0B3B2E" opacity="0.18" />
-                  <rect x="96" y="116" width="96" height="10" rx="5" fill="#0B3B2E" opacity="0.1" />
-                  <rect x="96" y="136" width="84" height="10" rx="5" fill="#0B3B2E" opacity="0.1" />
-
-                  <rect x="270" y="64" width="124" height="82" rx="24" fill="#FFFFFF" opacity="0.96" />
-                  <rect x="290" y="86" width="84" height="12" rx="6" fill="#FFB347" opacity="0.55" />
-                  <rect x="290" y="110" width="68" height="36" rx="18" fill="#0B3B2E" opacity="0.14" />
-
-                  <rect x="102" y="280" width="290" height="24" rx="12" fill="#D8EADF" opacity="0.9" />
-                  <rect x="176" y="188" width="132" height="78" rx="20" fill="#233B37" />
-                  <rect x="188" y="200" width="108" height="54" rx="14" fill="url(#screenTone)" />
-                  <rect x="196" y="210" width="40" height="8" rx="4" fill="#FFFFFF" opacity="0.34" />
-                  <rect x="196" y="226" width="74" height="6" rx="3" fill="#FFFFFF" opacity="0.18" />
-                  <rect x="196" y="239" width="62" height="6" rx="3" fill="#FFFFFF" opacity="0.18" />
-                  <rect x="228" y="268" width="28" height="10" rx="5" fill="#233B37" />
-
-                  <circle cx="240" cy="154" r="46" fill="#F4C39E" />
-                  <path d="M197 142C204 108 229 92 258 99C280 104 294 122 292 146C280 132 262 123 236 126C220 128 208 134 197 142Z" fill="#0F172A" />
-                  <circle cx="224" cy="154" r="4.4" fill="#1F2937" />
-                  <circle cx="255" cy="154" r="4.4" fill="#1F2937" />
-                  <path d="M225 176C234 186 247 186 256 176" fill="none" stroke="#A84B2C" strokeWidth="5" strokeLinecap="round" />
-                  <path d="M209 204C221 191 258 190 272 204L286 250H194L209 204Z" fill="#FFFFFF" />
-                  <path d="M182 224C194 204 208 194 240 194C270 194 286 205 299 224L324 286H156L182 224Z" fill="url(#jacketTone)" />
-                  <rect x="166" y="280" width="148" height="18" rx="9" fill="#1B4E40" opacity="0.55" />
-                  <rect x="151" y="300" width="180" height="16" rx="8" fill="#0B3B2E" opacity="0.12" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="hero-scene-footer">
-            <div className="hero-footer-chip">Portfolio</div>
-            <div className="hero-footer-chip">Tenant billing</div>
-            <div className="hero-footer-chip">Owner statements</div>
-            <div className="hero-footer-chip">Finance reports</div>
+          <div className="hero-proof-paper">
+            <img
+              src={heroStatementImage}
+              alt="Landlord statement preview"
+              className="hero-proof-paper-image"
+              loading="eager"
+            />
           </div>
         </div>
+
+        <div className="hero-proof-chip hero-proof-chip-top">Desktop workspace</div>
+        <div className="hero-proof-chip hero-proof-chip-bottom">Dashboard, collections and statements</div>
       </div>
     </div>
   );
@@ -423,6 +394,7 @@ function Home() {
           </div>
           <div className="hidden items-center gap-8 md:flex">
             <a href="#features" className="text-sm font-semibold text-slate-600 transition hover:text-[#0B3B2E]">Features</a>
+            <a href="#pricing" className="text-sm font-semibold text-slate-600 transition hover:text-[#0B3B2E]">Pricing</a>
             <a href="#how-it-works" className="text-sm font-semibold text-slate-600 transition hover:text-[#0B3B2E]">How it works</a>
             <a href="#faq" className="text-sm font-semibold text-slate-600 transition hover:text-[#0B3B2E]">FAQ</a>
             <button
@@ -578,6 +550,56 @@ function Home() {
               <p className="mt-3 text-sm leading-7 text-slate-600">{feature.description}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section id="pricing" className="bg-white py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Pricing</p>
+              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Simple portfolio-based pricing that stays easy to scan.</h2>
+            </div>
+          </div>
+
+          <div className="mt-10 grid gap-5 xl:grid-cols-5 md:grid-cols-2">
+            {pricingTiers.map((tier) => (
+              <div
+                key={tier.label}
+                className={`flex h-full flex-col rounded-[28px] border p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl ${
+                  tier.featured
+                    ? "border-[#0B3B2E] bg-[linear-gradient(180deg,rgba(11,59,46,0.06)_0%,#ffffff_100%)] ring-1 ring-[#0B3B2E]/10"
+                    : "border-slate-200 bg-[#f8faf9]"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#FF8C00]">{tier.label}</p>
+                    <h3 className="mt-3 text-lg font-extrabold text-slate-950">{tier.units}</h3>
+                  </div>
+                  {tier.featured ? (
+                    <span className="rounded-full bg-[#0B3B2E] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white">
+                      Popular
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-5 text-3xl font-extrabold text-slate-950">{tier.price}</p>
+                <p className="mt-4 flex-1 text-sm leading-7 text-slate-600">{tier.helper}</p>
+                <button
+                  type="button"
+                  onClick={() => openTrialModal("property_manager")}
+                  className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-bold transition ${
+                    tier.featured
+                      ? "bg-[#0B3B2E] text-white hover:bg-[#0A3127]"
+                      : "border border-slate-300 bg-white text-slate-800 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+                  }`}
+                >
+                  {tier.cta}
+                  <FaArrowRight />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

@@ -28,6 +28,7 @@ const RULES = [
   { prefix: "/api/landlords", resource: "landlords", moduleKey: "propertyManagement" },
   { prefix: "/api/leases", resource: "leases", moduleKey: "propertyManagement" },
   { prefix: "/api/maintenances", resource: "maintenances", moduleKey: "propertyManagement" },
+  { prefix: "/api/inspections", resource: "inspections", moduleKey: "propertyManagement" },
   { prefix: "/api/propertyexpenses", resource: "expenses", moduleKey: "accounts" },
   { prefix: "/api/utilities", resource: "utilities", moduleKey: "propertyManagement" },
   { prefix: "/api/meter-readings", resource: "meterReadings", moduleKey: "propertyManagement" },

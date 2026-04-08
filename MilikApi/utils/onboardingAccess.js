@@ -94,6 +94,11 @@ export function buildPublicHomeUrl() {
   return sanitizeBaseUrl(resolveFrontendBaseUrl(), "/home");
 }
 
+export function buildPublicDemoAccessUrl(accessToken = "") {
+  const base = sanitizeBaseUrl(resolveFrontendBaseUrl(), "/trial-access");
+  return accessToken ? `${base}?token=${encodeURIComponent(accessToken)}` : base;
+}
+
 export function buildTemporaryPassword(email = "") {
   const localPart = String(email || "")
     .split("@")[0]

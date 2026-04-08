@@ -17,6 +17,7 @@ import unitRoutes from "./routes/propertyRoutes/units.js";
 import tenantRoutes from "./routes/propertyRoutes/tenants.js";
 import rentPaymentRoutes from "./routes/propertyRoutes/rentPayments.js";
 import maintenanceRoutes from "./routes/propertyRoutes/maintenance.js";
+import inspectionRoutes from "./routes/propertyRoutes/inspections.js";
 import leaseRoutes from "./routes/propertyRoutes/leases.js";
 import expensePropertyRoutes from "./routes/propertyRoutes/expensesProperties.js";
 import ledgerDiagnosticsRoutes from "./routes/propertyRoutes/ledgerDiagnostics.js";
@@ -367,6 +368,7 @@ app.get("/api", (req, res) => {
       landlordReceipts: "/api/landlord-receipts",
       mpesaCollections: "/api/mpesa-collections",
       maintenance: "/api/maintenances",
+      inspections: "/api/inspections",
       expenses: "/api/propertyexpenses",
       utilities: "/api/utilities",
       meterReadings: "/api/meter-readings",
@@ -403,6 +405,7 @@ app.use("/api/landlord-receipts", landlordReceiptsRoutes);
 app.use("/api/landlord-standing-orders", landlordStandingOrdersRoutes);
 app.use("/api/landlord-advancements", landlordAdvancementsRoutes);
 app.use("/api/maintenances", maintenanceRoutes);
+app.use("/api/inspections", inspectionRoutes);
 app.use("/api/leases", leaseRoutes);
 app.use("/api/propertyexpenses", expensePropertyRoutes);
 app.use("/api/payment-vouchers", paymentVoucherRoutes);

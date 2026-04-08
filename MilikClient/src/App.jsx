@@ -1,5 +1,5 @@
 // App.js
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { clearCurrentCompany, getCompanySuccess, setCurrentCompany } from "./redux/companiesRedux";
@@ -11,6 +11,7 @@ import "./App.css";
 import { hasCompanyPermission } from "./utils/permissions";
 
 import Home from "./pages/Home/Home";
+import DemoAccessEntry from "./pages/Home/DemoAccessEntry";
 import Login from "./pages/Login/Login";
 import SetupAdmin from "./pages/Login/SetupAdmin";
 import FirstTimePassword from "./pages/Login/FirstTimePassword";
@@ -235,10 +236,15 @@ function PublicEntryRoute() {
   const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
   const token = storedSession.token;
   const isAuthenticated = Boolean(resolvedUser || token);
+  const location = useLocation();
+
+  if (isAuthenticated) {
+    return <Navigate to={resolveDefaultAuthenticatedRoute(resolvedUser)} replace />;
+  }
 
   return (
     <Navigate
-      to={isAuthenticated ? resolveDefaultAuthenticatedRoute(resolvedUser) : "/home"}
+      to={{ pathname: "/home", search: location.search || "" }}
       replace
     />
   );
@@ -344,6 +350,7 @@ function App() {
       <Routes>
         <Route path="/" element={<PublicEntryRoute />} />
         <Route path="/home" element={<PublicOnlyRoute><Home /></PublicOnlyRoute>} />
+        <Route path="/trial-access" element={<PublicOnlyRoute><DemoAccessEntry /></PublicOnlyRoute>} />
         <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
         <Route path="/setup-admin" element={<SetupAdmin />} />
         <Route path="/first-time-password" element={<ProtectedRoute allowMustChangePassword={true}><FirstTimePassword /></ProtectedRoute>} />
@@ -403,8 +410,8 @@ function App() {
         <Route path="/financial/ledger-entries" element={<ProtectedRoute><Navigate to="/financial/chart-of-accounts" replace /></ProtectedRoute>} />
         <Route path="/expenses/payment-vouchers" element={<ProtectedRoute><PaymentVouchers /></ProtectedRoute>} />
         <Route path="/vacants" element={<ProtectedRoute><Vacants /></ProtectedRoute>} />
-        <Route path="/maintenances" element={<ProtectedRoute><Maintenances /></ProtectedRoute>} />
-        <Route path="/inspections" element={<ProtectedRoute><Inspections /></ProtectedRoute>} />
+        <Route path="/maintenances" element={<PermissionRoute resource="maintenances" moduleKey="propertyManagement"><Maintenances /></PermissionRoute>} />
+        <Route path="/inspections" element={<PermissionRoute resource="inspections" moduleKey="propertyManagement"><Inspections /></PermissionRoute>} />
         <Route path="/add-company" element={<SuperAdminRoute><AddCompanyWizard /></SuperAdminRoute>} />
         <Route path="/add-company/:id" element={<SuperAdminRoute><AddCompanyWizard /></SuperAdminRoute>} />
         <Route path="/properties/new" element={<ProtectedRoute><AddProperty /></ProtectedRoute>} />
@@ -418,6 +425,7 @@ function App() {
         <Route path="/reports/rental-collection" element={<ProtectedRoute><RentalCollectionReport /></ProtectedRoute>} />
         <Route path="/reports/export" element={<ProtectedRoute><RentalCollectionReport /></ProtectedRoute>} />
         <Route path="/tools/import-export" element={<ProtectedRoute><Navigate to="/reports/export" replace /></ProtectedRoute>} />
+        <Route path="/tools/backup" element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
         <Route path="/reports/paid-balance" element={<ProtectedRoute><PaidBalanceReport /></ProtectedRoute>} />
         <Route path="/reports/aged-analysis" element={<ProtectedRoute><AgedAnalysisReport /></ProtectedRoute>} />
         <Route path="/reports/rental-aged-analysis" element={<ProtectedRoute><RentalAgedAnalysisReport /></ProtectedRoute>} />

@@ -324,6 +324,20 @@ const FreeTrialModal = ({ isOpen, onClose, initialRole = "property_manager" }) =
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Start here</p>
               <h3 className="mt-2 text-2xl font-extrabold text-slate-900 md:text-[2rem]">Short form. Clear next step.</h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">{roleCopy.helperText}</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Time</p>
+                  <p className="mt-2 text-sm font-bold text-slate-900">Less than a minute</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Response</p>
+                  <p className="mt-2 text-sm font-bold text-slate-900">Instant demo or guided follow-up</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Mode</p>
+                  <p className="mt-2 text-sm font-bold text-slate-900">Read-only, safe evaluation</p>
+                </div>
+              </div>
               {form.role === "property_manager" ? (
                 <p className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold leading-6 text-slate-600 shadow-sm">
                   Already requested demo access before? Use the email access link sent to you while your 3-day workspace is still active.
@@ -377,6 +391,7 @@ const FreeTrialModal = ({ isOpen, onClose, initialRole = "property_manager" }) =
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="rounded-[26px] border border-slate-200 bg-white/90 p-5 shadow-sm">
                 <div>
                   <span className="mb-3 block text-sm font-semibold text-slate-700">I am joining as</span>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -472,6 +487,8 @@ const FreeTrialModal = ({ isOpen, onClose, initialRole = "property_manager" }) =
                     />
                     {fieldErrors.company ? <p className="mt-1 text-xs font-semibold text-red-600">{fieldErrors.company}</p> : null}
                   </label>
+                </div>
+
                 </div>
 
                 <div className="rounded-[24px] border border-slate-200 bg-white/80 p-4 shadow-sm">

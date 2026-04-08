@@ -458,8 +458,6 @@ const TopToolbar = ({
         submenu: [
           { id: "settings", label: "Settings", icon: FaCog },
           { id: "users", label: "Users", icon: FaUsers },
-          { id: "backup", label: "Backup/Restore", icon: FaDatabase },
-          { id: "import-export", label: "Import/Export", icon: FaExchangeAlt },
           { type: "separator" },
           { id: "meter-readings", label: "Meter Readings", icon: FaCog },
           { id: "maintenance", label: "Maintenance Management", icon: FaWrench },

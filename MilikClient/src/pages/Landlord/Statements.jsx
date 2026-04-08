@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FaCheckCircle, FaDownload, FaFileAlt, FaPrint, FaSyncAlt } from "react-icons/fa";
@@ -281,6 +281,10 @@ const Statements = () => {
   const [loadingProcessedContext, setLoadingProcessedContext] = useState(false);
   const [processedContextLoaded, setProcessedContextLoaded] = useState(false);
 
+  const autoDraftTimerRef = useRef(null);
+  const lastAutoLoadedSelectionRef = useRef("");
+  const inFlightSelectionRef = useRef("");
+
   useEffect(() => {
     if (!currentCompany?._id) return;
     dispatch(getProperties({ business: currentCompany._id }));
@@ -368,6 +372,8 @@ const Statements = () => {
     }
 
     if (!processedContextLoaded) {
+      setPeriodEnd(todayIso);
+      setDraftStatement(null);
       return;
     }
 
@@ -380,7 +386,7 @@ const Statements = () => {
         todayIso,
       })
     );
-    setPeriodEnd("");
+    setPeriodEnd(todayIso);
     setDraftStatement(null);
   }, [month, year, selectedPropertyId, processedContextLoaded, latestProcessedCutoffAt, selectedProperty?.dateAcquired, todayIso]);
 
@@ -499,6 +505,7 @@ const Statements = () => {
           landlordId: landlordId || undefined,
           periodStart,
           periodEnd,
+          statementType,
           notes: `${statementType} statement workspace`,
           refresh: options.refresh === true,
         })
@@ -525,6 +532,12 @@ const Statements = () => {
   useEffect(() => {
     if (!selectedPropertyId || !processedContextLoaded || !hasValidPeriodSelection) {
       setDraftStatement(null);
+      lastAutoLoadedSelectionRef.current = "";
+      inFlightSelectionRef.current = "";
+      if (autoDraftTimerRef.current) {
+        window.clearTimeout(autoDraftTimerRef.current);
+        autoDraftTimerRef.current = null;
+      }
       return;
     }
 
@@ -533,7 +546,8 @@ const Statements = () => {
       normalizeId(draftStatement?.property) === normalizeId(selectedPropertyId) &&
       normalizeId(draftStatement?.landlord) === normalizeId(landlordId) &&
       resolveDayKey(draftStatement?.periodStart) === resolveDayKey(periodStart) &&
-      resolveDayKey(draftStatement?.periodEnd) === resolveDayKey(periodEnd);
+      resolveDayKey(draftStatement?.periodEnd) === resolveDayKey(periodEnd) &&
+      String(draftStatement?.metadata?.statementType || draftStatement?.metadata?.workspace?.statementType || "provisional") === String(statementType);
 
     if (!statementMatchesSelection) {
       setDraftStatement(null);
@@ -546,11 +560,89 @@ const Statements = () => {
     currentCompany?._id,
     processedContextLoaded,
     hasValidPeriodSelection,
+    statementType,
     draftStatement?._id,
     draftStatement?.property,
     draftStatement?.landlord,
     draftStatement?.periodStart,
     draftStatement?.periodEnd,
+    draftStatement?.metadata?.statementType,
+    draftStatement?.metadata?.workspace?.statementType,
+  ]);
+
+  useEffect(() => {
+    if (!selectedPropertyId || !processedContextLoaded || !hasValidPeriodSelection || loadingDraft) {
+      if (autoDraftTimerRef.current) {
+        window.clearTimeout(autoDraftTimerRef.current);
+        autoDraftTimerRef.current = null;
+      }
+      return undefined;
+    }
+
+    const selectionKey = [
+      currentCompany?._id || "",
+      selectedPropertyId,
+      landlordId || "",
+      statementType,
+      periodStart,
+      periodEnd,
+    ].join("|");
+
+    const statementMatchesSelection =
+      Boolean(draftStatement?._id) &&
+      normalizeId(draftStatement?.property) === normalizeId(selectedPropertyId) &&
+      normalizeId(draftStatement?.landlord) === normalizeId(landlordId) &&
+      resolveDayKey(draftStatement?.periodStart) === resolveDayKey(periodStart) &&
+      resolveDayKey(draftStatement?.periodEnd) === resolveDayKey(periodEnd) &&
+      String(draftStatement?.metadata?.statementType || draftStatement?.metadata?.workspace?.statementType || "provisional") === String(statementType);
+
+    if (statementMatchesSelection && lastAutoLoadedSelectionRef.current === selectionKey) {
+      return undefined;
+    }
+
+    if (inFlightSelectionRef.current === selectionKey) {
+      return undefined;
+    }
+
+    if (autoDraftTimerRef.current) {
+      window.clearTimeout(autoDraftTimerRef.current);
+    }
+
+    autoDraftTimerRef.current = window.setTimeout(async () => {
+      inFlightSelectionRef.current = selectionKey;
+      try {
+        await loadDraftWorkspace();
+        lastAutoLoadedSelectionRef.current = selectionKey;
+      } finally {
+        if (inFlightSelectionRef.current === selectionKey) {
+          inFlightSelectionRef.current = "";
+        }
+      }
+    }, 450);
+
+    return () => {
+      if (autoDraftTimerRef.current) {
+        window.clearTimeout(autoDraftTimerRef.current);
+        autoDraftTimerRef.current = null;
+      }
+    };
+  }, [
+    currentCompany?._id,
+    selectedPropertyId,
+    landlordId,
+    statementType,
+    periodStart,
+    periodEnd,
+    processedContextLoaded,
+    hasValidPeriodSelection,
+    loadingDraft,
+    draftStatement?._id,
+    draftStatement?.property,
+    draftStatement?.landlord,
+    draftStatement?.periodStart,
+    draftStatement?.periodEnd,
+    draftStatement?.metadata?.statementType,
+    draftStatement?.metadata?.workspace?.statementType,
   ]);
 
   const handleApprove = async () => {
@@ -785,7 +877,7 @@ const Statements = () => {
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 <p className="font-medium">Statement period rules</p>
                 <p className="mt-1">
-                  The first statement defaults its start date to the property acquisition date. After a statement is processed, the next statement defaults to the next valid calendar day after the last processed cut-off timestamp, so transactions already captured in the prior statement are not pulled back into a regenerated draft. Period end does not auto-fill and cannot be in the future.
+                  The first statement defaults its start date to the property acquisition date. After a statement is processed, the next statement defaults to the next valid calendar day after the last processed cut-off timestamp, so transactions already captured in the prior statement are not pulled back into a regenerated draft. Period end now auto-fills to today and cannot be in the future.
                 </p>
                 {latestProcessedCutoffAt ? (
                   <p className="mt-2 text-amber-900">
