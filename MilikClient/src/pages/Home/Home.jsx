@@ -30,10 +30,10 @@ import heroStatementImage from "../../assets/landing/hero-landlord-statement.web
 import "./home.css";
 
 const heroHighlights = [
-  "Tenant billing and receipting",
-  "Owner statements and remittances",
+  "AUTOMATED Tenant billing and receipting",
+  "LANDLORD statements and remittances",
   "Chart of Accounts, Trial Balance and Income Statement",
-  "M-PESA and bank-ready collections workflow",
+  "M-PESA INTEGRATION and bank-ready collections workflow",
 ];
 
 const features = [
@@ -44,12 +44,12 @@ const features = [
   },
   {
     icon: <FaFileInvoice />,
-    title: "Tenant billing",
+    title: "AUTOMATED Tenant billing",
     description: "Create invoices, manage recurring charges, record receipts and keep tenant balances clean.",
   },
   {
     icon: <FaCoins />,
-    title: "Owner reporting",
+    title: "LANDLORD reporting",
     description: "Prepare owner statements, commissions, remittances and reconciled reporting from one controlled flow.",
   },
   {
@@ -80,7 +80,7 @@ const steps = [
   },
   {
     title: "3. Subscribe when ready",
-    description: "Move from preview to your own live workspace once you are ready to onboard real company data.",
+    description: "Move from DEMO preview workspace to your own live workspace once you are ready to onboard real company data.",
   },
 ];
 
@@ -103,7 +103,7 @@ const erpSnapshots = [
   {
     title: "Portfolio map",
     description: "See every property, occupancy level and outstanding action from one cockpit.",
-    value: "24 Properties",
+    value: "300+ Properties",
     accent: "text-[#0B3B2E]",
     icon: <FaHome />,
   },
@@ -540,7 +540,7 @@ function Home() {
         <div className="rounded-[34px] border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-8">
           <div className="max-w-2xl">
             <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What makes it feel like ERP</p>
-            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A product view that connects buildings, tenants, cash and reports.</h2>
+            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A SYSTEM that connects properties, Landlords, tenants, cash and reports.</h2>
           </div>
           <div className="mt-8 grid gap-5 lg:grid-cols-3">
             {erpSnapshots.map((snapshot, index) => (
@@ -561,7 +561,7 @@ function Home() {
       <section id="features" className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
         <div className="max-w-2xl">
           <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Why teams choose Milik</p>
-          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A product built to feel operationally sharp and financially credible.</h2>
+          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A system built to feel operationally sharp and financially credible.</h2>
         </div>
         <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {features.map((feature) => (
@@ -579,7 +579,7 @@ function Home() {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Pricing</p>
-              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Simple portfolio-based pricing that stays easy to scan.</h2>
+              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Simple portfolio-based pricing.</h2>
             </div>
           </div>
 
@@ -655,7 +655,7 @@ function Home() {
               <div className="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
                 <FaChartLine className="text-2xl text-[#F8C471]" />
                 <p className="mt-4 text-lg font-extrabold">Financial clarity</p>
-                <p className="mt-2 text-sm text-white/80">Trial Balance and Income Statement reinforce product trust.</p>
+                <p className="mt-2 text-sm text-white/80">Trial Balance and Income Statement reinforce Reports.</p>
               </div>
               <div className="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
                 <FaClipboardList className="text-2xl text-[#F8C471]" />
@@ -735,7 +735,7 @@ function Home() {
           </div>
           <div className="flex flex-wrap items-center gap-4 text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
             <span>Professional demo workspace</span>
-            <span>Read-only product preview</span>
+            <span>Read-only Demo preview</span>
             <span>Built for confidence</span>
           </div>
         </div>
