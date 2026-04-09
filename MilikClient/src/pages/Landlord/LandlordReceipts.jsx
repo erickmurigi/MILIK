@@ -128,6 +128,8 @@ const LandlordReceipts = () => {
   const { currentCompany } = useSelector((state) => state.company || {});
   const landlords = ensureArray(useSelector((state) => state.landlord?.landlords));
   const properties = ensureArray(useSelector((state) => state.property?.properties));
+  const activeLandlords = useMemo(() => landlords.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [landlords]);
+  const activeProperties = useMemo(() => properties.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [properties]);
 
   const [cashbooks, setCashbooks] = useState([]);
   const [receipts, setReceipts] = useState([]);
@@ -179,7 +181,7 @@ const LandlordReceipts = () => {
     }));
   }, [cashbooks]);
 
-  const landlordPropertyOptions = useMemo(() => properties, [properties]);
+  const landlordPropertyOptions = useMemo(() => activeProperties, [activeProperties]);
 
   const selectedProperty = useMemo(
     () => findPropertyById(properties, formData.property),
@@ -521,7 +523,7 @@ const LandlordReceipts = () => {
               className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]"
             >
               <option value="all">All Landlords</option>
-              {landlords.map((landlord) => (
+              {activeLandlords.map((landlord) => (
                 <option key={landlord._id} value={landlord._id}>{landlord.landlordName}</option>
               ))}
             </select>

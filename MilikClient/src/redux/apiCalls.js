@@ -419,7 +419,6 @@ export const switchCompany = (companyId) => async (dispatch) => {
     }
 
     if (company?._id) {
-      dispatch(setCurrentCompany(company));
       dispatch(getCompanySuccess(company));
       localStorage.setItem("milik_active_company_id", company._id);
     } else if (typeof companyId === "string" && companyId) {
@@ -428,7 +427,6 @@ export const switchCompany = (companyId) => async (dispatch) => {
         const companyRes = await adminRequests.get(`/companies/${companyId}`);
         const resolvedCompany = companyRes?.data?.company || companyRes?.data || null;
         if (resolvedCompany?._id) {
-          dispatch(setCurrentCompany(resolvedCompany));
           dispatch(getCompanySuccess(resolvedCompany));
         }
       } catch (_companyErr) {

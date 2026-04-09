@@ -687,7 +687,9 @@ const AddProperty = () => {
   }, [activeTab, draftStorageKey, formData]);
 
   const renderGeneralInfo = () => {
-    const landlordItems = Array.isArray(landlordsFromStore) ? landlordsFromStore : [];
+    const landlordItems = (Array.isArray(landlordsFromStore) ? landlordsFromStore : []).filter(
+      (landlord) => String(landlord?.status || "active").toLowerCase() !== "archived"
+    );
 
     const getLandlordId = (l) => l?._id || l?.id || l?.landlordId?._id || l?.landlordId || "";
     const getLandlordLabel = (l) => l?.fullName || l?.name || l?.landlordName || l?.email || "Unnamed";

@@ -82,6 +82,12 @@ const getPageTitle = (pathname) => {
   const parts = pathname.split('/').filter(Boolean);
   if (pathname.startsWith('/add-company/')) return 'Company Details';
   if (pathname.startsWith('/properties/edit/')) return 'Property Details';
+  if (pathname === '/tenant/new' || pathname.startsWith('/tenant/') && pathname.endsWith('/edit')) {
+    return 'Tenant Details';
+  }
+  if (pathname.startsWith('/units/') && pathname !== '/units/new' && parts.length === 2) {
+    return 'Unit Details';
+  }
   if (pathname.startsWith('/financial/chart-of-accounts/') && pathname.endsWith('/activity')) {
     return 'Ledger Activity';
   }

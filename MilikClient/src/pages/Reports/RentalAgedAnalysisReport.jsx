@@ -220,10 +220,32 @@ const RentalAgedAnalysisReport = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+              <table className="min-w-full table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[18%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[9%]" />
+                </colgroup>
                 <thead className="bg-slate-100 text-slate-700">
                   <tr>
-                    {['Tenant', 'Property', 'Unit', 'Current', '1-30', '31-60', '61-90', '90+', 'Total', 'Oldest Due'].map((header) => <th key={header} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em]">{header}</th>)}
+                    {['Tenant', 'Property', 'Unit', 'Current', '1-30', '31-60', '61-90', '90+', 'Total', 'Oldest Due'].map((header) => {
+                      const isNumeric = ['Current', '1-30', '31-60', '61-90', '90+', 'Total'].includes(header);
+                      return (
+                        <th
+                          key={header}
+                          className={`whitespace-nowrap px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] ${isNumeric ? 'text-right' : 'text-left'}`}
+                        >
+                          {header}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>

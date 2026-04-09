@@ -73,6 +73,11 @@ const getMonthKey = (value) => {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
 };
 
+const formatPenaltyDescriptionPeriod = (value) => {
+  const dt = normalizeDate(value);
+  return `${dt.toLocaleString("en-US", { month: "short" })}/${String(dt.getFullYear()).slice(-2)}`;
+};
+
 const assertRuleCanRun = (rule, runDate) => {
   if (!rule?.active) {
     const error = new Error("This late penalty rule is inactive. Activate it before previewing or processing penalties.");
@@ -504,7 +509,7 @@ export const processLatePenalties = async (req, res) => {
             unit: row.unitId,
             category: "LATE_PENALTY_CHARGE",
             amount: Number(row.calculatedPenalty || 0),
-            description: `Late penalty for invoice ${row.sourceInvoiceNumber} under rule ${rule.ruleName}`,
+            description: `${formatPenaltyDescriptionPeriod(runDate)} Late Penalty`,
             invoiceDate: runDate,
             dueDate: runDate,
             createdBy: actorUserId,

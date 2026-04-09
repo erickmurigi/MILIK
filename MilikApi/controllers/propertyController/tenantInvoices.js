@@ -375,14 +375,17 @@ const reserveScopedSequenceNumber = async ({
   throw new Error(`Could not reserve a unique ${field}. Please retry.`);
 };
 
-const resolveInvoiceNumber = async (businessId, providedInvoiceNumber) => {
+const resolveInvoiceNumber = async (businessId, providedInvoiceNumber, category = null) => {
   const normalized = String(providedInvoiceNumber || "").trim();
   if (normalized) return normalized;
 
+  const normalizedCategory = String(category || "").toUpperCase();
+  const isDepositInvoice = normalizedCategory === "DEPOSIT_CHARGE";
+
   return reserveScopedSequenceNumber({
     businessId,
-    key: "tenant_invoice_number",
-    prefix: "INV",
+    key: isDepositInvoice ? "tenant_deposit_invoice_number" : "tenant_invoice_number",
+    prefix: isDepositInvoice ? "DINV" : "INV",
     model: TenantInvoice,
     field: "invoiceNumber",
   });
@@ -2056,7 +2059,8 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     await ensureSystemChartOfAccounts(businessId);
   }
 
-  const normalizedInvoiceNumber = await resolveInvoiceNumber(businessId, invoiceNumber);
+  const normalizedCategory = String(category).toUpperCase();
+  const normalizedInvoiceNumber = await resolveInvoiceNumber(businessId, invoiceNumber, normalizedCategory);
 
   const hasManualInvoiceNumber = Boolean(String(invoiceNumber || "").trim());
   if (hasManualInvoiceNumber) {
@@ -2166,7 +2170,6 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     throw error;
   }
 
-  const normalizedCategory = String(category).toUpperCase();
   const depositHeldBy =
     normalizedCategory === "DEPOSIT_CHARGE"
       ? tenantDoc.depositHeldBy || "Management Company"

@@ -123,6 +123,16 @@ const formatPeriodLabel = (month, year) => {
   return `${date.toLocaleString("en-US", { month: "short" })} ${String(year).slice(-2)}`;
 };
 
+const formatInvoiceDescriptionPeriod = (month, year) => {
+  const date = new Date(year, month, 1);
+  return `${date.toLocaleString("en-US", { month: "short" })}/${String(year).slice(-2)}`;
+};
+
+const buildRecurringInvoiceDescription = ({ month, year, label }) => {
+  const normalizedLabel = String(label || "Charge").trim();
+  return `${formatInvoiceDescriptionPeriod(month, year)} ${normalizedLabel}`;
+};
+
 const toPeriodDateString = (year, month, day) => {
   const safeYear = Number(year);
   const safeMonth = Number(month);
@@ -929,6 +939,7 @@ const RentalInvoices = () => {
           _id: invoice?._id,
           id: invoice?.invoiceNumber || invoice?._id,
           period: formatPeriodLabel(month, year),
+          invoiceDescription: String(invoice?.description || "").trim() || formatPeriodLabel(month, year),
           storagePeriodKey: formatPeriodLabel(month, year),
           chargeType,
           chargeTypeLabel: getInvoiceChargeTypeLabel(chargeType),
@@ -1128,7 +1139,7 @@ const visibleInvoiceKeys = useMemo(
       invoice?.chargeType === "combined"
         ? [
             {
-              description: `Rent charge for ${invoice?.period || "selected period"}`,
+              description: sourceInvoice?.description || buildRecurringInvoiceDescription({ month: new Date(sourceInvoice?.invoiceDate || sourceInvoice?.createdAt || Date.now()).getMonth(), year: new Date(sourceInvoice?.invoiceDate || sourceInvoice?.createdAt || Date.now()).getFullYear(), label: "Rent" }),
               amount: Math.max(0, subtotal - utilityBreakdown.reduce((sum, item) => sum + Number(item?.amount || 0), 0)),
             },
             ...utilityBreakdown.map((item) => ({
@@ -1223,7 +1234,7 @@ const visibleInvoiceKeys = useMemo(
           <div class="label">Invoice #</div><div class="value">${escapeHtml(invoice?.id)}</div>
           <div class="label">Invoice Date</div><div class="value">${escapeHtml(invoiceDateLabel)}</div>
           <div class="label">Due Date</div><div class="value">${escapeHtml(dueDateLabel)}</div>
-          <div class="label">Period</div><div class="value">${escapeHtml(invoice?.period || "-")}</div>
+          <div class="label">Inv Desc</div><div class="value">${escapeHtml(invoice?.invoiceDescription || sourceInvoice?.description || invoice?.period || "-")}</div>
           <div class="label">Bill Type</div><div class="value">${escapeHtml(chargeTypeLabel)}</div>
           <div class="label">Status</div><div class="value">${escapeHtml(invoice?.status || "Issued")}</div>
           <div class="label">Prepared On</div><div class="value">${escapeHtml(preparedLabel)}</div>
@@ -1243,7 +1254,7 @@ const visibleInvoiceKeys = useMemo(
       <div class="panel">
         <h3>Invoice Summary</h3>
         <div class="small">
-          ${escapeHtml(sourceInvoice?.description || `${chargeTypeLabel} charge for ${invoice?.period || "selected period"}`)}<br/>
+          ${escapeHtml(sourceInvoice?.description || invoice?.invoiceDescription || `${chargeTypeLabel} charge`)}<br/>
           ${taxAmount > 0 ? `Tax code: ${escapeHtml(taxSnapshot?.taxCodeName || "Tax")} (${Number(taxSnapshot?.taxRate || 0)}%)` : "No tax applied to this invoice."}
         </div>
       </div>
@@ -1308,7 +1319,7 @@ const visibleInvoiceKeys = useMemo(
   <td>${escapeHtml(inv.tenantName)}</td>
   <td>${escapeHtml(inv.propertyName)}</td>
   <td>${escapeHtml(inv.unitName)}</td>
-  <td>${escapeHtml(inv.period)}</td>
+  <td>${escapeHtml(inv.invoiceDescription || inv.period)}</td>
   <td>${escapeHtml(inv.chargeTypeLabel || getInvoiceChargeTypeLabel(inv.chargeType))}</td>
   <td>${escapeHtml(inv.invoiceDateLabel || "-")}</td>
   <td>${escapeHtml(inv.dueDateLabel || "-")}</td>
@@ -1357,7 +1368,7 @@ const visibleInvoiceKeys = useMemo(
         <th>Tenant</th>
         <th>Property</th>
         <th>Unit</th>
-        <th>Period</th>
+        <th>Inv Desc</th>
         <th>Type</th>
         <th>Invoice Date</th>
         <th>Due Date</th>
@@ -1650,7 +1661,7 @@ const visibleInvoiceKeys = useMemo(
           month,
           year,
           dueDay,
-          description: `Rent charge (${periodLabel})`,
+          description: buildRecurringInvoiceDescription({ month, year, label: "Rent" }),
           taxSelection,
         });
 
@@ -1667,7 +1678,7 @@ const visibleInvoiceKeys = useMemo(
           dueDay,
           description: utilityLabel
             ? `${utilityLabel} charge (${periodLabel})`
-            : `Utility charge (${periodLabel})`,
+            : buildRecurringInvoiceDescription({ month, year, label: utilityLabel || "Utility" }),
           metadata: utilityMetadata,
           taxSelection,
         });
@@ -1707,8 +1718,8 @@ const visibleInvoiceKeys = useMemo(
         dueDay,
         description:
           utilityAmount > 0
-            ? `Combined rent + utility charge (${periodLabel})`
-            : `Rent charge (${periodLabel})`,
+            ? buildRecurringInvoiceDescription({ month, year, label: `Rent + ${utilityLabel || "Utilities"}` })
+            : buildRecurringInvoiceDescription({ month, year, label: "Rent" }),
         metadata: buildCombinedInvoiceMetadata({
           utilityAmount,
           utilityLabel,
@@ -1941,8 +1952,8 @@ const visibleInvoiceKeys = useMemo(
                 dueDay,
                 description:
                   utilityAmount > 0
-                    ? `Combined rent + utility charge (${periodLabel})`
-                    : `Rent charge (${periodLabel})`,
+                    ? buildRecurringInvoiceDescription({ month, year, label: `Rent + ${utilityLabel || "Utilities"}` })
+                    : buildRecurringInvoiceDescription({ month, year, label: "Rent" }),
                 metadata: combinedMetadata,
                 taxSelection: selectedTaxSelection,
               })
@@ -1980,7 +1991,7 @@ const visibleInvoiceKeys = useMemo(
                 month,
                 year,
                 dueDay,
-                description: `Rent charge (${periodLabel})`,
+                description: buildRecurringInvoiceDescription({ month, year, label: "Rent" }),
                 taxSelection: selectedTaxSelection,
               })
             );
@@ -1998,7 +2009,7 @@ const visibleInvoiceKeys = useMemo(
                 dueDay,
                 description: utilityLabel
                   ? `${utilityLabel} charge (${periodLabel})`
-                  : `Utility charge (${periodLabel})`,
+                  : buildRecurringInvoiceDescription({ month, year, label: utilityLabel || "Utility" }),
                 metadata: utilityMetadata,
                 taxSelection: selectedTaxSelection,
               })
@@ -2408,17 +2419,26 @@ const visibleInvoiceKeys = useMemo(
                   Print List
                 </button>
 
-                <div className="flex items-center gap-1">
-                  <FaPlus className="text-[10px] text-[#0B3B2E]" />
-                  <select
-                    value={bookingAction}
-                    onChange={(e) => handleBookingActionChange(e.target.value)}
-                    className="rounded-lg border border-[#0B3B2E] bg-[#E7F5EC] px-3 py-1 text-xs font-semibold text-[#0B3B2E] shadow-sm"
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/tenants/deposits")}
+                    className={`rounded-lg px-3 py-1 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                   >
-                    <option value="">Booking</option>
-                    <option value="single">Create Single Booking</option>
-                    <option value="batch">Create Batch Booking</option>
-                  </select>
+                    Book Deposit
+                  </button>
+                  <div className="flex items-center gap-1">
+                    <FaPlus className="text-[10px] text-[#0B3B2E]" />
+                    <select
+                      value={bookingAction}
+                      onChange={(e) => handleBookingActionChange(e.target.value)}
+                      className="rounded-lg border border-[#0B3B2E] bg-[#E7F5EC] px-3 py-1 text-xs font-semibold text-[#0B3B2E] shadow-sm"
+                    >
+                      <option value="">Booking</option>
+                      <option value="single">Create Single Booking</option>
+                      <option value="batch">Create Batch Booking</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2434,7 +2454,7 @@ const visibleInvoiceKeys = useMemo(
                     {!tenantId && <th className="px-3 py-2 text-left font-semibold">Tenant</th>}
                     {!tenantId && <th className="px-3 py-2 text-left font-semibold">Property</th>}
                     <th className="px-3 py-2 text-left font-semibold">Unit</th>
-                    <th className="px-3 py-2 text-left font-semibold">Period</th>
+                    <th className="px-3 py-2 text-left font-semibold">Inv Desc</th>
                     <th className="px-3 py-2 text-left font-semibold">Type</th>
                     <th className="px-3 py-2 text-center font-semibold">Invoice Date</th>
                     <th className="px-3 py-2 text-center font-semibold">Due Date</th>
@@ -2486,7 +2506,7 @@ const visibleInvoiceKeys = useMemo(
                           <td className="px-3 py-2 font-semibold text-slate-900">{invoice.propertyName}</td>
                         )}
                         <td className="px-3 py-2 font-semibold text-slate-900">{invoice.unitName}</td>
-                        <td className="px-3 py-2 font-semibold text-orange-700">{invoice.period}</td>
+                        <td className="px-3 py-2 font-semibold text-orange-700">{invoice.invoiceDescription || invoice.period}</td>
                         <td className="px-3 py-2">
                           <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
                             {invoice.chargeTypeLabel || getInvoiceChargeTypeLabel(invoice.chargeType)}

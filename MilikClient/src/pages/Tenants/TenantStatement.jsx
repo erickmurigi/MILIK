@@ -49,6 +49,16 @@ const formatPeriodLabel = (dateValue) => {
   return dt.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
 };
 
+const formatInvoiceDescriptionPeriod = (year, month) => {
+  const date = new Date(year, month, 1);
+  return `${date.toLocaleString("en-US", { month: "short" })}/${String(year).slice(-2)}`;
+};
+
+const buildRecurringInvoiceDescription = ({ year, month, label }) => {
+  const normalizedLabel = String(label || "Charge").trim();
+  return `${formatInvoiceDescriptionPeriod(year, month)} ${normalizedLabel}`;
+};
+
 const safeId = (value) => {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -535,7 +545,7 @@ const TenantStatement = () => {
               tenant: tenantId,
               category: "RENT_CHARGE",
               amount: Number(period.rent || 0),
-              description: `Rent charge for ${period.description}`,
+              description: buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: "Rent" }),
               invoiceDate: periodDate,
               dueDate,
               ...taxPayload,
@@ -548,7 +558,7 @@ const TenantStatement = () => {
               tenant: tenantId,
               category: "UTILITY_CHARGE",
               amount: Number(period.utility || 0),
-              description: `Utility charge for ${period.description}`,
+              description: buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: Array.isArray(period.utilityNames) && period.utilityNames.length > 0 ? period.utilityNames.join(", ") : "Utility" }),
               invoiceDate: periodDate,
               dueDate,
               ...taxPayload,
@@ -564,8 +574,8 @@ const TenantStatement = () => {
               amount: combinedAmount,
               description:
                 Number(period.utility || 0) > 0
-                  ? `Combined rent + utility charge for ${period.description}`
-                  : `Rent charge for ${period.description}`,
+                  ? buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: `Rent + ${Array.isArray(period.utilityNames) && period.utilityNames.length > 0 ? period.utilityNames.join(", ") : "Utilities"}` })
+                  : buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: "Rent" }),
               invoiceDate: periodDate,
               dueDate,
               metadata: buildCombinedInvoiceMetadata({
@@ -609,7 +619,7 @@ const TenantStatement = () => {
           tenant: tenantId,
           category: "DEPOSIT_CHARGE",
           amount: Number(depositAmount || 0),
-          description: `Security deposit charge for ${depositPeriod.description}`,
+          description: buildRecurringInvoiceDescription({ year: depositPeriod.periodYear, month: depositPeriod.periodMonth, label: "Security Deposit" }),
           invoiceDate: depositInvoiceDate,
           dueDate: depositDueDate,
           metadata: {

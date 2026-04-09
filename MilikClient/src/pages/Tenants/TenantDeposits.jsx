@@ -32,6 +32,14 @@ const safeId = (value) => {
 
 const todayInput = () => new Date().toISOString().split("T")[0];
 
+const formatInvoiceDescriptionPeriod = (value) => {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.toLocaleString("en-US", { month: "short" })}/${String(date.getFullYear()).slice(-2)}`;
+};
+
+const buildDepositInvoiceDescription = (invoiceDate) => `${formatInvoiceDescriptionPeriod(invoiceDate)} Security Deposit`;
+
 const getTenantDisplayName = (tenant) =>
   tenant?.name ||
   tenant?.tenantName ||
@@ -85,6 +93,7 @@ const TenantDeposits = () => {
   const tenants = useSelector((state) => ensureArray(state.tenant?.tenants));
   const units = useSelector((state) => ensureArray(state.unit?.units));
   const properties = useSelector((state) => ensureArray(state.property?.properties));
+  const activeProperties = useMemo(() => properties.filter((property) => String(property?.status || "active").toLowerCase() !== "archived"), [properties]);
   const rentPayments = useSelector((state) => ensureArray(state.rentPayment?.rentPayments));
 
   const [tenantInvoices, setTenantInvoices] = useState([]);
@@ -176,6 +185,8 @@ const TenantDeposits = () => {
           return !["cancelled", "reversed"].includes(status);
         });
 
+        const latestInvoice = [...invoices].sort((a, b) => new Date(b?.invoiceDate || b?.createdAt || 0).getTime() - new Date(a?.invoiceDate || a?.createdAt || 0).getTime())[0] || null;
+
         const billed = invoices.reduce(
           (sum, invoice) => sum + Number(invoice?.adjustedAmount ?? invoice?.amount ?? 0),
           0
@@ -208,6 +219,9 @@ const TenantDeposits = () => {
           outstanding,
           status,
           invoices,
+          latestInvoiceNumber: latestInvoice?.invoiceNumber || "-",
+          latestInvoiceDescription: String(latestInvoice?.description || "").trim() || "-",
+          latestInvoiceDate: latestInvoice?.invoiceDate || latestInvoice?.createdAt || null,
           canBill: depositAmount > 0 && invoices.length === 0,
         };
       })
@@ -244,7 +258,7 @@ const TenantDeposits = () => {
       amount: String(row.depositAmount || ""),
       invoiceDate: todayInput(),
       dueDate: todayInput(),
-      description: `Security deposit charge for ${row.tenantName}`,
+      description: buildDepositInvoiceDescription(todayInput()),
     });
   };
 
@@ -377,7 +391,7 @@ const TenantDeposits = () => {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               >
                 <option value="all">All properties</option>
-                {properties.map((property) => (
+                {activeProperties.map((property) => (
                   <option key={property._id} value={property._id}>
                     {property.propertyName || property.name}
                   </option>
@@ -422,6 +436,7 @@ const TenantDeposits = () => {
                   <th className="px-4 py-3 text-left font-semibold">Tenant</th>
                   <th className="px-4 py-3 text-left font-semibold">Property / Unit</th>
                   <th className="px-4 py-3 text-left font-semibold">Holder</th>
+                  <th className="px-4 py-3 text-left font-semibold">Deposit Invoice</th>
                   <th className="px-4 py-3 text-right font-semibold">Configured</th>
                   <th className="px-4 py-3 text-right font-semibold">Billed</th>
                   <th className="px-4 py-3 text-right font-semibold">Paid</th>
@@ -433,7 +448,7 @@ const TenantDeposits = () => {
               <tbody>
                 {depositRows.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="px-4 py-6 text-center text-slate-500">
+                    <td colSpan="10" className="px-4 py-6 text-center text-slate-500">
                       No tenant deposits matched the current filters.
                     </td>
                   </tr>
@@ -449,6 +464,11 @@ const TenantDeposits = () => {
                         <div className="text-xs text-slate-500">Unit: {row.unitName}</div>
                       </td>
                       <td className="px-4 py-3 text-slate-700">{row.depositHolder}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-slate-900">{row.latestInvoiceNumber}</div>
+                        <div className="text-xs text-slate-500">{row.latestInvoiceDescription}</div>
+                        <div className="text-[11px] text-slate-400">{row.latestInvoiceDate ? new Date(row.latestInvoiceDate).toLocaleDateString() : "Not billed yet"}</div>
+                      </td>
                       <td className="px-4 py-3 text-right font-semibold text-slate-900">KES {row.depositAmount.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right text-slate-700">KES {row.billed.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right text-slate-700">KES {row.paid.toLocaleString()}</td>

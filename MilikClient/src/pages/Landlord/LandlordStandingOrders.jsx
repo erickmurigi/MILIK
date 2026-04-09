@@ -58,6 +58,8 @@ const LandlordStandingOrders = () => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const landlords = useSelector((state) => state.landlord?.landlords || []);
   const properties = useSelector((state) => state.property?.properties || []);
+  const activeLandlords = useMemo(() => landlords.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [landlords]);
+  const activeProperties = useMemo(() => properties.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [properties]);
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -135,12 +137,12 @@ const LandlordStandingOrders = () => {
   };
 
   const filteredProperties = useMemo(() => {
-    if (!form.landlord) return properties;
-    const selectedLandlord = landlords.find((item) => String(item._id) === String(form.landlord));
-    return properties.filter((property) =>
+    if (!form.landlord) return activeProperties;
+    const selectedLandlord = activeLandlords.find((item) => String(item._id) === String(form.landlord));
+    return activeProperties.filter((property) =>
       propertyBelongsToLandlord(property, form.landlord, selectedLandlord?.landlordName)
     );
-  }, [form.landlord, landlords, properties]);
+  }, [activeLandlords, activeProperties, form.landlord]);
 
   const handleSave = async () => {
     if (!form.landlord) return toast.warning("Landlord is required");
@@ -281,7 +283,7 @@ const LandlordStandingOrders = () => {
                 className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
               >
                 <option value="all">All landlords</option>
-                {landlords.map((landlord) => (
+                {activeLandlords.map((landlord) => (
                   <option key={landlord._id} value={landlord._id}>
                     {landlord.landlordName || `${landlord.firstName || ""} ${landlord.lastName || ""}`.trim()}
                   </option>
@@ -418,7 +420,7 @@ const LandlordStandingOrders = () => {
               <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
             </div>
             <div className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
-              <label className="block"><span className="text-sm font-bold text-slate-700">Landlord</span><select value={form.landlord} onChange={(e) => setForm((prev) => ({ ...prev, landlord: e.target.value, property: "" }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select landlord</option>{landlords.map((landlord) => <option key={landlord._id} value={landlord._id}>{landlord.landlordName || `${landlord.firstName || ""} ${landlord.lastName || ""}`.trim()}</option>)}</select></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Landlord</span><select value={form.landlord} onChange={(e) => setForm((prev) => ({ ...prev, landlord: e.target.value, property: "" }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select landlord</option>{activeLandlords.map((landlord) => <option key={landlord._id} value={landlord._id}>{landlord.landlordName || `${landlord.firstName || ""} ${landlord.lastName || ""}`.trim()}</option>)}</select></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Property</span><select value={form.property} onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select property</option>{filteredProperties.map((property) => <option key={property._id} value={property._id}>{property.propertyCode ? `[${property.propertyCode}] ` : ""}{property.propertyName || property.name}</option>)}</select></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Amount</span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block xl:col-span-2"><span className="text-sm font-bold text-slate-700">Title</span><input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>

@@ -752,7 +752,9 @@ const EditProperty = () => {
 
   // RENDER FUNCTIONS - identical to AddProperties
   const renderGeneralInfo = () => {
-    const landlordItems = Array.isArray(landlordsFromStore) ? landlordsFromStore : [];
+    const landlordItems = (Array.isArray(landlordsFromStore) ? landlordsFromStore : []).filter(
+      (landlord) => String(landlord?.status || "active").toLowerCase() !== "archived"
+    );
 
     const getLandlordId = (l) => l?._id || l?.id || l?.landlordId?._id || l?.landlordId || "";
     const getLandlordLabel = (l) =>

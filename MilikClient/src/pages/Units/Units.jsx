@@ -128,7 +128,7 @@ const Units = () => {
   // ---------------------------
   const emptyFilters = {
     property: "any",
-    status: "any",
+    status: "active",
     unitType: "any",
     unitNo: "",
     tenant: "",

@@ -132,6 +132,10 @@ const AddUnit = () => {
   const { currentUser } = useSelector((state) => state.auth);
   const { isFetching: loading, units = [] } = useSelector((state) => state.unit);
   const properties = useSelector((state) => state.property?.properties || []);
+  const activeProperties = useMemo(
+    () => properties.filter((property) => String(property?.status || "active").toLowerCase() !== "archived"),
+    [properties]
+  );
 
   const [formData, setFormData] = useState({
     unitNumber: "",
@@ -548,7 +552,7 @@ const AddUnit = () => {
                 label="Property"
                 required
                 placeholder="Select property"
-                items={properties}
+                items={activeProperties}
                 value={formData.property}
                 onChange={(val) => handleInputChange({ target: { name: "property", value: val } })}
                 getLabel={(p) => `${p.propertyCode} - ${p.propertyName}`}

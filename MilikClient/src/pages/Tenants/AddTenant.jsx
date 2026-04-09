@@ -216,6 +216,10 @@ const AddTenant = () => {
   const unitLoading = useSelector((state) => state.unit?.isFetching || false);
   const properties = useSelector((state) => state.property?.properties || []);
   const units = useSelector((state) => state.unit?.units || []);
+  const activeProperties = useMemo(
+    () => properties.filter((property) => String(property?.status || "active").toLowerCase() !== "archived"),
+    [properties]
+  );
 
   const generateNextTenantCode = () => "";
 
@@ -1002,7 +1006,7 @@ for (const request of invoiceRequests) {
                       label="Property"
                       required
                       placeholder="Select Property"
-                      items={properties}
+                      items={activeProperties}
                       value={formData.property}
                       onChange={(val) => {
                         setFormData((prev) => ({ ...prev, property: val, unit: "" }));
