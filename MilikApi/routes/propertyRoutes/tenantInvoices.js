@@ -36,6 +36,7 @@ router.delete("/:id", verifyUser, deleteTenantInvoice);
 // Credit/debit note routes
 router.get("/note-charge-types", verifyUser, getTenantInvoiceNoteChargeTypes);
 router.post("/notes", verifyUser, createTenantInvoiceNote);
+router.post("/notes/:id/reverse", verifyUser, reverseTenantInvoiceNote);
 router.delete("/notes/:id", verifyUser, reverseTenantInvoiceNote);
 router.get("/notes", verifyUser, getTenantInvoiceNotes);
 router.get("/creditable", verifyUser, getCreditableTenantInvoices);

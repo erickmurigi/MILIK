@@ -214,6 +214,64 @@ const buildUtilityInvoiceMetadata = (utilityLabel = "") => {
   };
 };
 
+const extractUtilityLabel = (utility = {}) => {
+  if (!utility) return "";
+  if (typeof utility === "string") return utility.trim();
+
+  const nestedUtility = utility?.utility;
+  if (typeof nestedUtility === "string" && nestedUtility.trim()) return nestedUtility.trim();
+  if (nestedUtility && typeof nestedUtility === "object") {
+    const nestedLabel =
+      nestedUtility?.name || nestedUtility?.utilityName || nestedUtility?.label || nestedUtility?._id || "";
+    if (String(nestedLabel || "").trim()) return String(nestedLabel).trim();
+  }
+
+  return String(
+    utility?.utilityLabel || utility?.utilityName || utility?.name || utility?.label || ""
+  ).trim();
+};
+
+const buildUtilityChargeDescription = ({ utilityLabel = "", month, year } = {}) => {
+  const normalizedLabel = String(utilityLabel || "").trim() || "Utility";
+  return buildRecurringInvoiceDescription({ month, year, label: normalizedLabel });
+};
+
+const deriveInvoiceDescription = (invoice = {}) => {
+  const description = String(invoice?.description || "").trim();
+  if (description && !/^utility\s+charge\b/i.test(description)) return description;
+
+  const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
+  const utilityLabel = String(
+    metadata?.utilityType ||
+      metadata?.meterUtilityType ||
+      metadata?.statementUtilityType ||
+      metadata?.utilityName ||
+      metadata?.utility ||
+      metadata?.billItemLabel ||
+      (Array.isArray(metadata?.utilityBreakdown) && metadata.utilityBreakdown.length === 1
+        ? metadata.utilityBreakdown[0]?.label
+        : "") ||
+      ""
+  ).trim();
+
+  const invoiceDate = invoice?.invoiceDate || invoice?.createdAt || null;
+  const parsedDate = invoiceDate ? new Date(invoiceDate) : null;
+  if (
+    utilityLabel &&
+    String(invoice?.category || "").toUpperCase() === "UTILITY_CHARGE" &&
+    parsedDate &&
+    !Number.isNaN(parsedDate.getTime())
+  ) {
+    return buildUtilityChargeDescription({
+      utilityLabel,
+      month: parsedDate.getMonth(),
+      year: parsedDate.getFullYear(),
+    });
+  }
+
+  return description;
+};
+
 const getInvoiceChargeTypeKey = ({ category, metadata = {} } = {}) => {
   const normalizedCategory = String(category || "").toUpperCase();
   if (
@@ -704,13 +762,15 @@ const RentalInvoices = () => {
         ? utilitiesFromTenant + serviceCharge
         : utilitiesFromUnit + serviceCharge;
 
+    const billableUtilityLabels = billableUtilityRows
+      .map((item) => extractUtilityLabel(item))
+      .filter(Boolean);
+
     const singleUtilityLabel =
-      serviceCharge === 0 && billableUtilityRows.length === 1
-        ? String(
-            billableUtilityRows[0]?.utilityLabel ||
-              billableUtilityRows[0]?.utility ||
-              ""
-          ).trim()
+      serviceCharge === 0 && billableUtilityLabels.length === 1
+        ? billableUtilityLabels[0]
+        : serviceCharge > 0 && billableUtilityLabels.length === 0
+        ? "Service Charge"
         : "";
 
     return {
@@ -939,7 +999,7 @@ const RentalInvoices = () => {
           _id: invoice?._id,
           id: invoice?.invoiceNumber || invoice?._id,
           period: formatPeriodLabel(month, year),
-          invoiceDescription: String(invoice?.description || "").trim() || formatPeriodLabel(month, year),
+          invoiceDescription: deriveInvoiceDescription(invoice) || formatPeriodLabel(month, year),
           storagePeriodKey: formatPeriodLabel(month, year),
           chargeType,
           chargeTypeLabel: getInvoiceChargeTypeLabel(chargeType),
@@ -1143,18 +1203,18 @@ const visibleInvoiceKeys = useMemo(
               amount: Math.max(0, subtotal - utilityBreakdown.reduce((sum, item) => sum + Number(item?.amount || 0), 0)),
             },
             ...utilityBreakdown.map((item) => ({
-              description: `${item?.label || "Utility"} charge${item?.periodLabel ? ` (${item.periodLabel})` : ""}`,
+              description: `${item?.label || "Utility"}${item?.periodLabel ? ` (${item.periodLabel})` : ""}`,
               amount: Number(item?.amount || 0),
             })),
           ].filter((item) => Number(item.amount || 0) > 0)
         : [
             {
-              description: sourceInvoice?.description || `${chargeTypeLabel} charge`,
+              description: invoice?.invoiceDescription || deriveInvoiceDescription(sourceInvoice) || `${chargeTypeLabel} charge`,
               amount: subtotal,
             },
           ];
 
-    const lineItems = baseLineItems.length > 0 ? baseLineItems : [{ description: sourceInvoice?.description || `${chargeTypeLabel} charge`, amount: subtotal }];
+    const lineItems = baseLineItems.length > 0 ? baseLineItems : [{ description: invoice?.invoiceDescription || deriveInvoiceDescription(sourceInvoice) || `${chargeTypeLabel} charge`, amount: subtotal }];
 
     const lineRows = lineItems
       .map(
@@ -1234,7 +1294,7 @@ const visibleInvoiceKeys = useMemo(
           <div class="label">Invoice #</div><div class="value">${escapeHtml(invoice?.id)}</div>
           <div class="label">Invoice Date</div><div class="value">${escapeHtml(invoiceDateLabel)}</div>
           <div class="label">Due Date</div><div class="value">${escapeHtml(dueDateLabel)}</div>
-          <div class="label">Inv Desc</div><div class="value">${escapeHtml(invoice?.invoiceDescription || sourceInvoice?.description || invoice?.period || "-")}</div>
+          <div class="label">Inv Desc</div><div class="value">${escapeHtml(invoice?.invoiceDescription || deriveInvoiceDescription(sourceInvoice) || invoice?.period || "-")}</div>
           <div class="label">Bill Type</div><div class="value">${escapeHtml(chargeTypeLabel)}</div>
           <div class="label">Status</div><div class="value">${escapeHtml(invoice?.status || "Issued")}</div>
           <div class="label">Prepared On</div><div class="value">${escapeHtml(preparedLabel)}</div>
@@ -1254,7 +1314,7 @@ const visibleInvoiceKeys = useMemo(
       <div class="panel">
         <h3>Invoice Summary</h3>
         <div class="small">
-          ${escapeHtml(sourceInvoice?.description || invoice?.invoiceDescription || `${chargeTypeLabel} charge`)}<br/>
+          ${escapeHtml(invoice?.invoiceDescription || deriveInvoiceDescription(sourceInvoice) || `${chargeTypeLabel} charge`)}<br/>
           ${taxAmount > 0 ? `Tax code: ${escapeHtml(taxSnapshot?.taxCodeName || "Tax")} (${Number(taxSnapshot?.taxRate || 0)}%)` : "No tax applied to this invoice."}
         </div>
       </div>
@@ -1676,9 +1736,7 @@ const visibleInvoiceKeys = useMemo(
           month,
           year,
           dueDay,
-          description: utilityLabel
-            ? `${utilityLabel} charge (${periodLabel})`
-            : buildRecurringInvoiceDescription({ month, year, label: utilityLabel || "Utility" }),
+          description: buildUtilityChargeDescription({ utilityLabel: utilityLabel || "Utility", month, year }),
           metadata: utilityMetadata,
           taxSelection,
         });
@@ -2007,9 +2065,7 @@ const visibleInvoiceKeys = useMemo(
                 month,
                 year,
                 dueDay,
-                description: utilityLabel
-                  ? `${utilityLabel} charge (${periodLabel})`
-                  : buildRecurringInvoiceDescription({ month, year, label: utilityLabel || "Utility" }),
+                description: buildUtilityChargeDescription({ utilityLabel: utilityLabel || "Utility", month, year }),
                 metadata: utilityMetadata,
                 taxSelection: selectedTaxSelection,
               })

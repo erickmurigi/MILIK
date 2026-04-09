@@ -70,6 +70,8 @@ const LandlordStandingOrders = () => {
   const [form, setForm] = useState(blankForm);
   const [runModal, setRunModal] = useState({ open: false, row: null, periodKey: "", amount: "", note: "" });
   const [expandedId, setExpandedId] = useState("");
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkRunning, setBulkRunning] = useState(false);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -97,6 +99,10 @@ const LandlordStandingOrders = () => {
   useEffect(() => {
     loadRows();
   }, [currentCompany?._id, filters.search, filters.status, filters.landlordId]);
+
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => rows.some((row) => String(row._id) === String(id) && (row.eligiblePeriods || []).length > 0)));
+  }, [rows]);
 
   const stats = useMemo(
     () => ({
@@ -224,6 +230,98 @@ const LandlordStandingOrders = () => {
     }
   };
 
+
+
+  const selectableRowIds = useMemo(
+    () => rows.filter((row) => (row.eligiblePeriods || []).length > 0).map((row) => String(row._id)),
+    [rows]
+  );
+
+  const allSelectableChecked =
+    selectableRowIds.length > 0 && selectableRowIds.every((id) => selectedIds.includes(id));
+
+  const toggleSelectAll = () => {
+    if (allSelectableChecked) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(selectableRowIds);
+  };
+
+  const toggleRowSelection = (rowId) => {
+    const normalizedId = String(rowId || "");
+    if (!normalizedId) return;
+    setSelectedIds((prev) =>
+      prev.includes(normalizedId) ? prev.filter((id) => id !== normalizedId) : [...prev, normalizedId]
+    );
+  };
+
+
+  const handleRunSelected = async () => {
+    if (!selectedIds.length) {
+      toast.info("Select at least one eligible standing order first.");
+      return;
+    }
+
+    const selectedRows = rows.filter((row) => selectedIds.includes(String(row._id)));
+    const runnableRows = selectedRows.filter((row) => (row.eligiblePeriods || []).length > 0);
+    if (!runnableRows.length) {
+      toast.info("None of the selected standing orders has an eligible period to run.");
+      return;
+    }
+
+    if (!window.confirm(`Run the next eligible period for ${runnableRows.length} selected standing order(s)?`)) {
+      return;
+    }
+
+    setBulkRunning(true);
+    let successCount = 0;
+    let failureCount = 0;
+    const updatedRows = new Map();
+
+    for (const row of runnableRows) {
+      const nextPeriod = row?.eligiblePeriods?.[0] || null;
+      if (!nextPeriod?.periodKey) {
+        failureCount += 1;
+        continue;
+      }
+
+      try {
+        const saved = await runLandlordStandingOrder(row._id, {
+          business: currentCompany?._id,
+          company: currentCompany?._id,
+          periodKey: nextPeriod.periodKey,
+          amount: Number(row.amount || 0),
+          note: row.narration || row.title || "",
+        });
+        updatedRows.set(String(row._id), saved);
+        successCount += 1;
+      } catch (error) {
+        failureCount += 1;
+        toast.error(
+          error?.response?.data?.message ||
+            `Failed to process ${row.standingOrderNo || row.referenceNo || "a selected standing order"}`
+        );
+      }
+    }
+
+    if (updatedRows.size > 0) {
+      setRows((prev) => prev.map((row) => updatedRows.get(String(row._id)) || row));
+    }
+
+    setSelectedIds([]);
+    setBulkRunning(false);
+
+    if (successCount > 0 && failureCount === 0) {
+      toast.success(`Processed ${successCount} standing order period${successCount === 1 ? "" : "s"}.`);
+      return;
+    }
+
+    if (successCount > 0 || failureCount > 0) {
+      toast.info(`Bulk run complete. Success: ${successCount}. Failed: ${failureCount}.`);
+    }
+  };
+
   const handleDelete = async (row) => {
     if (!window.confirm(`Delete standing order ${row.standingOrderNo || row.referenceNo}?`)) return;
     try {
@@ -249,6 +347,13 @@ const LandlordStandingOrders = () => {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleRunSelected}
+                  disabled={bulkRunning || selectedIds.length === 0}
+                  className="inline-flex items-center gap-2 rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-3 text-sm font-black text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <FaCheck /> {bulkRunning ? "Running..." : `Run Selected${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
+                </button>
                 <button
                   onClick={openCreate}
                   className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white hover:bg-[#0A3127]"
@@ -308,6 +413,15 @@ const LandlordStandingOrders = () => {
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-100 text-left text-slate-600">
                   <tr>
+                    <th className="px-4 py-3 font-black">
+                      <input
+                        type="checkbox"
+                        checked={allSelectableChecked}
+                        onChange={toggleSelectAll}
+                        disabled={selectableRowIds.length === 0}
+                        className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                      />
+                    </th>
                     <th className="px-4 py-3 font-black">Order</th>
                     <th className="px-4 py-3 font-black">Landlord / Property</th>
                     <th className="px-4 py-3 font-black">Schedule</th>
@@ -319,7 +433,7 @@ const LandlordStandingOrders = () => {
                 <tbody>
                   {!loading && rows.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-slate-500">No standing orders found.</td>
+                      <td colSpan={7} className="px-4 py-8 text-center text-slate-500">No standing orders found.</td>
                     </tr>
                   )}
                   {rows.map((row, index) => {
@@ -327,6 +441,16 @@ const LandlordStandingOrders = () => {
                     return (
                       <React.Fragment key={row._id}>
                         <tr className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                          <td className="px-4 py-3 align-top">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(String(row._id))}
+                              onChange={() => toggleRowSelection(row._id)}
+                              disabled={(row.eligiblePeriods || []).length === 0}
+                              className="mt-1 h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E] disabled:cursor-not-allowed disabled:opacity-50"
+                              title={(row.eligiblePeriods || []).length === 0 ? "No eligible period available" : "Select this standing order for bulk run"}
+                            />
+                          </td>
                           <td className="px-4 py-3">
                             <div className="font-black text-slate-900">{row.standingOrderNo || row.referenceNo}</div>
                             <div className="text-xs text-slate-500">{row.title}</div>
@@ -363,7 +487,7 @@ const LandlordStandingOrders = () => {
                         </tr>
                         {expanded && (
                           <tr className="border-t border-slate-100 bg-slate-50">
-                            <td colSpan={6} className="px-4 py-4">
+                            <td colSpan={7} className="px-4 py-4">
                               <div className="grid gap-4 lg:grid-cols-2">
                                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
                                   <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Eligible periods to run</p>

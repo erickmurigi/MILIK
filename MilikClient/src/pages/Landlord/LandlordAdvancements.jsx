@@ -32,15 +32,41 @@ const todayIso = () => new Date().toISOString().split("T")[0];
 const money = (value) => `KES ${Number(value || 0).toLocaleString()}`;
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : "-");
 
+const addMonths = (dateValue, months = 0) => {
+  if (!dateValue) return null;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  const safeMonths = Math.max(0, Number(months || 0));
+  const originalDay = date.getDate();
+  date.setDate(1);
+  date.setMonth(date.getMonth() + safeMonths);
+  const maxDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  date.setDate(Math.min(originalDay, maxDay));
+  return date;
+};
+
+const computeRecoveryEndDate = ({ startDate, periodMonths, gracePeriodMonths }) => {
+  const safePeriodMonths = Math.max(0, Number(periodMonths || 0));
+  if (!startDate || safePeriodMonths <= 0) return "";
+  const effectiveStart = addMonths(startDate, gracePeriodMonths || 0);
+  if (!effectiveStart) return "";
+  const endDate = new Date(effectiveStart.getFullYear(), effectiveStart.getMonth() + safePeriodMonths, 0);
+  return Number.isNaN(endDate.getTime()) ? "" : endDate.toISOString().split("T")[0];
+};
+
 const blankForm = {
   landlord: "",
   property: "",
   title: "",
   narration: "",
   amount: "",
+  interestRate: "",
+  interestType: "simple_flat",
   disbursementDate: todayIso(),
   startDate: todayIso(),
   endDate: todayIso(),
+  periodMonths: "",
+  gracePeriodMonths: 0,
   frequency: "monthly",
   paymentMethod: "bank_transfer",
   status: "draft",
@@ -107,11 +133,27 @@ const LandlordAdvancements = () => {
     loadRows();
   }, [currentCompany?._id, filters.search, filters.status, filters.landlordId]);
 
+  useEffect(() => {
+    if (!showModal) return;
+    if (!Number(form.periodMonths || 0) || !form.startDate) return;
+
+    const computedEndDate = computeRecoveryEndDate({
+      startDate: form.startDate,
+      periodMonths: form.periodMonths,
+      gracePeriodMonths: form.gracePeriodMonths,
+    });
+
+    if (computedEndDate && computedEndDate !== form.endDate) {
+      setForm((prev) => ({ ...prev, endDate: computedEndDate }));
+    }
+  }, [showModal, form.startDate, form.periodMonths, form.gracePeriodMonths, form.endDate]);
+
   const stats = useMemo(
     () => ({
       total: rows.length,
       disbursed: rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
-      recovered: rows.reduce((sum, row) => sum + Number(row.recoveredAmount || 0), 0),
+      recovered: rows.reduce((sum, row) => sum + Number(row.totalRecoveredAmount || (Number(row.recoveredAmount || 0) + Number(row.interestRecoveredAmount || 0))), 0),
+      interestRecovered: rows.reduce((sum, row) => sum + Number(row.interestRecoveredAmount || 0), 0),
       outstanding: rows.reduce((sum, row) => sum + Number(row.balanceOutstanding || 0), 0),
     }),
     [rows]
@@ -139,9 +181,13 @@ const LandlordAdvancements = () => {
       title: row.title || "",
       narration: row.narration || "",
       amount: row.amount || "",
+      interestRate: row.interestRate || "",
+      interestType: row.interestType || "simple_flat",
       disbursementDate: row.disbursementDate ? new Date(row.disbursementDate).toISOString().split("T")[0] : todayIso(),
       startDate: row.startDate ? new Date(row.startDate).toISOString().split("T")[0] : todayIso(),
       endDate: row.endDate ? new Date(row.endDate).toISOString().split("T")[0] : todayIso(),
+      periodMonths: row.periodMonths || "",
+      gracePeriodMonths: Number(row.gracePeriodMonths || 0),
       frequency: row.frequency === "annually" ? "yearly" : row.frequency || "monthly",
       paymentMethod:
         row.paymentMethod === "mobile_money"
@@ -160,13 +206,17 @@ const LandlordAdvancements = () => {
     if (!form.title.trim()) return toast.warning("Title is required");
     if (!Number(form.amount || 0) || Number(form.amount) <= 0) return toast.warning("Valid advancement amount is required");
     if (!form.startDate) return toast.warning("Recovery start date is required");
-    if (!form.endDate) return toast.warning("Recovery end date is required");
+    if (!form.endDate && !Number(form.periodMonths || 0)) return toast.warning("Recovery end date is required");
 
     setSaving(true);
     try {
       const payload = {
         ...form,
         amount: Number(form.amount),
+        interestRate: form.interestRate ? Number(form.interestRate) : 0,
+        interestType: form.interestType || "simple_flat",
+        periodMonths: form.periodMonths ? Number(form.periodMonths) : null,
+        gracePeriodMonths: Number(form.gracePeriodMonths || 0),
         business: currentCompany?._id,
         company: currentCompany?._id,
       };
@@ -373,10 +423,11 @@ const LandlordAdvancements = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Loans</p><p className="mt-2 text-2xl font-black text-slate-900">{stats.total}</p></div>
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Disbursed</p><p className="mt-2 text-2xl font-black text-emerald-700">{money(stats.disbursed)}</p></div>
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Recovered</p><p className="mt-2 text-2xl font-black text-blue-700">{money(stats.recovered)}</p></div>
+            <div className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-fuchsia-600">Interest Recovered</p><p className="mt-2 text-2xl font-black text-fuchsia-700">{money(stats.interestRecovered)}</p></div>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Outstanding</p><p className="mt-2 text-2xl font-black text-amber-700">{money(stats.outstanding)}</p></div>
           </div>
 
@@ -437,7 +488,8 @@ const LandlordAdvancements = () => {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="font-black text-slate-900">{money(row.balanceOutstanding)}</div>
-                            <div className="text-xs text-slate-500">Recovered {money(row.recoveredAmount)}</div>
+                            <div className="text-xs text-slate-500">Principal {money(row.amount)} • Interest {money(row.scheduledInterestTotal)}</div>
+                            <div className="text-xs text-slate-500">Recovered {money(row.totalRecoveredAmount || (Number(row.recoveredAmount || 0) + Number(row.interestRecoveredAmount || 0)))}</div>
                           </td>
                           <td className="px-4 py-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${statusPills[row.status] || statusPills.draft}`}>{row.status}</span></td>
                           <td className="px-4 py-3 text-right">
@@ -466,6 +518,7 @@ const LandlordAdvancements = () => {
                                             <div className="text-xs text-slate-500">{formatDate(item.periodStart)} - {formatDate(item.periodEnd)}</div>
                                           </div>
                                           <div className="font-black text-slate-900">{money(item.scheduledAmount)}</div>
+                                          <div className="text-[11px] text-slate-500">Principal {money(item.scheduledPrincipalAmount)} • Interest {money(item.scheduledInterestAmount)}</div>
                                         </div>
                                       </div>
                                     ))}
@@ -517,10 +570,14 @@ const LandlordAdvancements = () => {
             <div className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
               <label className="block"><span className="text-sm font-bold text-slate-700">Landlord</span><select value={form.landlord} onChange={(e) => setForm((prev) => ({ ...prev, landlord: e.target.value, property: "" }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select landlord</option>{activeLandlords.map((landlord) => <option key={landlord._id} value={landlord._id}>{landlord.landlordName || `${landlord.firstName || ""} ${landlord.lastName || ""}`.trim()}</option>)}</select></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Property</span><select value={form.property} onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select property</option>{filteredProperties.map((property) => <option key={property._id} value={property._id}>{property.propertyCode ? `[${property.propertyCode}] ` : ""}{property.propertyName || property.name}</option>)}</select></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Amount</span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Principal Amount</span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Interest Rate (%) per recovery period</span><input type="number" min="0" step="0.01" value={form.interestRate} onChange={(e) => setForm((prev) => ({ ...prev, interestRate: e.target.value }))} placeholder="Optional" className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Interest Method</span><select value={form.interestType} onChange={(e) => setForm((prev) => ({ ...prev, interestType: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="simple_flat">Flat on principal</option><option value="reducing_balance">Reducing balance</option></select></label>
               <label className="block xl:col-span-2"><span className="text-sm font-bold text-slate-700">Title</span><input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Disbursement Date</span><input type="date" value={form.disbursementDate} onChange={(e) => setForm((prev) => ({ ...prev, disbursementDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Recovery Start Date</span><input type="date" value={form.startDate} onChange={(e) => setForm((prev) => ({ ...prev, startDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Period (Months)</span><input type="number" min="1" value={form.periodMonths} onChange={(e) => setForm((prev) => ({ ...prev, periodMonths: e.target.value }))} placeholder="Optional" className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Grace Period (Months)</span><input type="number" min="0" value={form.gracePeriodMonths} onChange={(e) => setForm((prev) => ({ ...prev, gracePeriodMonths: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Recovery End Date</span><input type="date" value={form.endDate} onChange={(e) => setForm((prev) => ({ ...prev, endDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Frequency</span><select value={form.frequency} onChange={(e) => setForm((prev) => ({ ...prev, frequency: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option></select></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Payment Method</span><select value={form.paymentMethod} onChange={(e) => setForm((prev) => ({ ...prev, paymentMethod: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="bank_transfer">Bank Transfer</option><option value="mpesa">M-Pesa</option><option value="cheque">Cheque</option><option value="cash">Cash</option><option value="other">Other</option></select></label>
@@ -554,7 +611,7 @@ const LandlordAdvancements = () => {
                 <span className="text-sm font-bold text-slate-700">Eligible recovery period</span>
                 <select value={recoveryModal.periodKey} onChange={(e) => setRecoveryModal((prev) => ({ ...prev, periodKey: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
                   {(recoveryModal.row?.eligibleRecoveryPeriods || []).map((item) => (
-                    <option key={item.periodKey} value={item.periodKey}>{item.periodLabel} • {money(item.scheduledAmount)}</option>
+                    <option key={item.periodKey} value={item.periodKey}>{item.periodLabel} • {money(item.scheduledAmount)} (P {money(item.scheduledPrincipalAmount)} / I {money(item.scheduledInterestAmount)})</option>
                   ))}
                 </select>
               </label>

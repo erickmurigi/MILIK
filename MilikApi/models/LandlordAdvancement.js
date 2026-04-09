@@ -9,6 +9,8 @@ const recoveryHistorySchema = new mongoose.Schema(
     periodKey: { type: String, default: "", trim: true },
     periodLabel: { type: String, default: "", trim: true },
     amount: { type: Number, required: true, min: 0 },
+    principalAmount: { type: Number, default: 0, min: 0 },
+    interestAmount: { type: Number, default: 0, min: 0 },
     note: { type: String, default: "", trim: true },
     referenceNo: { type: String, default: "", trim: true },
     journalGroupId: {
@@ -71,6 +73,31 @@ const LandlordAdvancementSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    interestRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    interestType: {
+      type: String,
+      enum: ["simple_flat", "reducing_balance"],
+      default: "simple_flat",
+    },
+    scheduledInterestTotal: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    interestRecoveredAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    totalRecoverableAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     recoveredAmount: {
       type: Number,
       default: 0,
@@ -100,6 +127,16 @@ const LandlordAdvancementSchema = new mongoose.Schema(
     startDate: {
       type: Date,
       required: true,
+    },
+    periodMonths: {
+      type: Number,
+      default: null,
+      min: 1,
+    },
+    gracePeriodMonths: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     endDate: {
       type: Date,
@@ -171,9 +208,18 @@ const LandlordAdvancementSchema = new mongoose.Schema(
 );
 
 LandlordAdvancementSchema.pre("validate", function syncBalance(next) {
-  const amount = Number(this.amount || 0);
-  const recoveredAmount = Number(this.recoveredAmount || 0);
-  this.balanceOutstanding = Math.max(Math.round((amount - recoveredAmount + Number.EPSILON) * 100) / 100, 0);
+  const principalAmount = Number(this.amount || 0);
+  const scheduledInterestTotal = Number(this.scheduledInterestTotal || 0);
+  const totalRecoverableAmount = Number(this.totalRecoverableAmount || principalAmount + scheduledInterestTotal);
+  const recoveredPrincipal = Number(this.recoveredAmount || 0);
+  const recoveredInterest = Number(this.interestRecoveredAmount || 0);
+
+  this.scheduledInterestTotal = Math.max(Math.round((scheduledInterestTotal + Number.EPSILON) * 100) / 100, 0);
+  this.totalRecoverableAmount = Math.max(Math.round((totalRecoverableAmount + Number.EPSILON) * 100) / 100, 0);
+  this.balanceOutstanding = Math.max(
+    Math.round((this.totalRecoverableAmount - recoveredPrincipal - recoveredInterest + Number.EPSILON) * 100) / 100,
+    0
+  );
   next();
 });
 

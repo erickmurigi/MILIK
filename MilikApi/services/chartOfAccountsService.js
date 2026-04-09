@@ -27,6 +27,7 @@ const SYSTEM_CHART_TEMPLATE = [
   { code: "4200", name: "Management Fee Income", type: "income", group: "income", subGroup: "Operating Income", isSystem: true, isHeader: false, isPosting: true },
   { code: "4210", name: "Commission Income", type: "income", group: "income", subGroup: "Operating Income", isSystem: true, isHeader: false, isPosting: true },
   { code: "4300", name: "Other Property Income", type: "income", group: "income", subGroup: "Other Income", isSystem: true, isHeader: false, isPosting: true },
+  { code: "4301", name: "Advancement Interest Income", type: "income", group: "income", subGroup: "Other Income", isSystem: true, isHeader: false, isPosting: true },
 
   { code: "5100", name: "Maintenance Expense", type: "expense", group: "expenses", subGroup: "Operating Expenses", isSystem: true, isHeader: false, isPosting: true },
   { code: "5101", name: "Repairs Expense", type: "expense", group: "expenses", subGroup: "Operating Expenses", isSystem: true, isHeader: false, isPosting: true },

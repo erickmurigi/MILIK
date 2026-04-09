@@ -29,9 +29,13 @@ export const createTenantInvoiceNote = async (noteData) => {
   return res.data;
 };
 
-export const deleteTenantInvoiceNote = async (noteId, payload = {}) => {
-  const res = await adminRequests.delete(`/tenant-invoices/notes/${noteId}`, { data: payload });
+export const reverseTenantInvoiceNote = async (noteId, payload = {}) => {
+  const res = await adminRequests.post(`/tenant-invoices/notes/${noteId}/reverse`, payload);
   return res.data;
+};
+
+export const deleteTenantInvoiceNote = async (noteId, payload = {}) => {
+  return reverseTenantInvoiceNote(noteId, payload);
 };
 
 export const createTenantInvoice = async (invoiceData) => {

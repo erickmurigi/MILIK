@@ -59,6 +59,19 @@ const buildRecurringInvoiceDescription = ({ year, month, label }) => {
   return `${formatInvoiceDescriptionPeriod(year, month)} ${normalizedLabel}`;
 };
 
+const buildUtilityInvoiceMetadata = (utilityLabel = "") => {
+  const normalizedLabel = String(utilityLabel || "").trim();
+  if (!normalizedLabel) return undefined;
+  return {
+    utilityType: normalizedLabel,
+    meterUtilityType: normalizedLabel,
+    statementUtilityType: normalizedLabel,
+  };
+};
+
+const buildUtilityInvoiceDescription = ({ year, month, label }) =>
+  buildRecurringInvoiceDescription({ year, month, label: label || "Utility" });
+
 const safeId = (value) => {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -553,14 +566,25 @@ const TenantStatement = () => {
           }
 
           if (Number(period.utility || 0) > 0) {
+            const utilityLabel =
+              Array.isArray(period.utilityNames) && period.utilityNames.length === 1
+                ? period.utilityNames[0]
+                : Array.isArray(period.utilityNames) && period.utilityNames.length > 1
+                ? period.utilityNames.join(", ")
+                : "Utility";
             await createTenantInvoice({
               ...invoiceContext,
               tenant: tenantId,
               category: "UTILITY_CHARGE",
               amount: Number(period.utility || 0),
-              description: buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: Array.isArray(period.utilityNames) && period.utilityNames.length > 0 ? period.utilityNames.join(", ") : "Utility" }),
+              description: buildUtilityInvoiceDescription({
+                year: period.periodYear,
+                month: period.periodMonth,
+                label: utilityLabel,
+              }),
               invoiceDate: periodDate,
               dueDate,
+              metadata: buildUtilityInvoiceMetadata(utilityLabel),
               ...taxPayload,
             });
           }

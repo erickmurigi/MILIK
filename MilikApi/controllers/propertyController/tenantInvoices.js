@@ -629,6 +629,59 @@ const getInvoiceUtilityType = (invoice = {}) => {
   return "";
 };
 
+const buildInheritedInvoiceNoteMetadata = ({
+  sourceInvoice = {},
+  incomingMetadata = {},
+} = {}) => {
+  const sourceMetadata =
+    sourceInvoice?.metadata && typeof sourceInvoice.metadata === "object"
+      ? sourceInvoice.metadata
+      : {};
+  const requestedMetadata =
+    incomingMetadata && typeof incomingMetadata === "object" ? incomingMetadata : {};
+
+  const inherited = {
+    ...requestedMetadata,
+    sourceInvoiceNumber: sourceInvoice?.invoiceNumber || requestedMetadata?.sourceInvoiceNumber || "",
+    sourceInvoiceCategory: sourceInvoice?.category || requestedMetadata?.sourceInvoiceCategory || "",
+    sourceInvoiceAmount: Number(sourceInvoice?.amount || requestedMetadata?.sourceInvoiceAmount || 0),
+  };
+
+  const passthroughKeys = [
+    "utilityType",
+    "meterUtilityType",
+    "statementUtilityType",
+    "utilityName",
+    "utility",
+    "name",
+    "billItemKey",
+    "billItemLabel",
+    "invoicePriorityCategory",
+    "sourceTransactionType",
+    "statementClassification",
+    "includeInLandlordStatement",
+    "includeInCategoryTotals",
+  ];
+
+  passthroughKeys.forEach((key) => {
+    const requestedValue = requestedMetadata?.[key];
+    const sourceValue = sourceMetadata?.[key];
+    if (requestedValue !== undefined && requestedValue !== null && requestedValue !== "") {
+      inherited[key] = requestedValue;
+      return;
+    }
+    if (sourceValue !== undefined && sourceValue !== null && sourceValue !== "") {
+      inherited[key] = sourceValue;
+    }
+  });
+
+  if (!inherited.sourceTransactionType) {
+    inherited.sourceTransactionType = "invoice_note";
+  }
+
+  return inherited;
+};
+
 const isTakeOnBalanceInvoice = (invoice = {}) => {
   const metadata = invoice?.metadata || {};
   const explicitFlag =
@@ -1790,6 +1843,11 @@ export const createTenantInvoiceNote = async (req, res) => {
       return res.status(409).json({ error: "Note number already exists for this business." });
     }
 
+    const noteMetadata = buildInheritedInvoiceNoteMetadata({
+      sourceInvoice,
+      incomingMetadata: req.body.metadata,
+    });
+
     const note = await TenantInvoiceNote.create({
       business: sourceInvoice.business,
       property: sourceInvoice.property,
@@ -1811,12 +1869,7 @@ export const createTenantInvoiceNote = async (req, res) => {
       ledgerEntries: [],
       postingStatus: "unposted",
       postingError: null,
-      metadata: {
-        ...(req.body.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {}),
-        sourceInvoiceNumber: sourceInvoice.invoiceNumber,
-        sourceInvoiceCategory: sourceInvoice.category,
-        sourceInvoiceAmount: Number(sourceInvoice.amount || 0),
-      },
+      metadata: noteMetadata,
     });
 
     const posting = await postInvoiceNoteJournal({
@@ -1875,8 +1928,10 @@ export const reverseTenantInvoiceNote = async (req, res) => {
       return res.status(404).json({ error: "Invoice note not found." });
     }
 
-    if (String(note.noteType || "").toUpperCase() !== "DEBIT_NOTE") {
-      return res.status(400).json({ error: "Only debit notes can be deleted from this workspace." });
+    const normalizedNoteType = String(note.noteType || "").toUpperCase();
+
+    if (!["CREDIT_NOTE", "DEBIT_NOTE"].includes(normalizedNoteType)) {
+      return res.status(400).json({ error: "Only debit and credit notes can be reversed from this workspace." });
     }
 
     if (["cancelled", "reversed"].includes(String(note.status || "").toLowerCase())) {
@@ -1920,9 +1975,9 @@ export const reverseTenantInvoiceNote = async (req, res) => {
     const outstanding = Math.max(0, Number(sourceSnapshot?.outstanding || 0));
     const noteAmount = Math.abs(Number(note.amount || 0));
 
-    if (outstanding + 0.009 < noteAmount) {
+    if (normalizedNoteType === "DEBIT_NOTE" && outstanding + 0.009 < noteAmount) {
       return res.status(400).json({
-        error: "This debit note cannot be deleted because it has already been settled fully or partially.",
+        error: "This debit note cannot be reversed because it has already been settled fully or partially.",
       });
     }
 
@@ -1938,7 +1993,7 @@ export const reverseTenantInvoiceNote = async (req, res) => {
       await postReversal({
         entryId: entry._id,
         userId: actorUserId,
-        reason: req.body?.reason || `Reversal of debit note ${note.noteNumber}`,
+        reason: req.body?.reason || `Reversal of ${normalizedNoteType === "CREDIT_NOTE" ? "credit" : "debit"} note ${note.noteNumber}`,
       });
     }
 
@@ -1947,7 +2002,7 @@ export const reverseTenantInvoiceNote = async (req, res) => {
     note.postingError = null;
     note.metadata = {
       ...(note.metadata || {}),
-      reversalReason: req.body?.reason || "Debit note deleted from notes workspace",
+      reversalReason: req.body?.reason || `${normalizedNoteType === "CREDIT_NOTE" ? "Credit" : "Debit"} note reversed from notes workspace`,
       reversedAt: new Date(),
       reversedBy: actorUserId,
     };
@@ -1981,13 +2036,13 @@ export const reverseTenantInvoiceNote = async (req, res) => {
       .populate("unit", "unitNumber");
 
     return res.status(200).json({
-      message: "Debit note reversed successfully.",
+      message: `${normalizedNoteType === "CREDIT_NOTE" ? "Credit" : "Debit"} note reversed successfully.`,
       note: buildNoteStatementRow(populated),
     });
   } catch (error) {
     console.error("Tenant invoice note reversal error:", error);
     return res.status(error.statusCode || 500).json({
-      error: error.message || "Failed to reverse debit note.",
+      error: error.message || "Failed to reverse invoice note.",
     });
   }
 };

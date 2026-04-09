@@ -2034,6 +2034,14 @@ export const getLatePenaltyBatch = async (id, business = null) => {
   return res.data;
 };
 
+export const deleteLatePenaltyBatch = async (id, business = null) => {
+  const params = new URLSearchParams();
+  if (business) params.append("business", business);
+  const query = params.toString();
+  const res = await adminRequests.delete(`/late-penalties/batches/${id}${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
 // ========== STATEMENT API CALLS (Immutable Ledger-based Statements) ==========
 
 // Get statements with filters

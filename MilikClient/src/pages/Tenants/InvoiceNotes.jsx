@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
-import { FaPlus, FaRedoAlt, FaSave, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
+import { FaPlus, FaRedoAlt, FaSave, FaSearch, FaTimes, FaTrash, FaUndo } from "react-icons/fa";
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenants } from "../../redux/tenantsRedux";
@@ -303,26 +303,24 @@ const InvoiceNotes = () => {
     }
   };
 
-  const handleDeleteNote = async (note) => {
+  const handleReverseNote = async (note) => {
     const noteId = String(note?._id || "");
     if (!noteId) return;
     const reason = window.prompt(`Reverse ${note.noteNumber || "this note"}? Add an optional reason for the audit trail.`) || "";
     try {
       setBusyNoteId(noteId);
       await deleteTenantInvoiceNote(noteId, { business: currentCompany?._id, reason });
-      toast.success("Debit note reversed successfully.");
+      toast.success(`${String(note?.noteType || "").toUpperCase() === "CREDIT_NOTE" ? "Credit" : "Debit"} note reversed successfully.`);
       await loadData();
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {
-      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to reverse debit note");
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to reverse invoice note");
     } finally {
       setBusyNoteId("");
     }
   };
 
-  const canDeleteNote = (note) =>
-    String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE" &&
-    isActiveNote(note);
+  const canReverseNote = (note) => isActiveNote(note);
 
   const noteCountLabel = `${filteredNotes.length} note${filteredNotes.length === 1 ? "" : "s"}`;
 
@@ -348,7 +346,7 @@ const InvoiceNotes = () => {
           <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-500">Tenant invoice notes</p>
           <h1 className="mt-1 text-xl font-bold text-slate-900">Credit & Debit Notes</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Compact property-first note control with safer source invoice selection and debit-note reversal only where the backend supports it.
+            Compact property-first note control with safer source invoice selection and audited credit/debit-note reversals that preserve ledger integrity.
           </p>
         </div>
 
@@ -507,15 +505,15 @@ const InvoiceNotes = () => {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex justify-end">
-                            {canDeleteNote(note) ? (
+                            {canReverseNote(note) ? (
                               <button
                                 type="button"
-                                onClick={() => handleDeleteNote(note)}
+                                onClick={() => handleReverseNote(note)}
                                 disabled={busyNoteId === String(note._id)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                title="Reverse this debit note if it is still unpaid"
+                                className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-[11px] font-bold text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                title={String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE" ? "Reverse this debit note only if it is still unpaid" : "Reverse this credit note and restore the source invoice amount"}
                               >
-                                <FaTrash /> {busyNoteId === String(note._id) ? "Working..." : "Reverse"}
+                                <FaUndo /> {busyNoteId === String(note._id) ? "Working..." : "Reverse"}
                               </button>
                             ) : (
                               <span className="text-[11px] text-slate-400">-</span>

@@ -616,3 +616,36 @@ export const getLatePenaltyBatch = async (req, res) => {
     return res.status(500).json({ message: error.message || "Failed to load late penalty batch." });
   }
 };
+
+export const deleteLatePenaltyBatch = async (req, res) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    const batchId = req.params?.id;
+
+    if (!isValidObjectId(batchId)) {
+      return res.status(400).json({ message: "A valid late penalty batch is required." });
+    }
+
+    const batch = await LatePenaltyBatch.findOne({ _id: batchId, business: businessId }).lean();
+    if (!batch) {
+      return res.status(404).json({ message: "Late penalty batch not found." });
+    }
+
+    if (String(batch.status || "").toLowerCase() !== "failed") {
+      return res.status(400).json({ message: "Only fully failed late penalty batches can be deleted." });
+    }
+
+    const hasPenaltyInvoices = (Array.isArray(batch.items) ? batch.items : []).some(
+      (item) => item?.penaltyInvoice || String(item?.status || "").toLowerCase() !== "failed"
+    );
+
+    if (hasPenaltyInvoices) {
+      return res.status(400).json({ message: "This batch has processed items and cannot be deleted." });
+    }
+
+    await LatePenaltyBatch.deleteOne({ _id: batch._id, business: businessId });
+    return res.status(200).json({ success: true, message: "Failed late penalty batch deleted successfully." });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.message || "Failed to delete late penalty batch." });
+  }
+};

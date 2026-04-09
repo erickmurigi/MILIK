@@ -366,6 +366,43 @@ const resolveUtilityIdentity = (text = "", metadata = {}, row = null) => {
   return { key: "other_utility", label: defaultUtilityLabel };
 };
 
+const mergeNoteUtilityMetadata = (note = {}) => {
+  const noteMetadata = note?.metadata && typeof note.metadata === "object" ? note.metadata : {};
+  const sourceInvoiceMetadata =
+    note?.sourceInvoice?.metadata && typeof note.sourceInvoice.metadata === "object"
+      ? note.sourceInvoice.metadata
+      : {};
+
+  return {
+    ...sourceInvoiceMetadata,
+    ...noteMetadata,
+    utilityType:
+      noteMetadata?.utilityType ||
+      noteMetadata?.meterUtilityType ||
+      noteMetadata?.statementUtilityType ||
+      sourceInvoiceMetadata?.utilityType ||
+      sourceInvoiceMetadata?.meterUtilityType ||
+      sourceInvoiceMetadata?.statementUtilityType ||
+      sourceInvoiceMetadata?.utilityName ||
+      sourceInvoiceMetadata?.utility ||
+      noteMetadata?.utilityName ||
+      noteMetadata?.utility ||
+      "",
+    meterUtilityType:
+      noteMetadata?.meterUtilityType ||
+      sourceInvoiceMetadata?.meterUtilityType ||
+      noteMetadata?.utilityType ||
+      sourceInvoiceMetadata?.utilityType ||
+      "",
+    statementUtilityType:
+      noteMetadata?.statementUtilityType ||
+      sourceInvoiceMetadata?.statementUtilityType ||
+      noteMetadata?.utilityType ||
+      sourceInvoiceMetadata?.utilityType ||
+      "",
+  };
+};
+
 const sumUtilityPhase = (row = {}, phase = "invoice") =>
   Object.values(row?.utilities || {}).reduce((sum, item) => {
     const amount =
@@ -622,6 +659,7 @@ export const generateLandlordStatement = async ({
       .select(
         "_id tenant unit category amount description noteDate noteNumber noteType metadata sourceInvoice"
       )
+      .populate("sourceInvoice", "_id invoiceNumber category description metadata")
       .lean(),
 
     TenantInvoiceNote.find({
@@ -634,6 +672,7 @@ export const generateLandlordStatement = async ({
       .select(
         "_id tenant unit category amount description noteDate noteNumber noteType metadata sourceInvoice"
       )
+      .populate("sourceInvoice", "_id invoiceNumber category description metadata")
       .lean(),
 
     RentPayment.find({
@@ -836,7 +875,7 @@ export const generateLandlordStatement = async ({
   };
 
   const shouldIncludeNoteInLandlordStatement = (note = {}) => {
-    const metadata = note?.metadata || {};
+    const metadata = mergeNoteUtilityMetadata(note);
     if (typeof metadata.includeInLandlordStatement === "boolean") {
       return metadata.includeInLandlordStatement;
     }
@@ -1055,6 +1094,7 @@ export const generateLandlordStatement = async ({
 
     const row = ensureRow(note.tenant, note.unit);
     const amount = getSignedNoteAmount(note);
+    const noteMetadata = mergeNoteUtilityMetadata(note);
 
     if (note.category === "RENT_CHARGE") {
       row.invoicedRent += amount;
@@ -1063,8 +1103,8 @@ export const generateLandlordStatement = async ({
         row,
         "invoice",
         amount,
-        note.description || note.noteNumber || "",
-        note.metadata || {}
+        note.description || note.noteNumber || note?.sourceInvoice?.description || "",
+        noteMetadata
       );
     } else if (note.category === "DEPOSIT_CHARGE") {
       applyDepositChargeToMemo(note, amount, "current");
@@ -1075,8 +1115,8 @@ export const generateLandlordStatement = async ({
     const noteUtilityIdentity =
       note.category === "UTILITY_CHARGE"
         ? resolveUtilityIdentity(
-            note.description || note.noteNumber || "",
-            note.metadata || {},
+            note.description || note.noteNumber || note?.sourceInvoice?.description || "",
+            noteMetadata,
             row
           )
         : null;

@@ -12,6 +12,7 @@ import {
   FaSave,
   FaSms,
   FaTimes,
+  FaTrash,
 } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -23,6 +24,7 @@ import {
   getLatePenaltyBatches,
   getLatePenaltyPostingAccounts,
   getLatePenaltyRules,
+  deleteLatePenaltyBatch,
   processLatePenalties,
   previewLatePenalties,
   updateLatePenaltyRule,
@@ -333,6 +335,33 @@ const LatePenalties = () => {
     }
   };
 
+  const handleDeleteFailedBatch = async (batch) => {
+    if (!batch?._id) return;
+    if (String(batch?.status || "").toLowerCase() !== "failed") {
+      toast.info("Only fully failed batches can be deleted.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete failed late penalty batch \"${batch.batchName || batch._id}\"? This will only remove the failed batch record.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      const res = await deleteLatePenaltyBatch(batch._id, businessId);
+      toast.success(res?.message || "Failed late penalty batch deleted successfully.");
+      if (String(batchDetail?._id || "") === String(batch._id)) {
+        setBatchDetail(null);
+      }
+      await loadBatches();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error.message || "Failed to delete late penalty batch.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
 const allPreviewRowsSelected = !!preview?.rows?.length && preview.rows.every((row) => row.skippedReason || selectedRows[row.sourceInvoiceId]);
 
@@ -474,6 +503,19 @@ return (
 
             {batchDetail ? (
               <div className="space-y-4">
+                {String(batchDetail?.status || "").toLowerCase() === "failed" ? (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFailedBatch(batchDetail)}
+                      disabled={loading}
+                      className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <FaTrash /> Delete Failed Batch
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Batch</p>

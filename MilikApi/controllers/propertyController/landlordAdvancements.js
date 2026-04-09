@@ -40,6 +40,70 @@ const normalizePaymentMethod = (value) => {
   return "bank_transfer";
 };
 
+const addMonths = (dateValue, months = 0) => {
+  const parsed = parseDate(dateValue, null);
+  if (!parsed) return null;
+  const monthCount = Math.max(0, Number(months || 0));
+  const date = new Date(parsed);
+  const originalDay = date.getDate();
+  date.setDate(1);
+  date.setMonth(date.getMonth() + monthCount);
+  const maxDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  date.setDate(Math.min(originalDay, maxDay));
+  return date;
+};
+
+const endOfMonth = (dateValue) => {
+  const parsed = parseDate(dateValue, null);
+  if (!parsed) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth() + 1, 0, 23, 59, 59, 999);
+};
+
+const normalizeGracePeriodMonths = (value) => {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.trunc(parsed));
+};
+
+const normalizePeriodMonths = (value) => {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.max(1, Math.trunc(parsed));
+};
+
+const resolveAdvancementScheduleWindow = ({
+  startDate,
+  endDate = null,
+  periodMonths = null,
+  gracePeriodMonths = 0,
+} = {}) => {
+  const normalizedStartDate = parseDate(startDate, null);
+  const normalizedEndDate = parseDate(endDate, null);
+  const normalizedPeriodMonths = normalizePeriodMonths(periodMonths);
+  const normalizedGracePeriodMonths = normalizeGracePeriodMonths(gracePeriodMonths);
+  const effectiveStartDate = addMonths(normalizedStartDate, normalizedGracePeriodMonths) || normalizedStartDate;
+
+  if (!normalizedPeriodMonths) {
+    return {
+      effectiveStartDate,
+      endDate: normalizedEndDate,
+      periodMonths: null,
+      gracePeriodMonths: normalizedGracePeriodMonths,
+    };
+  }
+
+  const computedEndDate = endOfMonth(
+    addMonths(effectiveStartDate || normalizedStartDate, Math.max(normalizedPeriodMonths - 1, 0))
+  );
+
+  return {
+    effectiveStartDate,
+    endDate: computedEndDate || normalizedEndDate,
+    periodMonths: normalizedPeriodMonths,
+    gracePeriodMonths: normalizedGracePeriodMonths,
+  };
+};
+
 const generateReferenceNo = async (businessId) => {
   const prefix = "LADV";
   const last = await LandlordAdvancement.findOne(
@@ -142,9 +206,16 @@ const isPeriodClosedByProcessedStatement = async ({ businessId, propertyId, land
 };
 
 const computeSchedule = (row) => {
-  const schedule = buildRunSchedule({
+  const scheduleWindow = resolveAdvancementScheduleWindow({
     startDate: row.startDate,
     endDate: row.endDate,
+    periodMonths: row.periodMonths,
+    gracePeriodMonths: row.gracePeriodMonths,
+  });
+
+  const schedule = buildRunSchedule({
+    startDate: scheduleWindow.effectiveStartDate || row.startDate,
+    endDate: scheduleWindow.endDate || row.endDate,
     frequency: row.frequency,
     dayOfMonth: row.dayOfMonth,
     capAt: new Date(),
@@ -183,6 +254,12 @@ const computeSchedule = (row) => {
 
 const serializeAdvancement = (row) => {
   const plain = typeof row?.toObject === "function" ? row.toObject({ virtuals: true }) : { ...(row || {}) };
+  const scheduleWindow = resolveAdvancementScheduleWindow({
+    startDate: plain.startDate,
+    endDate: plain.endDate,
+    periodMonths: plain.periodMonths,
+    gracePeriodMonths: plain.gracePeriodMonths,
+  });
   const schedule = computeSchedule(plain);
   const eligiblePeriods = filterEligibleSchedule({
     schedule,
@@ -215,6 +292,8 @@ const serializeAdvancement = (row) => {
 
   return {
     ...plain,
+    computedRecoveryStartDate: scheduleWindow.effectiveStartDate || plain.startDate || null,
+    computedRecoveryEndDate: scheduleWindow.endDate || plain.endDate || null,
     amortizationSchedule: schedule,
     eligibleRecoveryPeriods: eligiblePeriods,
     processedPeriods,
@@ -346,7 +425,15 @@ export const createLandlordAdvancement = async (req, res, next) => {
     const title = String(req.body?.title || req.body?.narration || "Landlord Advancement").trim();
     const disbursementDate = parseDate(req.body?.disbursementDate, new Date());
     const startDate = parseDate(req.body?.startDate, disbursementDate || new Date());
-    const endDate = parseDate(req.body?.endDate, startDate);
+    const normalizedPeriodMonths = normalizePeriodMonths(req.body?.periodMonths);
+    const normalizedGracePeriodMonths = normalizeGracePeriodMonths(req.body?.gracePeriodMonths);
+    const scheduleWindow = resolveAdvancementScheduleWindow({
+      startDate,
+      endDate: req.body?.endDate,
+      periodMonths: normalizedPeriodMonths,
+      gracePeriodMonths: normalizedGracePeriodMonths,
+    });
+    const endDate = parseDate(scheduleWindow.endDate, startDate);
     if (!startDate) return res.status(400).json({ success: false, message: "Valid recovery start date is required" });
     if (endDate && endDate < startDate) return res.status(400).json({ success: false, message: "Recovery end date cannot be earlier than start date" });
 
@@ -371,6 +458,8 @@ export const createLandlordAdvancement = async (req, res, next) => {
       dayOfMonth: Math.max(1, Math.min(31, dayOfMonth)),
       disbursementDate,
       startDate,
+      periodMonths: normalizedPeriodMonths,
+      gracePeriodMonths: normalizedGracePeriodMonths,
       endDate,
       paymentMethod,
       cashbook: isValidObjectId(req.body?.cashbook) ? req.body.cashbook : null,
@@ -435,7 +524,7 @@ export const updateLandlordAdvancement = async (req, res, next) => {
     if (!row) return res.status(404).json({ success: false, message: "Landlord advancement not found" });
 
     const hasAccountingHistory = Boolean(row.disbursedAt) || (Array.isArray(row.recoveryHistory) && row.recoveryHistory.length > 0);
-    const structuralFields = ["amount", "landlord", "property", "startDate", "endDate", "frequency", "dayOfMonth", "disbursementDate"];
+    const structuralFields = ["amount", "landlord", "property", "startDate", "endDate", "periodMonths", "gracePeriodMonths", "frequency", "dayOfMonth", "disbursementDate"];
     if (hasAccountingHistory && structuralFields.some((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field))) {
       return res.status(400).json({
         success: false,
@@ -482,6 +571,12 @@ export const updateLandlordAdvancement = async (req, res, next) => {
         if (!startDate) return res.status(400).json({ success: false, message: "Valid recovery start date is required" });
         row.startDate = startDate;
       }
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "periodMonths")) {
+        row.periodMonths = normalizePeriodMonths(req.body?.periodMonths);
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "gracePeriodMonths")) {
+        row.gracePeriodMonths = normalizeGracePeriodMonths(req.body?.gracePeriodMonths);
+      }
       if (Object.prototype.hasOwnProperty.call(req.body || {}, "endDate")) {
         const endDate = parseDate(req.body?.endDate, null);
         if (endDate && row.startDate && endDate < row.startDate) return res.status(400).json({ success: false, message: "Recovery end date cannot be earlier than start date" });
@@ -496,6 +591,21 @@ export const updateLandlordAdvancement = async (req, res, next) => {
         const accountingContext = await resolvePropertyAccountingContext({ businessId, propertyId: targetProperty, landlordId: targetLandlord });
         row.landlord = accountingContext.landlordId;
         row.property = accountingContext.propertyId;
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(req.body || {}, "startDate") ||
+        Object.prototype.hasOwnProperty.call(req.body || {}, "endDate") ||
+        Object.prototype.hasOwnProperty.call(req.body || {}, "periodMonths") ||
+        Object.prototype.hasOwnProperty.call(req.body || {}, "gracePeriodMonths")
+      ) {
+        const scheduleWindow = resolveAdvancementScheduleWindow({
+          startDate: row.startDate,
+          endDate: row.endDate,
+          periodMonths: row.periodMonths,
+          gracePeriodMonths: row.gracePeriodMonths,
+        });
+        row.endDate = scheduleWindow.endDate || row.endDate;
       }
     }
 
