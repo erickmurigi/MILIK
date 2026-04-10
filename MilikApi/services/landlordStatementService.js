@@ -403,6 +403,96 @@ const mergeNoteUtilityMetadata = (note = {}) => {
   };
 };
 
+const getCombinedUtilityBreakdown = (metadata = {}) => {
+  const normalizedBillItemKey = safeName(metadata?.billItemKey || "");
+  if (normalizedBillItemKey !== "rent_utility:combined") return [];
+
+  return (Array.isArray(metadata?.utilityBreakdown) ? metadata.utilityBreakdown : [])
+    .map((item) => ({
+      label: String(item?.label || item?.utilityType || item?.name || item?.utility || "Utility").trim() || "Utility",
+      amount: round2(Math.max(0, Number(item?.amount || 0))),
+    }))
+    .filter((item) => item.amount > 0);
+};
+
+const getCombinedInvoiceStatementSplit = ({ amount = 0, metadata = {}, row = null } = {}) => {
+  const breakdown = getCombinedUtilityBreakdown(metadata);
+  if (breakdown.length === 0) return null;
+
+  const totalAmount = round2(Math.max(0, Number(amount || 0)));
+  if (totalAmount <= 0) {
+    return { rentAmount: 0, utilityAmount: 0, utilities: [] };
+  }
+
+  let remaining = totalAmount;
+  const utilities = breakdown.map((item, index) => {
+    const rawAmount = round2(Number(item.amount || 0));
+    const appliedAmount = index === breakdown.length - 1
+      ? round2(Math.max(0, remaining))
+      : round2(Math.max(0, Math.min(remaining, rawAmount)));
+    remaining = round2(Math.max(0, remaining - appliedAmount));
+
+    const identity = resolveUtilityIdentity(item.label, {
+      utilityType: item.label,
+      meterUtilityType: item.label,
+      statementUtilityType: item.label,
+    }, row);
+
+    return {
+      key: identity.key,
+      label: identity.label,
+      amount: appliedAmount,
+    };
+  }).filter((item) => item.amount > 0);
+
+  const utilityAmount = round2(utilities.reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  const rentAmount = round2(Math.max(0, totalAmount - utilityAmount));
+
+  return {
+    rentAmount,
+    utilityAmount,
+    utilities,
+  };
+};
+
+const getCombinedReceiptAllocationSplit = ({ allocationRow = {}, sourceInvoice = null, row = null } = {}) => {
+  if (!sourceInvoice) return null;
+
+  const invoiceAmount = round2(Math.max(0, Number(sourceInvoice?.amount || 0)));
+  const appliedAmount = round2(Math.max(0, Number(allocationRow?.appliedAmount || 0)));
+  if (invoiceAmount <= 0 || appliedAmount <= 0) return null;
+
+  const invoiceSplit = getCombinedInvoiceStatementSplit({
+    amount: invoiceAmount,
+    metadata: sourceInvoice?.metadata || {},
+    row,
+  });
+  if (!invoiceSplit || invoiceSplit.utilityAmount <= 0) return null;
+
+  const ratio = Math.min(1, appliedAmount / invoiceAmount);
+  let remainingUtilityApplied = round2(invoiceSplit.utilityAmount * ratio);
+  const utilities = (invoiceSplit.utilities || []).map((item, index, arr) => {
+    const rawAmount = round2(Number(item.amount || 0) * ratio);
+    const allocatedAmount = index === arr.length - 1
+      ? round2(Math.max(0, remainingUtilityApplied))
+      : round2(Math.max(0, Math.min(remainingUtilityApplied, rawAmount)));
+    remainingUtilityApplied = round2(Math.max(0, remainingUtilityApplied - allocatedAmount));
+    return {
+      ...item,
+      amount: allocatedAmount,
+    };
+  }).filter((item) => item.amount > 0);
+
+  const utilityAmount = round2(utilities.reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  const rentAmount = round2(Math.max(0, appliedAmount - utilityAmount));
+
+  return {
+    rentAmount,
+    utilityAmount,
+    utilities,
+  };
+};
+
 const sumUtilityPhase = (row = {}, phase = "invoice") =>
   Object.values(row?.utilities || {}).reduce((sum, item) => {
     const amount =
@@ -770,6 +860,9 @@ export const generateLandlordStatement = async ({
 
   const unitMap = new Map(units.map((u) => [String(u._id), u]));
   const tenantMap = new Map(tenants.map((t) => [String(t._id), t]));
+  const invoiceStatementMap = new Map(
+    [...invoicesBefore, ...invoicesInPeriod].map((invoice) => [String(invoice?._id || ""), invoice])
+  );
   const tenantsByUnit = new Map();
 
   tenants.forEach((tenant) => {
@@ -1030,6 +1123,27 @@ export const generateLandlordStatement = async ({
 
   for (const receipt of receiptsBefore) {
     const row = ensureRow(receipt.tenant, receipt.unit);
+    const allocationRows = getReceiptAllocationRows(receipt);
+
+    if (allocationRows.length > 0) {
+      let broughtForwardReduction = 0;
+      allocationRows.forEach((allocationRow) => {
+        const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        const combinedSplit = getCombinedReceiptAllocationSplit({ allocationRow, sourceInvoice, row });
+        if (combinedSplit) {
+          broughtForwardReduction += Number(combinedSplit.rentAmount || 0) + Number(combinedSplit.utilityAmount || 0);
+          return;
+        }
+
+        const priorityGroup = String(allocationRow?.priorityGroup || "other").toLowerCase();
+        if (priorityGroup === "rent" || priorityGroup === "utility") {
+          broughtForwardReduction += Number(allocationRow?.appliedAmount || 0);
+        }
+      });
+      row.balanceBF -= round2(broughtForwardReduction);
+      continue;
+    }
+
     row.balanceBF -= Number(receipt.amount || 0);
   }
 
@@ -1038,9 +1152,30 @@ export const generateLandlordStatement = async ({
 
     const row = ensureRow(invoice.tenant, invoice.unit);
     const amount = Number(invoice.amount || 0);
+    const combinedSplit =
+      String(invoice?.category || "").toUpperCase() === "RENT_CHARGE"
+        ? getCombinedInvoiceStatementSplit({ amount, metadata: invoice.metadata || {}, row })
+        : null;
 
     if (invoice.category === "RENT_CHARGE") {
-      row.invoicedRent += amount;
+      if (combinedSplit) {
+        row.invoicedRent += Number(combinedSplit.rentAmount || 0);
+        (combinedSplit.utilities || []).forEach((item) => {
+          applyUtility(
+            row,
+            "invoice",
+            Number(item.amount || 0),
+            item.label || invoice.description || invoice.invoiceNumber || "",
+            {
+              utilityType: item.label,
+              meterUtilityType: item.label,
+              statementUtilityType: item.label,
+            }
+          );
+        });
+      } else {
+        row.invoicedRent += amount;
+      }
     } else if (invoice.category === "UTILITY_CHARGE") {
       applyUtility(
         row,
@@ -1167,10 +1302,60 @@ export const generateLandlordStatement = async ({
       "Tenant receipt";
 
     const allocationRows = getReceiptAllocationRows(receipt);
-    const rentAllocated = getReceiptSummaryAmount(receipt, "rent");
     const depositAllocated = getReceiptSummaryAmount(receipt, "deposit");
-    const utilityAllocated = getReceiptSummaryAmount(receipt, "utility");
     const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
+    let rentAllocated = 0;
+    let utilityAllocated = 0;
+
+    if (allocationRows.length > 0) {
+      allocationRows.forEach((allocationRow) => {
+        const priorityGroup = String(allocationRow?.priorityGroup || "other").toLowerCase();
+        const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+        const combinedSplit = getCombinedReceiptAllocationSplit({ allocationRow, sourceInvoice, row });
+
+        if (combinedSplit) {
+          rentAllocated = round2(rentAllocated + Number(combinedSplit.rentAmount || 0));
+          utilityAllocated = round2(utilityAllocated + Number(combinedSplit.utilityAmount || 0));
+          (combinedSplit.utilities || []).forEach((item) => {
+            applyUtility(
+              row,
+              "receipt",
+              Number(item.amount || 0),
+              item.label || allocationRow?.description || receipt.description || "",
+              {
+                utilityType: item.label,
+                meterUtilityType: item.label,
+                statementUtilityType: item.label,
+              }
+            );
+          });
+          return;
+        }
+
+        if (priorityGroup === "rent") {
+          rentAllocated = round2(rentAllocated + Number(allocationRow?.appliedAmount || 0));
+          return;
+        }
+
+        if (priorityGroup === "utility") {
+          const utilityAmount = Number(allocationRow?.appliedAmount || 0);
+          utilityAllocated = round2(utilityAllocated + utilityAmount);
+          applyUtility(
+            row,
+            "receipt",
+            utilityAmount,
+            allocationRow?.utilityType || allocationRow?.description || receipt.description || "",
+            {
+              utilityType: allocationRow?.utilityType || "",
+              meterUtilityType: allocationRow?.utilityType || "",
+            }
+          );
+        }
+      });
+    } else {
+      rentAllocated = getReceiptSummaryAmount(receipt, "rent");
+      utilityAllocated = getReceiptSummaryAmount(receipt, "utility");
+    }
 
     if (rentAllocated !== 0) {
       row.paidRent += rentAllocated;
@@ -1179,22 +1364,7 @@ export const generateLandlordStatement = async ({
     }
 
     if (utilityAllocated !== 0) {
-      if (allocationRows.length > 0) {
-        allocationRows
-          .filter((item) => String(item?.priorityGroup || "") === "utility")
-          .forEach((util) => {
-            applyUtility(
-              row,
-              "receipt",
-              Number(util.appliedAmount || 0),
-              util.utilityType || util.description || receipt.description || "",
-              {
-                utilityType: util.utilityType || "",
-                meterUtilityType: util.utilityType || "",
-              }
-            );
-          });
-      } else {
+      if (allocationRows.length === 0) {
         const utilityBreakdown = Array.isArray(receipt.breakdown?.utilities)
           ? receipt.breakdown.utilities
           : [];

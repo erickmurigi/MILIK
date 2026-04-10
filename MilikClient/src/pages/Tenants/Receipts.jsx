@@ -109,6 +109,10 @@ const safeId = (value) => {
 
 const getInvoiceChargeType = (invoice = {}) => {
   const category = String(invoice?.category || "").toUpperCase();
+  const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
+  if (category === "RENT_CHARGE" && String(metadata?.billItemKey || "").trim().toLowerCase() === "rent_utility:combined") {
+    return "combined";
+  }
   if (category === "UTILITY_CHARGE") return "utility";
   if (category === "DEPOSIT_CHARGE") return "deposit";
   if (category === "LATE_PENALTY_CHARGE") return "late_fee";
@@ -1289,6 +1293,17 @@ const visibleReceiptIds = useMemo(
     );
   }, [allocationOptionMap]);
 
+  const handleMoveToPrepayment = useCallback(() => {
+    if (allocationRules?.lockedUnappliedForConfirmed && Number(allocationRules?.lockedAllocatedTotal || 0) > 0) {
+      toast.error("This posted receipt cannot move its locked allocated amount into prepayment from this workspace.");
+      return;
+    }
+
+    setAllocationLines([{ invoiceId: "", appliedAmount: 0 }]);
+    setAllocationReason((prev) => prev || "Moved receipt allocation to prepayment / unapplied balance.");
+    toast.info("Receipt is now staged as unapplied / prepayment. Click Save Allocation to confirm.");
+  }, [allocationRules]);
+
   const handleAutoAllocate = useCallback(() => {
     const editableCap = allocationRules?.lockedUnappliedForConfirmed
       ? Number(allocationRules?.lockedAllocatedTotal || 0)
@@ -2320,6 +2335,12 @@ const visibleReceiptIds = useMemo(
                           className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
                         >
                           <FaMagic /> Auto Allocate
+                        </button>
+                        <button
+                          onClick={handleMoveToPrepayment}
+                          className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100"
+                        >
+                          <FaInfoCircle /> Move To Prepayment
                         </button>
                         <button
                           onClick={addAllocationLine}
