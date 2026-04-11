@@ -8,6 +8,34 @@ import './login.css';
 
 const POST_LOGOUT_LANDING_KEY = 'milik_post_logout_landing';
 
+const PUBLIC_SITE_URL = 'https://milikproperty.com';
+
+const ensureHeadElement = (selector, tagName, attributes = {}) => {
+  let element = document.head.querySelector(selector);
+
+  if (!element) {
+    element = document.createElement(tagName);
+    Object.entries(attributes).forEach(([key, value]) => {
+      element.setAttribute(key, value);
+    });
+    document.head.appendChild(element);
+  }
+
+  return element;
+};
+
+const setDocumentDescription = (content) => {
+  ensureHeadElement('meta[name="description"]', 'meta', { name: 'description' }).setAttribute('content', content);
+};
+
+const setDocumentRobots = (content) => {
+  ensureHeadElement('meta[name="robots"]', 'meta', { name: 'robots' }).setAttribute('content', content);
+};
+
+const setCanonicalHref = (href) => {
+  ensureHeadElement('link[rel="canonical"]', 'link', { rel: 'canonical' }).setAttribute('href', href);
+};
+
 const consumePostLogoutLanding = () => {
   try {
     const target = sessionStorage.getItem(POST_LOGOUT_LANDING_KEY);
@@ -46,6 +74,13 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
+
+  useEffect(() => {
+    document.title = 'Sign in | Milik';
+    setDocumentDescription('Secure sign in for the Milik Property Management System workspace.');
+    setDocumentRobots('noindex,nofollow');
+    setCanonicalHref(`${PUBLIC_SITE_URL}/login`);
+  }, []);
 
   useEffect(() => {
     // Check if already logged in
@@ -182,7 +217,7 @@ function Login() {
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#FF8C00]">Existing user sign in</p>
               <h2 className="mt-2 text-2xl font-extrabold text-[#0B3B2E] mb-1 text-center">Welcome Back</h2>
               <p className="text-center text-sm font-semibold text-slate-600">Sign in to continue to your live workspace</p>
-              <Link to="/home" className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-[#0B3B2E] transition-colors hover:text-[#FF8C00]">
+              <Link to="/" className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-[#0B3B2E] transition-colors hover:text-[#FF8C00]">
                 ← Back to public overview
               </Link>
             </div>
@@ -276,7 +311,7 @@ function Login() {
             <div className="mt-6 text-center">
               <p className="text-sm font-semibold text-slate-600">
                 New to Milik?{' '}
-                <Link to="/home" className="font-extrabold text-[#0B3B2E] hover:text-[#FF8C00] transition-colors">
+                <Link to="/" className="font-extrabold text-[#0B3B2E] hover:text-[#FF8C00] transition-colors">
                   Explore the public overview
                 </Link>
               </p>

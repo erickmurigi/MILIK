@@ -155,7 +155,7 @@ const hasDemoExpiredNotice = () => {
 };
 
 const getSignedOutRedirectPath = () =>
-  hasDemoExpiredNotice() ? "/home?demoExpired=1" : "/login";
+  hasDemoExpiredNotice() ? "/?demoExpired=1" : "/login";
 
 function ProtectedRoute({ children, allowMustChangePassword = false }) {
   const { currentUser } = useSelector((state) => state.auth);
@@ -229,25 +229,18 @@ function PublicOnlyRoute({ children }) {
   return <Navigate to={resolveDefaultAuthenticatedRoute(resolvedUser)} replace />;
 }
 
-
 function PublicEntryRoute() {
   const { currentUser } = useSelector((state) => state.auth);
   const storedSession = getStoredAuthSession();
   const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
   const token = storedSession.token;
   const isAuthenticated = Boolean(resolvedUser || token);
-  const location = useLocation();
 
   if (isAuthenticated) {
     return <Navigate to={resolveDefaultAuthenticatedRoute(resolvedUser)} replace />;
   }
 
-  return (
-    <Navigate
-      to={{ pathname: "/home", search: location.search || "" }}
-      replace
-    />
-  );
+  return <Home />;
 }
 
 
@@ -351,7 +344,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<PublicEntryRoute />} />
-        <Route path="/home" element={<PublicOnlyRoute><Home /></PublicOnlyRoute>} />
+        <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/trial-access" element={<PublicOnlyRoute><DemoAccessEntry /></PublicOnlyRoute>} />
         <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
         <Route path="/setup-admin" element={<SetupAdmin />} />

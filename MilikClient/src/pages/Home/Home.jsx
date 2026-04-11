@@ -170,6 +170,42 @@ const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
 const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
 const API_BASE = String(import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
 
+const PUBLIC_SITE_URL = "https://milikproperty.com";
+
+const ensureHeadElement = (selector, tagName, attributes = {}) => {
+  let element = document.head.querySelector(selector);
+
+  if (!element) {
+    element = document.createElement(tagName);
+    Object.entries(attributes).forEach(([key, value]) => {
+      element.setAttribute(key, value);
+    });
+    document.head.appendChild(element);
+  }
+
+  return element;
+};
+
+const setDocumentDescription = (content) => {
+  ensureHeadElement('meta[name="description"]', "meta", { name: "description" }).setAttribute("content", content);
+};
+
+const setDocumentRobots = (content) => {
+  ensureHeadElement('meta[name="robots"]', "meta", { name: "robots" }).setAttribute("content", content);
+};
+
+const setCanonicalHref = (href) => {
+  ensureHeadElement('link[rel="canonical"]', "link", { rel: "canonical" }).setAttribute("href", href);
+};
+
+const setOpenGraphContent = (property, content) => {
+  ensureHeadElement(`meta[property="${property}"]`, "meta", { property }).setAttribute("content", content);
+};
+
+const setTwitterContent = (name, content) => {
+  ensureHeadElement(`meta[name="${name}"]`, "meta", { name }).setAttribute("content", content);
+};
+
 function HeroWorkspaceVisual() {
   return (
     <div className="hero-workspace-visual" aria-hidden="true">
@@ -243,6 +279,35 @@ function Home() {
   const [activeFaq, setActiveFaq] = React.useState(null);
   const [demoExpiredNotice, setDemoExpiredNotice] = React.useState("");
   const [restoringDemoAccess, setRestoringDemoAccess] = React.useState(false);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const hasUtilityQuery = params.has("demoAccess") || params.has("token");
+    const canonicalUrl = `${PUBLIC_SITE_URL}/`;
+
+    document.title = "Milik Property Management System | Property, Billing, Statements and Reports";
+    setDocumentDescription(
+      "Milik helps property managers control properties, tenant billing, receipts, landlord statements, Trial Balance, Balance Sheet and Income Statement in one workspace."
+    );
+    setDocumentRobots(hasUtilityQuery ? "noindex,nofollow" : "index,follow");
+    setCanonicalHref(canonicalUrl);
+    setOpenGraphContent("og:type", "website");
+    setOpenGraphContent("og:site_name", "Milik");
+    setOpenGraphContent("og:title", "Milik Property Management System");
+    setOpenGraphContent(
+      "og:description",
+      "Control properties, collections, landlord statements and accounting reports in one workspace."
+    );
+    setOpenGraphContent("og:url", canonicalUrl);
+    setOpenGraphContent("og:image", `${PUBLIC_SITE_URL}/logo.png`);
+    setTwitterContent("twitter:card", "summary_large_image");
+    setTwitterContent("twitter:title", "Milik Property Management System");
+    setTwitterContent(
+      "twitter:description",
+      "Control properties, collections, landlord statements and accounting reports in one workspace."
+    );
+    setTwitterContent("twitter:image", `${PUBLIC_SITE_URL}/logo.png`);
+  }, [location.search]);
 
   const openTrialModal = (role = "property_manager") => {
     setTrialRole(role);

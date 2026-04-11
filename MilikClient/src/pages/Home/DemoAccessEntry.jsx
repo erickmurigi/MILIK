@@ -6,6 +6,33 @@ import { loginSuccess } from "../../redux/authSlice";
 import { getCompanySuccess } from "../../redux/companiesRedux";
 
 const API_BASE = String(import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
+const PUBLIC_SITE_URL = "https://milikproperty.com";
+
+const ensureHeadElement = (selector, tagName, attributes = {}) => {
+  let element = document.head.querySelector(selector);
+
+  if (!element) {
+    element = document.createElement(tagName);
+    Object.entries(attributes).forEach(([key, value]) => {
+      element.setAttribute(key, value);
+    });
+    document.head.appendChild(element);
+  }
+
+  return element;
+};
+
+const setDocumentDescription = (content) => {
+  ensureHeadElement('meta[name="description"]', "meta", { name: "description" }).setAttribute("content", content);
+};
+
+const setDocumentRobots = (content) => {
+  ensureHeadElement('meta[name="robots"]', "meta", { name: "robots" }).setAttribute("content", content);
+};
+
+const setCanonicalHref = (href) => {
+  ensureHeadElement('link[rel="canonical"]', "link", { rel: "canonical" }).setAttribute("href", href);
+};
 
 const DemoAccessEntry = () => {
   const dispatch = useDispatch();
@@ -13,11 +40,18 @@ const DemoAccessEntry = () => {
   const navigate = useNavigate();
 
   React.useEffect(() => {
+    document.title = "Demo Access | Milik";
+    setDocumentDescription("Secure Milik demo access link validation.");
+    setDocumentRobots("noindex,nofollow");
+    setCanonicalHref(`${PUBLIC_SITE_URL}/trial-access`);
+  }, []);
+
+  React.useEffect(() => {
     const params = new URLSearchParams(location.search);
     const accessToken = params.get("token") || params.get("demoAccess");
 
     if (!accessToken) {
-      navigate("/home", { replace: true });
+      navigate("/", { replace: true });
       return undefined;
     }
 
@@ -52,7 +86,7 @@ const DemoAccessEntry = () => {
         if (cancelled) return;
         const message = error?.message || "Failed to restore demo access.";
         toast.error(message);
-        navigate("/home", { replace: true, state: { demoRestoreError: message } });
+        navigate("/", { replace: true, state: { demoRestoreError: message } });
       }
     };
 
