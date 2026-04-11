@@ -93,7 +93,9 @@ const resolveTaxCode = ({ companyTaxConfig = null, requestedKey = null }) => {
 
 const resolveCategoryTaxability = ({ category, taxSettings }) => {
   const normalizedCategory = String(category || "").toUpperCase();
-  if (normalizedCategory === "DEPOSIT_CHARGE") return false;
+  if (normalizedCategory === "DEPOSIT_CHARGE") {
+    return Boolean(taxSettings.invoiceTaxabilityByCategory?.deposit ?? false);
+  }
   if (normalizedCategory === "RENT_CHARGE") {
     return Boolean(taxSettings.invoiceTaxabilityByCategory?.rent ?? taxSettings.invoiceTaxableByDefault);
   }

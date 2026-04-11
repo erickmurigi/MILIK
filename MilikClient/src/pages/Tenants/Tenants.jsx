@@ -23,6 +23,7 @@ import {
   FaDownload,
   FaPrint,
   FaSms,
+  FaExchangeAlt,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getTenants, deleteTenant } from "../../redux/tenantsRedux";
@@ -54,6 +55,19 @@ const isActiveInvoice = (invoice) => {
   return status !== "cancelled" && status !== "reversed";
 };
 
+
+
+const getTenantUnitLabel = (tenant = {}) => {
+  const primary = tenant?.unit?.unitNumber || tenant?.unit?.unitName || tenant?.unit?.name || tenant?.unitNumber || "";
+  const additional = Array.isArray(tenant?.additionalUnits)
+    ? tenant.additionalUnits
+        .map((unit) => unit?.unitNumber || unit?.unitName || unit?.name || "")
+        .filter(Boolean)
+    : [];
+  const labels = [primary, ...additional].filter(Boolean);
+  return labels.length ? labels.join(", ") : "-";
+};
+
 const computeOperationalStatus = ({ tenant }) => {
   const currentStatus = String(tenant?.status || "active").toLowerCase();
 
@@ -74,8 +88,8 @@ const Tenants = () => {
 
   // Redux state
   const { currentCompany } = useSelector((state) => state.company || {});
-  const { tenants: tenantsData = [], isFetching } = useSelector(
-    (state) => state.tenant || { tenants: [], isFetching: false }
+  const { tenants: tenantsData = [] } = useSelector(
+    (state) => state.tenant || { tenants: [] }
   );
   const units = useSelector((state) => state.unit?.units || []);
   const properties = useSelector((state) => state.property?.properties || []);
@@ -93,6 +107,9 @@ const Tenants = () => {
   const actionMenuRef = useRef(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showCommunicationModal, setShowCommunicationModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", effectiveDate: "", reason: "" });
   const [invoiceRefreshTick, setInvoiceRefreshTick] = useState(0);
   const [paymentsSnapshotReady, setPaymentsSnapshotReady] = useState(false);
 
@@ -287,11 +304,7 @@ const Tenants = () => {
         id: tenant._id,
         tenantCode: tenant.tenantCode || "-",
         tenantName: tenant.name || "-",
-        unitNumber:
-          tenant.unit?.unitNumber ||
-          tenant.unit?.unitName ||
-          tenant.unit?.name ||
-          "-",
+        unitNumber: getTenantUnitLabel(tenant),
         propertyName: resolveTenantPropertyName(tenant, units, properties),
         startDate: resolvedStartDate
           ? new Date(resolvedStartDate).toLocaleDateString()
@@ -462,6 +475,53 @@ const Tenants = () => {
     toast.info("Add utility feature coming soon");
     setActionMenuOpen(false);
   };
+
+
+const handleTransferUnit = () => {
+  if (selectedTenants.length === 0) {
+    toast.warning("Please select one tenant to transfer");
+    return;
+  }
+  if (selectedTenants.length > 1) {
+    toast.warning("Please select only one tenant to transfer");
+    return;
+  }
+
+  setTransferForm({
+    tenantId: selectedTenants[0],
+    newUnit: "",
+    effectiveDate: new Date().toISOString().slice(0, 10),
+    reason: "",
+  });
+  setShowTransferModal(true);
+  setActionMenuOpen(false);
+};
+
+const confirmTransferUnit = async () => {
+  if (!transferForm.tenantId || !transferForm.newUnit) {
+    toast.error("Choose the destination unit before transferring");
+    return;
+  }
+
+  setIsTransferring(true);
+  try {
+    await adminRequests.post(`/tenants/${transferForm.tenantId}/transfer-unit`, {
+      business: currentCompany?._id,
+      newUnit: transferForm.newUnit,
+      effectiveDate: transferForm.effectiveDate,
+      reason: transferForm.reason,
+    });
+    toast.success("Tenant unit transferred successfully");
+    setShowTransferModal(false);
+    await dispatch(getTenants({ business: currentCompany._id }));
+    await dispatch(getUnits({ business: currentCompany._id }));
+    await loadInvoices();
+  } catch (error) {
+    toast.error(error?.response?.data?.message || error?.response?.data?.error || error?.message || "Failed to transfer tenant unit");
+  } finally {
+    setIsTransferring(false);
+  }
+};
 
   const handleReviewRent = () => {
     if (selectedTenants.length === 0) {
@@ -774,6 +834,13 @@ const Tenants = () => {
                     >
                       <FaUserEdit size={12} />
                       <span>Edit Tenant Details</span>
+                    </button>
+                    <button
+                      onClick={handleTransferUnit}
+                      className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
+                    >
+                      <FaExchangeAlt size={12} />
+                      <span>Transfer Tenant Unit</span>
                     </button>
                     <button
                       onClick={handleViewReceipts}
@@ -1220,6 +1287,74 @@ const Tenants = () => {
       </div>
 
       {/* ===== DELETE CONFIRMATION MODAL ===== */}
+
+
+{showTransferModal && (() => {
+  const selectedTenantRecord = (Array.isArray(tenantsData) ? tenantsData : []).find((tenant) => tenant._id === transferForm.tenantId) || null;
+  const occupiedUnitIds = new Set([
+    normalizeId(selectedTenantRecord?.unit?._id || selectedTenantRecord?.unit),
+    ...((Array.isArray(selectedTenantRecord?.additionalUnits) ? selectedTenantRecord.additionalUnits : []).map((unit) => normalizeId(unit?._id || unit))),
+  ].filter(Boolean));
+  const availableTransferUnits = (Array.isArray(units) ? units : []).filter((unit) => {
+    const status = String(unit?.status || "").toLowerCase();
+    const unitId = normalizeId(unit?._id);
+    if (!unitId || occupiedUnitIds.has(unitId)) return false;
+    return status === "vacant" && unit?.isVacant !== false;
+  });
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <div className="text-lg font-black text-slate-900">Transfer Tenant Unit</div>
+          <div className="mt-1 text-sm text-slate-500">Move the tenant to a new primary unit while preserving tenant history and invoice records.</div>
+        </div>
+        <div className="space-y-4 px-6 py-5">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700">Destination Unit</label>
+            <select
+              value={transferForm.newUnit}
+              onChange={(e) => setTransferForm((prev) => ({ ...prev, newUnit: e.target.value }))}
+              className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+            >
+              <option value="">Select vacant unit</option>
+              {availableTransferUnits.map((unit) => (
+                <option key={unit._id} value={unit._id}>
+                  {unit.unitNumber} - {(unit.property?.propertyName || unit.propertyName || "Property")}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700">Effective Date</label>
+              <input
+                type="date"
+                value={transferForm.effectiveDate}
+                onChange={(e) => setTransferForm((prev) => ({ ...prev, effectiveDate: e.target.value }))}
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700">Reason</label>
+              <input
+                type="text"
+                value={transferForm.reason}
+                onChange={(e) => setTransferForm((prev) => ({ ...prev, reason: e.target.value }))}
+                placeholder="Upgrade, relocation, merger of spaces..."
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+          <button onClick={() => setShowTransferModal(false)} className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">Cancel</button>
+          <button onClick={confirmTransferUnit} disabled={isTransferring} className="rounded-2xl bg-[#0B3B2E] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{isTransferring ? "Transferring..." : "Transfer Unit"}</button>
+        </div>
+      </div>
+    </div>
+  );
+})()}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-md transform transition-all">

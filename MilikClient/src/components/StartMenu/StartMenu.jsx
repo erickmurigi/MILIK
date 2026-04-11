@@ -5,8 +5,6 @@ import {
   FaBoxes,
   FaUsers,
   FaFolderOpen,
-  FaCogs,
-  FaExchangeAlt,
   FaCalculator,
   FaStickyNote,
   FaEnvelope,
@@ -20,9 +18,15 @@ import {
   FaChevronRight,
   FaSearch,
   FaUserShield,
+  FaShieldAlt,
+  FaStore,
+  FaChartLine,
+  FaBriefcase,
+  FaLock,
 } from "react-icons/fa";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import { toast } from "react-toastify";
 import { clearClientSessionStorage } from "../../utils/sessionCleanup";
 import { getAccessibleCompanies, switchCompany } from "../../redux/apiCalls";
 import { hasCompanyModule } from "../../utils/companyModules";
@@ -34,6 +38,74 @@ const initialsFromName = (value = "") =>
     .slice(0, 2)
     .map((part) => part.charAt(0).toUpperCase())
     .join("") || "M";
+
+const moduleRegistry = [
+  {
+    id: "milik",
+    moduleKey: "propertyManagement",
+    label: "Milik Property Management System",
+    icon: <FaHome />,
+    to: "/dashboard",
+    status: "active",
+  },
+  {
+    id: "accounts",
+    moduleKey: "accounts",
+    label: "Financial Accounts",
+    icon: <FaChartLine />,
+    to: "/financial/chart-of-accounts",
+    status: "active",
+  },
+  {
+    id: "billing",
+    moduleKey: "billing",
+    label: "Billing",
+    icon: <FaEnvelope />,
+    status: "coming",
+  },
+  {
+    id: "inventory",
+    moduleKey: "inventory",
+    label: "Inventory Management",
+    icon: <FaBoxes />,
+    status: "coming",
+  },
+  {
+    id: "procurement",
+    moduleKey: "procurement",
+    label: "Ven-Door",
+    icon: <FaBriefcase />,
+    status: "coming",
+  },
+  {
+    id: "hr",
+    moduleKey: "hr",
+    label: "Human Resource",
+    icon: <FaUsers />,
+    status: "coming",
+  },
+  {
+    id: "pos",
+    moduleKey: "pos",
+    label: "POS & Billing",
+    icon: <FaStore />,
+    status: "coming",
+  },
+  {
+    id: "securityServices",
+    moduleKey: "securityServices",
+    label: "Security",
+    icon: <FaShieldAlt />,
+    status: "coming",
+  },
+  {
+    id: "dms",
+    moduleKey: "dms",
+    label: "Document Management",
+    icon: <FaFolderOpen />,
+    status: "coming",
+  },
+];
 
 const StartMenu = ({ darkMode = false }) => {
   const dispatch = useDispatch();
@@ -55,6 +127,7 @@ const StartMenu = ({ darkMode = false }) => {
   const userName = [currentUser?.surname, currentUser?.otherNames].filter(Boolean).join(" ") || "Milik User";
   const companyName = currentCompany?.companyName || currentUser?.company?.companyName || "No active company";
   const companyLogo = currentCompany?.logo || currentUser?.company?.logo || "";
+  const activeCompanyContext = currentCompany || currentUser?.company || null;
 
   useEffect(() => {
     const onDown = (e) => {
@@ -80,37 +153,18 @@ const StartMenu = ({ darkMode = false }) => {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, showSwitchModal]);
 
-  const activeCompanyContext = currentCompany || currentUser?.company || null;
-
   const primary = useMemo(() => {
-    const items = [
-      hasCompanyModule(activeCompanyContext, "propertyManagement")
-        ? { label: "Milik Property Management System", icon: <FaHome />, to: "/dashboard" }
-        : null,
-      hasCompanyModule(activeCompanyContext, "accounts")
-        ? { label: "Financial Accounts", icon: <FaUsers />, to: "/financial/chart-of-accounts" }
-        : null,
-      hasCompanyModule(activeCompanyContext, "procurement")
-        ? { label: "Ven-Door", icon: <FaKey />, to: "/vendors" }
-        : null,
-      hasCompanyModule(activeCompanyContext, "inventory")
-        ? { label: "Inventory Management", icon: <FaBoxes />, to: "/inventory" }
-        : null,
-      hasCompanyModule(activeCompanyContext, "dms")
-        ? { label: "Document Management", icon: <FaFolderOpen />, to: "/documents" }
-        : null,
-    ].filter(Boolean);
-
-    return items.length > 0 ? items : [{ label: "Milik Property Management System", icon: <FaHome />, to: "/dashboard" }];
+    if (!activeCompanyContext) return [];
+    return moduleRegistry.filter((item) => hasCompanyModule(activeCompanyContext, item.moduleKey));
   }, [activeCompanyContext]);
 
   const secondaryTop = useMemo(
     () => [
-      { label: "SMS Manager", icon: <FaSms />, onClick: () => alert("SMS Manager coming soon") },
-      { label: "Email Manager", icon: <FaEnvelope />, onClick: () => alert("Email Manager coming soon") },
-      { label: "Sticky Notes", icon: <FaStickyNote />, onClick: () => alert("Sticky Notes coming soon") },
-      { label: "Calculator", icon: <FaCalculator />, onClick: () => window.open("https://www.google.com/search?q=calculator", "_blank") },
-      { label: "Help", icon: <FaQuestionCircle />, onClick: () => alert("Help coming soon") },
+      { label: "SMS Manager", icon: <FaSms />, onClick: () => toast.info("SMS Manager is coming soon") },
+      { label: "Email Manager", icon: <FaEnvelope />, onClick: () => toast.info("Email Manager is coming soon") },
+      { label: "Sticky Notes", icon: <FaStickyNote />, onClick: () => toast.info("Sticky Notes are coming soon") },
+      { label: "Calculator", icon: <FaCalculator />, onClick: () => window.open("https://www.google.com/search?q=calculator", "_blank", "noopener,noreferrer") },
+      { label: "Help", icon: <FaQuestionCircle />, onClick: () => toast.info("Help is coming soon") },
     ],
     []
   );
@@ -132,6 +186,7 @@ const StartMenu = ({ darkMode = false }) => {
       console.error("Failed to load accessible companies:", error);
       setCompanies([]);
       setCompaniesLoadedAt(0);
+      toast.error(error?.response?.data?.message || error?.message || "Failed to load companies");
     } finally {
       setLoadingCompanies(false);
     }
@@ -141,7 +196,6 @@ const StartMenu = ({ darkMode = false }) => {
     const items = [
       {
         label: "Company Setup",
-        to: "/company-setup",
         icon: <FaBuilding />,
         onClick: () => {
           setOpen(false);
@@ -153,7 +207,6 @@ const StartMenu = ({ darkMode = false }) => {
     if (isSystemAdmin) {
       items.push({
         label: "System Admin",
-        to: "/system-setup",
         icon: <FaUserShield />,
         onClick: () => {
           setOpen(false);
@@ -164,7 +217,7 @@ const StartMenu = ({ darkMode = false }) => {
 
     items.push({
       label: "Switch Company",
-      icon: <FaExchangeAlt />,
+      icon: <FaBuilding />,
       onClick: async (e) => {
         e?.preventDefault?.();
         await openSwitchCompany();
@@ -195,6 +248,20 @@ const StartMenu = ({ darkMode = false }) => {
     window.location.replace("/login");
   };
 
+  const handlePrimaryModuleClick = (item) => {
+    setOpen(false);
+
+    if (item?.status === "active" && item?.to) {
+      const recent = JSON.parse(localStorage.getItem("recentModules") || "[]");
+      const updated = [item.id, ...recent.filter((id) => id !== item.id)].slice(0, 5);
+      localStorage.setItem("recentModules", JSON.stringify(updated));
+      navigate(item.to);
+      return;
+    }
+
+    toast.info(`${item?.label || "This module"} is enabled for this company but its workspace is not yet live.`);
+  };
+
   const handleSwitchCompany = async (company) => {
     if (!company?._id) return;
 
@@ -202,6 +269,7 @@ const StartMenu = ({ darkMode = false }) => {
     if (String(company._id) === activeCompanyId) {
       setShowSwitchModal(false);
       setOpen(false);
+      navigate("/moduleDashboard", { replace: true });
       return;
     }
 
@@ -212,10 +280,10 @@ const StartMenu = ({ darkMode = false }) => {
       await dispatch(switchCompany(company._id));
       setShowSwitchModal(false);
       setOpen(false);
-      navigate("/dashboard", { replace: true });
+      navigate("/moduleDashboard", { replace: true });
     } catch (error) {
       console.error("Failed to switch company:", error);
-      alert(error?.response?.data?.message || error?.message || "Failed to switch company");
+      toast.error(error?.response?.data?.message || error?.message || "Failed to switch company");
     } finally {
       setSwitchLoading(false);
     }
@@ -225,38 +293,37 @@ const StartMenu = ({ darkMode = false }) => {
 
   return (
     <>
-      <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[120]">
+      <div className="fixed bottom-12 left-1/2 z-[120] -translate-x-1/2">
         <button
           ref={anchorRef}
           onClick={() => setOpen((v) => !v)}
           className={[
-            "group relative flex items-center gap-2 rounded-2xl px-4 py-2 shadow-lg border",
+            "group relative flex items-center gap-2 rounded-2xl border px-4 py-2 shadow-lg",
             "backdrop-blur-xl transition active:scale-[0.98]",
             darkMode
-              ? "bg-white/25 border-white/20 text-white"
-              : "bg-white/85 border-emerald-100 text-slate-900",
+              ? "border-white/20 bg-white/25 text-white"
+              : "border-emerald-100 bg-white/85 text-slate-900",
           ].join(" ")}
           aria-label="Open Start Menu"
         >
-          <span className="h-10 w-10 rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white flex items-center justify-center shadow-inner">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white shadow-inner">
             <FaThLarge />
           </span>
           <span className="text-sm font-extrabold tracking-wide">MENU</span>
-          <span className="absolute -inset-1 rounded-3xl opacity-0 group-hover:opacity-100 transition bg-white/10" />
+          <span className="absolute -inset-1 rounded-3xl bg-white/10 opacity-0 transition group-hover:opacity-100" />
         </button>
 
         {open && (
-          <div ref={menuRef} className="absolute left-1/2 -translate-x-1/2 bottom-[60px] w-[92vw] max-w-[860px]">
+          <div ref={menuRef} className="absolute bottom-[60px] left-1/2 w-[92vw] max-w-[860px] -translate-x-1/2">
             <div
               className={[
-                "rounded-3xl border shadow-2xl overflow-hidden",
-                "backdrop-blur-2xl",
+                "overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-2xl",
                 darkMode ? "border-white/15 bg-black/30" : "border-white/40 bg-white/80",
               ].join(" ")}
             >
-              <div className="px-5 py-4 flex items-center justify-between bg-gradient-to-r from-[#0A400C] via-[#0f766e] to-[#F97316]">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-12 w-12 rounded-2xl bg-white/15 border border-white/20 text-white overflow-hidden flex items-center justify-center shadow-inner">
+              <div className="flex items-center justify-between bg-gradient-to-r from-[#0A400C] via-[#0f766e] to-[#F97316] px-5 py-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white/15 text-white shadow-inner">
                     {companyLogo ? (
                       <img src={companyLogo} alt={companyName} className="h-full w-full object-cover" />
                     ) : (
@@ -264,55 +331,71 @@ const StartMenu = ({ darkMode = false }) => {
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-white font-extrabold truncate">{userName}</div>
-                    <div className="text-white/80 text-xs truncate">{companyName}</div>
+                    <div className="truncate text-white font-extrabold">{userName}</div>
+                    <div className="truncate text-xs text-white/80">{companyName}</div>
                   </div>
                 </div>
 
                 <button
                   onClick={() => setOpen(false)}
-                  className="rounded-xl px-3 py-2 text-xs font-semibold border border-white/20 text-white hover:bg-white/10 transition"
+                  className="rounded-xl border border-white/20 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
                 >
                   Close
                 </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3">
-                <div className={["md:col-span-2 p-4", darkMode ? "bg-white/5" : "bg-white/40"].join(" ")}>
-                  <div className={darkMode ? "text-white/80 text-xs font-bold mb-3" : "text-slate-700 text-xs font-bold mb-3"}>MODULES</div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {primary.map((item) => (
-                      <Link
-                        key={item.label}
-                        to={item.to}
-                        onClick={() => setOpen(false)}
-                        className={[
-                          "flex items-center gap-3 rounded-2xl px-3 py-3 border transition",
-                          darkMode ? "border-white/10 hover:bg-white/10 text-white" : "border-slate-200 hover:bg-white text-slate-900",
-                        ].join(" ")}
-                      >
-                        <span className="h-10 w-10 rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white flex items-center justify-center">
-                          {item.icon}
-                        </span>
-                        <div className="text-sm font-semibold">{item.label}</div>
-                      </Link>
-                    ))}
+                <div className={["p-4 md:col-span-2", darkMode ? "bg-white/5" : "bg-white/40"].join(" ")}>
+                  <div className={darkMode ? "mb-3 text-xs font-bold text-white/80" : "mb-3 text-xs font-bold text-slate-700"}>
+                    MODULES
                   </div>
+
+                  {primary.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {primary.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handlePrimaryModuleClick(item)}
+                          className={[
+                            "flex items-center gap-3 rounded-2xl border px-3 py-3 text-left transition",
+                            darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
+                          ].join(" ")}
+                        >
+                          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white">
+                            {item.icon}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-semibold">{item.label}</div>
+                            <div className={darkMode ? "text-[11px] text-white/60" : "text-[11px] text-slate-500"}>
+                              {item.status === "active" ? "Live workspace" : "Enabled for company"}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={[
+                      "rounded-2xl border px-4 py-4 text-sm",
+                      darkMode ? "border-white/10 bg-white/5 text-white/80" : "border-slate-200 bg-slate-50 text-slate-600",
+                    ].join(" ")}>
+                      No active modules are currently enabled for this company.
+                    </div>
+                  )}
 
                   <div className="mt-4 h-px bg-black/10" />
 
-                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {secondaryBottom.map((item) => (
                       <button
                         key={item.label}
                         onClick={item.onClick}
                         className={[
-                          "flex items-center gap-2 rounded-2xl px-3 py-3 border text-left transition",
-                          darkMode ? "border-white/10 hover:bg-white/10 text-white" : "border-slate-200 hover:bg-white text-slate-900",
+                          "flex items-center gap-2 rounded-2xl border px-3 py-3 text-left transition",
+                          darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
                         ].join(" ")}
                       >
-                        <span className="h-9 w-9 rounded-2xl bg-slate-900/90 text-white flex items-center justify-center">{item.icon}</span>
+                        <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-900/90 text-white">{item.icon}</span>
                         <span className="text-xs font-bold">{item.label}</span>
                       </button>
                     ))}
@@ -320,18 +403,18 @@ const StartMenu = ({ darkMode = false }) => {
                 </div>
 
                 <div className={["p-4", darkMode ? "bg-black/10" : "bg-white/55"].join(" ")}>
-                  <div className={darkMode ? "text-white/80 text-xs font-bold mb-3" : "text-slate-700 text-xs font-bold mb-3"}>TOOLS</div>
+                  <div className={darkMode ? "mb-3 text-xs font-bold text-white/80" : "mb-3 text-xs font-bold text-slate-700"}>TOOLS</div>
                   <div className="space-y-2">
                     {secondaryTop.map((item) => (
                       <button
                         key={item.label}
                         onClick={item.onClick}
                         className={[
-                          "w-full flex items-center gap-3 rounded-2xl px-3 py-3 border transition",
-                          darkMode ? "border-white/10 hover:bg-white/10 text-white" : "border-slate-200 hover:bg-white text-slate-900",
+                          "w-full flex items-center gap-3 rounded-2xl border px-3 py-3 transition",
+                          darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
                         ].join(" ")}
                       >
-                        <span className="h-10 w-10 rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white flex items-center justify-center">{item.icon}</span>
+                        <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white">{item.icon}</span>
                         <div className="text-sm font-semibold">{item.label}</div>
                       </button>
                     ))}
@@ -341,24 +424,24 @@ const StartMenu = ({ darkMode = false }) => {
 
                   <div className="mt-4 space-y-2">
                     <button
-                      onClick={() => alert("My Account coming soon")}
+                      onClick={() => toast.info("My Account is coming soon")}
                       className={[
-                        "w-full flex items-center gap-3 rounded-2xl px-3 py-3 border transition",
-                        darkMode ? "border-white/10 hover:bg-white/10 text-white" : "border-slate-200 hover:bg-white text-slate-900",
+                        "w-full flex items-center gap-3 rounded-2xl border px-3 py-3 transition",
+                        darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
                       ].join(" ")}
                     >
-                      <span className="h-10 w-10 rounded-2xl bg-slate-900/90 text-white flex items-center justify-center"><FaUserCircle /></span>
+                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900/90 text-white"><FaUserCircle /></span>
                       <div className="text-sm font-semibold">My Account</div>
                     </button>
 
                     <button
                       onClick={onSignOut}
                       className={[
-                        "w-full flex items-center gap-3 rounded-2xl px-3 py-3 border transition",
-                        darkMode ? "border-white/10 hover:bg-white/10 text-white" : "border-slate-200 hover:bg-white text-slate-900",
+                        "w-full flex items-center gap-3 rounded-2xl border px-3 py-3 transition",
+                        darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
                       ].join(" ")}
                     >
-                      <span className="h-10 w-10 rounded-2xl bg-red-600/90 text-white flex items-center justify-center"><FaSignOutAlt /></span>
+                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-600/90 text-white"><FaSignOutAlt /></span>
                       <div className="text-sm font-semibold">Sign Out</div>
                     </button>
                   </div>
@@ -366,7 +449,7 @@ const StartMenu = ({ darkMode = false }) => {
               </div>
 
               <div className="relative">
-                <div className="absolute left-1/2 -translate-x-1/2 -bottom-2 h-4 w-4 rotate-45 border border-white/30 bg-white/70 backdrop-blur-xl" />
+                <div className="absolute left-1/2 -bottom-2 h-4 w-4 -translate-x-1/2 rotate-45 border border-white/30 bg-white/70 backdrop-blur-xl" />
               </div>
             </div>
           </div>
@@ -374,9 +457,9 @@ const StartMenu = ({ darkMode = false }) => {
       </div>
 
       {showSwitchModal && (
-        <div className="fixed inset-0 z-[140] bg-slate-950/35 backdrop-blur-sm flex items-center justify-center px-4">
-          <div className="w-full max-w-2xl rounded-[28px] border border-emerald-100 bg-white shadow-2xl overflow-hidden">
-            <div className="px-6 py-4 bg-gradient-to-r from-[#0A400C] via-[#16A34A] to-[#F97316] text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-emerald-100 bg-white shadow-2xl">
+            <div className="flex items-center justify-between bg-gradient-to-r from-[#0A400C] via-[#16A34A] to-[#F97316] px-6 py-4 text-white">
               <div>
                 <div className="text-lg font-extrabold">Switch Company</div>
                 <div className="text-xs text-white/80">Choose the company context you want to work in.</div>
@@ -385,17 +468,17 @@ const StartMenu = ({ darkMode = false }) => {
             </div>
 
             <div className="p-5">
-              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 mb-4">
+              <div className="mb-4 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <FaSearch className="text-slate-400" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search company by name, code, town or country"
-                  className="w-full bg-transparent outline-none text-sm"
+                  className="w-full bg-transparent text-sm outline-none"
                 />
               </div>
 
-              <div className="rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="overflow-hidden rounded-2xl border border-slate-200">
                 {loadingCompanies ? (
                   <div className="p-6 text-sm text-slate-500">Loading companies...</div>
                 ) : filteredCompanies.length === 0 ? (
@@ -408,24 +491,26 @@ const StartMenu = ({ darkMode = false }) => {
                         key={company._id}
                         onClick={() => handleSwitchCompany(company)}
                         disabled={isBusySwitching}
-                        className="w-full flex items-center justify-between gap-4 px-4 py-4 border-b last:border-b-0 border-slate-200 hover:bg-emerald-50 text-left transition disabled:opacity-60"
+                        className="w-full border-b border-slate-200 px-4 py-4 text-left transition last:border-b-0 hover:bg-emerald-50 disabled:opacity-60"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-12 w-12 rounded-2xl overflow-hidden bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white flex items-center justify-center font-bold shrink-0">
-                            {company?.logo ? (
-                              <img src={company.logo} alt={company.companyName} className="h-full w-full object-cover" />
-                            ) : (
-                              initialsFromName(company?.companyName)
-                            )}
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] font-bold text-white">
+                              {company?.logo ? (
+                                <img src={company.logo} alt={company.companyName} className="h-full w-full object-cover" />
+                              ) : (
+                                initialsFromName(company?.companyName)
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate font-bold text-slate-900">{company?.companyName}</div>
+                              <div className="truncate text-xs text-slate-500">{[company?.companyCode, company?.town, company?.country].filter(Boolean).join(" • ") || "Company workspace"}</div>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <div className="font-bold text-slate-900 truncate">{company?.companyName}</div>
-                            <div className="text-xs text-slate-500 truncate">{[company?.companyCode, company?.town, company?.country].filter(Boolean).join(" • ") || "Company workspace"}</div>
+                          <div className="flex shrink-0 items-center gap-3">
+                            {active ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700"><FaCheckCircle /> Active</span> : null}
+                            <FaChevronRight className="text-slate-400" />
                           </div>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          {active ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700"><FaCheckCircle /> Active</span> : null}
-                          <FaChevronRight className="text-slate-400" />
                         </div>
                       </button>
                     );

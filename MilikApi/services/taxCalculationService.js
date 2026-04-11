@@ -50,7 +50,7 @@ export const normalizeCompanyTaxConfiguration = (settings = null) => {
       key: normalizeCodeKey(code?.key || code?.name),
       name: String(code?.name || code?.key || "Tax Code").trim(),
       type: String(code?.type || "vat").trim().toLowerCase(),
-      rate: Number(code?.rate ?? normalizedSettings.defaultVatRate ?? 0),
+      rate: Math.max(Number(code?.rate ?? normalizedSettings.defaultVatRate ?? 0), 0),
       isDefault: Boolean(code?.isDefault),
       isActive: code?.isActive !== false,
       description: String(code?.description || "").trim(),
@@ -58,15 +58,49 @@ export const normalizeCompanyTaxConfiguration = (settings = null) => {
     .filter((code) => code.key);
 
   if (!taxCodes.some((code) => code.key === "no_tax")) {
-    taxCodes.unshift(DEFAULT_TAX_CODES[0]);
+    taxCodes.unshift({ ...DEFAULT_TAX_CODES[0] });
   }
 
-  const defaultCodeExists = taxCodes.some((code) => code.key === normalizeCodeKey(normalizedSettings.defaultTaxCodeKey, "vat_standard"));
-  if (!defaultCodeExists) {
-    normalizedSettings.defaultTaxCodeKey = "vat_standard";
+  const noTaxIndex = taxCodes.findIndex((code) => code.key === "no_tax");
+  if (noTaxIndex >= 0) {
+    taxCodes[noTaxIndex] = {
+      ...taxCodes[noTaxIndex],
+      name: taxCodes[noTaxIndex].name || DEFAULT_TAX_CODES[0].name,
+      type: "none",
+      rate: 0,
+      isActive: true,
+    };
   }
 
-  return { taxSettings: normalizedSettings, taxCodes };
+  let normalizedDefaultKey = normalizeCodeKey(normalizedSettings.defaultTaxCodeKey, "vat_standard");
+  const activeDefaultExists = taxCodes.some(
+    (code) => code.key === normalizedDefaultKey && code.isActive !== false
+  );
+
+  if (!activeDefaultExists) {
+    normalizedDefaultKey = taxCodes.some((code) => code.key === "vat_standard" && code.isActive !== false)
+      ? "vat_standard"
+      : (taxCodes.find((code) => code.isActive !== false)?.key || "no_tax");
+  }
+
+  normalizedSettings.defaultTaxCodeKey = normalizedDefaultKey;
+
+  let defaultAssigned = false;
+  const normalizedCodes = taxCodes.map((code) => {
+    const nextCode = {
+      ...code,
+      isDefault: !defaultAssigned && code.key === normalizedDefaultKey,
+    };
+    if (nextCode.isDefault) defaultAssigned = true;
+    return nextCode;
+  });
+
+  if (!defaultAssigned) {
+    normalizedCodes[0] = { ...normalizedCodes[0], isDefault: true };
+    normalizedSettings.defaultTaxCodeKey = normalizedCodes[0].key;
+  }
+
+  return { taxSettings: normalizedSettings, taxCodes: normalizedCodes };
 };
 
 export const getCompanyTaxConfiguration = async (businessId) => {
@@ -126,7 +160,7 @@ export const calculateTaxBreakdown = ({ amount, taxRate = 0, taxMode = "exclusiv
 
 const resolveInvoiceTaxability = ({ category, taxSettings, overrides = {} }) => {
   const normalizedCategory = String(category || "").toUpperCase();
-  if (normalizedCategory === "DEPOSIT_CHARGE") return false;
+  if (normalizedCategory === "DEPOSIT_CHARGE") return Boolean(taxSettings.invoiceTaxabilityByCategory?.deposit ?? false);
   if (typeof overrides?.isTaxable === "boolean") return overrides.isTaxable;
 
   if (normalizedCategory === "RENT_CHARGE") return Boolean(taxSettings.invoiceTaxabilityByCategory?.rent ?? taxSettings.invoiceTaxableByDefault);

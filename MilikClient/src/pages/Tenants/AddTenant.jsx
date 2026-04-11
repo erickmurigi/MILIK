@@ -230,6 +230,7 @@ const AddTenant = () => {
     idNumber: "",
     property: "",
     unit: "",
+    additionalUnits: [],
     moveInDate: "",
     moveOutDate: "",
     leaseType: "at_will",
@@ -278,7 +279,7 @@ const AddTenant = () => {
     if (!formData.property) {
       lastPropertyRef.current = "";
       setAvailableUnits([]);
-      setFormData((prev) => ({ ...prev, unit: "", utilities: [] }));
+      setFormData((prev) => ({ ...prev, unit: "", additionalUnits: [], utilities: [] }));
       setAdditionalUtilities([]);
       return;
     }
@@ -309,12 +310,45 @@ const AddTenant = () => {
     setAvailableUnits(unitOptions);
 
     if (lastPropertyRef.current && lastPropertyRef.current !== formData.property) {
-      setFormData((prev) => ({ ...prev, unit: "", utilities: [], rent: "", depositAmount: "" }));
+      setFormData((prev) => ({ ...prev, unit: "", additionalUnits: [], utilities: [], rent: "", depositAmount: "" }));
       setAdditionalUtilities([]);
     }
 
     lastPropertyRef.current = formData.property;
-  }, [formData.property, unitLoading, units]);
+  }, [formData.property, formData.unit, unitLoading, units]);
+
+
+useEffect(() => {
+  if (!formData.unit) {
+    if (Array.isArray(formData.additionalUnits) && formData.additionalUnits.length > 0) {
+      setFormData((prev) => ({ ...prev, additionalUnits: [] }));
+    }
+    return;
+  }
+
+  const cleanedAdditionalUnits = Array.from(
+    new Set((Array.isArray(formData.additionalUnits) ? formData.additionalUnits : []).filter((unitId) => normalizeId(unitId) !== normalizeId(formData.unit)))
+  );
+
+  const assignedUnits = availableUnits.filter((unit) =>
+    [formData.unit, ...cleanedAdditionalUnits].some((unitId) => normalizeId(unitId) === normalizeId(unit?._id))
+  );
+
+  const computedRent = assignedUnits.reduce((sum, unit) => sum + Number(unit?.rent || 0), 0);
+  const nextRent = computedRent > 0 ? String(computedRent) : formData.rent;
+  const additionalChanged = cleanedAdditionalUnits.join(",") !== (Array.isArray(formData.additionalUnits) ? formData.additionalUnits.map((unitId) => normalizeId(unitId)).join(",") : "");
+  const rentChanged = nextRent !== String(formData.rent ?? "");
+
+  if (!additionalChanged && !rentChanged) {
+    return;
+  }
+
+  setFormData((prev) => ({
+    ...prev,
+    additionalUnits: additionalChanged ? cleanedAdditionalUnits : prev.additionalUnits,
+    rent: rentChanged ? nextRent : prev.rent,
+  }));
+}, [availableUnits, formData.additionalUnits, formData.rent, formData.unit]);
 
   useEffect(() => {
     if (!formData.unit || availableUnits.length === 0) return;
@@ -349,6 +383,18 @@ const AddTenant = () => {
       availableUnits.find((unit) => normalizeId(unit?._id) === normalizeId(formData.unit)) || null,
     [availableUnits, formData.unit]
   );
+
+
+
+const selectedAdditionalUnitRecords = useMemo(
+  () =>
+    availableUnits.filter((unit) =>
+      Array.isArray(formData.additionalUnits) &&
+      formData.additionalUnits.some((unitId) => normalizeId(unitId) === normalizeId(unit?._id))
+    ),
+  [availableUnits, formData.additionalUnits]
+);
+
 
   const selectedPropertyRecord = useMemo(
     () =>
@@ -456,6 +502,7 @@ const AddTenant = () => {
           idNumber: tenant.idNumber || "",
           property: propertyId,
           unit: unitId,
+          additionalUnits: Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits.map((item) => normalizeId(item?._id || item)) : [],
           moveInDate: formatDateInput(tenant.moveInDate),
           moveOutDate: formatDateInput(tenant.moveOutDate),
           leaseType: tenant.leaseType || "at_will",
@@ -672,6 +719,9 @@ const AddTenant = () => {
     if (!formData.idNumber?.trim()) errors.idNumber = "ID number is required";
     if (!formData.property?.trim()) errors.property = "Property is required";
     if (!formData.unit?.trim()) errors.unit = "Unit is required";
+    if (Array.isArray(formData.additionalUnits) && formData.additionalUnits.some((unitId) => normalizeId(unitId) === normalizeId(formData.unit))) {
+      errors.additionalUnits = "Additional units cannot include the primary unit";
+    }
     if (!formData.moveInDate) errors.moveInDate = "Move-in date is required (billing anchor)";
     if (!formData.rent || parseFloat(formData.rent) <= 0) {
       errors.rent = "Valid monthly rent is required";
@@ -1009,7 +1059,7 @@ for (const request of invoiceRequests) {
                       items={activeProperties}
                       value={formData.property}
                       onChange={(val) => {
-                        setFormData((prev) => ({ ...prev, property: val, unit: "" }));
+                        setFormData((prev) => ({ ...prev, property: val, unit: "", additionalUnits: [] }));
                         if (fieldErrors.property) {
                           setFieldErrors((prev) => ({ ...prev, property: "" }));
                         }
@@ -1036,6 +1086,47 @@ for (const request of invoiceRequests) {
                       error={fieldErrors.unit}
                       disabled={!formData.property}
                     />
+                  </div>
+
+                  {formData.property && availableUnits.length > 1 && (
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-sm font-semibold text-slate-800">Additional Units (Optional)</div>
+                      <p className="mt-1 text-xs text-slate-500">Keep the selected unit as the primary unit, then tick any extra units that belong to the same tenant.</p>
+                      {selectedAdditionalUnitRecords.length > 0 && (
+                        <p className="mt-2 text-xs font-semibold text-emerald-700">{selectedAdditionalUnitRecords.length} additional unit(s) selected.</p>
+                      )}
+                      <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                        {availableUnits
+                          .filter((unit) => normalizeId(unit?._id) !== normalizeId(formData.unit))
+                          .map((unit) => {
+                            const checked = Array.isArray(formData.additionalUnits) && formData.additionalUnits.some((unitId) => normalizeId(unitId) === normalizeId(unit?._id));
+                            return (
+                              <label key={unit._id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                                <span>{unit.unitNumber} - Ksh {Number(unit.rent || 0).toLocaleString()}</span>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      additionalUnits: e.target.checked
+                                        ? [...(Array.isArray(prev.additionalUnits) ? prev.additionalUnits : []), unit._id]
+                                        : (Array.isArray(prev.additionalUnits) ? prev.additionalUnits : []).filter((unitId) => normalizeId(unitId) !== normalizeId(unit._id)),
+                                    }));
+                                    if (fieldErrors.additionalUnits) {
+                                      setFieldErrors((prev) => ({ ...prev, additionalUnits: "" }));
+                                    }
+                                  }}
+                                />
+                              </label>
+                            );
+                          })}
+                      </div>
+                      {fieldErrors.additionalUnits && <p className="mt-2 text-xs text-red-600">{fieldErrors.additionalUnits}</p>}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   </div>
                 </div>
 

@@ -108,7 +108,7 @@ function Login() {
     setServerError('');
     
     try {
-      const result = await dispatch(loginUser(formData.email, formData.password));
+      const result = await dispatch(loginUser(formData.email.trim().toLowerCase(), formData.password));
       toast.success('Login successful!');
       setServerError('');
       navigate(resolvePostLoginRoute(result?.user), { replace: true });

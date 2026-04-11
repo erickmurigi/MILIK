@@ -782,7 +782,7 @@ const transformCompanyData = (data) => {
   if (data.modules) {
     const moduleBooleans = {};
     for (const [key, value] of Object.entries(data.modules)) {
-      moduleBooleans[key] = value.enabled || false;
+      moduleBooleans[key] = typeof value === "boolean" ? value : Boolean(value?.enabled);
     }
     transformed.modules = moduleBooleans;
   }
@@ -2274,7 +2274,8 @@ export const loginUser = (email, password) => async (dispatch) => {
       password
     });
 
-    const { user, token } = res.data;
+    const { user, token, company } = res.data;
+    const resolvedCompany = company?._id ? company : user?.company?._id ? user.company : null;
 
     invalidateAccessibleCompaniesCache();
     dispatch(clearCompanyState());
@@ -2284,15 +2285,15 @@ export const loginUser = (email, password) => async (dispatch) => {
 
     dispatch(loginSuccess({ user, token }));
 
-    if (user && user.company?._id) {
-      dispatch(setCurrentCompany(user.company));
-      dispatch(getCompanySuccess(user.company));
-      localStorage.setItem('milik_active_company_id', user.company._id);
+    if (resolvedCompany?._id) {
+      dispatch(setCurrentCompany(resolvedCompany));
+      dispatch(getCompanySuccess(resolvedCompany));
+      localStorage.setItem('milik_active_company_id', resolvedCompany._id);
     } else if (!user?.isDemoUser) {
       localStorage.removeItem('milik_active_company_id');
     }
 
-    return { user, token };
+    return { user, token, company: resolvedCompany };
   } catch (err) {
     dispatch(loginFailure());
     throw err;

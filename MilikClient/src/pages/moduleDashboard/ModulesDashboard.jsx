@@ -1,6 +1,7 @@
 // pages/ModulesDashboard/ModulesDashboard.jsx
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import {
   FaChartLine,
   FaWarehouse,
@@ -9,102 +10,126 @@ import {
   FaHandshake,
   FaStore,
   FaArrowRight,
+  FaEnvelope,
+  FaHome,
+  FaLock,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
+import { hasCompanyModule } from "../../utils/companyModules";
+import StartMenu from "../../components/StartMenu/StartMenu";
 import "./ModulesDashboard.css";
+
+const moduleRegistry = [
+  {
+    id: "milik",
+    moduleKey: "propertyManagement",
+    title: "MILIK",
+    subtitle: "Milik Property Management System",
+    description: "Launch Milik core workspace for properties, tenants, leases and rent operations.",
+    status: "active",
+    route: "/dashboard",
+    icon: <img src="/logo.png" alt="Milik logo" className="h-9 w-9 object-contain milik-logo-mark" />,
+    tint: "milik-icon-light",
+  },
+  {
+    id: "accounts",
+    moduleKey: "accounts",
+    title: "Accounts & Finance",
+    subtitle: "Financial management and accounting",
+    description: "Track income, expenses, analytics and accounting operations with clear financial visibility.",
+    status: "active",
+    route: "/financial/chart-of-accounts",
+    icon: <FaChartLine />,
+    tint: "milik-icon-gold",
+  },
+  {
+    id: "billing",
+    moduleKey: "billing",
+    title: "Billing",
+    subtitle: "Invoice and billing workspace",
+    description: "Prepare billing-focused workflows for future activation under the company module set.",
+    status: "coming",
+    icon: <FaEnvelope />,
+    tint: "milik-icon-gold",
+  },
+  {
+    id: "inventory",
+    moduleKey: "inventory",
+    title: "Inventory",
+    subtitle: "Stock management and warehousing",
+    description: "Monitor stock movement, automate replenishment and keep warehouse operations synchronized.",
+    status: "coming",
+    icon: <FaWarehouse />,
+    tint: "milik-icon-cyan",
+  },
+  {
+    id: "hr",
+    moduleKey: "hr",
+    title: "Human Resource",
+    subtitle: "People and staffing operations",
+    description: "Manage staffing, people administration and HR workflows once the workspace is enabled.",
+    status: "coming",
+    icon: <FaUsers />,
+    tint: "milik-icon-teal",
+  },
+  {
+    id: "security",
+    moduleKey: "securityServices",
+    title: "Security",
+    subtitle: "Access control and monitoring",
+    description: "Protect operations with role controls, security workflows and monitoring tools.",
+    status: "coming",
+    icon: <FaShieldAlt />,
+    tint: "milik-icon-charcoal",
+  },
+  {
+    id: "pos",
+    moduleKey: "pos",
+    title: "POS & Billing",
+    subtitle: "Point of sale system",
+    description: "Process payments, issue receipts and manage checkout operations with inventory sync.",
+    status: "coming",
+    icon: <FaStore />,
+    tint: "milik-icon-orange",
+  },
+  {
+    id: "vendoor",
+    moduleKey: "procurement",
+    title: "Ven-Door",
+    subtitle: "Vendor management portal",
+    description: "Centralize supplier workflows, purchase coordination and vendor performance.",
+    status: "coming",
+    icon: <FaHandshake />,
+    tint: "milik-icon-indigo",
+  },
+];
 
 const ModulesDashboard = () => {
   const navigate = useNavigate();
+  const currentCompany = useSelector((state) => state.company?.currentCompany || null);
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
 
-  const modules = useMemo(
-    () => [
-      {
-        id: "milik",
-        title: "MILIK",
-        subtitle: "Milik Property Management System",
-        description: "Launch Milik core workspace for properties, tenants, leases and rent operations.",
-        status: "active",
-        route: "/dashboard",
-        icon: <img src="/logo.png" alt="Milik logo" className="h-9 w-9 object-contain milik-logo-mark" />,
-        tint: "milik-icon-light",
-      },
-      {
-        id: "accounts",
-        title: "Accounts & Finance",
-        subtitle: "Financial management and accounting",
-        description: "Track income, expenses, analytics and accounting operations with clear financial visibility.",
-        status: "active",
-        route: "/financial/chart-of-accounts",
-        icon: <FaChartLine />,
-        tint: "milik-icon-gold",
-      },
-      {
-        id: "inventory",
-        title: "Inventory",
-        subtitle: "Stock management and warehousing",
-        description: "Monitor stock movement, automate replenishment and keep warehouse operations synchronized.",
-        status: "active",
-        route: "/inventory",
-        icon: <FaWarehouse />,
-        tint: "milik-icon-cyan",
-      },
-      {
-        id: "crm",
-        title: "CRM",
-        subtitle: "Customer relationship management",
-        description: "Manage customer pipelines, interactions and growth opportunities with actionable insights.",
-        status: "active",
-        route: "/crm",
-        icon: <FaUsers />,
-        tint: "milik-icon-teal",
-      },
-      {
-        id: "security",
-        title: "Security",
-        subtitle: "Access control and monitoring",
-        description: "Protect operations with role controls, security workflows and real-time monitoring tools.",
-        status: "active",
-        route: "/security",
-        icon: <FaShieldAlt />,
-        tint: "milik-icon-charcoal",
-      },
-      {
-        id: "pos",
-        title: "POS & Billing",
-        subtitle: "Point of sale system",
-        description: "Process payments, issue receipts and manage checkout operations with inventory sync.",
-        status: "active",
-        route: "/pos",
-        icon: <FaStore />,
-        tint: "milik-icon-orange",
-      },
-      {
-        id: "vendoor",
-        title: "Ven-Door",
-        subtitle: "Vendor management portal",
-        description: "Centralize supplier workflows, purchase coordination and vendor performance.",
-        status: "active",
-        route: "/ven-door",
-        icon: <FaHandshake />,
-        tint: "milik-icon-indigo",
-      },
-    ],
-    []
-  );
+  const activeCompanyContext = currentCompany || currentUser?.company || null;
+  const visibleModules = useMemo(() => {
+    if (!activeCompanyContext) return [];
+    return moduleRegistry.filter((moduleItem) => hasCompanyModule(activeCompanyContext, moduleItem.moduleKey));
+  }, [activeCompanyContext]);
 
-  const handleOpen = (m) => {
-    if (m.status === "active" && m.route) {
+  const handleOpen = (moduleItem) => {
+    if (moduleItem.status === "active" && moduleItem.route) {
       const recent = JSON.parse(localStorage.getItem("recentModules") || "[]");
-      const updated = [m.id, ...recent.filter((id) => id !== m.id)].slice(0, 5);
+      const updated = [moduleItem.id, ...recent.filter((id) => id !== moduleItem.id)].slice(0, 5);
       localStorage.setItem("recentModules", JSON.stringify(updated));
-      navigate(m.route);
+      navigate(moduleItem.route);
       return;
     }
-    if (m.status === "coming") {
-      toast.info(`${m.title} is coming soon in your Milik workspace.`);
+
+    if (moduleItem.status === "coming") {
+      toast.info(`${moduleItem.title} is enabled for this company and its workspace is coming soon.`);
       return;
     }
-    toast.warning(`${m.title} is currently unavailable for your account.`);
+
+    toast.warning(`${moduleItem.title} is currently unavailable for your account.`);
   };
 
   const StatusPill = ({ status }) => {
@@ -113,6 +138,16 @@ const ModulesDashboard = () => {
     if (status === "coming") return <span className={`${base} coming`}>Soon</span>;
     return <span className={`${base} locked`}>Locked</span>;
   };
+
+  const emptyState = !activeCompanyContext
+    ? {
+        title: "No active company selected",
+        subtitle: "Switch to a company workspace first, then the enabled modules for that company will appear here.",
+      }
+    : {
+        title: "No modules enabled",
+        subtitle: "No business modules are currently assigned to this company.",
+      };
 
   return (
     <div className="milik-modules-page">
@@ -129,46 +164,46 @@ const ModulesDashboard = () => {
             <img src="/logo.png" alt="Milik" className="h-9 w-9 object-contain" />
             <span>Milik Smart Workbench</span>
           </div>
-          <h1>
-            Choose a Module
-          </h1>
+          <h1>Choose a Module</h1>
           <p>
-            A cleaner, sharper control center for every Milik business line.
+            {activeCompanyContext?.companyName
+              ? `Only the modules enabled for ${activeCompanyContext.companyName} are shown here.`
+              : "A cleaner, sharper control center for every Milik business line."}
           </p>
         </header>
 
         <section className="milik-module-grid" aria-label="Milik modules">
           <div className="milik-module-grid-inner">
-            {modules.map((m, index) => (
+            {visibleModules.map((moduleItem, index) => (
               <button
-                key={m.id}
-                onClick={() => handleOpen(m)}
+                key={moduleItem.id}
+                onClick={() => handleOpen(moduleItem)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
+                  if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    handleOpen(m);
+                    handleOpen(moduleItem);
                   }
                 }}
-                className={`milik-module-tile ${m.id === 'milik' ? 'milik-featured-tile' : ''}`}
+                className={`milik-module-tile ${moduleItem.id === "milik" ? "milik-featured-tile" : ""}`}
                 style={{ animationDelay: `${(index + 1) * 90}ms` }}
-                aria-label={`${m.title} - ${m.subtitle}${m.status === 'active' ? '' : ' (Coming soon)'}`}
+                aria-label={`${moduleItem.title} - ${moduleItem.subtitle}${moduleItem.status === "active" ? "" : " (Coming soon)"}`}
                 tabIndex={0}
               >
                 <div className="milik-module-overlay" aria-hidden="true" />
                 <div className="milik-module-content">
                   <div className="milik-module-head">
-                    <StatusPill status={m.status} />
+                    <StatusPill status={moduleItem.status} />
                   </div>
 
-                  <div className={`milik-icon-shell ${m.tint} ${m.id === "milik" ? "milik-logo-shell" : ""}`}>
-                    <span className="milik-icon-wrap">{m.icon}</span>
+                  <div className={`milik-icon-shell ${moduleItem.tint} ${moduleItem.id === "milik" ? "milik-logo-shell" : ""}`}>
+                    <span className="milik-icon-wrap">{moduleItem.icon}</span>
                   </div>
 
-                  <h3>{m.title}</h3>
-                  <p className="milik-subtitle">{m.subtitle}</p>
+                  <h3>{moduleItem.title}</h3>
+                  <p className="milik-subtitle">{moduleItem.subtitle}</p>
 
                   <div className="milik-tile-action">
-                    <span>{m.status === "active" ? "Open Module" : "Preview"}</span>
+                    <span>{moduleItem.status === "active" ? "Open Module" : "Preview"}</span>
                     <div className="milik-arrow-wrap">
                       <FaArrowRight />
                     </div>
@@ -178,11 +213,33 @@ const ModulesDashboard = () => {
             ))}
           </div>
         </section>
+
+        {!visibleModules.length && (
+          <section className="milik-module-grid" aria-label="No enabled modules">
+            <div className="milik-module-grid-inner">
+              <div className="milik-module-tile milik-featured-tile" style={{ cursor: "default" }}>
+                <div className="milik-module-overlay" aria-hidden="true" />
+                <div className="milik-module-content">
+                  <div className="milik-module-head">
+                    <span className="milik-status-pill locked">Unavailable</span>
+                  </div>
+                  <div className="milik-icon-shell milik-icon-charcoal">
+                    <span className="milik-icon-wrap">
+                      <FaLock />
+                    </span>
+                  </div>
+                  <h3>{emptyState.title}</h3>
+                  <p className="milik-subtitle">{emptyState.subtitle}</p>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
       </main>
 
-      {/* Empty State */}
-      </div>
-    );
+      <StartMenu darkMode={false} />
+    </div>
+  );
 };
 
 export default ModulesDashboard;

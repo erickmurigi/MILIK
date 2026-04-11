@@ -61,6 +61,59 @@ const TenantSchema = new mongoose.Schema(
       index: true,
     },
 
+    additionalUnits: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Unit",
+        },
+      ],
+      default: [],
+    },
+
+    unitTransferHistory: {
+      type: [
+        {
+          fromUnit: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Unit",
+            default: null,
+          },
+          toUnit: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Unit",
+            default: null,
+          },
+          effectiveDate: { type: Date, default: Date.now },
+          reason: { type: String, trim: true, default: "" },
+          transferredBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            default: null,
+          },
+          previousAdditionalUnits: {
+            type: [
+              {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Unit",
+              },
+            ],
+            default: [],
+          },
+          nextAdditionalUnits: {
+            type: [
+              {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Unit",
+              },
+            ],
+            default: [],
+          },
+        },
+      ],
+      default: [],
+    },
+
     rent: {
       type: Number,
       required: true,
@@ -159,6 +212,7 @@ TenantSchema.index({ business: 1, tenantCode: 1 }, { unique: true, sparse: true 
 TenantSchema.index({ business: 1, idNumber: 1 }, { unique: true });
 TenantSchema.index({ business: 1, phone: 1 });
 TenantSchema.index({ unit: 1 });
+TenantSchema.index({ additionalUnits: 1 });
 TenantSchema.index({ moveInDate: -1 });
 
 TenantSchema.pre("validate", function (next) {
@@ -194,6 +248,35 @@ TenantSchema.pre("validate", function (next) {
   this.balance = Number(this.balance || 0);
   this.depositAmount = Number(this.depositAmount || 0);
   this.depositRefundAmount = Number(this.depositRefundAmount || 0);
+
+  if (Array.isArray(this.additionalUnits)) {
+    this.additionalUnits = Array.from(
+      new Set(
+        this.additionalUnits
+          .map((item) => (item ? String(item) : ""))
+          .filter(Boolean)
+          .filter((item) => item !== String(this.unit || ""))
+      )
+    );
+  } else {
+    this.additionalUnits = [];
+  }
+
+  if (Array.isArray(this.unitTransferHistory)) {
+    this.unitTransferHistory = this.unitTransferHistory.map((entry) => ({
+      ...entry,
+      reason: typeof entry?.reason === "string" ? entry.reason.trim() : "",
+      effectiveDate: entry?.effectiveDate || new Date(),
+      previousAdditionalUnits: Array.isArray(entry?.previousAdditionalUnits)
+        ? Array.from(new Set(entry.previousAdditionalUnits.map((item) => String(item)).filter(Boolean)))
+        : [],
+      nextAdditionalUnits: Array.isArray(entry?.nextAdditionalUnits)
+        ? Array.from(new Set(entry.nextAdditionalUnits.map((item) => String(item)).filter(Boolean)))
+        : [],
+    }));
+  } else {
+    this.unitTransferHistory = [];
+  }
 
   if (this.status === "moved_out") {
     this.status = "terminated";

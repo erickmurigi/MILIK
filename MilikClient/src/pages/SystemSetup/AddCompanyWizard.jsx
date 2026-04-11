@@ -25,6 +25,18 @@ import { normalizeCompanyModules } from "../../utils/companyModules";
 
 const MODULE_OPTIONS = [
   {
+    key: "propertyManagement",
+    label: "Property Management",
+    description: "Landlords, properties, units, tenants, statements, and operations.",
+    icon: FaBuilding,
+  },
+  {
+    key: "billing",
+    label: "Billing",
+    description: "Invoicing, charging schedules, and receipting flows tied to the company modules.",
+    icon: FaEnvelope,
+  },
+  {
     key: "accounts",
     label: "Accounting",
     description: "General ledger, journals, reports, and financial controls.",
@@ -215,6 +227,25 @@ const AddCompanyWizard = () => {
     }));
   };
 
+
+const validateForm = () => {
+  const errors = [];
+
+  if (!String(formData.companyName || "").trim()) {
+    errors.push("Company name is required");
+  }
+
+  if (!String(formData.postalAddress || "").trim()) {
+    errors.push("Postal address is required");
+  }
+
+  if (selectedModulesCount === 0) {
+    errors.push("Select at least one module for this company");
+  }
+
+  return errors;
+};
+
   const handleLogoSelect = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -227,7 +258,7 @@ const AddCompanyWizard = () => {
     try {
       const dataUrl = await readFileAsDataUrl(file);
       setField("logo", dataUrl);
-    } catch (err) {
+    } catch {
       toast.error("Failed to read the selected logo file.");
     }
   };
@@ -236,6 +267,15 @@ const AddCompanyWizard = () => {
     event.preventDefault();
     setSaving(true);
     setError("");
+
+    const validationErrors = validateForm();
+    if (validationErrors.length > 0) {
+      const message = validationErrors.join(" | ");
+      setError(message);
+      toast.error(validationErrors[0]);
+      setSaving(false);
+      return;
+    }
 
     try {
       const action = isEditMode ? updateCompany(id, formData) : createCompany(formData);

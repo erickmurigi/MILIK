@@ -43,7 +43,13 @@ const getPermissionValue = (permissions = {}, resource, action) => {
   return undefined;
 };
 
-export const hasCompanyPermission = (user = {}, currentCompany = null, resource = "", action = "view", moduleKey = null) => {
+export const hasCompanyPermission = (
+  user = {},
+  currentCompany = null,
+  resource = "",
+  action = "view",
+  moduleKey = null
+) => {
   if (user?.isSystemAdmin || user?.superAdminAccess) return true;
 
   const normalizedAction = normalizeAction(action);
@@ -73,15 +79,20 @@ export const hasCompanyPermission = (user = {}, currentCompany = null, resource 
   const accessText = String(moduleAccess?.[map[moduleKey] || moduleKey] || "").toLowerCase();
 
   if (!moduleKey) {
-    return normalizedAction === "view" || normalizedAction === "export" ? true : false;
+    return normalizedAction === "view" || normalizedAction === "export";
   }
+
   if (normalizedAction === "view" || normalizedAction === "export") {
     return accessText === "view only" || accessText === "full access";
   }
+
   return accessText === "full access";
 };
 
-export const guardButtonProps = (allowed, titleWhenDenied = "You do not have permission for this action") =>
+export const guardButtonProps = (
+  allowed,
+  titleWhenDenied = "You do not have permission for this action"
+) =>
   allowed
     ? {}
     : {

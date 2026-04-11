@@ -2190,7 +2190,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
       [String(businessId), String(tenant)].join(":"),
       () =>
         Tenant.findOne({ _id: tenant, business: businessId })
-          .select("_id business unit depositHeldBy")
+          .select("_id business unit additionalUnits depositHeldBy")
           .lean()
     ),
   ]);
@@ -2219,7 +2219,8 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     throw error;
   }
 
-  if (String(tenantDoc.unit || "") !== String(unitDoc._id)) {
+  const tenantAssignedUnitIds = [String(tenantDoc.unit || ""), ...(Array.isArray(tenantDoc.additionalUnits) ? tenantDoc.additionalUnits.map((item) => String(item)) : [])].filter(Boolean);
+  if (!tenantAssignedUnitIds.includes(String(unitDoc._id))) {
     const error = new Error("Selected tenant does not belong to the supplied unit.");
     error.statusCode = 400;
     throw error;
@@ -2532,7 +2533,7 @@ export const updateTakeOnBalance = async (req, res) => {
     const [propertyDoc, unitDoc, tenantDoc] = await Promise.all([
       Property.findOne({ _id: invoice.property, business: businessId }).select("_id business landlords").lean(),
       Unit.findOne({ _id: invoice.unit, business: businessId }).select("_id business property").lean(),
-      Tenant.findOne({ _id: invoice.tenant, business: businessId }).select("_id business unit depositHeldBy").lean(),
+      Tenant.findOne({ _id: invoice.tenant, business: businessId }).select("_id business unit additionalUnits depositHeldBy").lean(),
     ]);
 
     if (!propertyDoc || !unitDoc || !tenantDoc) {

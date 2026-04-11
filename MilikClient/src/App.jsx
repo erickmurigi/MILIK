@@ -179,7 +179,7 @@ function ProtectedRoute({ children, allowMustChangePassword = false }) {
 
 
 
-function PermissionRoute({ children, resource, action = "view", moduleKey = null, fallback = "/dashboard" }) {
+function PermissionRoute({ children, resource, action = "view", moduleKey = null, fallback = "/moduleDashboard" }) {
   const { currentUser } = useSelector((state) => state.auth);
   const { currentCompany } = useSelector((state) => state.company);
   const storedSession = getStoredAuthSession();
@@ -202,7 +202,7 @@ function SuperAdminRoute({ children }) {
   const canAccess = Boolean(resolvedUser?.isSystemAdmin || resolvedUser?.superAdminAccess);
 
   if (!isAuthenticated) return <Navigate to={getSignedOutRedirectPath()} replace />;
-  return canAccess ? children : <Navigate to="/dashboard" replace />;
+  return canAccess ? children : <Navigate to="/moduleDashboard" replace />;
 }
 
 
@@ -215,7 +215,7 @@ function resolveDefaultAuthenticatedRoute(currentUser) {
     return "/first-time-password";
   }
 
-  return "/dashboard";
+  return currentUser?.isDemoUser ? "/dashboard" : "/moduleDashboard";
 }
 
 function PublicOnlyRoute({ children }) {
@@ -274,6 +274,8 @@ function App() {
   }, [currentUser, dispatch]);
 
   useEffect(() => {
+    if (isCompanySwitching) return;
+
     const resolvedUser = getResolvedAuthUser(currentUser, getStoredAuthSession());
     const userCompanyId = resolvedUser?.company?._id;
     const activeCompanyId = currentCompany?._id;
@@ -288,7 +290,7 @@ function App() {
       dispatch(clearCurrentCompany());
       localStorage.removeItem("milik_active_company_id");
     }
-  }, [currentUser, currentCompany?._id, dispatch]);
+  }, [currentUser, currentCompany?._id, dispatch, isCompanySwitching]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -386,7 +388,7 @@ function App() {
         <Route path="/tenants/financing" element={<ProtectedRoute><Navigate to="/tenants/take-on-balances" replace /></ProtectedRoute>} />
         <Route path="/tenants/journals" element={<ProtectedRoute><Navigate to="/financial/journals" replace /></ProtectedRoute>} />
         <Route path="/invoices/rental" element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices /></PermissionRoute>} />
-        <Route path="/invoices/new" element={<ProtectedRoute><Navigate to="/invoices/rental" replace /></ProtectedRoute>} />
+        <Route path="/invoices/new" element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices initialOpenSingleBooking /></PermissionRoute>} />
         <Route path="/invoices/rental/:id" element={<ProtectedRoute><RentalInvoices /></ProtectedRoute>} />
         <Route path="/invoices/notes" element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><InvoiceNotes /></PermissionRoute>} />
         <Route path="/invoices/vat" element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoiceVATReport /></PermissionRoute>} />

@@ -5,6 +5,134 @@ import Property from "../../models/Property.js";
 import RentPayment from "../../models/RentPayment.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 
+
+const ACTIVE_TENANT_STATUSES = ["active", "overdue"];
+
+const isValidObjectIdString = (value) =>
+  typeof value === "string" && mongoose.Types.ObjectId.isValid(value);
+
+const toObjectIdString = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value._id) return String(value._id);
+  return String(value);
+};
+
+const uniqueUnitIds = (values = []) =>
+  Array.from(
+    new Set(
+      (Array.isArray(values) ? values : [values])
+        .map((item) => toObjectIdString(item))
+        .filter((item) => isValidObjectIdString(item))
+    )
+  );
+
+const getTenantAssignedUnitIds = (tenant = {}) => {
+  const primary = toObjectIdString(tenant?.unit);
+  const additional = uniqueUnitIds(tenant?.additionalUnits || []).filter((item) => item !== primary);
+  return primary ? [primary, ...additional] : additional;
+};
+
+const buildRequestedTenantUnits = ({ primaryUnitId, additionalUnits = [] } = {}) => {
+  const primary = toObjectIdString(primaryUnitId);
+  const normalizedAdditional = uniqueUnitIds(additionalUnits).filter((item) => item !== primary);
+  return {
+    primary,
+    additional: normalizedAdditional,
+    all: primary ? [primary, ...normalizedAdditional] : normalizedAdditional,
+  };
+};
+
+const populateTenantQuery = (query) =>
+  query
+    .populate("unit", "unitNumber property rent status utilities")
+    .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
+    .populate("additionalUnits", "unitNumber property rent status utilities")
+    .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy");
+
+const calculateTenantAssignedRent = (unitDocs = [], fallback = 0) => {
+  const total = unitDocs.reduce((sum, unit) => sum + Number(unit?.rent || 0), 0);
+  return total > 0 ? total : Number(fallback || 0);
+};
+
+const ensureUnitsBelongToBusiness = async ({ businessId, unitIds = [] } = {}) => {
+  const normalizedIds = uniqueUnitIds(unitIds);
+  const unitDocs = await Unit.find({
+    _id: { $in: normalizedIds },
+    business: businessId,
+  }).populate("property", "depositHeldBy");
+
+  if (unitDocs.length !== normalizedIds.length) {
+    const error = new Error("One or more selected units were not found for the selected company");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return unitDocs;
+};
+
+const ensureUnitsAvailableForTenant = async ({
+  businessId,
+  unitDocs = [],
+  currentTenantId = null,
+  currentlyAssignedUnitIds = [],
+} = {}) => {
+  const currentlyAssigned = new Set(uniqueUnitIds(currentlyAssignedUnitIds));
+
+  const conflictingTenant = await Tenant.findOne({
+    business: businessId,
+    _id: currentTenantId ? { $ne: currentTenantId } : { $exists: true },
+    status: { $in: ACTIVE_TENANT_STATUSES },
+    $or: [
+      { unit: { $in: unitDocs.map((unit) => unit._id) } },
+      { additionalUnits: { $in: unitDocs.map((unit) => unit._id) } },
+    ],
+  })
+    .select("name tenantCode unit additionalUnits")
+    .lean();
+
+  if (conflictingTenant) {
+    const error = new Error("One or more selected units are already assigned to another active tenant");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  for (const unit of unitDocs) {
+    const unitId = String(unit._id);
+    if (currentlyAssigned.has(unitId)) continue;
+
+    const normalizedStatus = String(unit.status || "").trim().toLowerCase();
+    const normalizedIsVacant = unit.isVacant !== false;
+    if (normalizedStatus !== "vacant" || !normalizedIsVacant) {
+      const error = new Error(`Unit ${unit.unitNumber || unitId} is not available`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+};
+
+const syncTenantAssignedUnitOccupancy = async ({
+  previousUnitIds = [],
+  nextUnitIds = [],
+  tenantId,
+  effectiveDate = new Date(),
+} = {}) => {
+  const previous = new Set(uniqueUnitIds(previousUnitIds));
+  const next = new Set(uniqueUnitIds(nextUnitIds));
+
+  const toVacate = Array.from(previous).filter((unitId) => !next.has(unitId));
+  const toOccupy = Array.from(next).filter((unitId) => !previous.has(unitId));
+
+  for (const unitId of toVacate) {
+    await setUnitVacant(unitId, tenantId, effectiveDate);
+  }
+
+  for (const unitId of toOccupy) {
+    await setUnitOccupied(unitId, tenantId);
+  }
+};
+
+
 const resolveBusinessId = (req) => {
   return (
     (req.user?.isSystemAdmin && (req.body?.business || req.query?.business)) ||
@@ -235,40 +363,22 @@ export const createTenant = async (req, res, next) => {
       });
     }
 
-    const unit = await Unit.findOne({
-      _id: req.body.unit,
-      business: businessId,
-    }).populate("property", "depositHeldBy");
-
-    if (!unit) {
-      return res.status(404).json({
-        success: false,
-        message: "Unit not found for the selected company",
-      });
-    }
-
-    const normalizedStatus = String(unit.status || "").trim().toLowerCase();
-    const normalizedIsVacant = unit.isVacant !== false;
-
-    if (normalizedStatus !== "vacant" || !normalizedIsVacant) {
-      return res.status(400).json({
-        success: false,
-        message: "Unit is not available",
-      });
-    }
-
-    const existingActiveTenant = await Tenant.findOne({
-      unit: unit._id,
-      business: businessId,
-      status: { $in: ["active", "overdue"] },
+    const requestedUnits = buildRequestedTenantUnits({
+      primaryUnitId: req.body.unit,
+      additionalUnits: req.body.additionalUnits,
     });
 
-    if (existingActiveTenant) {
-      return res.status(400).json({
-        success: false,
-        message: "This unit already has an active tenant",
-      });
-    }
+    const unitDocs = await ensureUnitsBelongToBusiness({
+      businessId,
+      unitIds: requestedUnits.all,
+    });
+
+    await ensureUnitsAvailableForTenant({
+      businessId,
+      unitDocs,
+    });
+
+    const unit = unitDocs.find((item) => String(item._id) === requestedUnits.primary) || null;
 
     const normalizedName = normalizeString(req.body.name);
     const normalizedPhone = normalizeString(req.body.phone);
@@ -401,6 +511,8 @@ export const getTenants = async (req, res, next) => {
     const tenants = await Tenant.find(filter)
       .populate("unit", "unitNumber property rent status utilities")
       .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
+      .populate("additionalUnits", "unitNumber property rent status utilities")
+      .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy")
       .sort({ createdAt: -1 });
 
     const enrichedTenants = tenants.map((tenantDoc) => {
@@ -514,15 +626,26 @@ export const updateTenant = async (req, res, next) => {
       );
     }
 
+    const currentAssignedUnitIds = getTenantAssignedUnitIds(tenant);
     const currentUnitId = tenant.unit ? String(tenant.unit) : "";
     let targetUnit = null;
     const requestedUnitId =
       normalizedPayload.unit !== undefined && normalizedPayload.unit !== null
         ? String(normalizedPayload.unit)
         : currentUnitId;
+    const requestedAdditionalUnits =
+      normalizedPayload.additionalUnits !== undefined
+        ? uniqueUnitIds(normalizedPayload.additionalUnits)
+        : uniqueUnitIds(tenant.additionalUnits || []);
+    const requestedUnits = buildRequestedTenantUnits({
+      primaryUnitId: requestedUnitId,
+      additionalUnits: requestedAdditionalUnits,
+    });
     const isChangingUnit = !!requestedUnitId && requestedUnitId !== currentUnitId;
+    const isChangingAdditionalUnits =
+      requestedUnits.additional.join(",") !== uniqueUnitIds(tenant.additionalUnits || []).join(",");
 
-    if (normalizedPayload.unit !== undefined) {
+    if (normalizedPayload.unit !== undefined || normalizedPayload.additionalUnits !== undefined) {
       if (!mongoose.Types.ObjectId.isValid(requestedUnitId)) {
         return res.status(400).json({
           success: false,
@@ -530,28 +653,50 @@ export const updateTenant = async (req, res, next) => {
         });
       }
 
-      targetUnit = await Unit.findOne({
-        _id: requestedUnitId,
-        business: tenant.business,
-      }).populate("property", "depositHeldBy");
+      const requestedUnitDocs = await ensureUnitsBelongToBusiness({
+        businessId: tenant.business,
+        unitIds: requestedUnits.all,
+      });
 
-      if (!targetUnit) {
-        return res.status(404).json({
-          success: false,
-          message: "Unit not found for the selected company",
-        });
+      await ensureUnitsAvailableForTenant({
+        businessId: tenant.business,
+        unitDocs: requestedUnitDocs,
+        currentTenantId: tenant._id,
+        currentlyAssignedUnitIds: currentAssignedUnitIds,
+      });
+
+      targetUnit =
+        requestedUnitDocs.find((item) => String(item._id) === requestedUnits.primary) || null;
+
+      normalizedPayload.unit = requestedUnits.primary;
+      normalizedPayload.additionalUnits = requestedUnits.additional;
+
+      if (normalizedPayload.rent === undefined) {
+        normalizedPayload.rent = calculateTenantAssignedRent(requestedUnitDocs, tenant.rent || 0);
       }
 
       if (isChangingUnit) {
-        const normalizedStatus = String(targetUnit.status || "").trim().toLowerCase();
-        const normalizedIsVacant = targetUnit.isVacant !== false;
+        normalizedPayload.utilities = sanitizeUtilities(
+          normalizedPayload.utilities !== undefined
+            ? normalizedPayload.utilities
+            : targetUnit?.utilities || []
+        );
 
-        if (normalizedStatus !== "vacant" || !normalizedIsVacant) {
-          return res.status(400).json({
-            success: false,
-            message: "Selected unit is not available",
-          });
-        }
+        normalizedPayload.unitTransferHistory = [
+          ...(Array.isArray(tenant.unitTransferHistory) ? tenant.unitTransferHistory : []),
+          {
+            fromUnit: tenant.unit || null,
+            toUnit: requestedUnits.primary || null,
+            effectiveDate: new Date(),
+            reason: normalizedPayload.transferReason || "Unit reassigned from tenant profile update",
+            transferredBy:
+              req.user?.id && mongoose.Types.ObjectId.isValid(String(req.user.id))
+                ? req.user.id
+                : null,
+            previousAdditionalUnits: uniqueUnitIds(tenant.additionalUnits || []),
+            nextAdditionalUnits: requestedUnits.additional,
+          },
+        ];
       }
     }
 
@@ -606,19 +751,23 @@ export const updateTenant = async (req, res, next) => {
       }
     }
 
-    const updatedTenant = await Tenant.findByIdAndUpdate(
-      req.params.id,
-      { $set: normalizedPayload },
-      { new: true, runValidators: true }
-    )
-      .populate("unit", "unitNumber property rent status utilities")
-      .populate("unit.property", "propertyName propertyCode depositHeldBy");
+    delete normalizedPayload.transferReason;
 
-    if (isChangingUnit) {
-      if (currentUnitId) {
-        await setUnitVacant(currentUnitId, tenant._id, new Date());
-      }
-      await setUnitOccupied(requestedUnitId, tenant._id);
+    const updatedTenant = await populateTenantQuery(
+      Tenant.findByIdAndUpdate(
+        req.params.id,
+        { $set: normalizedPayload },
+        { new: true, runValidators: true }
+      )
+    );
+
+    if (isChangingUnit || isChangingAdditionalUnits) {
+      await syncTenantAssignedUnitOccupancy({
+        previousUnitIds: currentAssignedUnitIds,
+        nextUnitIds: getTenantAssignedUnitIds(updatedTenant),
+        tenantId: tenant._id,
+        effectiveDate: new Date(),
+      });
     }
 
     return res.status(200).json({
@@ -673,9 +822,12 @@ export const deleteTenant = async (req, res, next) => {
       });
     }
 
-    if (tenant.unit) {
-      await setUnitVacant(tenant.unit, tenant._id, new Date());
-    }
+    await syncTenantAssignedUnitOccupancy({
+      previousUnitIds: getTenantAssignedUnitIds(tenant),
+      nextUnitIds: [],
+      tenantId: tenant._id,
+      effectiveDate: new Date(),
+    });
 
     await Tenant.findByIdAndDelete(req.params.id);
 
@@ -731,9 +883,12 @@ export const updateTenantStatus = async (req, res, next) => {
       updateData.depositRefundStatus =
         depositRefundAmount > 0 ? req.body?.depositRefundStatus || "pending" : "not_applicable";
 
-      if (tenant.unit) {
-        await setUnitVacant(tenant.unit, tenant._id, effectiveTerminationDate);
-      }
+      await syncTenantAssignedUnitOccupancy({
+        previousUnitIds: getTenantAssignedUnitIds(tenant),
+        nextUnitIds: [],
+        tenantId: tenant._id,
+        effectiveDate: effectiveTerminationDate,
+      });
     } else if (
       status === "active" &&
       ["terminated", "moved_out"].includes(String(tenant.status || "").toLowerCase())
@@ -859,55 +1014,165 @@ export const getTenantBalance = async (req, res, next) => {
 };
 
 // Get tenant total due
+
 export const getTenantTotalDue = async (tenantId) => {
   try {
-    const tenant = await Tenant.findById(tenantId).populate("unit");
-    if (!tenant || !tenant.unit) return { rent: 0, utilities: [], total: 0 };
+    const tenant = await Tenant.findById(tenantId).populate("unit additionalUnits");
+    if (!tenant) return { rent: 0, utilities: [], total: 0 };
 
-    const unit = await Unit.findById(tenant.unit).populate(
+    const assignedUnitIds = getTenantAssignedUnitIds(tenant);
+    if (!assignedUnitIds.length) return { rent: 0, utilities: [], total: 0 };
+
+    const units = await Unit.find({ _id: { $in: assignedUnitIds } }).populate(
       "utilities.utility",
       "name unitCost billingCycle"
     );
 
-    if (!unit) return { rent: 0, utilities: [], total: 0 };
+    if (!units.length) return { rent: 0, utilities: [], total: 0 };
 
-    let total = Number(unit.rent || 0);
-    const utilitiesBreakdown = [];
+    let totalRent = 0;
+    let total = 0;
+    const utilities = [];
 
-    (unit.utilities || []).forEach((item) => {
-      if (item.isIncluded && item.utility) {
+    units.forEach((unit) => {
+      const unitRent = Number(unit.rent || 0);
+      totalRent += unitRent;
+      total += unitRent;
+
+      (unit.utilities || []).forEach((item) => {
         const utility = item.utility;
+        if (!utility || item.isIncluded) return;
+
         let charge = 0;
-
-        if (utility.billingCycle === "monthly") {
-          charge = item.unitCharge || utility.unitCost || 0;
-        } else if (utility.billingCycle === "quarterly") {
-          charge = (item.unitCharge || utility.unitCost || 0) / 3;
-        } else if (utility.billingCycle === "annually") {
-          charge = (item.unitCharge || utility.unitCost || 0) / 12;
+        switch (utility.billingCycle) {
+          case "monthly":
+            charge = item.unitCharge || utility.unitCost || 0;
+            break;
+          case "quarterly":
+            charge = (item.unitCharge || utility.unitCost || 0) / 3;
+            break;
+          case "yearly":
+            charge = (item.unitCharge || utility.unitCost || 0) / 12;
+            break;
+          default:
+            charge = item.unitCharge || utility.unitCost || 0;
         }
 
-        if (charge > 0) {
-          total += charge;
-          utilitiesBreakdown.push({
-            utility: utility._id,
-            name: utility.name,
-            amount: charge,
-            billingCycle: utility.billingCycle,
-          });
-        }
-      }
+        utilities.push({
+          unit: unit.unitNumber,
+          utility: utility.name,
+          amount: charge,
+        });
+        total += charge;
+      });
     });
 
     return {
-      rent: Number(unit.rent || 0),
-      utilities: utilitiesBreakdown,
-      total: parseFloat(total.toFixed(2)),
+      rent: totalRent,
+      utilities,
+      total,
       tenantBalance: Number(tenant.balance || 0),
     };
   } catch (error) {
     console.error("Error calculating tenant total due:", error);
     return { rent: 0, utilities: [], total: 0, tenantBalance: 0 };
+  }
+};
+
+
+
+export const transferTenantUnit = async (req, res, next) => {
+  try {
+    const tenant = await Tenant.findById(req.params.id);
+
+    const access = authorizeTenantAccess(req, tenant);
+    if (!access.allowed) {
+      return res.status(access.status).json({
+        success: false,
+        message: access.message.replace("access", "transfer"),
+      });
+    }
+
+    const nextPrimaryUnitId = toObjectIdString(req.body?.newUnit || req.body?.unit);
+    if (!isValidObjectIdString(nextPrimaryUnitId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid destination unit is required",
+      });
+    }
+
+    const keepPreviousUnitAssigned = Boolean(req.body?.keepPreviousUnitAssigned);
+    const reason = normalizeString(req.body?.reason) || "Tenant transferred to a new unit";
+    const effectiveDate = req.body?.effectiveDate ? new Date(req.body.effectiveDate) : new Date();
+    const previousPrimaryUnitId = toObjectIdString(tenant.unit);
+    const previousAdditionalUnitIds = uniqueUnitIds(tenant.additionalUnits || []);
+
+    const nextAdditionalUnits = keepPreviousUnitAssigned && previousPrimaryUnitId && previousPrimaryUnitId !== nextPrimaryUnitId
+      ? uniqueUnitIds([...previousAdditionalUnitIds, previousPrimaryUnitId]).filter((item) => item !== nextPrimaryUnitId)
+      : previousAdditionalUnitIds.filter((item) => item !== nextPrimaryUnitId);
+
+    const requestedUnits = buildRequestedTenantUnits({
+      primaryUnitId: nextPrimaryUnitId,
+      additionalUnits: nextAdditionalUnits,
+    });
+
+    const requestedUnitDocs = await ensureUnitsBelongToBusiness({
+      businessId: tenant.business,
+      unitIds: requestedUnits.all,
+    });
+
+    await ensureUnitsAvailableForTenant({
+      businessId: tenant.business,
+      unitDocs: requestedUnitDocs,
+      currentTenantId: tenant._id,
+      currentlyAssignedUnitIds: getTenantAssignedUnitIds(tenant),
+    });
+
+    const nextPrimaryUnitDoc = requestedUnitDocs.find((unit) => String(unit._id) === requestedUnits.primary) || null;
+
+    const updatedTenant = await populateTenantQuery(
+      Tenant.findByIdAndUpdate(
+        tenant._id,
+        {
+          $set: {
+            unit: requestedUnits.primary,
+            additionalUnits: requestedUnits.additional,
+            rent: calculateTenantAssignedRent(requestedUnitDocs, tenant.rent || 0),
+            utilities: sanitizeUtilities(nextPrimaryUnitDoc?.utilities || []),
+          },
+          $push: {
+            unitTransferHistory: {
+              fromUnit: tenant.unit || null,
+              toUnit: requestedUnits.primary || null,
+              effectiveDate,
+              reason,
+              transferredBy:
+                req.user?.id && mongoose.Types.ObjectId.isValid(String(req.user.id))
+                  ? req.user.id
+                  : null,
+              previousAdditionalUnits: previousAdditionalUnitIds,
+              nextAdditionalUnits: requestedUnits.additional,
+            },
+          },
+        },
+        { new: true, runValidators: true }
+      )
+    );
+
+    await syncTenantAssignedUnitOccupancy({
+      previousUnitIds: getTenantAssignedUnitIds(tenant),
+      nextUnitIds: getTenantAssignedUnitIds(updatedTenant),
+      tenantId: tenant._id,
+      effectiveDate,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: updatedTenant,
+      message: "Tenant unit transferred successfully",
+    });
+  } catch (err) {
+    next(err);
   }
 };
 

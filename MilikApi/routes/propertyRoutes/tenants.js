@@ -11,7 +11,8 @@ import {
   getTenantBalance, 
   getTenantTotalDue,
   migrateTenantCodes,
-  bulkImportTenants
+  bulkImportTenants,
+  transferTenantUnit
 } from "../../controllers/propertyController/tenants.js"
 import { verifyUser } from "../../controllers/verifyToken.js"
 
@@ -31,6 +32,9 @@ router.get("/:id", verifyUser, getTenant)
 
 // Update tenant
 router.put("/:id", verifyUser, updateTenant)
+
+// Transfer tenant primary unit
+router.post("/:id/transfer-unit", verifyUser, transferTenantUnit)
 
 // Delete tenant
 router.delete("/:id", verifyUser, deleteTenant)
