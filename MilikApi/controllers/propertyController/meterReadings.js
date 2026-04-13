@@ -9,6 +9,8 @@ import { createTenantInvoiceRecord } from "./tenantInvoices.js";
 import { resolvePropertyAccountingContext } from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
+const ACTIVE_METER_READING_STATUSES = ["draft", "billed", "void"];
+
 const normalizeDate = (value, fallback = new Date()) => {
   const date = value ? new Date(value) : new Date(fallback);
   return Number.isNaN(date.getTime()) ? new Date(fallback) : date;
@@ -44,6 +46,13 @@ const resolveActorUserId = async (req) =>
     candidateUserIds: [req.body?.createdBy || null],
     fallbackErrorMessage: "No valid company user could be resolved for meter reading attribution.",
   });
+
+const populateReadingQuery = (query) =>
+  query
+    .populate("property", "propertyName propertyCode")
+    .populate("unit", "unitNumber")
+    .populate("tenant", "name tenantCode")
+    .populate("billedInvoice", "_id invoiceNumber status amount dueDate");
 
 const findActiveTenantForUnit = async ({ businessId, unitId }) => {
   if (!businessId || !unitId) return null;
@@ -107,7 +116,7 @@ const getPreviousReadingValue = async ({ businessId, propertyId, unitId, utility
     property: propertyId,
     unit: unitId,
     utilityType: { $regex: `^${String(utilityType || "").trim()}$`, $options: "i" },
-    status: { $ne: "void" },
+    status: { $in: ACTIVE_METER_READING_STATUSES },
   };
 
   if (excludeId && mongoose.Types.ObjectId.isValid(String(excludeId))) {
@@ -144,8 +153,12 @@ const computeConsumption = ({ previousReading, currentReading, isMeterReset }) =
 
 const ensureReadingContext = async ({ businessId, propertyId, unitId, tenantId = null }) => {
   const [propertyDoc, unitDoc] = await Promise.all([
-    Property.findOne({ _id: propertyId, business: businessId }).select("_id landlord business propertyName").lean(),
-    Unit.findOne({ _id: unitId, business: businessId }).select("_id property unitNumber utilities business").lean(),
+    Property.findOne({ _id: propertyId, business: businessId })
+      .select("_id landlord business propertyName")
+      .lean(),
+    Unit.findOne({ _id: unitId, business: businessId })
+      .select("_id property unitNumber utilities business")
+      .lean(),
   ]);
 
   if (!propertyDoc) {
@@ -180,7 +193,7 @@ const checkDuplicateReading = async ({ businessId, unitId, utilityType, billingP
     unit: unitId,
     utilityType: { $regex: `^${String(utilityType || "").trim()}$`, $options: "i" },
     billingPeriod,
-    status: { $ne: "void" },
+    status: { $in: ACTIVE_METER_READING_STATUSES },
   };
 
   if (excludeId && mongoose.Types.ObjectId.isValid(String(excludeId))) {
@@ -202,7 +215,10 @@ const buildReadingPayload = async ({ req, existingReading = null }) => {
   const propertyId = req.body.property || existingReading?.property;
   const unitId = req.body.unit || existingReading?.unit;
   const utilityType = String(req.body.utilityType || existingReading?.utilityType || "").trim();
-  const billingPeriod = toPeriodKey(req.body.billingPeriod || existingReading?.billingPeriod, req.body.readingDate || existingReading?.readingDate || new Date());
+  const billingPeriod = toPeriodKey(
+    req.body.billingPeriod || existingReading?.billingPeriod,
+    req.body.readingDate || existingReading?.readingDate || new Date()
+  );
   const readingDate = normalizeDate(req.body.readingDate || existingReading?.readingDate || new Date());
   const isMeterReset =
     req.body.isMeterReset !== undefined
@@ -250,9 +266,10 @@ const buildReadingPayload = async ({ req, existingReading = null }) => {
   });
 
   const calculatedAmount = Number((unitsConsumed * Number(rate || 0)).toFixed(2));
-  const suppliedAmount = req.body.amount !== undefined && req.body.amount !== null && req.body.amount !== ""
-    ? normalizeAmount(req.body.amount, calculatedAmount)
-    : calculatedAmount;
+  const suppliedAmount =
+    req.body.amount !== undefined && req.body.amount !== null && req.body.amount !== ""
+      ? normalizeAmount(req.body.amount, calculatedAmount)
+      : calculatedAmount;
 
   return {
     business: businessId,
@@ -274,6 +291,60 @@ const buildReadingPayload = async ({ req, existingReading = null }) => {
   };
 };
 
+const invokeInvoiceDeletionForMeterReading = async ({ req, invoiceId }) => {
+  const { deleteTenantInvoice } = await import("./tenantInvoices.js");
+
+  return new Promise((resolve, reject) => {
+    let resolved = false;
+    const response = {
+      statusCode: 200,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        resolved = true;
+        resolve({ statusCode: this.statusCode || 200, payload });
+        return this;
+      },
+    };
+
+    Promise.resolve(
+      deleteTenantInvoice(
+        {
+          ...req,
+          params: { ...(req.params || {}), id: String(invoiceId) },
+        },
+        response
+      )
+    )
+      .then(() => {
+        if (!resolved) {
+          resolve({ statusCode: response.statusCode || 200, payload: null });
+        }
+      })
+      .catch(reject);
+  });
+};
+
+const softDeleteReading = async ({ reading, actorUserId = null, reason = "", deletedInvoiceId = null }) => {
+  const existingNotes = String(reading.notes || "").trim();
+  const auditNote = String(reason || "Meter reading deleted.").trim();
+
+  reading.status = "deleted";
+  reading.deletedAt = new Date();
+  reading.deletedBy = actorUserId || null;
+  reading.deletionReason = auditNote;
+  reading.deletedInvoice = deletedInvoiceId || reading.deletedInvoice || null;
+  reading.billedInvoice = null;
+  reading.billedAt = null;
+  reading.updatedBy = actorUserId || reading.updatedBy || null;
+  reading.notes = existingNotes ? `${existingNotes}\n[Deleted] ${auditNote}` : `[Deleted] ${auditNote}`;
+  await reading.save();
+
+  return populateReadingQuery(MeterReading.findById(reading._id));
+};
+
 export const getMeterReadings = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -285,18 +356,20 @@ export const getMeterReadings = async (req, res, next) => {
     if (req.query.property) query.property = req.query.property;
     if (req.query.unit) query.unit = req.query.unit;
     if (req.query.tenant) query.tenant = req.query.tenant;
-    if (req.query.status) query.status = req.query.status;
+    if (req.query.status) {
+      query.status = req.query.status;
+    } else {
+      query.status = { $ne: "deleted" };
+    }
     if (req.query.billingPeriod) query.billingPeriod = toPeriodKey(req.query.billingPeriod);
     if (req.query.utilityType) {
       query.utilityType = { $regex: `^${String(req.query.utilityType).trim()}$`, $options: "i" };
     }
 
-    const readings = await MeterReading.find(query)
-      .populate("property", "propertyName propertyCode")
-      .populate("unit", "unitNumber")
-      .populate("tenant", "name tenantCode")
-      .populate("billedInvoice", "_id invoiceNumber status amount dueDate")
-      .sort({ readingDate: -1, createdAt: -1 });
+    const readings = await populateReadingQuery(MeterReading.find(query)).sort({
+      readingDate: -1,
+      createdAt: -1,
+    });
 
     return res.status(200).json(readings);
   } catch (err) {
@@ -323,15 +396,14 @@ export const createMeterReading = async (req, res, next) => {
       updatedBy: actorUserId,
     });
 
-    const populated = await MeterReading.findById(reading._id)
-      .populate("property", "propertyName propertyCode")
-      .populate("unit", "unitNumber")
-      .populate("tenant", "name tenantCode")
-      .populate("billedInvoice", "_id invoiceNumber status amount dueDate");
-
+    const populated = await populateReadingQuery(MeterReading.findById(reading._id));
     return res.status(201).json(populated);
   } catch (err) {
-    if (err.message?.includes("already exists") || err.message?.includes("cannot be less")) {
+    if (
+      err.message?.includes("already exists") ||
+      err.message?.includes("cannot be less") ||
+      err.message?.includes("cannot be negative")
+    ) {
       return res.status(400).json({ message: err.message });
     }
     next(err);
@@ -365,15 +437,14 @@ export const updateMeterReading = async (req, res, next) => {
 
     await reading.save();
 
-    const populated = await MeterReading.findById(reading._id)
-      .populate("property", "propertyName propertyCode")
-      .populate("unit", "unitNumber")
-      .populate("tenant", "name tenantCode")
-      .populate("billedInvoice", "_id invoiceNumber status amount dueDate");
-
+    const populated = await populateReadingQuery(MeterReading.findById(reading._id));
     return res.status(200).json(populated);
   } catch (err) {
-    if (err.message?.includes("already exists") || err.message?.includes("cannot be less")) {
+    if (
+      err.message?.includes("already exists") ||
+      err.message?.includes("cannot be less") ||
+      err.message?.includes("cannot be negative")
+    ) {
       return res.status(400).json({ message: err.message });
     }
     next(err);
@@ -387,12 +458,67 @@ export const deleteMeterReading = async (req, res, next) => {
       return res.status(404).json({ message: "Meter reading not found." });
     }
 
-    if (reading.status !== "draft") {
-      return res.status(400).json({ message: "Only draft meter readings can be deleted." });
+    if (reading.status === "deleted") {
+      return res.status(400).json({ message: "This meter reading has already been deleted." });
     }
 
-    await MeterReading.findByIdAndDelete(reading._id);
-    return res.status(200).json({ success: true, deletedId: reading._id });
+    const actorUserId = await resolveActorUserId(req).catch(() => null);
+
+    if (reading.status === "billed" && reading.billedInvoice) {
+      const invoiceDeletion = await invokeInvoiceDeletionForMeterReading({
+        req,
+        invoiceId: reading.billedInvoice,
+      });
+
+      if (Number(invoiceDeletion?.statusCode || 500) >= 400) {
+        const payload = invoiceDeletion?.payload || {};
+        return res.status(invoiceDeletion.statusCode || 400).json({
+          message:
+            payload?.error ||
+            payload?.message ||
+            "Failed to reverse the linked utility invoice for this meter reading.",
+        });
+      }
+
+      const refreshedReading = await MeterReading.findById(reading._id);
+      if (!refreshedReading) {
+        return res.status(200).json({
+          success: true,
+          message: "Linked invoice reversed and meter reading removed successfully.",
+        });
+      }
+
+      const deletedReading = await softDeleteReading({
+        reading: refreshedReading,
+        actorUserId,
+        reason: `Meter reading deleted after reversing linked invoice ${reading.billedInvoice}.`,
+        deletedInvoiceId: reading.billedInvoice,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Meter reading deleted and linked invoice reversed successfully.",
+        reading: deletedReading,
+        deletedId: refreshedReading._id,
+      });
+    }
+
+    const deletedReading = await softDeleteReading({
+      reading,
+      actorUserId,
+      reason:
+        reading.status === "void"
+          ? "Voided meter reading deleted from register."
+          : "Draft meter reading deleted from register.",
+      deletedInvoiceId: null,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Meter reading deleted successfully.",
+      reading: deletedReading,
+      deletedId: reading._id,
+    });
   } catch (err) {
     next(err);
   }
@@ -405,22 +531,33 @@ export const voidMeterReading = async (req, res, next) => {
       return res.status(404).json({ message: "Meter reading not found." });
     }
 
+    if (reading.status === "deleted") {
+      return res.status(400).json({ message: "Deleted meter readings cannot be voided." });
+    }
+
     if (reading.status === "billed") {
       return res.status(400).json({
-        message: "Billed meter readings cannot be voided here because they are already linked to an invoice. Reverse/delete the invoice through the normal invoice flow instead.",
+        message:
+          "Billed meter readings cannot be voided here because they are already linked to an invoice. Delete the meter reading to reverse the linked invoice correctly.",
       });
     }
 
+    if (reading.status === "void") {
+      return res.status(400).json({ message: "This meter reading is already voided." });
+    }
+
+    const actorUserId = await resolveActorUserId(req);
     reading.status = "void";
     reading.voidedAt = new Date();
-    reading.voidedBy = await resolveActorUserId(req);
-    reading.updatedBy = await resolveActorUserId(req);
+    reading.voidedBy = actorUserId;
+    reading.updatedBy = actorUserId;
     if (req.body?.notes) {
       reading.notes = String(req.body.notes).trim();
     }
     await reading.save();
 
-    return res.status(200).json(reading);
+    const populated = await populateReadingQuery(MeterReading.findById(reading._id));
+    return res.status(200).json(populated);
   } catch (err) {
     next(err);
   }
@@ -435,6 +572,10 @@ export const billMeterReading = async (req, res, next) => {
 
     if (reading.status === "void") {
       return res.status(400).json({ message: "Voided meter readings cannot be billed." });
+    }
+
+    if (reading.status === "deleted") {
+      return res.status(400).json({ message: "Deleted meter readings cannot be billed." });
     }
 
     if (reading.status === "billed" || reading.billedInvoice) {
@@ -453,7 +594,8 @@ export const billMeterReading = async (req, res, next) => {
 
     if (!activeTenant?._id) {
       return res.status(400).json({
-        message: "No active tenant is linked to this meter reading's unit. Attach the correct tenant before billing.",
+        message:
+          "No active tenant is linked to this meter reading's unit. Attach the correct tenant before billing.",
       });
     }
 
@@ -497,11 +639,7 @@ export const billMeterReading = async (req, res, next) => {
     reading.updatedBy = await resolveActorUserId(req);
     await reading.save();
 
-    const populatedReading = await MeterReading.findById(reading._id)
-      .populate("property", "propertyName propertyCode")
-      .populate("unit", "unitNumber")
-      .populate("tenant", "name tenantCode")
-      .populate("billedInvoice", "_id invoiceNumber status amount dueDate");
+    const populatedReading = await populateReadingQuery(MeterReading.findById(reading._id));
 
     return res.status(200).json({
       message: "Meter reading billed successfully.",

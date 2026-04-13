@@ -135,6 +135,9 @@ const AddLandlord = () => {
   const editLandlordId = location.state?.landlordId || null;
   const editLandlordData = location.state?.landlordData || null;
   const isEditMode = Boolean(editLandlordId);
+  const draftStorageKey = currentCompany?._id
+    ? `milik:landlord-form-draft:${currentCompany._id}:${isEditMode ? editLandlordId || "edit" : "new"}`
+    : null;
 
   const [formData, setFormData] = useState({
     landlordCode: "",
@@ -151,6 +154,11 @@ const AddLandlord = () => {
   });
 
   const [attachments, setAttachments] = useState([]);
+
+  const clearDraftState = () => {
+    if (!draftStorageKey) return;
+    localStorage.removeItem(draftStorageKey);
+  };
 
   useEffect(() => {
     if (!isEditMode || !editLandlordData) return;
@@ -179,6 +187,47 @@ const AddLandlord = () => {
       }))
     );
   }, [isEditMode, editLandlordData]);
+
+  useEffect(() => {
+    if (isEditMode || !draftStorageKey) return;
+
+    try {
+      const savedDraft = localStorage.getItem(draftStorageKey);
+      if (!savedDraft) return;
+
+      const parsedDraft = JSON.parse(savedDraft);
+      if (parsedDraft?.formData && typeof parsedDraft.formData === "object") {
+        setFormData((prev) => ({ ...prev, ...parsedDraft.formData }));
+      }
+      if (Array.isArray(parsedDraft?.attachments)) {
+        setAttachments(parsedDraft.attachments);
+      }
+    } catch (draftError) {
+      console.warn("Failed to restore landlord draft", draftError);
+    }
+  }, [draftStorageKey, isEditMode]);
+
+  useEffect(() => {
+    if (isEditMode || !draftStorageKey) return;
+
+    try {
+      localStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          formData,
+          attachments: attachments.map(({ id, name, size, dateTime }) => ({
+            id,
+            name,
+            size,
+            dateTime,
+            file: null,
+          })),
+        })
+      );
+    } catch (draftError) {
+      console.warn("Failed to persist landlord draft", draftError);
+    }
+  }, [attachments, draftStorageKey, formData, isEditMode]);
 
   // Input classes for consistency
   const inputClass =
@@ -278,6 +327,7 @@ const AddLandlord = () => {
         toast.success("Landlord added successfully!");
       }
 
+      clearDraftState();
       navigate("/landlords");
     } catch (err) {
       console.error("Error:", err);

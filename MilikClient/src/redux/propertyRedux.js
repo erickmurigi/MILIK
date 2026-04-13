@@ -89,8 +89,16 @@ export const createProperty = createAsyncThunk(
       });
       
       let errorMessage = 'Failed to create property';
+      const validationErrors = Array.isArray(error.response?.data?.errors)
+        ? error.response.data.errors
+        : [];
       
-      if (error.response?.data?.message) {
+      if (validationErrors.length > 0) {
+        errorMessage = validationErrors
+          .map((item) => item?.message)
+          .filter(Boolean)
+          .join('; ') || errorMessage;
+      } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.response?.data?.error) {
         errorMessage = error.response.data.error;

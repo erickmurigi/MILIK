@@ -1,7 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
-import { FaPlus, FaRedoAlt, FaSave, FaSearch, FaTimes, FaTrash, FaUndo } from "react-icons/fa";
+import {
+  FaFileInvoice,
+  FaPlus,
+  FaRedoAlt,
+  FaSave,
+  FaSearch,
+  FaTimes,
+  FaUndo,
+} from "react-icons/fa";
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenants } from "../../redux/tenantsRedux";
@@ -79,6 +87,39 @@ const getStatusChip = (status) => {
   return "border-slate-200 bg-slate-50 text-slate-700";
 };
 
+const normalizeInvoiceItemKey = (invoice) => {
+  const metadata = invoice?.metadata || {};
+  const category = String(invoice?.category || "").toUpperCase();
+  const billItemKey = String(metadata?.billItemKey || "").trim();
+  const utilityType = String(
+    metadata?.utilityType || metadata?.meterUtilityType || metadata?.statementUtilityType || metadata?.utilityName || metadata?.utility || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  return [category, billItemKey || utilityType].filter(Boolean).join("::");
+};
+
+const humanizeCategory = (value = "") =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const getInvoiceItemLabel = (invoice) => {
+  const metadata = invoice?.metadata || {};
+  return (
+    metadata?.billItemLabel ||
+    metadata?.billItemKey ||
+    metadata?.utilityType ||
+    metadata?.meterUtilityType ||
+    metadata?.statementUtilityType ||
+    metadata?.utilityName ||
+    metadata?.utility ||
+    humanizeCategory(invoice?.category || "Charge Item")
+  );
+};
+
 const InvoiceNotes = () => {
   const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -101,6 +142,7 @@ const InvoiceNotes = () => {
   const [propertyId, setPropertyId] = useState("");
   const [tenantId, setTenantId] = useState("");
   const [sourceInvoiceId, setSourceInvoiceId] = useState("");
+  const [invoiceItemSelection, setInvoiceItemSelection] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
@@ -177,9 +219,8 @@ const InvoiceNotes = () => {
     return tenants.filter((tenant) => resolvePropertyId(tenant) === String(filters.propertyId));
   }, [tenants, filters.propertyId]);
 
-  const sourceInvoicePool = noteType === "CREDIT_NOTE" ? openInvoices : anchorInvoices.filter(isPostedInvoice);
-
   const sourceInvoiceOptions = useMemo(() => {
+    const sourceInvoicePool = noteType === "CREDIT_NOTE" ? openInvoices : anchorInvoices.filter(isPostedInvoice);
     return sourceInvoicePool
       .filter((invoice) => {
         if (!tenantId) return false;
@@ -192,20 +233,53 @@ const InvoiceNotes = () => {
         const aTime = new Date(a?.invoiceDate || a?.createdAt || 0).getTime();
         return bTime - aTime;
       });
-  }, [sourceInvoicePool, tenantId, propertyId]);
+  }, [noteType, openInvoices, anchorInvoices, tenantId, propertyId]);
 
-  const selectedSourceInvoice = useMemo(
-    () => sourceInvoiceOptions.find((invoice) => String(invoice?._id || invoice?.sourceInvoiceId || "") === String(sourceInvoiceId)),
-    [sourceInvoiceId, sourceInvoiceOptions]
+  const debitInvoiceItemOptions = useMemo(() => {
+    const optionMap = new Map();
+    sourceInvoiceOptions.forEach((invoice) => {
+      const key = normalizeInvoiceItemKey(invoice) || String(invoice?._id || "");
+      if (!key || optionMap.has(key)) return;
+      optionMap.set(key, {
+        key,
+        label: getInvoiceItemLabel(invoice),
+        category: String(invoice?.category || ""),
+        anchorInvoiceId: String(invoice?._id || ""),
+        anchorInvoice: invoice,
+      });
+    });
+    return Array.from(optionMap.values());
+  }, [sourceInvoiceOptions]);
+
+  const selectedInvoiceItem = useMemo(
+    () => debitInvoiceItemOptions.find((item) => item.key === invoiceItemSelection) || null,
+    [debitInvoiceItemOptions, invoiceItemSelection]
   );
 
+  const selectedSourceInvoice = useMemo(() => {
+    if (noteType === "DEBIT_NOTE") return selectedInvoiceItem?.anchorInvoice || null;
+    return sourceInvoiceOptions.find((invoice) => String(invoice?._id || invoice?.sourceInvoiceId || "") === String(sourceInvoiceId)) || null;
+  }, [noteType, selectedInvoiceItem, sourceInvoiceId, sourceInvoiceOptions]);
+
   useEffect(() => {
+    if (noteType === "DEBIT_NOTE") {
+      if (!selectedInvoiceItem) return;
+      setSourceInvoiceId(String(selectedInvoiceItem.anchorInvoiceId || ""));
+      setCategory(String(selectedInvoiceItem.category || ""));
+      const sourceAccountId =
+        selectedInvoiceItem?.anchorInvoice?.chartAccount?._id ||
+        selectedInvoiceItem?.anchorInvoice?.chartAccount ||
+        "";
+      if (sourceAccountId) setChartAccountId(String(sourceAccountId));
+      return;
+    }
+
     if (!sourceInvoiceId) return;
     const exists = sourceInvoiceOptions.some(
       (invoice) => String(invoice?._id || invoice?.sourceInvoiceId || "") === String(sourceInvoiceId)
     );
     if (!exists) setSourceInvoiceId("");
-  }, [sourceInvoiceId, sourceInvoiceOptions]);
+  }, [noteType, selectedInvoiceItem, sourceInvoiceId, sourceInvoiceOptions]);
 
   useEffect(() => {
     if (!selectedSourceInvoice) return;
@@ -217,12 +291,14 @@ const InvoiceNotes = () => {
   useEffect(() => {
     setTenantId("");
     setSourceInvoiceId("");
+    setInvoiceItemSelection("");
     setAmount("");
     setDescription("");
   }, [propertyId, noteType]);
 
   useEffect(() => {
     setSourceInvoiceId("");
+    setInvoiceItemSelection("");
     setAmount("");
     setDescription("");
   }, [tenantId]);
@@ -255,10 +331,28 @@ const InvoiceNotes = () => {
     });
   }, [notes, filters, propertyMap]);
 
+  const summaryCards = useMemo(() => {
+    const activeNotes = filteredNotes.filter(isActiveNote);
+    const reversedNotes = filteredNotes.filter(
+      (item) => String(item?.status || "").toLowerCase() === "reversed"
+    );
+    const activeValue = activeNotes.reduce((sum, item) => sum + Number(item?.amount || 0), 0);
+    const totalValue = filteredNotes.reduce((sum, item) => sum + Number(item?.amount || 0), 0);
+
+    return {
+      totalCount: filteredNotes.length,
+      activeCount: activeNotes.length,
+      reversedCount: reversedNotes.length,
+      activeValue,
+      totalValue,
+    };
+  }, [filteredNotes]);
+
   const resetModalForm = () => {
     setPropertyId("");
     setTenantId("");
     setSourceInvoiceId("");
+    setInvoiceItemSelection("");
     setAmount("");
     setCategory("");
     setDescription("");
@@ -273,8 +367,24 @@ const InvoiceNotes = () => {
 
   const handleSave = async () => {
     if (!currentCompany?._id) return;
-    if (!propertyId || !tenantId || !sourceInvoiceId || !amount || Number(amount) <= 0) {
-      toast.error("Property, tenant, source invoice and amount are required.");
+
+    const isCreditNote = noteType === "CREDIT_NOTE";
+    const resolvedSourceInvoiceId = isCreditNote
+      ? sourceInvoiceId
+      : sourceInvoiceId || selectedInvoiceItem?.anchorInvoiceId || "";
+
+    if (!propertyId || !tenantId || !amount || Number(amount) <= 0) {
+      toast.error("Property, tenant and a positive amount are required.");
+      return;
+    }
+
+    if (isCreditNote && !resolvedSourceInvoiceId) {
+      toast.error("A source invoice is required for credit notes.");
+      return;
+    }
+
+    if (!isCreditNote && !invoiceItemSelection) {
+      toast.error("Select an invoice item for the debit note.");
       return;
     }
 
@@ -283,12 +393,26 @@ const InvoiceNotes = () => {
       await createTenantInvoiceNote({
         business: currentCompany._id,
         noteType,
-        sourceInvoiceId,
+        sourceInvoiceId: resolvedSourceInvoiceId || undefined,
+        anchorSourceInvoiceId: !isCreditNote ? resolvedSourceInvoiceId || undefined : undefined,
+        tenantId,
+        propertyId,
         amount: Number(amount),
         noteDate,
         description,
         category: category || selectedSourceInvoice?.category,
         chartAccountId: chartAccountId || undefined,
+        metadata: !isCreditNote && selectedInvoiceItem
+          ? {
+              billItemKey: selectedInvoiceItem?.anchorInvoice?.metadata?.billItemKey || undefined,
+              billItemLabel: selectedInvoiceItem?.label || undefined,
+              utilityType:
+                selectedInvoiceItem?.anchorInvoice?.metadata?.utilityType ||
+                selectedInvoiceItem?.anchorInvoice?.metadata?.meterUtilityType ||
+                selectedInvoiceItem?.anchorInvoice?.metadata?.statementUtilityType ||
+                undefined,
+            }
+          : undefined,
       });
 
       toast.success(`${noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} note created successfully.`);
@@ -336,174 +460,233 @@ const InvoiceNotes = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-3">
+        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-3">
+          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+            <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-500">
+                  Tenant invoice notes
+                </p>
+                <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
+                  Credit &amp; Debit Notes
+                </h1>
+                <p className="mt-1 text-sm text-slate-600">
+                  Manage note adjustments with the same compact MILIK workspace style used across invoices and meter readings, while preserving source invoice controls and audited reversals.
+                </p>
+              </div>
+              <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
+                {currentCompany?.companyName || currentCompany?.name || "No company selected"}
+              </div>
+            </div>
 
-<div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-white px-3 pb-3 pt-2">
-  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
-    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-      <div className="space-y-2">
-        <div>
-          <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-500">Tenant invoice notes</p>
-          <h1 className="mt-1 text-xl font-bold text-slate-900">Credit & Debit Notes</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Compact property-first note control with safer source invoice selection and audited credit/debit-note reversals that preserve ledger integrity.
-          </p>
-        </div>
+            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded border border-blue-200 bg-blue-50 p-2.5">
+                <p className="text-[11px] font-semibold text-blue-600">Visible Notes</p>
+                <p className="text-xl font-bold leading-tight text-blue-900">{summaryCards.totalCount}</p>
+              </div>
+              <div className="rounded border border-emerald-200 bg-emerald-50 p-2.5">
+                <p className="text-[11px] font-semibold text-emerald-600">Active Notes</p>
+                <p className="text-xl font-bold leading-tight text-emerald-900">{summaryCards.activeCount}</p>
+              </div>
+              <div className="rounded border border-amber-200 bg-amber-50 p-2.5">
+                <p className="text-[11px] font-semibold text-amber-600">Reversed Notes</p>
+                <p className="text-xl font-bold leading-tight text-amber-900">{summaryCards.reversedCount}</p>
+              </div>
+              <div className="rounded border border-violet-200 bg-violet-50 p-2.5">
+                <p className="text-[11px] font-semibold text-violet-600">Visible Note Value</p>
+                <p className="text-xl font-bold leading-tight text-violet-900">{formatCurrency(summaryCards.totalValue)}</p>
+              </div>
+            </div>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setNoteType("CREDIT_NOTE");
-              setFilters((prev) => ({ ...prev, noteType: "CREDIT_NOTE" }));
-              const nextParams = new URLSearchParams(searchParams);
-              nextParams.set("type", "credit");
-              setSearchParams(nextParams, { replace: true });
-            }}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
-              filters.noteType === "CREDIT_NOTE"
-                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            Credit Notes
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setNoteType("DEBIT_NOTE");
-              setFilters((prev) => ({ ...prev, noteType: "DEBIT_NOTE" }));
-              const nextParams = new URLSearchParams(searchParams);
-              nextParams.set("type", "debit");
-              setSearchParams(nextParams, { replace: true });
-            }}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
-              filters.noteType === "DEBIT_NOTE"
-                ? "border-orange-300 bg-orange-50 text-orange-700"
-                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            Debit Notes
-          </button>
-          <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700 text-xs">{noteCountLabel}</span>
-          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 text-xs">Active {filteredNotes.filter(isActiveNote).length}</span>
-          <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 text-xs">Reversed {filteredNotes.filter((item) => String(item?.status || "").toLowerCase() === "reversed").length}</span>
-        </div>
-      </div>
+          <div className="flex-1 min-h-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-3">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNoteType("CREDIT_NOTE");
+                        setFilters((prev) => ({ ...prev, noteType: "CREDIT_NOTE" }));
+                        const nextParams = new URLSearchParams(searchParams);
+                        nextParams.set("type", "credit");
+                        setSearchParams(nextParams, { replace: true });
+                      }}
+                      className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                        filters.noteType === "CREDIT_NOTE"
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      Credit Notes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNoteType("DEBIT_NOTE");
+                        setFilters((prev) => ({ ...prev, noteType: "DEBIT_NOTE" }));
+                        const nextParams = new URLSearchParams(searchParams);
+                        nextParams.set("type", "debit");
+                        setSearchParams(nextParams, { replace: true });
+                      }}
+                      className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                        filters.noteType === "DEBIT_NOTE"
+                          ? "border-orange-300 bg-orange-50 text-orange-700"
+                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      Debit Notes
+                    </button>
+                    <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                      {noteCountLabel}
+                    </span>
+                    <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      Active Value {formatCurrency(summaryCards.activeValue)}
+                    </span>
+                  </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"
-        >
-          <FaPlus /> Add Note
-        </button>
-        <button
-          type="button"
-          onClick={loadData}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-        >
-          <FaRedoAlt /> Refresh
-        </button>
-        <button
-          type="button"
-          onClick={resetWorkspaceFilters}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-        >
-          <FaTimes /> Reset Filters
-        </button>
-      </div>
-    </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={openAddModal}
+                      className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"
+                    >
+                      <FaPlus /> Add Note
+                    </button>
+                    <button
+                      type="button"
+                      onClick={loadData}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                      <FaRedoAlt /> Refresh
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resetWorkspaceFilters}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                      <FaTimes /> Reset Filters
+                    </button>
+                  </div>
+                </div>
 
-    <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
-      <select
-        value={filters.propertyId}
-        onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))}
-        className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none"
-      >
-        <option value="">All properties</option>
-        {properties.map((property) => (
-          <option key={property._id} value={property._id}>{property.propertyName || property.propertyCode || "Unnamed Property"}</option>
-        ))}
-      </select>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
+                  <div className="relative xl:col-span-2">
+                    <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={filters.search}
+                      onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                      placeholder="Search note no, tenant, source invoice, property..."
+                      className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm focus:border-[#0B3B2E] focus:outline-none"
+                    />
+                  </div>
 
-      <select
-        value={filters.tenantId}
-        onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value }))}
-        className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none"
-      >
-        <option value="">All tenants</option>
-        {filterScopedTenants.map((tenant) => (
-          <option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)}</option>
-        ))}
-      </select>
+                  <select
+                    value={filters.propertyId}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none"
+                  >
+                    <option value="">All properties</option>
+                    {properties.map((property) => (
+                      <option key={property._id} value={property._id}>
+                        {property.propertyName || property.propertyCode || "Unnamed Property"}
+                      </option>
+                    ))}
+                  </select>
 
-      <select
-        value={filters.status}
-        onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-        className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none"
-      >
-        <option value="active">Active only</option>
-        <option value="reversed">Reversed</option>
-        <option value="all">All statuses</option>
-      </select>
+                  <select
+                    value={filters.tenantId}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value }))}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none"
+                  >
+                    <option value="">All tenants</option>
+                    {filterScopedTenants.map((tenant) => (
+                      <option key={tenant._id} value={tenant._id}>
+                        {getTenantDisplayName(tenant)}
+                      </option>
+                    ))}
+                  </select>
 
-      <div className="relative sm:col-span-2 xl:col-span-3">
-        <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          value={filters.search}
-          onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-          placeholder="Search note no, tenant, source invoice, property..."
-          className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pl-10 pr-3 text-sm focus:border-[#0B3B2E] focus:outline-none"
-        />
-      </div>
-    </div>
-  </div>
-</div>
+                  <select
+                    value={filters.status}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none"
+                  >
+                    <option value="active">Active only</option>
+                    <option value="reversed">Reversed</option>
+                    <option value="all">All statuses</option>
+                  </select>
+                </div>
+              </div>
+            </div>
 
-<div className="flex-1 min-h-0 overflow-auto px-3 py-3">
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-auto">
+            <div className="flex-1 min-h-0 overflow-auto">
               <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-left text-[11px] font-bold uppercase tracking-[0.16em] text-white">
-                  <tr>
-                    <th className="px-3 py-2">Date</th>
-                    <th className="px-3 py-2">Note</th>
-                    <th className="px-3 py-2">Tenant</th>
-                    <th className="px-3 py-2">Property</th>
-                    <th className="px-3 py-2">Source Invoice</th>
-                    <th className="px-3 py-2">Charge Type</th>
-                    <th className="px-3 py-2.5 text-right">Amount</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2.5 text-right">Actions</th>
+                <thead>
+                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-left text-[11px] font-bold uppercase tracking-[0.16em] text-white">
+                    <th className="px-3 py-3">Date</th>
+                    <th className="px-3 py-3">Note</th>
+                    <th className="px-3 py-3">Tenant</th>
+                    <th className="px-3 py-3">Property</th>
+                    <th className="px-3 py-3">Source Invoice</th>
+                    <th className="px-3 py-3">Charge Type</th>
+                    <th className="px-3 py-3 text-right">Amount</th>
+                    <th className="px-3 py-3">Status</th>
+                    <th className="px-3 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {filteredNotes.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-3 py-10 text-center text-sm text-slate-500">{loading ? "Loading notes..." : "No invoice notes found."}</td>
+                      <td colSpan={9} className="px-3 py-12 text-center text-sm text-slate-500">
+                        {loading ? "Loading notes..." : "No invoice notes found."}
+                      </td>
                     </tr>
                   ) : (
                     filteredNotes.map((note, index) => (
-                      <tr key={note._id} className={`align-top ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-slate-50`}>
-                        <td className="px-3 py-2 text-xs text-slate-600">{formatDate(note.noteDate || note.invoiceDate || note.createdAt)}</td>
-                        <td className="px-3 py-2">
-                          <p className="font-semibold text-slate-900">{note.noteNumber || note.invoiceNumber}</p>
-                          <p className="text-[11px] text-slate-500">{note.noteType || note.documentType}</p>
+                      <tr
+                        key={note._id}
+                        className={`align-top ${index % 2 === 0 ? "bg-white" : "bg-slate-50/70"} hover:bg-slate-50`}
+                      >
+                        <td className="px-3 py-3 text-xs text-slate-600">
+                          {formatDate(note.noteDate || note.invoiceDate || note.createdAt)}
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-slate-700">{note?.tenant?.name || note?.tenantName || "-"}</td>
-                        <td className="px-3 py-2.5 text-xs text-slate-700">{resolvePropertyName(note, propertyMap)}</td>
-                        <td className="px-3 py-2.5 text-xs text-slate-700">{note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}</td>
-                        <td className="px-3 py-2.5 text-xs text-slate-700">{note.category || "-"}</td>
-                        <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(note.amount)}</td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-3">
+                          <div className="flex items-start gap-2">
+                            <span className="mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                              <FaFileInvoice className="text-sm" />
+                            </span>
+                            <div>
+                              <p className="font-semibold text-slate-900">{note.noteNumber || note.invoiceNumber}</p>
+                              <p className="text-[11px] font-medium text-slate-500">{note.noteType || note.documentType}</p>
+                              {note.description ? (
+                                <p className="mt-1 max-w-[260px] truncate text-[11px] text-slate-500">{note.description}</p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-slate-700">
+                          {note?.tenant?.name || note?.tenantName || "-"}
+                        </td>
+                        <td className="px-3 py-3 text-xs text-slate-700">
+                          {resolvePropertyName(note, propertyMap)}
+                        </td>
+                        <td className="px-3 py-3 text-xs text-slate-700">
+                          {note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}
+                        </td>
+                        <td className="px-3 py-3 text-xs text-slate-700">{note.category || "-"}</td>
+                        <td className="px-3 py-3 text-right font-semibold text-slate-900">
+                          {formatCurrency(note.amount)}
+                        </td>
+                        <td className="px-3 py-3">
                           <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase ${getStatusChip(note?.status)}`}>
                             {note?.status || "posted"}
                           </span>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-3">
                           <div className="flex justify-end">
                             {canReverseNote(note) ? (
                               <button
@@ -526,6 +709,18 @@ const InvoiceNotes = () => {
                 </tbody>
               </table>
             </div>
+
+            <div className="border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
+              Showing <span className="font-semibold text-slate-900">{filteredNotes.length}</span> note{filteredNotes.length === 1 ? "" : "s"}
+              {filters.status !== "all" ? (
+                <span>
+                  {" "}· Status: <span className="font-semibold text-slate-900">{filters.status}</span>
+                </span>
+              ) : null}
+              <span>
+                {" "}· Current type: <span className="font-semibold text-slate-900">{filters.noteType === "CREDIT_NOTE" ? "Credit Notes" : "Debit Notes"}</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -536,7 +731,7 @@ const InvoiceNotes = () => {
                 <div>
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-500">Add invoice note</p>
                   <h3 className="mt-1 text-lg font-bold text-slate-900">{noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"}</h3>
-                  <p className="mt-1 text-sm text-slate-500">Select property first, then tenant, then the source invoice within that property. Debit notes only list active posted invoices.</p>
+                  <p className="mt-1 text-sm text-slate-500">Select property first, then tenant. Credit notes must point to a source invoice. Debit notes only require the invoice item being adjusted.</p>
                 </div>
                 <button onClick={() => !saving && setShowAddModal(false)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-white hover:text-slate-800">
                   <FaTimes />
@@ -592,31 +787,53 @@ const InvoiceNotes = () => {
                     </select>
                   </label>
 
-                  <label className="space-y-1.5 text-sm font-medium text-slate-700 md:col-span-2">
-                    <span>Source Invoice</span>
-                    <select value={sourceInvoiceId} onChange={(e) => setSourceInvoiceId(e.target.value)} disabled={!tenantId} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100">
-                      <option value="">{tenantId ? (sourceInvoiceOptions.length ? "Select source invoice" : "No matching posted source invoices") : "Select tenant first"}</option>
-                      {sourceInvoiceOptions.map((invoice) => (
-                        <option key={invoice._id} value={invoice._id}>
-                          {(invoice.invoiceNumber || "-")} | {(invoice.category || "-")} | {formatCurrency(
-                            noteType === "CREDIT_NOTE"
-                              ? invoice.remainingCreditableAmount ?? 0
-                              : invoice.adjustedAmount ?? invoice.netAmount ?? invoice.amount
-                          )}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  {noteType === "CREDIT_NOTE" ? (
+                    <label className="space-y-1.5 text-sm font-medium text-slate-700 md:col-span-2">
+                      <span>Source Invoice</span>
+                      <select value={sourceInvoiceId} onChange={(e) => setSourceInvoiceId(e.target.value)} disabled={!tenantId} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100">
+                        <option value="">{tenantId ? (sourceInvoiceOptions.length ? "Select source invoice" : "No matching open posted invoices") : "Select tenant first"}</option>
+                        {sourceInvoiceOptions.map((invoice) => (
+                          <option key={invoice._id} value={invoice._id}>
+                            {(invoice.invoiceNumber || "-")} | {(invoice.category || "-")} | {formatCurrency(invoice.remainingCreditableAmount ?? 0)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label className="space-y-1.5 text-sm font-medium text-slate-700 md:col-span-2">
+                      <span>Invoice Item</span>
+                      <select value={invoiceItemSelection} onChange={(e) => setInvoiceItemSelection(e.target.value)} disabled={!tenantId} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100">
+                        <option value="">{tenantId ? (debitInvoiceItemOptions.length ? "Select invoice item" : "No matching posted invoice items") : "Select tenant first"}</option>
+                        {debitInvoiceItemOptions.map((item) => (
+                          <option key={item.key} value={item.key}>
+                            {item.label} | {humanizeCategory(item.category)} | {item.anchorInvoice?.invoiceNumber || "-"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
 
-                  <label className="space-y-1.5 text-sm font-medium text-slate-700">
-                    <span>Charge Type</span>
-                    <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none">
-                      <option value="">Select charge type</option>
-                      {chargeTypes.map((item) => (
-                        <option key={item.value} value={item.value}>{item.label}</option>
-                      ))}
-                    </select>
-                  </label>
+                  {noteType === "CREDIT_NOTE" ? (
+                    <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                      <span>Charge Type</span>
+                      <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none">
+                        <option value="">Select charge type</option>
+                        {chargeTypes.map((item) => (
+                          <option key={item.value} value={item.value}>{item.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                      <span>Invoice Item Category</span>
+                      <input
+                        type="text"
+                        value={selectedInvoiceItem ? humanizeCategory(selectedInvoiceItem.category) : ""}
+                        readOnly
+                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none"
+                      />
+                    </label>
+                  )}
 
                   <label className="space-y-1.5 text-sm font-medium text-slate-700">
                     <span>Amount</span>
@@ -641,7 +858,7 @@ const InvoiceNotes = () => {
 
                 {selectedSourceInvoice ? (
                   <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    <p><span className="font-semibold">Source Invoice:</span> {selectedSourceInvoice.invoiceNumber}</p>
+                    <p><span className="font-semibold">{noteType === "CREDIT_NOTE" ? "Source Invoice" : "Anchor Invoice"}:</span> {selectedSourceInvoice.invoiceNumber}</p>
                     <p><span className="font-semibold">Property:</span> {resolvePropertyName(selectedSourceInvoice, propertyMap)}</p>
                     <p><span className="font-semibold">Original Amount:</span> {formatCurrency(selectedSourceInvoice.amount)}</p>
                     <p><span className="font-semibold">Net Amount:</span> {formatCurrency(selectedSourceInvoice.netAmount ?? selectedSourceInvoice.amount)}</p>

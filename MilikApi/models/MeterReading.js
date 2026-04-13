@@ -83,7 +83,7 @@ const MeterReadingSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["draft", "billed", "void"],
+      enum: ["draft", "billed", "void", "deleted"],
       default: "draft",
       index: true,
     },
@@ -119,6 +119,25 @@ const MeterReadingSchema = new mongoose.Schema(
     },
     voidedAt: {
       type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletionReason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    deletedInvoice: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "TenantInvoice",
       default: null,
     },
   },

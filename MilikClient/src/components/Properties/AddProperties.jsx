@@ -284,7 +284,7 @@ const AddProperty = () => {
 
   const clearDraftState = () => {
     if (!draftStorageKey) return;
-    sessionStorage.removeItem(draftStorageKey);
+    localStorage.removeItem(draftStorageKey);
   };
 
 
@@ -654,7 +654,7 @@ const AddProperty = () => {
       return;
     }
     try {
-      const savedDraft = sessionStorage.getItem(draftStorageKey);
+      const savedDraft = localStorage.getItem(draftStorageKey);
       if (savedDraft) {
         const parsedDraft = JSON.parse(savedDraft);
         if (parsedDraft?.formData && typeof parsedDraft.formData === "object") {
@@ -674,7 +674,7 @@ const AddProperty = () => {
   useEffect(() => {
     if (!draftStorageKey || !draftRestoredRef.current) return;
     try {
-      sessionStorage.setItem(
+      localStorage.setItem(
         draftStorageKey,
         JSON.stringify({
           formData,

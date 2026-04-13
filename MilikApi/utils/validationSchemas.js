@@ -32,7 +32,9 @@ export const createUserSchema = z.object({
 
 // ========== PROPERTY SCHEMAS ==========
 export const createPropertySchema = z.object({
-  propertyCode: z.string().min(1, "Property code is required"),
+  // Property code is optional here because the controller safely auto-generates
+  // the next code when the client intentionally submits it blank.
+  propertyCode: z.union([z.string().min(1, "Property code is required"), z.literal("")]).optional(),
   propertyName: z.string().min(1, "Property name is required"),
   lrNumber: z.string().min(1, "LR number is required"),
   category: z.string().optional(),

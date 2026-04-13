@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +6,10 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getRentPayments } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
+
+const ITEMS_PER_PAGE = 50;
+const MILIK_GREEN = "bg-[#0B3B2E]";
+const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 
 const ensureArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -54,6 +57,7 @@ const TenantPrepayments = () => {
   const [search, setSearch] = useState("");
   const [propertyFilter, setPropertyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -112,6 +116,10 @@ const TenantPrepayments = () => {
       .sort((a, b) => new Date(b.paymentDate || 0).getTime() - new Date(a.paymentDate || 0).getTime());
   }, [propertyFilter, propertyMap, receipts, search, statusFilter, tenants]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, propertyFilter, statusFilter]);
+
   const totals = useMemo(() => {
     const confirmedRows = rows.filter((row) => row.isConfirmed);
     return {
@@ -122,143 +130,201 @@ const TenantPrepayments = () => {
     };
   }, [rows]);
 
+  const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = rows.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentPageRows = rows.slice(startIndex, endIndex);
+
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-white p-4 md:p-6">
-        <div className="mx-auto space-y-4" style={{ maxWidth: "96%" }}>
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
-            <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-5 py-5 text-white">
-              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-100">Receipting operations</p>
-                  <h1 className="mt-1 text-2xl font-black tracking-tight">Tenant Prepayments</h1>
-                  <p className="mt-1 max-w-3xl text-sm text-slate-200">
-                    Review receipts with unapplied balance and open the allocation workspace to manually apply them to invoices without breaking posted ledger entries.
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-slate-100">
-                  Confirmed receipts keep their unapplied balance locked unless you reallocate only the already-allocated portion. This page follows the existing allocation safety rules.
-                </div>
+      <div className="min-h-screen bg-slate-50 p-4">
+        <div className="mx-auto max-w-[96%] space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Receipting Workspace</p>
+                <h1 className="mt-1 text-2xl font-black text-slate-900">Tenant Prepayments</h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  Review receipts with unapplied balance and route users into the supported allocation workflow without creating duplicate ledgers.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => navigate("/receipts/new")}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-black text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                >
+                  <FaReceipt /> New Receipt
+                </button>
               </div>
             </div>
+          </div>
 
-            <div className="grid gap-4 p-4 md:grid-cols-4 md:p-5">
-              {[
-                { label: "Open prepayments", value: totals.rowCount, accent: "text-slate-900" },
-                { label: "Unapplied balance", value: formatMoney(totals.totalUnapplied), accent: "text-amber-700" },
-                { label: "Already allocated", value: formatMoney(totals.totalAllocated), accent: "text-emerald-700" },
-                { label: "Confirmed rows", value: totals.lockedRows, accent: "text-[#0B3B2E]" },
-              ].map((item) => (
-                <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
-                  <p className={`mt-2 text-2xl font-black ${item.accent}`}>{item.value}</p>
-                </div>
-              ))}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Open Prepayments</p>
+              <p className="mt-2 text-2xl font-black text-slate-900">{totals.rowCount}</p>
             </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Unapplied Balance</p>
+              <p className="mt-2 text-2xl font-black text-amber-700">{formatMoney(totals.totalUnapplied)}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Already Allocated</p>
+              <p className="mt-2 text-2xl font-black text-emerald-700">{formatMoney(totals.totalAllocated)}</p>
+            </div>
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Confirmed Rows</p>
+              <p className="mt-2 text-2xl font-black text-blue-700">{totals.lockedRows}</p>
+            </div>
+          </div>
 
-            <div className="border-t border-slate-200 p-4 md:p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex flex-1 flex-col gap-3 md:flex-row">
-                  <div className="relative md:w-80">
-                    <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search tenant, property, unit, reference"
-                      className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
-                    />
-                  </div>
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-4 border-b border-slate-200 bg-slate-50">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="relative lg:col-span-2">
+                  <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search tenant, property, unit, reference"
+                    className="w-full px-3 py-3 pl-10 border border-slate-300 rounded-md text-sm"
+                  />
+                </div>
+                <div>
                   <select
                     value={propertyFilter}
                     onChange={(e) => setPropertyFilter(e.target.value)}
-                    className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full px-3 py-3 border border-slate-300 rounded-md text-sm"
                   >
-                    <option value="all">All properties</option>
+                    <option value="all">All Properties</option>
                     {properties.map((property) => (
                       <option key={property._id} value={property._id}>
                         {property.propertyName || property.name || "Unnamed Property"}
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full px-3 py-3 border border-slate-300 rounded-md text-sm"
                   >
-                    <option value="all">All statuses</option>
-                    <option value="confirmed">Confirmed only</option>
-                    <option value="unconfirmed">Unconfirmed only</option>
+                    <option value="all">All Statuses</option>
+                    <option value="confirmed">Confirmed Only</option>
+                    <option value="unconfirmed">Unconfirmed Only</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   onClick={() => navigate("/receipts/new")}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-[#0A3127]"
+                  className={`px-3 py-1.5 text-xs rounded-md text-white font-semibold flex items-center gap-2 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                 >
-                  <FaReceipt /> New receipt
+                  <FaReceipt /> New Receipt
+                </button>
+                <button
+                  onClick={() => {
+                    setSearch("");
+                    setPropertyFilter("all");
+                    setStatusFilter("all");
+                  }}
+                  className="px-3 py-1.5 text-xs rounded-md bg-slate-500 hover:bg-slate-600 text-white font-semibold flex items-center gap-2"
+                >
+                  <FaCoins /> Reset Filters
                 </button>
               </div>
+            </div>
 
-              <div className="mt-4 overflow-auto rounded-2xl border border-slate-200">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50">
-                    <tr className="text-left text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                      <th className="px-4 py-3">Receipt</th>
-                      <th className="px-4 py-3">Tenant</th>
-                      <th className="px-4 py-3">Property</th>
-                      <th className="px-4 py-3">Amounts</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 text-right">Action</th>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px] text-xs">
+                <thead>
+                  <tr className={`${MILIK_GREEN} text-white`}>
+                    <th className="px-3 py-2 text-left">Receipt #</th>
+                    <th className="px-3 py-2 text-left">Date</th>
+                    <th className="px-3 py-2 text-left">Tenant</th>
+                    <th className="px-3 py-2 text-left">Property</th>
+                    <th className="px-3 py-2 text-left">Unit</th>
+                    <th className="px-3 py-2 text-right">Receipt</th>
+                    <th className="px-3 py-2 text-right">Allocated</th>
+                    <th className="px-3 py-2 text-right">Unapplied</th>
+                    <th className="px-3 py-2 text-left">Status</th>
+                    <th className="px-3 py-2 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentPageRows.length === 0 ? (
+                    <tr>
+                      <td colSpan="10" className="px-3 py-10 text-center text-slate-500">
+                        No unapplied receipt balances matched the current filters.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {rows.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
-                          No unapplied receipt balances matched the current filters.
+                  ) : (
+                    currentPageRows.map((row, index) => (
+                      <tr
+                        key={row._id}
+                        className={`border-b border-slate-200 ${index % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
+                      >
+                        <td className="px-3 py-2 font-bold text-slate-900">{row.referenceNumber}</td>
+                        <td className="px-3 py-2 font-semibold text-slate-900">{formatDate(row.paymentDate)}</td>
+                        <td className="px-3 py-2 font-semibold text-slate-900">{row.tenantName}</td>
+                        <td className="px-3 py-2 font-semibold text-slate-900">{row.propertyName}</td>
+                        <td className="px-3 py-2 font-semibold text-slate-900">{row.unitName}</td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(row.amount)}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-emerald-700">{formatMoney(row.allocatedAmount)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-amber-700">{formatMoney(row.unappliedAmount)}</td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`inline-flex px-2 py-1 rounded text-[10px] font-semibold ${
+                              row.isConfirmed ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {row.isConfirmed ? "Confirmed" : "Pending"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => navigate(`/receipts?receipt=${row._id}`)}
+                            className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white inline-flex items-center gap-1"
+                          >
+                            <FaArrowRight size={11} /> Manage Allocation
+                          </button>
                         </td>
                       </tr>
-                    ) : (
-                      rows.map((row) => (
-                        <tr key={row._id}>
-                          <td className="px-4 py-3">
-                            <p className="font-bold text-slate-900">{row.referenceNumber}</p>
-                            <p className="mt-1 text-xs text-slate-500">{formatDate(row.paymentDate)}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="font-semibold text-slate-900">{row.tenantName}</p>
-                            <p className="mt-1 text-xs text-slate-500">Unit {row.unitName}</p>
-                          </td>
-                          <td className="px-4 py-3 text-slate-700">{row.propertyName}</td>
-                          <td className="px-4 py-3">
-                            <p className="font-semibold text-slate-900">Receipt {formatMoney(row.amount)}</p>
-                            <p className="mt-1 text-xs text-emerald-700">Allocated {formatMoney(row.allocatedAmount)}</p>
-                            <p className="mt-1 text-xs font-bold text-amber-700">Unapplied {formatMoney(row.unappliedAmount)}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${row.isConfirmed ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                              {row.isConfirmed ? "Confirmed" : "Unconfirmed"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={() => navigate(`/receipts?receipt=${row._id}`)}
-                              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-700 hover:bg-slate-50"
-                            >
-                              <FaArrowRight /> Manage allocation
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                <p className="font-bold text-slate-900">How this stays accounting-safe</p>
-                <p className="mt-1">
-                  This page does not invent a second prepayment ledger. It surfaces existing receipt records whose unapplied balance already sits in the current receipt allocation logic, then routes users back to the supported allocation workflow.
-                </p>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
+              <p>
+                <span className="font-semibold">Showing:</span> {rows.length === 0 ? 0 : startIndex + 1}
+                {" - "}
+                {Math.min(endIndex, rows.length)} of {rows.length} prepayment row(s)
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={safeCurrentPage === 1}
+                  className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 font-semibold text-slate-700">
+                  Page {safeCurrentPage} of {totalPages} · {ITEMS_PER_PAGE} per page
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={safeCurrentPage === totalPages}
+                  className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Next
+                </button>
               </div>
             </div>
           </div>

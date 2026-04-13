@@ -20,19 +20,35 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import {
   createLatePenaltyRule,
+  deleteLatePenalty,
+  deleteLatePenaltyBatch,
   getLatePenaltyBatch,
   getLatePenaltyBatches,
   getLatePenaltyPostingAccounts,
   getLatePenaltyRules,
-  deleteLatePenaltyBatch,
-  processLatePenalties,
   previewLatePenalties,
+  processLatePenalties,
+  reverseLatePenalty,
   updateLatePenaltyRule,
 } from "../../redux/apiCalls";
 
-const cardClass = "rounded-3xl border border-slate-200 bg-white shadow-sm";
-const inputClass = "w-full rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm transition focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100";
+const MILIK_GREEN = "#0B3B2E";
+const pageShellClass =
+  "overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]";
+const pillTabClass = (active, tone = "green") => {
+  if (active && tone === "orange") return "border-orange-300 bg-orange-50 text-orange-700";
+  if (active && tone === "slate") return "border-slate-400 bg-slate-100 text-slate-800";
+  return active
+    ? "border-[#0B3B2E] bg-[#E7F5EC] text-[#0B3B2E]"
+    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
+};
+const inputClass =
+  "w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10";
 const labelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500";
+const ITEMS_PER_PAGE = 50;
+
+const getErrorMessage = (error, fallback) =>
+  error?.response?.data?.message || error?.message || fallback;
 
 const defaultRuleForm = {
   ruleName: "",
@@ -66,21 +82,6 @@ const formatDate = (value) => {
   return dt.toLocaleDateString();
 };
 
-const ruleModeLabels = {
-  rent_only: "Rent only",
-  current_period_rent_only: "Current period rent only",
-  current_period_bill_balance_only: "Current period bill balance only",
-  all_arrears: "All arrears",
-  outstanding_invoice_balance: "Outstanding invoice balance",
-};
-
-const calcTypeLabels = {
-  flat_amount: "Flat amount",
-  percentage_overdue_balance: "Percentage of overdue balance",
-  daily_fixed_amount: "Daily fixed amount",
-  daily_percentage: "Daily percentage",
-};
-
 const mapRuleToForm = (rule) => ({
   ruleName: rule?.ruleName || "",
   effectiveFrom: rule?.effectiveFrom ? new Date(rule.effectiveFrom).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -99,10 +100,31 @@ const mapRuleToForm = (rule) => ({
   notes: rule?.notes || "",
 });
 
+const statusBadgeClass = (status = "") => {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "processed") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (normalized === "reversed") return "bg-amber-50 text-amber-700 border-amber-200";
+  if (normalized === "deleted") return "bg-rose-50 text-rose-700 border-rose-200";
+  if (normalized === "failed") return "bg-rose-50 text-rose-700 border-rose-200";
+  if (normalized === "partial") return "bg-orange-50 text-orange-700 border-orange-200";
+  if (normalized === "reversed_ready") return "bg-blue-50 text-blue-700 border-blue-200";
+  return "bg-slate-100 text-slate-700 border-slate-200";
+};
+
+const batchDeleteSummary = (batch) => {
+  const blockers = Array.isArray(batch?.deleteBlockers) ? batch.deleteBlockers : [];
+  if (!blockers.length) return "";
+  const first = blockers[0];
+  if (!first?.invoiceNumber) return "Active penalty invoices still exist in this batch.";
+  return blockers.length === 1
+    ? `Active penalty invoice still exists: ${first.invoiceNumber}.`
+    : `Active penalty invoices still exist, starting with ${first.invoiceNumber}.`;
+};
+
 const LatePenalties = () => {
   const { currentCompany } = useSelector((state) => state.company || {});
-
   const businessId = currentCompany?._id || "";
+
   const [accounts, setAccounts] = useState([]);
   const [rules, setRules] = useState([]);
   const [batches, setBatches] = useState([]);
@@ -116,8 +138,18 @@ const LatePenalties = () => {
   const [loading, setLoading] = useState(false);
   const [savingRule, setSavingRule] = useState(false);
   const [batchDetail, setBatchDetail] = useState(null);
-  const [workspaceView, setWorkspaceView] = useState("operations");
+  const [workspaceView, setWorkspaceView] = useState("processed_penalties");
   const [communicationModal, setCommunicationModal] = useState(null);
+  const [selectedBatchRows, setSelectedBatchRows] = useState({});
+  const [processingBatchAction, setProcessingBatchAction] = useState(false);
+  const [penaltySearch, setPenaltySearch] = useState("");
+  const [penaltyStatusFilter, setPenaltyStatusFilter] = useState("all");
+  const [penaltyRuleFilter, setPenaltyRuleFilter] = useState("all");
+  const [penaltyPropertyFilter, setPenaltyPropertyFilter] = useState("all");
+  const [batchSearch, setBatchSearch] = useState("");
+  const [batchStatusFilter, setBatchStatusFilter] = useState("all");
+  const [processedPenaltyPage, setProcessedPenaltyPage] = useState(1);
+  const [processedBatchPage, setProcessedBatchPage] = useState(1);
 
   const incomeAccounts = useMemo(
     () => (Array.isArray(accounts) ? accounts.filter((account) => String(account?.type || "").toLowerCase() === "income") : []),
@@ -157,10 +189,12 @@ const LatePenalties = () => {
   const loadBatches = useCallback(async () => {
     if (!businessId) {
       setBatches([]);
-      return;
+      return [];
     }
     const res = await getLatePenaltyBatches(businessId);
-    setBatches(Array.isArray(res?.batches) ? res.batches : []);
+    const rows = Array.isArray(res?.batches) ? res.batches : [];
+    setBatches(rows);
+    return rows;
   }, [businessId]);
 
   const loadAccounts = useCallback(async () => {
@@ -170,18 +204,14 @@ const LatePenalties = () => {
     }
 
     const res = await getLatePenaltyPostingAccounts(businessId);
-    const rows = Array.isArray(res)
-      ? res
-      : Array.isArray(res?.accounts)
-      ? res.accounts
-      : [];
+    const rows = Array.isArray(res) ? res : Array.isArray(res?.accounts) ? res.accounts : [];
     setAccounts(rows);
   }, [businessId]);
 
   useEffect(() => {
-    loadRules().catch((error) => toast.error(error?.response?.data?.message || error.message || "Failed to load late penalty rules."));
-    loadBatches().catch((error) => toast.error(error?.response?.data?.message || error.message || "Failed to load late penalty batches."));
-    loadAccounts().catch((error) => toast.error(error?.response?.data?.message || error.message || "Failed to load late penalty posting accounts."));
+    loadRules().catch((error) => toast.error(getErrorMessage(error, "Failed to load late penalty rules.")));
+    loadBatches().catch((error) => toast.error(getErrorMessage(error, "Failed to load late penalty batches.")));
+    loadAccounts().catch((error) => toast.error(getErrorMessage(error, "Failed to load late penalty posting accounts.")));
   }, [loadRules, loadBatches, loadAccounts]);
 
   useEffect(() => {
@@ -202,6 +232,156 @@ const LatePenalties = () => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [showRuleModal, savingRule]);
 
+  const processedPenaltyRows = useMemo(() => {
+    const rows = [];
+    batches.forEach((batch) => {
+      (Array.isArray(batch?.items) ? batch.items : []).forEach((item) => {
+        const normalizedStatus = String(item?.status || "").toLowerCase();
+        const include =
+          Boolean(item?.penaltyInvoice?._id || item?.penaltyInvoice) ||
+          normalizedStatus === "processed" ||
+          normalizedStatus === "reversed" ||
+          normalizedStatus === "deleted";
+
+        if (!include) return;
+
+        rows.push({
+          ...item,
+          batchId: batch._id,
+          batchName: batch.batchName || "Late Penalty Batch",
+          batchStatus: batch.status || "processed",
+          batchRunDate: batch.runDate,
+          ruleName: batch.ruleName || batch.rule?.ruleName || "-",
+          penaltyInvoiceNumber: item?.penaltyInvoice?.invoiceNumber || item?.penaltyInvoiceNumber || "-",
+          sourceInvoiceNumber: item?.sourceInvoiceNumber || item?.sourceInvoice?.invoiceNumber || "-",
+          tenantName: item?.tenant?.name || item?.tenantName || "-",
+          tenantCode: item?.tenant?.tenantCode || "",
+          propertyName: item?.property?.propertyName || item?.propertyName || "-",
+          unitNumber: item?.unit?.unitNumber || item?.unitNumber || "-",
+          displayStatus: item?.isDeleted ? "deleted" : item?.reversedAt ? "reversed" : normalizedStatus || "processed",
+        });
+      });
+    });
+
+    return rows.sort((a, b) => new Date(b.batchRunDate || 0).getTime() - new Date(a.batchRunDate || 0).getTime());
+  }, [batches]);
+
+  const processedPenaltyRuleOptions = useMemo(
+    () => Array.from(new Set(processedPenaltyRows.map((row) => String(row?.ruleName || "").trim()).filter(Boolean))).sort(),
+    [processedPenaltyRows]
+  );
+
+  const processedPenaltyPropertyOptions = useMemo(
+    () => Array.from(new Set(processedPenaltyRows.map((row) => String(row?.propertyName || "").trim()).filter(Boolean))).sort(),
+    [processedPenaltyRows]
+  );
+
+  const filteredProcessedPenaltyRows = useMemo(() => {
+    return processedPenaltyRows.filter((row) => {
+      if (penaltyStatusFilter !== "all" && String(row?.displayStatus || "").toLowerCase() !== penaltyStatusFilter) {
+        return false;
+      }
+      if (penaltyRuleFilter !== "all" && String(row?.ruleName || "") !== String(penaltyRuleFilter)) return false;
+      if (penaltyPropertyFilter !== "all" && String(row?.propertyName || "") !== String(penaltyPropertyFilter)) return false;
+
+      if (!penaltySearch.trim()) return true;
+      const haystack = [
+        row?.batchName,
+        row?.ruleName,
+        row?.sourceInvoiceNumber,
+        row?.penaltyInvoiceNumber,
+        row?.tenantName,
+        row?.tenantCode,
+        row?.propertyName,
+        row?.unitNumber,
+        row?.reason,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(penaltySearch.trim().toLowerCase());
+    });
+  }, [processedPenaltyRows, penaltySearch, penaltyStatusFilter, penaltyRuleFilter, penaltyPropertyFilter]);
+
+  const filteredBatches = useMemo(() => {
+    return batches.filter((batch) => {
+      if (batchStatusFilter !== "all" && String(batch?.status || "").toLowerCase() !== batchStatusFilter) return false;
+      if (!batchSearch.trim()) return true;
+
+      const haystack = [
+        batch?.batchName,
+        batch?.ruleName,
+        batch?.rule?.ruleName,
+        batch?.status,
+        batchDeleteSummary(batch),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(batchSearch.trim().toLowerCase());
+    });
+  }, [batches, batchSearch, batchStatusFilter]);
+
+  const processedPenaltyTotalPages = Math.max(1, Math.ceil(filteredProcessedPenaltyRows.length / ITEMS_PER_PAGE));
+  const safeProcessedPenaltyPage = Math.min(processedPenaltyPage, processedPenaltyTotalPages);
+  const processedPenaltyStartIndex = filteredProcessedPenaltyRows.length ? (safeProcessedPenaltyPage - 1) * ITEMS_PER_PAGE : 0;
+  const currentProcessedPenaltyRows = filteredProcessedPenaltyRows.slice(
+    processedPenaltyStartIndex,
+    processedPenaltyStartIndex + ITEMS_PER_PAGE
+  );
+
+  const processedBatchTotalPages = Math.max(1, Math.ceil(filteredBatches.length / ITEMS_PER_PAGE));
+  const safeProcessedBatchPage = Math.min(processedBatchPage, processedBatchTotalPages);
+  const processedBatchStartIndex = filteredBatches.length ? (safeProcessedBatchPage - 1) * ITEMS_PER_PAGE : 0;
+  const currentProcessedBatchRows = filteredBatches.slice(
+    processedBatchStartIndex,
+    processedBatchStartIndex + ITEMS_PER_PAGE
+  );
+
+  const selectableProcessedRows = useMemo(
+    () =>
+      currentProcessedPenaltyRows.filter((row) => {
+        const normalizedStatus = String(row?.displayStatus || "").toLowerCase();
+        return normalizedStatus !== "deleted" && normalizedStatus !== "reversed" && !row?.isDeleted && !row?.reversedAt;
+      }),
+    [currentProcessedPenaltyRows]
+  );
+
+  const selectedProcessedItemIds = useMemo(
+    () =>
+      selectableProcessedRows
+        .filter((row) => selectedBatchRows[String(row._id)])
+        .map((row) => String(row._id)),
+    [selectableProcessedRows, selectedBatchRows]
+  );
+
+  const allProcessedRowsSelected =
+    selectableProcessedRows.length > 0 &&
+    selectableProcessedRows.every((row) => selectedBatchRows[String(row._id)]);
+
+  const processedPenaltyStats = useMemo(() => {
+    const activeRows = processedPenaltyRows.filter((row) => String(row?.displayStatus || "").toLowerCase() === "processed");
+    const reversedRows = processedPenaltyRows.filter((row) => String(row?.displayStatus || "").toLowerCase() === "reversed");
+    const deletedRows = processedPenaltyRows.filter((row) => String(row?.displayStatus || "").toLowerCase() === "deleted");
+    return {
+      totalRows: processedPenaltyRows.length,
+      activeRows: activeRows.length,
+      reversedRows: reversedRows.length,
+      deletedRows: deletedRows.length,
+      activeAmount: activeRows.reduce((sum, row) => sum + Number(row?.calculatedPenalty || 0), 0),
+    };
+  }, [processedPenaltyRows]);
+
+  useEffect(() => {
+    setProcessedPenaltyPage(1);
+  }, [penaltySearch, penaltyStatusFilter, penaltyRuleFilter, penaltyPropertyFilter]);
+
+  useEffect(() => {
+    setProcessedBatchPage(1);
+  }, [batchSearch, batchStatusFilter]);
+
   const selectedCount = useMemo(() => Object.values(selectedRows).filter(Boolean).length, [selectedRows]);
   const selectedPenaltyAmount = useMemo(() => {
     if (!preview?.rows) return 0;
@@ -210,7 +390,77 @@ const LatePenalties = () => {
       .reduce((sum, row) => sum + Number(row.calculatedPenalty || 0), 0);
   }, [preview, selectedRows]);
 
-  const toggleRow = (rowId) => setSelectedRows((prev) => ({ ...prev, [rowId]: !prev[rowId] }));
+  const batchItems = Array.isArray(batchDetail?.items) ? batchDetail.items : [];
+  const selectableBatchItems = useMemo(
+    () =>
+      batchItems.filter((item) => {
+        const normalizedStatus = String(item?.status || "").toLowerCase();
+        return !item?.isDeleted && !item?.reversedAt && normalizedStatus !== "deleted" && normalizedStatus !== "reversed";
+      }),
+    [batchItems]
+  );
+  const selectedModalBatchItemIds = useMemo(
+    () =>
+      selectableBatchItems
+        .filter((item) => selectedBatchRows[String(item._id)])
+        .map((item) => String(item._id)),
+    [selectableBatchItems, selectedBatchRows]
+  );
+  const allModalBatchRowsSelected =
+    selectableBatchItems.length > 0 &&
+    selectableBatchItems.every((item) => selectedBatchRows[String(item._id)]);
+
+  const togglePreviewRow = (rowId) => setSelectedRows((prev) => ({ ...prev, [rowId]: !prev[rowId] }));
+
+  const toggleProcessedPenaltyRow = (itemId) =>
+    setSelectedBatchRows((prev) => ({
+      ...prev,
+      [itemId]: !prev[itemId],
+    }));
+
+  const toggleAllProcessedPenaltyRows = () => {
+    if (!selectableProcessedRows.length) {
+      setSelectedBatchRows({});
+      return;
+    }
+
+    if (allProcessedRowsSelected) {
+      const next = { ...selectedBatchRows };
+      selectableProcessedRows.forEach((row) => {
+        delete next[String(row._id)];
+      });
+      setSelectedBatchRows(next);
+      return;
+    }
+
+    const next = { ...selectedBatchRows };
+    selectableProcessedRows.forEach((row) => {
+      next[String(row._id)] = true;
+    });
+    setSelectedBatchRows(next);
+  };
+
+  const toggleAllModalBatchRows = () => {
+    if (!selectableBatchItems.length) {
+      setSelectedBatchRows({});
+      return;
+    }
+
+    if (allModalBatchRowsSelected) {
+      const next = { ...selectedBatchRows };
+      selectableBatchItems.forEach((item) => {
+        delete next[String(item._id)];
+      });
+      setSelectedBatchRows(next);
+      return;
+    }
+
+    const next = { ...selectedBatchRows };
+    selectableBatchItems.forEach((item) => {
+      next[String(item._id)] = true;
+    });
+    setSelectedBatchRows(next);
+  };
 
   const handlePreview = async () => {
     if (!selectedRuleId) {
@@ -228,7 +478,7 @@ const LatePenalties = () => {
       setSelectedRows(defaults);
       toast.success("Late penalty preview ready.");
     } catch (error) {
-      toast.error(error?.response?.data?.message || error.message || "Failed to preview late penalties.");
+      toast.error(getErrorMessage(error, "Failed to preview late penalties."));
     } finally {
       setLoading(false);
     }
@@ -253,14 +503,12 @@ const LatePenalties = () => {
       toast.success(res?.message || "Late penalties processed successfully.");
       await loadBatches();
       if (res?.batch?._id) {
-        setWorkspaceView("operations");
+        setWorkspaceView("processed_batches");
         await openBatch(res.batch._id);
-      } else {
-        setBatchDetail(res?.batch || null);
       }
       await handlePreview();
     } catch (error) {
-      toast.error(error?.response?.data?.message || error.message || "Failed to process late penalties.");
+      toast.error(getErrorMessage(error, "Failed to process late penalties."));
     } finally {
       setLoading(false);
     }
@@ -312,11 +560,9 @@ const LatePenalties = () => {
 
       await loadRules(savedRuleId);
       setShowRuleModal(false);
-      if (savedRuleId) {
-        setSelectedRuleId(savedRuleId);
-      }
+      if (savedRuleId) setSelectedRuleId(savedRuleId);
     } catch (error) {
-      toast.error(error?.response?.data?.message || error.message || "Failed to save late penalty rule.");
+      toast.error(getErrorMessage(error, "Failed to save late penalty rule."));
     } finally {
       setSavingRule(false);
     }
@@ -325,518 +571,943 @@ const LatePenalties = () => {
   const openBatch = async (batchId) => {
     try {
       setLoading(true);
-      setWorkspaceView("operations");
+      setSelectedBatchRows({});
       const res = await getLatePenaltyBatch(batchId, businessId);
       setBatchDetail(res?.batch || null);
     } catch (error) {
-      toast.error(error?.response?.data?.message || error.message || "Failed to load late penalty batch.");
+      toast.error(getErrorMessage(error, "Failed to load late penalty batch."));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteFailedBatch = async (batch) => {
+  const handleDeleteBatch = async (batch) => {
     if (!batch?._id) return;
-    if (String(batch?.status || "").toLowerCase() !== "failed") {
-      toast.info("Only fully failed batches can be deleted.");
+
+    if (!batch?.canDeleteBatch) {
+      toast.error(batchDeleteSummary(batch) || "Cannot delete batch until all linked penalty invoices are cleared.");
       return;
     }
 
     const confirmed = window.confirm(
-      `Delete failed late penalty batch \"${batch.batchName || batch._id}\"? This will only remove the failed batch record.`
+      `Delete late penalty batch "${batch.batchName || batch._id}"? This will remove the batch record because all linked penalty invoices have already been cleared.`
     );
     if (!confirmed) return;
 
     try {
       setLoading(true);
       const res = await deleteLatePenaltyBatch(batch._id, businessId);
-      toast.success(res?.message || "Failed late penalty batch deleted successfully.");
+      toast.success(res?.message || "Late penalty batch deleted successfully.");
       if (String(batchDetail?._id || "") === String(batch._id)) {
         setBatchDetail(null);
       }
       await loadBatches();
     } catch (error) {
-      toast.error(error?.response?.data?.message || error.message || "Failed to delete late penalty batch.");
+      toast.error(getErrorMessage(error, "Failed to delete late penalty batch."));
     } finally {
       setLoading(false);
     }
   };
 
+  const refreshOpenBatch = async () => {
+    await loadBatches();
+    if (batchDetail?._id) {
+      await openBatch(batchDetail._id);
+    }
+  };
 
-const allPreviewRowsSelected = !!preview?.rows?.length && preview.rows.every((row) => row.skippedReason || selectedRows[row.sourceInvoiceId]);
+  const runReverseForItems = async (itemIds) => {
+    if (!itemIds.length) {
+      toast.error("Select at least one late penalty row to reverse.");
+      return;
+    }
 
-return (
-  <DashboardLayout>
-    <div className="space-y-4">
-      <div className={`${cardClass} px-4 py-4 md:px-5`}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-500">Late penalty workspace</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Late Penalties</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Operational batch review is the default workspace. Switch to rules, preview, and process only when you need to prepare a run.
-            </p>
+    try {
+      setProcessingBatchAction(true);
+      const res = await reverseLatePenalty({
+        business: businessId,
+        itemIds,
+      });
+      toast.success(res?.message || "Selected late penalties reversed successfully.");
+      setSelectedBatchRows({});
+      await refreshOpenBatch();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to reverse selected late penalties."));
+    } finally {
+      setProcessingBatchAction(false);
+    }
+  };
+
+  const runDeleteForItems = async (itemIds) => {
+    if (!itemIds.length) {
+      toast.error("Select at least one late penalty row to delete.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      itemIds.length === 1
+        ? "Delete the selected late penalty? This only works when no journal entry exists."
+        : `Delete ${itemIds.length} selected late penalties? This only works when no journal entry exists.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setProcessingBatchAction(true);
+      for (const itemId of itemIds) {
+        // eslint-disable-next-line no-await-in-loop
+        await deleteLatePenalty(itemId, { business: businessId });
+      }
+      toast.success(
+        itemIds.length === 1
+          ? "Late penalty deleted successfully."
+          : "Selected late penalties deleted successfully."
+      );
+      setSelectedBatchRows({});
+      await refreshOpenBatch();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to delete selected late penalties."));
+    } finally {
+      setProcessingBatchAction(false);
+    }
+  };
+
+  const allPreviewRowsSelected =
+    !!preview?.rows?.length && preview.rows.every((row) => row.skippedReason || selectedRows[row.sourceInvoiceId]);
+
+  return (
+    <DashboardLayout>
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-white p-4 md:p-6">
+        <div className="mx-auto space-y-4" style={{ maxWidth: "96%" }}>
+          <div className={pageShellClass}>
+            <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-5 py-5 text-white">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-100">Penalty control</p>
+                  <h1 className="mt-1 text-2xl font-black tracking-tight">Late Penalties</h1>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-200">
+                    Review processed penalties, inspect batches, and only switch into rule preview when you need to prepare a new penalty run.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkspaceView("processed_penalties");
+                      setSelectedBatchRows({});
+                    }}
+                    className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${pillTabClass(
+                      workspaceView === "processed_penalties",
+                      "green"
+                    )}`}
+                  >
+                    Processed Penalties
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkspaceView("processed_batches");
+                      setSelectedBatchRows({});
+                    }}
+                    className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${pillTabClass(
+                      workspaceView === "processed_batches",
+                      "slate"
+                    )}`}
+                  >
+                    Processed Batches
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkspaceView("rules");
+                      setSelectedBatchRows({});
+                    }}
+                    className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${pillTabClass(
+                      workspaceView === "rules",
+                      "orange"
+                    )}`}
+                  >
+                    Rules / Preview / Process
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openNewRuleModal}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    <FaPlus /> Add Rule
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 p-4 md:grid-cols-5 md:p-5">
+              {[
+                { label: "Processed penalties", value: processedPenaltyStats.totalRows, accent: "text-slate-900" },
+                { label: "Active penalties", value: processedPenaltyStats.activeRows, accent: "text-emerald-700" },
+                { label: "Reversed", value: processedPenaltyStats.reversedRows, accent: "text-amber-700" },
+                { label: "Deleted", value: processedPenaltyStats.deletedRows, accent: "text-rose-700" },
+                { label: "Active amount", value: formatCurrency(processedPenaltyStats.activeAmount), accent: "text-slate-900" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
+                  <p className={`mt-2 text-2xl font-black ${item.accent}`}>{item.value}</p>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setWorkspaceView("operations")}
-              className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
-                workspaceView === "operations"
-                  ? "border-[#0B3B2E] bg-[#E7F5EC] text-[#0B3B2E]"
-                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              Invoices / Batch History / Batch Detail
-            </button>
-            <button
-              type="button"
-              onClick={() => setWorkspaceView("rules")}
-              className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
-                workspaceView === "rules"
-                  ? "border-orange-300 bg-orange-50 text-orange-700"
-                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              Rules / Preview / Process
-            </button>
-            <button
-              type="button"
-              onClick={openNewRuleModal}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            >
-              <FaPlus /> Add Rule
-            </button>
-            <button
-              type="button"
-              onClick={loadBatches}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            >
-              <FaHistory /> Refresh Batches
-            </button>
-          </div>
-        </div>
+          <div className={`${pageShellClass} flex min-h-[calc(100vh-260px)] flex-col`}>
+            {workspaceView === "processed_penalties" ? (
+              <>
+                <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50 px-4 py-3 md:px-5">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="flex flex-1 flex-col gap-3 lg:flex-row">
+                      <input
+                        value={penaltySearch}
+                        onChange={(e) => setPenaltySearch(e.target.value)}
+                        placeholder="Search batch, tenant, penalty invoice, property, unit"
+                        className={`${inputClass} lg:max-w-md`}
+                      />
+                      <select
+                        value={penaltyStatusFilter}
+                        onChange={(e) => setPenaltyStatusFilter(e.target.value)}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                      >
+                        <option value="all">All statuses</option>
+                        <option value="processed">Processed</option>
+                        <option value="reversed">Reversed</option>
+                        <option value="deleted">Deleted</option>
+                      </select>
+                      <select
+                        value={penaltyRuleFilter}
+                        onChange={(e) => setPenaltyRuleFilter(e.target.value)}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                      >
+                        <option value="all">All rules</option>
+                        {processedPenaltyRuleOptions.map((ruleName) => (
+                          <option key={ruleName} value={ruleName}>{ruleName}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={penaltyPropertyFilter}
+                        onChange={(e) => setPenaltyPropertyFilter(e.target.value)}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                      >
+                        <option value="all">All properties</option>
+                        {processedPenaltyPropertyOptions.map((propertyName) => (
+                          <option key={propertyName} value={propertyName}>{propertyName}</option>
+                        ))}
+                      </select>
+                    </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Saved rules</p>
-            <p className="mt-1 text-xl font-bold text-slate-900">{rules.length}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Processed batches</p>
-            <p className="mt-1 text-xl font-bold text-slate-900">{batches.length}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Selected rule</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">{selectedRule?.ruleName || "No rule selected"}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Run date</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">{formatDate(runDate)}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => runReverseForItems(selectedProcessedItemIds)}
+                        disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
+                        className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white shadow-sm ${
+                          selectedProcessedItemIds.length > 0 ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-400 cursor-not-allowed"
+                        }`}
+                      >
+                        <FaCheckSquare /> Reverse Selected
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => runDeleteForItems(selectedProcessedItemIds)}
+                        disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
+                        className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white shadow-sm ${
+                          selectedProcessedItemIds.length > 0 ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-400 cursor-not-allowed"
+                        }`}
+                      >
+                        <FaTrash /> Delete Selected
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-auto">
+                  <table className="w-full min-w-[1500px] text-xs">
+                    <thead>
+                      <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                        <th className="px-3 py-2 text-left">
+                          <input
+                            type="checkbox"
+                            checked={selectableProcessedRows.length > 0 && allProcessedRowsSelected}
+                            onChange={toggleAllProcessedPenaltyRows}
+                          />
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">Batch</th>
+                        <th className="px-3 py-2 text-left font-semibold">Source Invoice</th>
+                        <th className="px-3 py-2 text-left font-semibold">Penalty Invoice</th>
+                        <th className="px-3 py-2 text-left font-semibold">Tenant</th>
+                        <th className="px-3 py-2 text-left font-semibold">Property</th>
+                        <th className="px-3 py-2 text-left font-semibold">Unit</th>
+                        <th className="px-3 py-2 text-right font-semibold">Penalty</th>
+                        <th className="px-3 py-2 text-center font-semibold">Run Date</th>
+                        <th className="px-3 py-2 text-center font-semibold">Status</th>
+                        <th className="px-3 py-2 text-left font-semibold">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentProcessedPenaltyRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={11} className="px-4 py-10 text-center text-slate-500">
+                            No processed late penalties match the current filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        currentProcessedPenaltyRows.map((row, index) => {
+                          const selectable = String(row?.displayStatus || "").toLowerCase() === "processed";
+                          const isSelected = !!selectedBatchRows[String(row._id)];
+                          return (
+                            <tr
+                              key={row._id}
+                              className={`border-b border-slate-200 transition-colors ${
+                                isSelected
+                                  ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
+                                  : index % 2 === 0
+                                  ? "bg-white hover:bg-blue-50/40"
+                                  : "bg-slate-50 hover:bg-blue-50/40"
+                              }`}
+                            >
+                              <td className="px-3 py-2">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  disabled={!selectable}
+                                  onChange={() => toggleProcessedPenaltyRow(String(row._id))}
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setWorkspaceView("processed_batches");
+                                    openBatch(row.batchId);
+                                  }}
+                                  className="font-bold text-blue-700 hover:underline"
+                                >
+                                  {row.batchName}
+                                </button>
+                                <p className="mt-1 text-[11px] text-slate-500">{row.ruleName}</p>
+                              </td>
+                              <td className="px-3 py-2 font-semibold text-slate-900">{row.sourceInvoiceNumber}</td>
+                              <td className="px-3 py-2 font-semibold text-slate-900">{row.penaltyInvoiceNumber}</td>
+                              <td className="px-3 py-2">
+                                <p className="font-semibold text-slate-900">{row.tenantName}</p>
+                                <p className="mt-1 text-[11px] text-slate-500">{row.tenantCode || "-"}</p>
+                              </td>
+                              <td className="px-3 py-2 font-semibold text-slate-800">{row.propertyName}</td>
+                              <td className="px-3 py-2 text-slate-700">{row.unitNumber}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(row.calculatedPenalty)}</td>
+                              <td className="px-3 py-2 text-center text-slate-700">{formatDate(row.batchRunDate)}</td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={`inline-flex rounded-full border px-3 py-1 font-semibold ${statusBadgeClass(row.displayStatus)}`}>
+                                  {row.displayStatus}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">{row.reason || "-"}</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700 md:px-5">
+                  <p>
+                    <span className="font-semibold">Showing:</span> {filteredProcessedPenaltyRows.length === 0 ? 0 : processedPenaltyStartIndex + 1}
+                    {" - "}
+                    {Math.min(processedPenaltyStartIndex + ITEMS_PER_PAGE, filteredProcessedPenaltyRows.length)} of {filteredProcessedPenaltyRows.length} penalty row(s)
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setProcessedPenaltyPage((prev) => Math.max(1, prev - 1))}
+                      disabled={safeProcessedPenaltyPage === 1}
+                      className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 font-semibold text-slate-700">
+                      Page {safeProcessedPenaltyPage} of {processedPenaltyTotalPages} · {ITEMS_PER_PAGE} per page
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setProcessedPenaltyPage((prev) => Math.min(processedPenaltyTotalPages, prev + 1))}
+                      disabled={safeProcessedPenaltyPage === processedPenaltyTotalPages}
+                      className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {workspaceView === "processed_batches" ? (
+              <>
+                <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50 px-4 py-3 md:px-5">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="flex flex-1 flex-col gap-3 lg:flex-row">
+                      <input
+                        value={batchSearch}
+                        onChange={(e) => setBatchSearch(e.target.value)}
+                        placeholder="Search batch name, rule, status"
+                        className={`${inputClass} lg:max-w-md`}
+                      />
+                      <select
+                        value={batchStatusFilter}
+                        onChange={(e) => setBatchStatusFilter(e.target.value)}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                      >
+                        <option value="all">All batch statuses</option>
+                        <option value="processed">Processed</option>
+                        <option value="partial">Partial</option>
+                        <option value="failed">Failed</option>
+                        <option value="reversed_ready">Reversed ready</option>
+                      </select>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Click a batch row to open the invoice list in a bottom sheet.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-auto">
+                  <table className="w-full min-w-[1200px] text-xs">
+                    <thead>
+                      <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                        <th className="px-3 py-2 text-left font-semibold">Batch</th>
+                        <th className="px-3 py-2 text-left font-semibold">Rule</th>
+                        <th className="px-3 py-2 text-center font-semibold">Run Date</th>
+                        <th className="px-3 py-2 text-right font-semibold">Invoices</th>
+                        <th className="px-3 py-2 text-right font-semibold">Amount</th>
+                        <th className="px-3 py-2 text-center font-semibold">Status</th>
+                        <th className="px-3 py-2 text-left font-semibold">Delete Rule</th>
+                        <th className="px-3 py-2 text-right font-semibold">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentProcessedBatchRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
+                            No late penalty batches match the current filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        currentProcessedBatchRows.map((batch, index) => (
+                          <tr
+                            key={batch._id}
+                            className={`cursor-pointer border-b border-slate-200 transition-colors ${
+                              index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50 hover:bg-blue-50/40"
+                            }`}
+                            onClick={() => openBatch(batch._id)}
+                          >
+                            <td className="px-3 py-2">
+                              <p className="font-bold text-blue-700">{batch.batchName}</p>
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                {(Array.isArray(batch?.items) ? batch.items.length : 0).toLocaleString()} penalty rows
+                              </p>
+                            </td>
+                            <td className="px-3 py-2 font-semibold text-slate-900">{batch.ruleName || batch.rule?.ruleName || "-"}</td>
+                            <td className="px-3 py-2 text-center text-slate-700">{formatDate(batch.runDate)}</td>
+                            <td className="px-3 py-2 text-right font-semibold text-slate-800">{Number(batch.invoicesCreatedCount || 0)}</td>
+                            <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(batch.totalPenaltyAmount)}</td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`inline-flex rounded-full border px-3 py-1 font-semibold ${statusBadgeClass(batch.status)}`}>
+                                {batch.status || "processed"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-slate-600">
+                              {batch?.canDeleteBatch ? (
+                                <span className="font-medium text-emerald-700">Ready to delete</span>
+                              ) : (
+                                <span className="text-amber-700">{batchDeleteSummary(batch) || "Clear linked invoices first."}</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleDeleteBatch(batch);
+                                }}
+                                disabled={!batch?.canDeleteBatch}
+                                className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-bold text-white ${
+                                  batch?.canDeleteBatch ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-400 cursor-not-allowed"
+                                }`}
+                              >
+                                <FaTrash /> Delete Batch
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700 md:px-5">
+                  <p>
+                    <span className="font-semibold">Showing:</span> {filteredBatches.length === 0 ? 0 : processedBatchStartIndex + 1}
+                    {" - "}
+                    {Math.min(processedBatchStartIndex + ITEMS_PER_PAGE, filteredBatches.length)} of {filteredBatches.length} batch(es)
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setProcessedBatchPage((prev) => Math.max(1, prev - 1))}
+                      disabled={safeProcessedBatchPage === 1}
+                      className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 font-semibold text-slate-700">
+                      Page {safeProcessedBatchPage} of {processedBatchTotalPages} · {ITEMS_PER_PAGE} per page
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setProcessedBatchPage((prev) => Math.min(processedBatchTotalPages, prev + 1))}
+                      disabled={safeProcessedBatchPage === processedBatchTotalPages}
+                      className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {workspaceView === "rules" ? (
+              <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 p-4 md:p-5 xl:grid-cols-[340px_minmax(0,1fr)]">
+                <div className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white">
+                  <div className="border-b border-slate-200 px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-base font-semibold text-slate-900">Saved rules</h2>
+                        <p className="text-xs text-slate-500">Pick a rule, edit it, then preview the current run.</p>
+                      </div>
+                      <FaBolt className="text-[#0B3B2E]" />
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-auto p-3">
+                    <div className="space-y-3">
+                      {rules.map((rule) => {
+                        const active = String(rule._id) === String(selectedRuleId);
+                        return (
+                          <button
+                            key={rule._id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedRuleId(rule._id);
+                              setEditingRuleId(rule._id);
+                            }}
+                            className={`w-full rounded-2xl border px-4 py-3 text-left shadow-sm transition ${
+                              active
+                                ? "border-[#0B3B2E] bg-[#E7F5EC]"
+                                : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-semibold text-slate-900">{rule.ruleName}</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {rule.postingAccount?.code ? `${rule.postingAccount.code} · ` : ""}
+                                  {rule.postingAccount?.name || "Posting account not loaded"}
+                                </p>
+                              </div>
+                              <span className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold ${statusBadgeClass(rule.active ? "processed" : "failed")}`}>
+                                {rule.active ? "Active" : "Inactive"}
+                              </span>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
+                              <span>{rule.repeatFrequency || "manual"}</span>
+                              <span>{rule.calculationType || "percentage_overdue_balance"}</span>
+                            </div>
+                            <div className="mt-3">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openEditRuleModal(rule);
+                                }}
+                                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                              >
+                                <FaPen /> Edit Rule
+                              </button>
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {!rules.length ? (
+                        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                          No late penalty rules have been configured yet.
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white">
+                  <div className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-3">
+                        <div>
+                          <label className={labelClass}>Selected rule</label>
+                          <select
+                            className={inputClass}
+                            value={selectedRuleId}
+                            onChange={(e) => setSelectedRuleId(e.target.value)}
+                          >
+                            <option value="">Select rule</option>
+                            {rules.map((rule) => (
+                              <option key={rule._id} value={rule._id}>
+                                {rule.ruleName}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className={labelClass}>Run date</label>
+                          <div className="relative">
+                            <FaCalendarAlt className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                              type="date"
+                              className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm text-slate-900 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                              value={runDate}
+                              onChange={(e) => setRunDate(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Selected total</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">
+                            {selectedCount} row(s) · {formatCurrency(selectedPenaltyAmount)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handlePreview}
+                          disabled={loading}
+                          className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-60"
+                        >
+                          <FaEye /> Preview Penalties
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleProcess}
+                          disabled={loading || selectedCount === 0}
+                          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white ${
+                            selectedCount > 0 ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-400 cursor-not-allowed"
+                          }`}
+                        >
+                          <FaCheckSquare /> Process Selected
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-h-0 overflow-auto">
+                    <table className="w-full min-w-[1400px] text-xs">
+                      <thead>
+                        <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                          <th className="px-3 py-2 text-left">
+                            <input
+                              type="checkbox"
+                              checked={allPreviewRowsSelected}
+                              onChange={() => {
+                                if (!preview?.rows?.length) return;
+                                if (allPreviewRowsSelected) {
+                                  setSelectedRows({});
+                                  return;
+                                }
+                                const next = {};
+                                preview.rows.forEach((row) => {
+                                  if (!row.skippedReason && Number(row.calculatedPenalty || 0) > 0) {
+                                    next[row.sourceInvoiceId] = true;
+                                  }
+                                });
+                                setSelectedRows(next);
+                              }}
+                            />
+                          </th>
+                          <th className="px-3 py-2 text-left font-semibold">Source Invoice</th>
+                          <th className="px-3 py-2 text-left font-semibold">Tenant</th>
+                          <th className="px-3 py-2 text-left font-semibold">Property</th>
+                          <th className="px-3 py-2 text-left font-semibold">Unit</th>
+                          <th className="px-3 py-2 text-center font-semibold">Overdue Days</th>
+                          <th className="px-3 py-2 text-right font-semibold">Outstanding</th>
+                          <th className="px-3 py-2 text-right font-semibold">Penalty</th>
+                          <th className="px-3 py-2 text-left font-semibold">Status / Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview?.rows?.length ? (
+                          preview.rows.map((row, index) => {
+                            const selected = !!selectedRows[row.sourceInvoiceId];
+                            return (
+                              <tr
+                                key={`${row.sourceInvoiceId}-${index}`}
+                                className={`border-b border-slate-200 transition-colors ${
+                                  selected
+                                    ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E]"
+                                    : index % 2 === 0
+                                    ? "bg-white hover:bg-blue-50/40"
+                                    : "bg-slate-50 hover:bg-blue-50/40"
+                                }`}
+                              >
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={selected}
+                                    disabled={Boolean(row.skippedReason)}
+                                    onChange={() => togglePreviewRow(row.sourceInvoiceId)}
+                                  />
+                                </td>
+                                <td className="px-3 py-2 font-semibold text-slate-900">{row.sourceInvoiceNumber}</td>
+                                <td className="px-3 py-2">
+                                  <p className="font-semibold text-slate-900">{row.tenantName}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">{row.tenantCode || "-"}</p>
+                                </td>
+                                <td className="px-3 py-2 font-semibold text-slate-800">{row.propertyName}</td>
+                                <td className="px-3 py-2 text-slate-700">{row.unitNumber}</td>
+                                <td className="px-3 py-2 text-center text-slate-700">{row.overdueDays}</td>
+                                <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(row.outstandingBalance)}</td>
+                                <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(row.calculatedPenalty)}</td>
+                                <td className="px-3 py-2">
+                                  {row.skippedReason ? (
+                                    <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-semibold text-amber-800">
+                                      <FaExclamationTriangle /> {row.skippedReason}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">
+                                      Ready
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={9} className="px-4 py-10 text-center text-slate-500">
+                              No preview yet. Select a rule and click <span className="font-semibold">Preview Penalties</span>.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
 
-      {workspaceView === "operations" ? (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(320px,0.92fr)_minmax(0,1.58fr)]">
-          <div className={`${cardClass} p-4`}>
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900">Processed batch history</h2>
-                <p className="text-xs text-slate-500">Open a processed batch to inspect the invoices that make up that run.</p>
+      {batchDetail ? (
+        <div className="fixed inset-0 z-[58] flex items-end justify-center bg-slate-950/30 px-4 py-4 backdrop-blur-[2px]">
+          <div className="max-h-[88vh] w-full max-w-7xl overflow-hidden rounded-t-[32px] border border-slate-200 bg-white shadow-2xl">
+            <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-slate-900 to-orange-500 px-5 py-4 text-white">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-orange-100">Processed batch detail</p>
+                  <h2 className="mt-1 text-2xl font-black tracking-tight">{batchDetail.batchName}</h2>
+                  <p className="mt-1 text-sm text-slate-200">
+                    {batchDetail.ruleName || batchDetail.rule?.ruleName || "-"} · {formatDate(batchDetail.runDate)} · {batchDetail.status}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => runReverseForItems(selectedModalBatchItemIds)}
+                    disabled={processingBatchAction || selectedModalBatchItemIds.length === 0}
+                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white ${
+                      selectedModalBatchItemIds.length > 0 ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-400 cursor-not-allowed"
+                    }`}
+                  >
+                    <FaCheckSquare /> Reverse Selected
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runDeleteForItems(selectedModalBatchItemIds)}
+                    disabled={processingBatchAction || selectedModalBatchItemIds.length === 0}
+                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white ${
+                      selectedModalBatchItemIds.length > 0 ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-400 cursor-not-allowed"
+                    }`}
+                  >
+                    <FaTrash /> Delete Selected
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteBatch(batchDetail)}
+                    disabled={!batchDetail?.canDeleteBatch}
+                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white ${
+                      batchDetail?.canDeleteBatch ? "bg-rose-700 hover:bg-rose-800" : "bg-slate-400 cursor-not-allowed"
+                    }`}
+                  >
+                    <FaTrash /> Delete Batch
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedBatchRows({});
+                      setBatchDetail(null);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/20"
+                  >
+                    <FaTimes /> Close
+                  </button>
+                </div>
               </div>
-              <FaHistory className="text-slate-500" />
+              {!batchDetail?.canDeleteBatch ? (
+                <p className="mt-3 text-xs text-orange-100">{batchDeleteSummary(batchDetail) || "This batch still has active linked penalty invoices."}</p>
+              ) : (
+                <p className="mt-3 text-xs text-emerald-100">All linked penalty invoices have been cleared. This batch can now be deleted safely.</p>
+              )}
             </div>
 
-            <div className="max-h-[calc(100vh-250px)] overflow-y-auto rounded-2xl border border-slate-200">
-              <table className="min-w-full divide-y divide-slate-200 text-xs">
-                <thead className="sticky top-0 z-10 bg-slate-50 font-bold uppercase tracking-[0.16em] text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Batch</th>
-                    <th className="px-3 py-2 text-left">Rule / Date</th>
-                    <th className="px-3 py-2 text-right">Invoices</th>
-                    <th className="px-3 py-2 text-right">Amount</th>
+            <div className="grid gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 md:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Status</p>
+                <p className="mt-1 text-base font-semibold text-slate-900">{batchDetail.status}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Invoices</p>
+                <p className="mt-1 text-base font-semibold text-slate-900">{Number(batchDetail.invoicesCreatedCount || 0)}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Penalty amount</p>
+                <p className="mt-1 text-base font-semibold text-slate-900">{formatCurrency(batchDetail.totalPenaltyAmount)}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Rule</p>
+                <p className="mt-1 text-base font-semibold text-slate-900">{batchDetail.ruleName || batchDetail.rule?.ruleName || "-"}</p>
+              </div>
+            </div>
+
+            <div className="max-h-[52vh] overflow-auto">
+              <table className="w-full min-w-[1450px] text-xs">
+                <thead>
+                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                    <th className="px-3 py-2 text-left">
+                      <input
+                        type="checkbox"
+                        checked={selectableBatchItems.length > 0 && allModalBatchRowsSelected}
+                        onChange={toggleAllModalBatchRows}
+                      />
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold">Source Invoice</th>
+                    <th className="px-3 py-2 text-left font-semibold">Tenant</th>
+                    <th className="px-3 py-2 text-left font-semibold">Property</th>
+                    <th className="px-3 py-2 text-left font-semibold">Penalty Invoice</th>
+                    <th className="px-3 py-2 text-right font-semibold">Penalty</th>
+                    <th className="px-3 py-2 text-center font-semibold">Status</th>
+                    <th className="px-3 py-2 text-left font-semibold">Reason</th>
+                    <th className="px-3 py-2 text-right font-semibold">Communication</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {batches.map((batch) => (
-                    <tr
-                      key={batch._id}
-                      onClick={() => openBatch(batch._id)}
-                      className={`cursor-pointer transition ${
-                        String(batchDetail?._id || "") === String(batch._id)
-                          ? "bg-orange-50/80"
-                          : "hover:bg-slate-50"
-                      }`}
-                    >
-                      <td className="px-3 py-2 align-top">
-                        <p className="font-semibold text-slate-900">{batch.batchName}</p>
-                        <p className="text-[11px] text-slate-500">{batch.status || "processed"}</p>
-                      </td>
-                      <td className="px-3 py-2 align-top text-[11px] text-slate-600">
-                        <p className="font-medium text-slate-700">{batch.ruleName || batch.rule?.ruleName || "-"}</p>
-                        <p>{formatDate(batch.runDate)}</p>
-                      </td>
-                      <td className="px-3 py-2 text-right font-semibold text-slate-700">{Number(batch.invoicesCreatedCount || 0)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(batch.totalPenaltyAmount)}</td>
-                    </tr>
-                  ))}
-                  {!batches.length ? (
+                <tbody>
+                  {batchItems.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-500">No late penalty batches processed yet.</td>
+                      <td colSpan={9} className="px-4 py-10 text-center text-slate-500">
+                        This batch has no processed items.
+                      </td>
                     </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className={`${cardClass} p-4`}>
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900">Batch detail</h2>
-                <p className="text-xs text-slate-500">Compact invoice-level review with direct communication actions where the penalty invoice exists.</p>
-              </div>
-              <FaEye className="text-slate-500" />
-            </div>
-
-            {batchDetail ? (
-              <div className="space-y-4">
-                {String(batchDetail?.status || "").toLowerCase() === "failed" ? (
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteFailedBatch(batchDetail)}
-                      disabled={loading}
-                      className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <FaTrash /> Delete Failed Batch
-                    </button>
-                  </div>
-                ) : null}
-
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Batch</p>
-                    <p className="mt-1 font-semibold text-slate-900">{batchDetail.batchName}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Rule</p>
-                    <p className="mt-1 font-semibold text-slate-900">{batchDetail.ruleName || batchDetail.rule?.ruleName || "-"}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Status</p>
-                    <p className="mt-1 font-semibold text-slate-900">{batchDetail.status}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Total amount</p>
-                    <p className="mt-1 font-semibold text-slate-900">{formatCurrency(batchDetail.totalPenaltyAmount)}</p>
-                  </div>
-                </div>
-
-                <div className="max-h-[calc(100vh-320px)] overflow-auto rounded-2xl border border-slate-200">
-                  <table className="min-w-full divide-y divide-slate-200 text-xs">
-                    <thead className="sticky top-0 z-10 bg-slate-50 font-bold uppercase tracking-[0.16em] text-slate-500">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Source Invoice</th>
-                        <th className="px-3 py-2 text-left">Tenant / Property / Unit</th>
-                        <th className="px-3 py-2 text-left">Penalty Invoice</th>
-                        <th className="px-3 py-2 text-right">Amount</th>
-                        <th className="px-3 py-2 text-left">Status</th>
-                        <th className="px-3 py-2 text-left">Reason</th>
-                        <th className="px-3 py-2 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {(batchDetail.items || []).map((item) => (
-                        <tr key={item._id} className="align-top hover:bg-slate-50">
-                          <td className="px-3 py-2 font-semibold text-slate-900">{item.sourceInvoiceNumber || item?.sourceInvoice?.invoiceNumber || "-"}</td>
-                          <td className="px-3 py-2 text-[11px] text-slate-600">
-                            <p className="font-medium text-slate-800">{item.tenant?.name || item.tenantName || "-"}</p>
-                            <p>{item.property?.propertyName || "-"} / {item.unit?.unitNumber || "-"}</p>
-                          </td>
-                          <td className="px-3 py-2 text-[11px] text-slate-600">{item?.penaltyInvoice?.invoiceNumber || "-"}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(item.calculatedPenalty)}</td>
-                          <td className="px-3 py-2 text-[11px] text-slate-600">{item.status || "-"}</td>
-                          <td className="px-3 py-2 text-[11px] text-slate-600">{item.reason || "-"}</td>
+                  ) : (
+                    batchItems.map((item, index) => {
+                      const normalizedStatus = item?.isDeleted ? "deleted" : item?.reversedAt ? "reversed" : String(item?.status || "").toLowerCase();
+                      const isSelected = !!selectedBatchRows[String(item._id)];
+                      const rowSelectable = normalizedStatus !== "deleted" && normalizedStatus !== "reversed";
+                      return (
+                        <tr
+                          key={item._id}
+                          className={`border-b border-slate-200 transition-colors ${
+                            isSelected
+                              ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E]"
+                              : index % 2 === 0
+                              ? "bg-white hover:bg-blue-50/40"
+                              : "bg-slate-50 hover:bg-blue-50/40"
+                          }`}
+                        >
                           <td className="px-3 py-2">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={!rowSelectable}
+                              onChange={() => toggleProcessedPenaltyRow(String(item._id))}
+                            />
+                          </td>
+                          <td className="px-3 py-2 font-semibold text-slate-900">{item.sourceInvoiceNumber || item?.sourceInvoice?.invoiceNumber || "-"}</td>
+                          <td className="px-3 py-2">
+                            <p className="font-semibold text-slate-900">{item.tenant?.name || item.tenantName || "-"}</p>
+                            <p className="mt-1 text-[11px] text-slate-500">{item.property?.propertyName || "-"} / {item.unit?.unitNumber || "-"}</p>
+                          </td>
+                          <td className="px-3 py-2 font-semibold text-slate-800">{item.property?.propertyName || "-"}</td>
+                          <td className="px-3 py-2 font-semibold text-slate-900">{item?.penaltyInvoice?.invoiceNumber || "-"}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(item.calculatedPenalty)}</td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`inline-flex rounded-full border px-3 py-1 font-semibold ${statusBadgeClass(normalizedStatus)}`}>
+                              {normalizedStatus}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-slate-600">{item.reason || "-"}</td>
+                          <td className="px-3 py-2 text-right">
                             {item?.penaltyInvoice?._id ? (
                               <div className="flex justify-end gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => setCommunicationModal({
-                                    contextType: "penalty_invoice",
-                                    recordIds: [item.penaltyInvoice._id],
-                                    title: "Send Penalty Notice SMS",
-                                    subtitle: "Preview the final penalty notice SMS before sending.",
-                                    allowedChannels: ["sms"],
-                                    defaultChannel: "sms",
-                                  })}
+                                  onClick={() =>
+                                    setCommunicationModal({
+                                      contextType: "penalty_invoice",
+                                      recordIds: [item.penaltyInvoice._id],
+                                      title: "Send Penalty Notice SMS",
+                                      subtitle: "Preview the final penalty notice SMS before sending.",
+                                      allowedChannels: ["sms"],
+                                      defaultChannel: "sms",
+                                    })
+                                  }
                                   className="inline-flex items-center gap-1 rounded-lg bg-orange-500 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-orange-600"
                                 >
                                   <FaSms /> SMS
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => setCommunicationModal({
-                                    contextType: "penalty_invoice",
-                                    recordIds: [item.penaltyInvoice._id],
-                                    title: "Send Penalty Notice Email",
-                                    subtitle: "Preview the final penalty notice email before sending.",
-                                    allowedChannels: ["email"],
-                                    defaultChannel: "email",
-                                  })}
+                                  onClick={() =>
+                                    setCommunicationModal({
+                                      contextType: "penalty_invoice",
+                                      recordIds: [item.penaltyInvoice._id],
+                                      title: "Send Penalty Notice Email",
+                                      subtitle: "Preview the final penalty notice email before sending.",
+                                      allowedChannels: ["email"],
+                                      defaultChannel: "email",
+                                    })
+                                  }
                                   className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-700"
                                 >
                                   <FaEnvelope /> Email
                                 </button>
                               </div>
                             ) : (
-                              <span className="text-xs text-slate-400">-</span>
+                              <span className="text-slate-400">-</span>
                             )}
                           </td>
                         </tr>
-                      ))}
-                      {!(batchDetail.items || []).length ? (
-                        <tr>
-                          <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500">This batch has no processed items.</td>
-                        </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-16 text-center text-sm text-slate-500">
-                Click a processed batch to view the invoices that make up that batch.
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className={`${cardClass} p-4 md:p-5`}>
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900">Rules and run setup</h2>
-                <p className="text-xs text-slate-500">Choose the rule, inspect its setup, then preview or process using the selected run date.</p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={selectedRuleId}
-                  onChange={(e) => setSelectedRuleId(e.target.value)}
-                  className={`${inputClass} min-w-[240px]`}
-                >
-                  <option value="">Select a rule</option>
-                  {rules.map((rule) => (
-                    <option key={rule._id} value={rule._id}>
-                      {rule.ruleName}
-                    </option>
-                  ))}
-                </select>
-                <div className="min-w-[180px]">
-                  <label className={labelClass}>Run date</label>
-                  <input type="date" className={inputClass} value={runDate} onChange={(e) => setRunDate(e.target.value)} />
-                </div>
-                {selectedRule ? (
-                  <button
-                    type="button"
-                    onClick={() => openEditRuleModal(selectedRule)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                  >
-                    <FaPen /> Edit Selected Rule
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={handlePreview}
-                  disabled={loading || !selectedRuleId}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <FaEye /> Preview Penalties
-                </button>
-                <button
-                  type="button"
-                  onClick={handleProcess}
-                  disabled={loading || !selectedCount}
-                  className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-3 py-2 text-xs font-bold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <FaCheckSquare /> Process Selected
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Eligible rows</p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">{preview?.summary?.eligibleCount || 0}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Skipped rows</p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">{preview?.summary?.skippedCount || 0}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected count</p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">{selectedCount}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected penalty</p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">{formatCurrency(selectedPenaltyAmount)}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className={`${cardClass} p-4 md:p-5`}>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900">Saved penalty rules</h2>
-                <p className="text-xs text-slate-500">Click a rule tile to make it active for preview and processing.</p>
-              </div>
-              <FaCalendarAlt className="text-slate-500" />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {rules.map((rule) => {
-                const active = String(selectedRuleId) === String(rule._id);
-                return (
-                  <button
-                    key={rule._id}
-                    onClick={() => setSelectedRuleId(rule._id)}
-                    className={`rounded-3xl border p-5 text-left transition ${
-                      active
-                        ? "border-orange-300 bg-gradient-to-br from-orange-50 via-white to-emerald-50 shadow-md"
-                        : "border-slate-200 bg-white hover:border-orange-200 hover:shadow-sm"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-base font-semibold text-slate-900">{rule.ruleName}</p>
-                        <p className="mt-1 text-sm text-slate-500">{ruleModeLabels[rule.penalizeItem] || "Rule"}</p>
-                      </div>
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${rule.active !== false ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
-                        {rule.active !== false ? "Active" : "Inactive"}
-                      </span>
-                    </div>
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-600">
-                      <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                        <p className="text-xs uppercase tracking-wide text-slate-500">Calculation</p>
-                        <p className="mt-1 font-semibold text-slate-800">{calcTypeLabels[rule.calculationType] || "-"}</p>
-                      </div>
-                      <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                        <p className="text-xs uppercase tracking-wide text-slate-500">Rate / amount</p>
-                        <p className="mt-1 font-semibold text-slate-800">{Number(rule.rateOrAmount || 0)}</p>
-                      </div>
-                      <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                        <p className="text-xs uppercase tracking-wide text-slate-500">Grace days</p>
-                        <p className="mt-1 font-semibold text-slate-800">{Number(rule.graceDays || 0)}</p>
-                      </div>
-                      <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                        <p className="text-xs uppercase tracking-wide text-slate-500">Min overdue</p>
-                        <p className="mt-1 font-semibold text-slate-800">{Number(rule.minimumOverdueDays || 0)}</p>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                      <span>Effective {formatDate(rule.effectiveFrom)}</span>
-                      <span>{rule.repeatFrequency || "manual"}</span>
-                    </div>
-                  </button>
-                );
-              })}
-              {!rules.length ? (
-                <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm text-slate-500 md:col-span-2">
-                  No rules saved yet. Click <span className="font-semibold text-slate-700">Add Rule</span> to create your first late penalty rule.
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className={`${cardClass} p-4 md:p-5`}>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900">Preview and process</h2>
-                <p className="text-xs text-slate-500">Full-width preview workspace with more room for review before posting penalty invoices.</p>
-              </div>
-              <FaBolt className="text-slate-500" />
-            </div>
-
-            <div className="overflow-x-auto rounded-3xl border border-slate-200">
-              <table className="min-w-full border-separate border-spacing-0 text-sm">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-600">
-                    <th className="sticky left-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-2 text-left">
-                      <input
-                        type="checkbox"
-                        checked={allPreviewRowsSelected}
-                        onChange={() => {
-                          const next = {};
-                          const shouldSelectAll = !allPreviewRowsSelected;
-                          (preview?.rows || []).forEach((row) => {
-                            if (!row.skippedReason && Number(row.calculatedPenalty || 0) > 0) next[row.sourceInvoiceId] = shouldSelectAll;
-                          });
-                          setSelectedRows(next);
-                        }}
-                      />
-                    </th>
-                    {["Source Invoice", "Tenant", "Property / Unit", "Due Date", "Overdue Days", "Outstanding", "Calculated Penalty", "Skipped / Reason"].map((label) => (
-                      <th key={label} className="border-b border-slate-200 px-3 py-2 text-left font-semibold">
-                        {label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(preview?.rows || []).map((row) => {
-                    const selected = !!selectedRows[row.sourceInvoiceId];
-                    return (
-                      <tr
-                        key={row.sourceInvoiceId}
-                        onClick={() => !row.skippedReason && toggleRow(row.sourceInvoiceId)}
-                        className={`cursor-pointer border-b border-slate-100 ${selected ? "bg-orange-50" : "hover:bg-slate-50"}`}
-                      >
-                        <td className="sticky left-0 z-10 border-b border-slate-100 bg-inherit px-3 py-2">
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            disabled={!!row.skippedReason}
-                            onChange={() => toggleRow(row.sourceInvoiceId)}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </td>
-                        <td className="border-b border-slate-100 px-3 py-2 font-semibold text-slate-900">{row.sourceInvoiceNumber}</td>
-                        <td className="border-b border-slate-100 px-3 py-2">{row.tenantName}</td>
-                        <td className="border-b border-slate-100 px-3 py-2">{row.propertyName} / {row.unitNumber}</td>
-                        <td className="border-b border-slate-100 px-3 py-2">{formatDate(row.dueDate)}</td>
-                        <td className="border-b border-slate-100 px-3 py-2">{row.overdueDays}</td>
-                        <td className="border-b border-slate-100 px-3 py-2">{formatCurrency(row.outstandingBalance)}</td>
-                        <td className="border-b border-slate-100 px-3 py-2 font-semibold text-slate-900">{formatCurrency(row.calculatedPenalty)}</td>
-                        <td className="border-b border-slate-100 px-3 py-2">
-                          {row.skippedReason ? (
-                            <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-                              <FaExclamationTriangle /> {row.skippedReason}
-                            </span>
-                          ) : (
-                            <span className="text-emerald-700">Ready</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {!preview?.rows?.length ? (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">
-                        No preview yet. Select a rule and click <span className="font-semibold">Preview Penalties</span>.
-                      </td>
-                    </tr>
-                  ) : null}
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
-      )}
-    </div>
+      ) : null}
 
       {showRuleModal ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/20 px-4 py-6 backdrop-blur-[10px]">
@@ -1007,73 +1678,46 @@ return (
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className={labelClass}>Repeat frequency</label>
-                      <select className={inputClass} value={ruleForm.repeatFrequency} onChange={(e) => setRuleForm((prev) => ({ ...prev, repeatFrequency: e.target.value }))}>
-                        <option value="manual">Manual</option>
-                        <option value="daily">Daily</option>
-                        <option value="monthly">Monthly</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelClass}>Rule status</label>
-                      <select className={inputClass} value={ruleForm.active ? "yes" : "no"} onChange={(e) => setRuleForm((prev) => ({ ...prev, active: e.target.value === "yes" }))}>
-                        <option value="yes">Active</option>
-                        <option value="no">Inactive</option>
-                      </select>
-                    </div>
+                  <div>
+                    <label className={labelClass}>Repeat frequency</label>
+                    <select
+                      className={inputClass}
+                      value={ruleForm.repeatFrequency}
+                      onChange={(e) => setRuleForm((prev) => ({ ...prev, repeatFrequency: e.target.value }))}
+                    >
+                      <option value="manual">Manual</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <label className="flex items-center gap-3 text-sm font-semibold text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={false}
-                        disabled
-                        readOnly
-                      />
-                      Apply automatically when scheduled
-                    </label>
-                    <p className="mt-2 text-xs text-slate-500">
-                      Scheduled automation is not active yet. Rules save and run manually from this workspace.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className={labelClass}>Notes</label>
+                    <label className={`${labelClass} mb-2`}>Notes</label>
                     <textarea
-                      rows="6"
-                      className={`${inputClass} resize-none`}
+                      rows={8}
+                      className={`${inputClass} min-h-[180px]`}
                       value={ruleForm.notes}
                       onChange={(e) => setRuleForm((prev) => ({ ...prev, notes: e.target.value }))}
-                      placeholder="Optional internal note for staff using this rule"
+                      placeholder="Optional internal guidance for the team."
                     />
                   </div>
-                </div>
-              </div>
 
-              <div className="mt-6 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-slate-500">
-                  Save will keep the current page intact and refresh the rule list using the active company context.
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowRuleModal(false)}
-                    disabled={savingRule}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                  >
-                    <FaTimes /> Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveRule}
-                    disabled={savingRule || !incomeAccounts.length}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-4 py-2.5 font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <FaSave /> {savingRule ? "Saving..." : editingRuleId ? "Update rule" : "Save rule"}
-                  </button>
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowRuleModal(false)}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      <FaTimes /> Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveRule}
+                      disabled={savingRule || !incomeAccounts.length}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-4 py-2.5 font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <FaSave /> {savingRule ? "Saving..." : editingRuleId ? "Update rule" : "Save rule"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

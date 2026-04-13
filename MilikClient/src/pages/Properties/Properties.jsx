@@ -38,6 +38,9 @@ const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 
+const getErrorMessage = (error, fallback) =>
+  error?.response?.data?.message || error?.message || fallback;
+
 const Properties = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -260,7 +263,7 @@ const Properties = () => {
       };
       dispatch(getProperties(params));
     } catch (err) {
-      const errorMsg = typeof err === 'string' ? err : (err?.message || "Failed to delete property");
+      const errorMsg = typeof err === 'string' ? err : getErrorMessage(err, "Failed to delete property");
       toast.error(errorMsg);
     }
   };
@@ -305,7 +308,7 @@ const Properties = () => {
           };
           dispatch(getProperties(params));
         } catch (err) {
-          const errorMsg = typeof err === 'string' ? err : (err?.message || "Failed to delete some properties");
+          const errorMsg = typeof err === 'string' ? err : getErrorMessage(err, "Failed to delete some properties");
           toast.error(errorMsg);
         }
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
@@ -487,7 +490,7 @@ const Properties = () => {
           };
           dispatch(getProperties(params));
         } catch (err) {
-          const errorMsg = typeof err === 'string' ? err : (err?.message || "Failed to archive properties");
+          const errorMsg = typeof err === 'string' ? err : getErrorMessage(err, "Failed to archive properties");
           toast.error(errorMsg);
           setConfirmDialog({ isOpen: false });
         }
@@ -535,7 +538,7 @@ const Properties = () => {
           };
           dispatch(getProperties(params));
         } catch (err) {
-          const errorMsg = typeof err === 'string' ? err : (err?.message || "Failed to restore properties");
+          const errorMsg = typeof err === 'string' ? err : getErrorMessage(err, "Failed to restore properties");
           toast.error(errorMsg);
           setConfirmDialog({ isOpen: false });
         }

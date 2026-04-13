@@ -4,9 +4,12 @@ import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import Property from "../../models/Property.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
-import { createTenantInvoiceRecord, resolveActorUserId, computeTenantInvoiceSnapshots } from "./tenantInvoices.js";
+import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import { createTenantInvoiceRecord, resolveActorUserId, computeTenantInvoiceSnapshots, recomputeTenantBalance, recomputeInvoiceStatusesForTenant } from "./tenantInvoices.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
+import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { getAccessibleCompanyIds } from "../../utils/permissionControl.js";
+import { postReversal } from "../../services/ledgerPostingService.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
@@ -157,6 +160,43 @@ const getOutstandingBalance = async (invoice, asOfDate = null) => {
   return round2(Number(snapshot.outstanding || 0));
 };
 
+const resolveExistingPenaltyItemStates = async ({ businessId, ruleId, periodKey }) => {
+  const batches = await LatePenaltyBatch.find({
+    business: businessId,
+    rule: ruleId,
+    periodKey,
+  })
+    .select("items.sourceInvoice items.invoiced items.isDeleted items.deletedAt items.reversedAt items.status")
+    .lean();
+
+  const stateMap = new Map();
+
+  for (const batch of batches) {
+    for (const item of Array.isArray(batch?.items) ? batch.items : []) {
+      const sourceInvoiceId = String(item?.sourceInvoice || "");
+      if (!sourceInvoiceId) continue;
+
+      const existing = stateMap.get(sourceInvoiceId) || {
+        invoiced: false,
+        isDeleted: false,
+        isReversed: false,
+      };
+
+      if (item?.invoiced) existing.invoiced = true;
+      if (item?.isDeleted || String(item?.status || "").toLowerCase() === "deleted" || item?.deletedAt) {
+        existing.isDeleted = true;
+      }
+      if (item?.reversedAt || String(item?.status || "").toLowerCase() === "reversed") {
+        existing.isReversed = true;
+      }
+
+      stateMap.set(sourceInvoiceId, existing);
+    }
+  }
+
+  return stateMap;
+};
+
 const buildCandidateRows = async ({ businessId, rule, runDate }) => {
   const runAt = startOfDay(runDate);
   assertRuleCanRun(rule, runAt);
@@ -174,6 +214,12 @@ const buildCandidateRows = async ({ businessId, rule, runDate }) => {
     .lean();
 
   const periodKey = buildPeriodKey(rule, runDate);
+  const existingPenaltyItemStates = await resolveExistingPenaltyItemStates({
+    businessId,
+    ruleId: rule._id,
+    periodKey,
+  });
+
   const rows = [];
 
   for (const invoice of invoices) {
@@ -190,6 +236,15 @@ const buildCandidateRows = async ({ businessId, rule, runDate }) => {
     else if (outstandingBalance <= 0) skippedReason = "No outstanding balance";
     else if (outstandingBalance < Number(rule?.minimumBalance || 0)) skippedReason = "Below minimum balance filter";
     else if (Number(rule?.maximumBalance || 0) > 0 && outstandingBalance > Number(rule.maximumBalance)) skippedReason = "Above maximum balance filter";
+
+    const existingPenaltyState = existingPenaltyItemStates.get(String(invoice._id));
+    if (!skippedReason && existingPenaltyState?.isDeleted) {
+      skippedReason = "Deleted late penalty already exists for this invoice and period";
+    } else if (!skippedReason && existingPenaltyState?.isReversed) {
+      skippedReason = "Reversed late penalty already exists for this invoice and period";
+    } else if (!skippedReason && existingPenaltyState?.invoiced) {
+      skippedReason = "Late penalty already invoiced for this invoice and period";
+    }
 
     let duplicatePenaltyInvoice = null;
     if (!skippedReason) {
@@ -257,6 +312,152 @@ const loadRuleOrThrow = async (businessId, ruleId) => {
   }
 
   return rule;
+};
+
+const findBatchAndItemOrThrow = async ({ businessId, itemId }) => {
+  if (!isValidObjectId(itemId)) {
+    const error = new Error("A valid late penalty item is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const batch = await LatePenaltyBatch.findOne({
+    business: businessId,
+    "items._id": itemId,
+  });
+
+  if (!batch) {
+    const error = new Error("Late penalty item not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const item = batch.items.id(itemId);
+  if (!item) {
+    const error = new Error("Late penalty item not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return { batch, item };
+};
+
+const findPenaltyInvoice = async ({ businessId, item }) => {
+  const penaltyInvoiceId = item?.penaltyInvoice?._id || item?.penaltyInvoice || null;
+  if (!penaltyInvoiceId || !isValidObjectId(penaltyInvoiceId)) {
+    return null;
+  }
+
+  return TenantInvoice.findOne({
+    _id: penaltyInvoiceId,
+    business: businessId,
+  });
+};
+
+const getOriginalPenaltyLedgerEntries = async (invoice) => {
+  if (!invoice?._id) return [];
+
+  return FinancialLedgerEntry.find({
+    business: invoice.business,
+    sourceTransactionType: "invoice",
+    sourceTransactionId: String(invoice._id),
+    category: { $ne: "REVERSAL" },
+  });
+};
+
+const refreshPenaltyItemBatchStatus = (batch) => {
+  const items = Array.isArray(batch?.items) ? batch.items : [];
+
+  if (!items.length) {
+    batch.status = "failed";
+    return;
+  }
+
+  const activeProcessedItems = items.filter(
+    (item) =>
+      String(item?.status || "").toLowerCase() === "processed" &&
+      !item?.isDeleted &&
+      !item?.reversedAt
+  );
+
+  const hasFailed = items.some((item) => String(item?.status || "").toLowerCase() === "failed");
+  const hasProcessed = items.some((item) => String(item?.status || "").toLowerCase() === "processed");
+  const allHandledByReversalOrDelete = hasProcessed && activeProcessedItems.length === 0;
+
+  if (allHandledByReversalOrDelete) {
+    batch.status = "reversed_ready";
+  } else if (hasFailed && hasProcessed) {
+    batch.status = "partial";
+  } else if (hasFailed && !hasProcessed) {
+    batch.status = "failed";
+  } else {
+    batch.status = "processed";
+  }
+
+  batch.invoicesCreatedCount = activeProcessedItems.length;
+  batch.totalPenaltyAmount = round2(
+    activeProcessedItems.reduce((sum, item) => sum + Number(item?.calculatedPenalty || 0), 0)
+  );
+};
+
+const ACTIVE_PENALTY_INVOICE_STATUSES = new Set(["pending", "paid", "partially_paid"]);
+
+const buildBatchDeleteReadiness = async ({ businessId, batch }) => {
+  const items = Array.isArray(batch?.items) ? batch.items : [];
+  const linkedInvoiceIds = [
+    ...new Set(
+      items
+        .map((item) => item?.penaltyInvoice?._id || item?.penaltyInvoice || null)
+        .filter((value) => isValidObjectId(value))
+        .map((value) => String(value))
+    ),
+  ];
+
+  if (!linkedInvoiceIds.length) {
+    return { canDeleteBatch: true, deleteBlockers: [] };
+  }
+
+  const linkedInvoices = await TenantInvoice.find({
+    business: businessId,
+    _id: { $in: linkedInvoiceIds },
+  })
+    .select("_id invoiceNumber status")
+    .lean();
+
+  const invoiceMap = new Map(linkedInvoices.map((invoice) => [String(invoice._id), invoice]));
+  const deleteBlockers = [];
+
+  for (const item of items) {
+    const penaltyInvoiceId = item?.penaltyInvoice?._id || item?.penaltyInvoice || null;
+    if (!isValidObjectId(penaltyInvoiceId)) continue;
+
+    const invoice = invoiceMap.get(String(penaltyInvoiceId));
+    if (!invoice) continue;
+
+    const normalizedStatus = String(invoice?.status || "").toLowerCase();
+    if (ACTIVE_PENALTY_INVOICE_STATUSES.has(normalizedStatus)) {
+      deleteBlockers.push({
+        itemId: String(item?._id || ""),
+        invoiceId: String(invoice._id),
+        invoiceNumber: invoice.invoiceNumber || "Penalty invoice",
+        status: normalizedStatus,
+      });
+    }
+  }
+
+  return {
+    canDeleteBatch: deleteBlockers.length === 0,
+    deleteBlockers,
+  };
+};
+
+const hydrateBatchDeleteReadiness = async (businessId, batch) => {
+  const readiness = await buildBatchDeleteReadiness({ businessId, batch });
+  return {
+    ...batch,
+    canDeleteBatch: readiness.canDeleteBatch,
+    deleteBlockers: readiness.deleteBlockers,
+  };
 };
 
 export const getLatePenaltyPostingAccounts = async (req, res) => {
@@ -495,7 +696,7 @@ export const processLatePenalties = async (req, res) => {
         .lean();
 
       if (duplicate?._id) {
-        results.push({ ...row, status: "duplicate", reason: `Duplicate already exists (${duplicate.invoiceNumber})`, penaltyInvoiceId: String(duplicate._id) });
+        results.push({ ...row, status: "duplicate", reason: `Duplicate already exists (${duplicate.invoiceNumber})`, penaltyInvoiceId: String(duplicate._id), invoiced: true });
         continue;
       }
 
@@ -530,9 +731,9 @@ export const processLatePenalties = async (req, res) => {
           },
         });
 
-        results.push({ ...row, status: "processed", reason: "", penaltyInvoiceId: String(penaltyInvoice._id), penaltyInvoiceNumber: penaltyInvoice.invoiceNumber });
+        results.push({ ...row, status: "processed", reason: "", penaltyInvoiceId: String(penaltyInvoice._id), penaltyInvoiceNumber: penaltyInvoice.invoiceNumber, invoiced: true });
       } catch (error) {
-        results.push({ ...row, status: "failed", reason: error.message || "Failed to create penalty invoice" });
+        results.push({ ...row, status: "failed", reason: error.message || "Failed to create penalty invoice", invoiced: false });
       }
     }
 
@@ -547,14 +748,18 @@ export const processLatePenalties = async (req, res) => {
       outstandingBalance: Number(row.outstandingBalance || 0),
       calculatedPenalty: Number(row.calculatedPenalty || 0),
       penaltyInvoice: row.penaltyInvoiceId || null,
+      invoiced: !!row.invoiced,
       status: row.status,
       reason: row.reason || "",
+      isDeleted: false,
+      deletedAt: null,
+      deletedBy: null,
+      deletionReason: "",
+      reversedAt: null,
+      reversedBy: null,
+      reversalReason: "",
     }));
-    batch.invoicesCreatedCount = results.filter((row) => row.status === "processed").length;
-    batch.totalPenaltyAmount = round2(results.filter((row) => row.status === "processed").reduce((sum, row) => sum + Number(row.calculatedPenalty || 0), 0));
-    if (results.every((row) => row.status === "failed")) batch.status = "failed";
-    else if (results.some((row) => row.status === "failed")) batch.status = "partial";
-    else batch.status = "processed";
+    refreshPenaltyItemBatchStatus(batch);
     await batch.save();
 
     const savedBatch = await LatePenaltyBatch.findById(batch._id)
@@ -585,10 +790,20 @@ export const getLatePenaltyBatches = async (req, res) => {
     const rows = await LatePenaltyBatch.find({ business: businessId })
       .populate("rule", "ruleName")
       .populate("processedBy", "surname otherNames email")
+      .populate("items.sourceInvoice", "invoiceNumber amount status category")
+      .populate("items.penaltyInvoice", "invoiceNumber amount status category")
+      .populate("items.tenant", "name tenantCode")
+      .populate("items.property", "propertyName propertyCode")
+      .populate("items.unit", "unitNumber")
       .sort({ runDate: -1, createdAt: -1 })
       .lean();
 
-    return res.status(200).json({ batches: rows });
+    const hydratedRows = [];
+    for (const row of rows) {
+      hydratedRows.push(await hydrateBatchDeleteReadiness(businessId, row));
+    }
+
+    return res.status(200).json({ batches: hydratedRows });
   } catch (error) {
     return res.status(500).json({ message: error.message || "Failed to load late penalty batches." });
   }
@@ -611,7 +826,7 @@ export const getLatePenaltyBatch = async (req, res) => {
       return res.status(404).json({ message: "Late penalty batch not found." });
     }
 
-    return res.status(200).json({ batch });
+    return res.status(200).json({ batch: await hydrateBatchDeleteReadiness(businessId, batch) });
   } catch (error) {
     return res.status(500).json({ message: error.message || "Failed to load late penalty batch." });
   }
@@ -631,21 +846,216 @@ export const deleteLatePenaltyBatch = async (req, res) => {
       return res.status(404).json({ message: "Late penalty batch not found." });
     }
 
-    if (String(batch.status || "").toLowerCase() !== "failed") {
-      return res.status(400).json({ message: "Only fully failed late penalty batches can be deleted." });
-    }
-
-    const hasPenaltyInvoices = (Array.isArray(batch.items) ? batch.items : []).some(
-      (item) => item?.penaltyInvoice || String(item?.status || "").toLowerCase() !== "failed"
-    );
-
-    if (hasPenaltyInvoices) {
-      return res.status(400).json({ message: "This batch has processed items and cannot be deleted." });
+    const readiness = await buildBatchDeleteReadiness({ businessId, batch });
+    if (!readiness.canDeleteBatch) {
+      return res.status(400).json({
+        message: "Cannot delete batch while active penalty invoices still exist. Reverse or clear every penalty invoice in the batch first.",
+        deleteBlockers: readiness.deleteBlockers,
+      });
     }
 
     await LatePenaltyBatch.deleteOne({ _id: batch._id, business: businessId });
-    return res.status(200).json({ success: true, message: "Failed late penalty batch deleted successfully." });
+    return res.status(200).json({ success: true, message: "Late penalty batch deleted successfully." });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ message: error.message || "Failed to delete late penalty batch." });
+  }
+};
+
+export const reverseLatePenalty = async (req, res) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    const itemIds = Array.isArray(req.body?.itemIds) ? req.body.itemIds.filter(Boolean) : [];
+    const requestedItemIds = itemIds.length > 0 ? itemIds : [req.body?.itemId].filter(Boolean);
+
+    if (!requestedItemIds.length) {
+      return res.status(400).json({ message: "Select at least one late penalty row to reverse." });
+    }
+
+    const actorUserId = await resolveActorUserId({
+      req,
+      business: businessId,
+      fallbackUserId: req.user?.id || req.user?._id,
+    });
+
+    const results = [];
+    const touchedAccountIds = new Set();
+
+    for (const itemId of requestedItemIds) {
+      try {
+        const { batch, item } = await findBatchAndItemOrThrow({ businessId, itemId });
+
+        if (item?.isDeleted || String(item?.status || "").toLowerCase() === "deleted") {
+          results.push({ itemId: String(item._id), status: "failed", message: "Deleted penalties cannot be reversed." });
+          continue;
+        }
+
+        if (item?.reversedAt || String(item?.status || "").toLowerCase() === "reversed") {
+          results.push({ itemId: String(item._id), status: "skipped", message: "Penalty already reversed." });
+          continue;
+        }
+
+        const penaltyInvoice = await findPenaltyInvoice({ businessId, item });
+
+        if (penaltyInvoice) {
+          const originalEntries = await getOriginalPenaltyLedgerEntries(penaltyInvoice);
+
+          if (originalEntries.length === 0) {
+            results.push({
+              itemId: String(item._id),
+              status: "failed",
+              message: "Cannot reverse penalty without journal entry. Delete instead.",
+            });
+            continue;
+          }
+
+          for (const entry of originalEntries) {
+            if (entry?.accountId) {
+              touchedAccountIds.add(String(entry.accountId));
+            }
+
+            if (!entry?.reversedByEntry && String(entry?.status || "").toLowerCase() !== "reversed") {
+              const reversal = await postReversal({
+                entryId: entry._id,
+                userId: actorUserId,
+                reason: req.body?.reason || `Late penalty reversal for ${penaltyInvoice.invoiceNumber || penaltyInvoice._id}`,
+              });
+
+              if (reversal?.reversalEntry?.accountId) {
+                touchedAccountIds.add(String(reversal.reversalEntry.accountId));
+              }
+            }
+          }
+
+          penaltyInvoice.status = penaltyInvoice.ledgerMode === "off_ledger" ? "cancelled" : "reversed";
+          penaltyInvoice.postingStatus = penaltyInvoice.ledgerMode === "off_ledger" ? "not_applicable" : "reversed";
+          penaltyInvoice.postingError = null;
+          penaltyInvoice.metadata = {
+            ...(penaltyInvoice.metadata && typeof penaltyInvoice.metadata === "object" ? penaltyInvoice.metadata : {}),
+            reversedAt: new Date(),
+            reversedBy: actorUserId,
+            reversalReason: req.body?.reason || "Late penalty reversed from late penalties workspace",
+          };
+          await penaltyInvoice.save();
+
+          await recomputeTenantBalance(penaltyInvoice.tenant, penaltyInvoice.business);
+          await recomputeInvoiceStatusesForTenant({
+            businessId: penaltyInvoice.business,
+            tenantId: penaltyInvoice.tenant,
+          });
+        }
+
+        if (!penaltyInvoice) {
+          results.push({
+            itemId: String(item._id),
+            status: "failed",
+            message: "Penalty invoice not found for this batch item.",
+          });
+          continue;
+        }
+
+        item.invoiced = false;
+        item.status = "reversed";
+        item.reason = req.body?.reason || item.reason || "Late penalty reversed.";
+        item.reversedAt = new Date();
+        item.reversedBy = actorUserId;
+        item.reversalReason = req.body?.reason || "Late penalty reversed from workspace";
+        batch.markModified("items");
+        refreshPenaltyItemBatchStatus(batch);
+        await batch.save();
+
+        results.push({
+          itemId: String(item._id),
+          status: "reversed",
+          message: "Late penalty reversed successfully.",
+        });
+      } catch (error) {
+        results.push({
+          itemId: String(itemId),
+          status: "failed",
+          message: error.message || "Failed to reverse late penalty.",
+        });
+      }
+    }
+
+    if (touchedAccountIds.size > 0) {
+      await aggregateChartOfAccountBalances(businessId, Array.from(touchedAccountIds));
+    }
+
+    const failed = results.filter((row) => row.status === "failed");
+    if (failed.length === results.length) {
+      return res.status(400).json({
+        message: failed[0]?.message || "Failed to reverse selected late penalties.",
+        results,
+      });
+    }
+
+    return res.status(200).json({
+      message: results.length === 1 ? "Late penalty reversed successfully." : "Selected late penalties reversed successfully.",
+      results,
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.message || "Failed to reverse late penalty." });
+  }
+};
+
+export const deleteLatePenalty = async (req, res) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    const itemId = req.params?.id;
+
+    const actorUserId = await resolveActorUserId({
+      req,
+      business: businessId,
+      fallbackUserId: req.user?.id || req.user?._id,
+    });
+
+    const { batch, item } = await findBatchAndItemOrThrow({ businessId, itemId });
+
+    if (item?.reversedAt || String(item?.status || "").toLowerCase() === "reversed") {
+      return res.status(400).json({ message: "Reversed penalties cannot be deleted." });
+    }
+
+    if (item?.isDeleted || String(item?.status || "").toLowerCase() === "deleted") {
+      return res.status(400).json({ message: "Penalty already deleted." });
+    }
+
+    const penaltyInvoice = await findPenaltyInvoice({ businessId, item });
+
+    if (penaltyInvoice) {
+      const originalEntries = await getOriginalPenaltyLedgerEntries(penaltyInvoice);
+      const hasJournalEntries = Array.isArray(penaltyInvoice.ledgerEntries) && penaltyInvoice.ledgerEntries.length > 0
+        ? true
+        : originalEntries.length > 0;
+
+      if (hasJournalEntries) {
+        return res.status(400).json({
+          message: "Cannot delete penalty with journal entry. Reverse instead.",
+        });
+      }
+
+      if (!["cancelled", "reversed"].includes(String(penaltyInvoice.status || "").toLowerCase())) {
+        await TenantInvoice.deleteOne({ _id: penaltyInvoice._id, business: businessId });
+        await recomputeTenantBalance(penaltyInvoice.tenant, penaltyInvoice.business);
+        await recomputeInvoiceStatusesForTenant({
+          businessId: penaltyInvoice.business,
+          tenantId: penaltyInvoice.tenant,
+        });
+      }
+    }
+
+    item.invoiced = false;
+    item.isDeleted = true;
+    item.status = "deleted";
+    item.reason = req.body?.reason || item.reason || "Late penalty deleted.";
+    item.deletedAt = new Date();
+    item.deletedBy = actorUserId;
+    item.deletionReason = req.body?.reason || "Late penalty deleted from workspace";
+    batch.markModified("items");
+    refreshPenaltyItemBatchStatus(batch);
+    await batch.save();
+
+    return res.status(200).json({ message: "Penalty deleted successfully." });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.message || "Failed to delete late penalty." });
   }
 };

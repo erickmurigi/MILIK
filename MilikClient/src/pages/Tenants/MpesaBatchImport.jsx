@@ -201,7 +201,7 @@ const MpesaBatchImport = () => {
             </div>
 
             <div className="grid gap-4 border-t border-slate-200 p-4 md:grid-cols-[0.95fr_1.05fr] md:p-5">
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex min-h-[680px] flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center gap-2 text-slate-900">
                   <FaFileImport className="text-[#0B3B2E]" />
                   <h2 className="text-lg font-black">Import batch lines</h2>
@@ -241,7 +241,7 @@ const MpesaBatchImport = () => {
                 />
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex min-h-[680px] flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <div className="flex items-center gap-2 text-slate-900">
@@ -294,9 +294,9 @@ const MpesaBatchImport = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 max-h-[560px] overflow-auto rounded-2xl border border-slate-200">
+                <div className="mt-4 min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-200">
                   <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead className="bg-slate-50">
+                    <thead className="sticky top-0 z-10 bg-slate-50">
                       <tr className="text-left text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
                         <th className="px-4 py-3">Transaction</th>
                         <th className="px-4 py-3">Matched tenant</th>

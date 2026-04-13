@@ -16,6 +16,7 @@ router.post("/", verifyUser, createMeterReading);
 router.put("/:id", verifyUser, updateMeterReading);
 router.delete("/:id", verifyUser, deleteMeterReading);
 router.post("/:id/void", verifyUser, voidMeterReading);
+router.patch("/:id/void", verifyUser, voidMeterReading);
 router.post("/:id/bill", verifyUser, billMeterReading);
 
 export default router;

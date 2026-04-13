@@ -45,6 +45,9 @@ const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 
+const getErrorMessage = (error, fallback) =>
+  error?.response?.data?.message || error?.message || fallback;
+
 const Landlords = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -380,12 +383,17 @@ const Landlords = () => {
           setSelectAll(false);
           setCurrentPage(1);
           setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          toast.success(
+            selectedRows.length === 1
+              ? "Landlord deleted successfully."
+              : `${selectedRows.length} landlords deleted successfully.`
+          );
         } catch (err) {
           console.error('Delete error:', err);
           setConfirmDialog({
             isOpen: true,
             title: "Delete Failed",
-            message: err?.response?.data?.message || err?.message || "Failed to delete landlord(s)",
+            message: getErrorMessage(err, "Failed to delete landlord(s)"),
             confirmText: "OK",
             cancelText: "Close",
             isDangerous: false,
@@ -441,12 +449,17 @@ const Landlords = () => {
           setSelectedLandlords([]);
           setSelectAll(false);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          toast.success(
+            toArchive.length === 1
+              ? "Landlord archived successfully."
+              : `${toArchive.length} landlords archived successfully.`
+          );
         } catch (err) {
           console.error("Archive error:", err);
           setConfirmDialog({
             isOpen: true,
             title: "Archive Failed",
-            message: err?.response?.data?.message || err?.message || "Failed to archive landlord(s)",
+            message: getErrorMessage(err, "Failed to archive landlord(s)"),
             confirmText: "OK",
             cancelText: "Close",
             isDangerous: false,
@@ -502,12 +515,17 @@ const Landlords = () => {
           setSelectedLandlords([]);
           setSelectAll(false);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          toast.success(
+            toRestore.length === 1
+              ? "Landlord restored successfully."
+              : `${toRestore.length} landlords restored successfully.`
+          );
         } catch (err) {
           console.error("Restore error:", err);
           setConfirmDialog({
             isOpen: true,
             title: "Restore Failed",
-            message: err?.response?.data?.message || err?.message || "Failed to restore landlord(s)",
+            message: getErrorMessage(err, "Failed to restore landlord(s)"),
             confirmText: "OK",
             cancelText: "Close",
             isDangerous: false,

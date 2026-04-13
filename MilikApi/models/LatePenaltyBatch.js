@@ -48,12 +48,48 @@ const LatePenaltyBatchItemSchema = new mongoose.Schema(
       ref: "TenantInvoice",
       default: null,
     },
+    invoiced: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
-      enum: ["processed", "skipped", "duplicate", "failed"],
+      enum: ["processed", "skipped", "duplicate", "failed", "reversed", "deleted"],
       default: "processed",
     },
     reason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    deletionReason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    reversedAt: {
+      type: Date,
+      default: null,
+    },
+    reversedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    reversalReason: {
       type: String,
       default: "",
       trim: true,

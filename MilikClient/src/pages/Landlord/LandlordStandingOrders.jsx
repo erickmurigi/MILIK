@@ -371,49 +371,75 @@ const LandlordStandingOrders = () => {
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Pending Eligible Periods</p><p className="mt-2 text-2xl font-black text-amber-700">{stats.pendingPeriods}</p></div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr),220px,220px]">
-              <div className="relative">
-                <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
-                <input
-                  value={filters.search}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                  placeholder="Search order number, title, narration"
-                  className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                />
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-4 border-b border-slate-200 bg-slate-50">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="relative lg:col-span-2">
+                  <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+                  <input
+                    value={filters.search}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                    placeholder="Search order number, title, narration"
+                    className="w-full px-3 py-3 pl-10 border border-slate-300 rounded-md text-sm"
+                  />
+                </div>
+                <div>
+                  <select
+                    value={filters.landlordId}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))}
+                    className="w-full px-3 py-3 border border-slate-300 rounded-md text-sm"
+                  >
+                    <option value="all">All Landlords</option>
+                    {activeLandlords.map((landlord) => (
+                      <option key={landlord._id} value={landlord._id}>
+                        {landlord.landlordName || `${landlord.firstName || ""} ${landlord.lastName || ""}`.trim()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <select
+                    value={filters.status}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                    className="w-full px-3 py-3 border border-slate-300 rounded-md text-sm"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="draft">Draft</option>
+                    <option value="active">Active</option>
+                    <option value="paused">Paused</option>
+                    <option value="stopped">Stopped</option>
+                  </select>
+                </div>
               </div>
-              <select
-                value={filters.landlordId}
-                onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-              >
-                <option value="all">All landlords</option>
-                {activeLandlords.map((landlord) => (
-                  <option key={landlord._id} value={landlord._id}>
-                    {landlord.landlordName || `${landlord.firstName || ""} ${landlord.lastName || ""}`.trim()}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-              >
-                <option value="all">All statuses</option>
-                <option value="draft">Draft</option>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="stopped">Stopped</option>
-              </select>
-            </div>
-          </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={handleRunSelected}
+                  disabled={bulkRunning || selectedIds.length === 0}
+                  className="px-3 py-1.5 text-xs rounded-md bg-green-600 hover:bg-green-700 text-white font-semibold flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FaCheck /> {bulkRunning ? "Running..." : `Run Selected${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
+                </button>
+                <button
+                  onClick={openCreate}
+                  className="px-3 py-1.5 text-xs rounded-md bg-[#0B3B2E] hover:bg-[#0A3127] text-white font-semibold flex items-center gap-2"
+                >
+                  <FaPlus /> Add Standing Order
+                </button>
+                <button
+                  onClick={() => setFilters({ search: "", status: "all", landlordId: "all" })}
+                  className="px-3 py-1.5 text-xs rounded-md bg-slate-500 hover:bg-slate-600 text-white font-semibold"
+                >
+                  Reset Filters
+                </button>
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-100 text-left text-slate-600">
-                  <tr>
-                    <th className="px-4 py-3 font-black">
+              <table className="w-full min-w-[1200px] text-xs">
+                <thead>
+                  <tr className="bg-[#0B3B2E] text-white">
+                    <th className="px-3 py-2 text-left font-semibold">
                       <input
                         type="checkbox"
                         checked={allSelectableChecked}
@@ -422,12 +448,12 @@ const LandlordStandingOrders = () => {
                         className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
                       />
                     </th>
-                    <th className="px-4 py-3 font-black">Order</th>
-                    <th className="px-4 py-3 font-black">Landlord / Property</th>
-                    <th className="px-4 py-3 font-black">Schedule</th>
-                    <th className="px-4 py-3 font-black text-right">Amount</th>
-                    <th className="px-4 py-3 font-black">Status</th>
-                    <th className="px-4 py-3 font-black text-right">Actions</th>
+                    <th className="px-3 py-2 text-left font-semibold">Order</th>
+                    <th className="px-3 py-2 text-left font-semibold">Landlord / Property</th>
+                    <th className="px-3 py-2 text-left font-semibold">Schedule</th>
+                    <th className="px-3 py-2 text-right font-semibold">Amount</th>
+                    <th className="px-3 py-2 text-left font-semibold">Status</th>
+                    <th className="px-3 py-2 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>

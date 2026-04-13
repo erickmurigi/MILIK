@@ -681,7 +681,8 @@ export const updateLandlord = (id, landlordData) => async (dispatch) => {
   } catch (err) {
     console.error('Update landlord error:', err);
     dispatch(updateLandlordFailure());
-    throw err;
+    const message = err?.response?.data?.message || err?.message || 'Failed to update landlord';
+    throw new Error(message);
   }
 };
 
@@ -694,7 +695,8 @@ export const deleteLandlord = (id) => async (dispatch) => {
   } catch (err) {
     console.error('Delete landlord error:', err);
     dispatch(deleteLandlordFailure());
-    throw err;
+    const message = err?.response?.data?.message || err?.message || 'Failed to delete landlord';
+    throw new Error(message);
   }
 };
 
@@ -1943,10 +1945,11 @@ export const getMeterReadings = async (filters = {}) => {
   if (filters.property && filters.property !== "all") params.append("property", filters.property);
   if (filters.unit && filters.unit !== "all") params.append("unit", filters.unit);
   if (filters.tenant && filters.tenant !== "all") params.append("tenant", filters.tenant);
-  if (filters.utility && filters.utility !== "all") params.append("utility", filters.utility);
+  if (filters.utility && filters.utility !== "all") params.append("utilityType", filters.utility);
+  if (filters.utilityType && filters.utilityType !== "all") params.append("utilityType", filters.utilityType);
   if (filters.status && filters.status !== "all") params.append("status", filters.status);
-  if (filters.periodMonth) params.append("periodMonth", filters.periodMonth);
-  if (filters.periodYear) params.append("periodYear", filters.periodYear);
+  if (filters.billingPeriod) params.append("billingPeriod", filters.billingPeriod);
+  if (filters.periodMonth && filters.periodYear) params.append("billingPeriod", `${filters.periodYear}-${String(filters.periodMonth).padStart(2, "0")}`);
   if (filters.search) params.append("search", filters.search);
 
   const query = params.toString();
@@ -2039,6 +2042,19 @@ export const deleteLatePenaltyBatch = async (id, business = null) => {
   if (business) params.append("business", business);
   const query = params.toString();
   const res = await adminRequests.delete(`/late-penalties/batches/${id}${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
+export const reverseLatePenalty = async (payload = {}) => {
+  const res = await adminRequests.post("/late-penalties/reverse", payload);
+  return res.data;
+};
+
+export const deleteLatePenalty = async (id, payload = {}) => {
+  const params = new URLSearchParams();
+  if (payload?.business) params.append("business", payload.business);
+  const query = params.toString();
+  const res = await adminRequests.delete(`/late-penalties/${id}${query ? `?${query}` : ""}`, { data: payload });
   return res.data;
 };
 

@@ -1,5 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Toaster } from "react-hot-toast";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
@@ -72,6 +74,15 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
             border: `1px solid ${darkMode ? "#4B5563" : "#E5E7EB"}`,
           },
         }}
+      />
+      <ToastContainer
+        position="top-right"
+        autoClose={4000}
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+        draggable
+        theme={darkMode ? "dark" : "light"}
       />
 
       <div

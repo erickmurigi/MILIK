@@ -6,6 +6,7 @@ import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import RentPayment from "../../models/RentPayment.js";
+import MeterReading from "../../models/MeterReading.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import SequenceCounter from "../../models/SequenceCounter.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
@@ -17,6 +18,7 @@ import {
 } from "../../services/propertyAccountingService.js";
 import { buildInvoiceTaxSnapshot, getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../services/taxCalculationService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
 
 const TENANT_INVOICE_NOTE_SOURCE_TYPE = "invoice_note";
 
@@ -1737,12 +1739,74 @@ export const createTenantInvoiceNote = async (req, res) => {
       return res.status(400).json({ error: "Invalid note type." });
     }
 
-    const sourceInvoiceId = req.body.sourceInvoiceId || req.body.sourceInvoice;
-    if (!isValidObjectId(sourceInvoiceId)) {
-      return res.status(400).json({ error: "A valid source invoice is required." });
+    const scopedBusinessId = resolveAuthorizedBusinessId(req);
+    const requestedMetadata =
+      req.body.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {};
+    let sourceInvoiceId =
+      req.body.sourceInvoiceId || req.body.sourceInvoice || req.body.anchorSourceInvoiceId || null;
+
+    if (!isValidObjectId(sourceInvoiceId) && noteType === "DEBIT_NOTE") {
+      const requestedTenantId = req.body.tenantId || req.body.tenant || null;
+      const requestedPropertyId = req.body.propertyId || req.body.property || null;
+      const requestedCategory = String(req.body.category || "").toUpperCase();
+      const requestedBillItemKey = String(requestedMetadata?.billItemKey || "").trim();
+      const requestedUtilityType = String(
+        requestedMetadata?.utilityType ||
+          requestedMetadata?.meterUtilityType ||
+          requestedMetadata?.statementUtilityType ||
+          ""
+      )
+        .trim()
+        .toLowerCase();
+
+      if (isValidObjectId(requestedTenantId) && TENANT_INVOICE_CATEGORIES.includes(requestedCategory)) {
+        const anchorQuery = {
+          tenant: requestedTenantId,
+          category: requestedCategory,
+          postingStatus: "posted",
+          status: { $nin: ["cancelled", "reversed"] },
+          ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
+          ...(isValidObjectId(requestedPropertyId) ? { property: requestedPropertyId } : {}),
+        };
+
+        const anchorCandidates = await TenantInvoice.find(anchorQuery)
+          .sort({ invoiceDate: -1, createdAt: -1, _id: -1 })
+          .limit(100)
+          .lean();
+
+        const matchedAnchor = anchorCandidates.find((invoice) => {
+          const metadata = invoice?.metadata || {};
+          const invoiceBillItemKey = String(metadata?.billItemKey || "").trim();
+          const invoiceUtilityType = String(
+            metadata?.utilityType || metadata?.meterUtilityType || metadata?.statementUtilityType || ""
+          )
+            .trim()
+            .toLowerCase();
+
+          if (requestedBillItemKey) {
+            return invoiceBillItemKey === requestedBillItemKey;
+          }
+
+          if (requestedUtilityType) {
+            return invoiceUtilityType === requestedUtilityType;
+          }
+
+          return true;
+        });
+
+        sourceInvoiceId = matchedAnchor?._id || null;
+      }
     }
 
-    const scopedBusinessId = resolveAuthorizedBusinessId(req);
+    if (!isValidObjectId(sourceInvoiceId)) {
+      return res.status(400).json({
+        error:
+          noteType === "CREDIT_NOTE"
+            ? "A valid source invoice is required for a credit note."
+            : "A valid anchor invoice could not be resolved for this debit note. Select an invoice item first.",
+      });
+    }
+
     const sourceInvoice = await TenantInvoice.findOne({
       _id: sourceInvoiceId,
       ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
@@ -2921,6 +2985,50 @@ export const createTenantInvoicesBatch = async (req, res) => {
   }
 };
 
+
+const syncLatePenaltyBatchItemsForInvoiceDeletion = async ({
+  invoice,
+  actorUserId = null,
+  itemStatus = "deleted",
+  reason = "",
+}) => {
+  if (!invoice?._id || String(invoice?.category || "").toUpperCase() !== "LATE_PENALTY_CHARGE") {
+    return;
+  }
+
+  const normalizedStatus = String(itemStatus || "").toLowerCase();
+  const now = new Date();
+  const arrayFilters = [{ "elem.penaltyInvoice": invoice._id }];
+
+  const setFields = {
+    "items.$[elem].invoiced": false,
+    "items.$[elem].reason": reason || (normalizedStatus === "reversed" ? "Late penalty invoice reversed." : "Late penalty invoice deleted."),
+  };
+
+  if (normalizedStatus === "reversed") {
+    setFields["items.$[elem].status"] = "reversed";
+    setFields["items.$[elem].reversedAt"] = now;
+    setFields["items.$[elem].reversedBy"] = actorUserId || null;
+    setFields["items.$[elem].reversalReason"] = reason || "Late penalty invoice reversed.";
+  } else {
+    setFields["items.$[elem].status"] = "deleted";
+    setFields["items.$[elem].isDeleted"] = true;
+    setFields["items.$[elem].deletedAt"] = now;
+    setFields["items.$[elem].deletedBy"] = actorUserId || null;
+    setFields["items.$[elem].deletionReason"] = reason || "Late penalty invoice deleted.";
+  }
+
+  await LatePenaltyBatch.updateMany(
+    {
+      business: invoice.business,
+      "items.penaltyInvoice": invoice._id,
+    },
+    { $set: setFields },
+    { arrayFilters }
+  );
+};
+
+
 export const deleteTenantInvoice = async (req, res) => {
   try {
     const { id } = req.params;
@@ -2931,7 +3039,6 @@ export const deleteTenantInvoice = async (req, res) => {
         error: "Invalid invoice id.",
       });
     }
-
     const requestedBusinessId = resolveAuthorizedBusinessId(req);
     let businessId = null;
 
@@ -3006,6 +3113,12 @@ export const deleteTenantInvoice = async (req, res) => {
 
     if (canHardDeleteWithoutAuditReversal) {
       await TenantInvoice.deleteOne({ _id: invoice._id });
+      await syncLatePenaltyBatchItemsForInvoiceDeletion({
+        invoice,
+        actorUserId: null,
+        itemStatus: "deleted",
+        reason: `Late penalty invoice ${invoice.invoiceNumber || invoice._id} deleted without ledger posting.`,
+      });
       await releaseMeterReadingLinkedToInvoice(
         invoice,
         null,
@@ -3083,6 +3196,13 @@ export const deleteTenantInvoice = async (req, res) => {
     invoice.postingError = null;
     invoice.metadata = nextMetadata;
     await invoice.save();
+
+    await syncLatePenaltyBatchItemsForInvoiceDeletion({
+      invoice,
+      actorUserId,
+      itemStatus: cancellationStatus === "reversed" ? "reversed" : "deleted",
+      reason: `Late penalty invoice ${invoice.invoiceNumber || invoice._id} ${cancellationStatus}.`,
+    });
 
     await releaseMeterReadingLinkedToInvoice(
       invoice,
