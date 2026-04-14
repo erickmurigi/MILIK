@@ -823,6 +823,8 @@ const buildLegacyReceiptAllocations = ({ receipt, invoiceSnapshots = [] }) => {
       category: snapshot.category,
       priorityGroup: snapshot.priorityGroup,
       utilityType: snapshot.utilityType || "",
+      depositHeldBy: snapshot.depositHeldBy || snapshot?.metadata?.depositHeldBy || "",
+      invoiceLedgerMode: snapshot.ledgerMode || snapshot?.metadata?.ledgerMode || "",
       appliedAmount,
       beforeOutstanding: outstanding,
       afterOutstanding: Math.max(0, outstanding - appliedAmount),
@@ -868,6 +870,16 @@ const normalizeStoredAllocationRows = ({ receipt, invoiceMap = new Map() }) => {
       category: snapshot.category,
       priorityGroup: snapshot.priorityGroup,
       utilityType: snapshot.utilityType || "",
+      depositHeldBy:
+        raw?.depositHeldBy ||
+        snapshot.depositHeldBy ||
+        snapshot?.metadata?.depositHeldBy ||
+        "",
+      invoiceLedgerMode:
+        raw?.invoiceLedgerMode ||
+        snapshot.ledgerMode ||
+        snapshot?.metadata?.ledgerMode ||
+        "",
       appliedAmount,
       beforeOutstanding: outstanding,
       afterOutstanding: Math.max(0, outstanding - appliedAmount),

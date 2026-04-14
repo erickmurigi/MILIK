@@ -36,6 +36,7 @@ const buildInitialActiveTabs = () => ({
 const getPageTitle = (pathname) => {
   const routeNames = {
     '/dashboard': 'Dashboard',
+    '/moduleDashboard': 'Choose Module',
     '/system-setup': 'Companies',
     '/system-setup/companies': 'Companies',
     '/system-setup/users': 'Users',
@@ -136,6 +137,7 @@ const TabManager = ({ darkMode }) => {
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentCompanyKey = String(currentCompany?._id || 'default-company');
+  const currentCompanyName = String(currentCompany?.companyName || currentCompany?.name || '').trim();
   const previousCompanyKeyRef = useRef(currentCompanyKey);
 
   const [tabsByWorkspace, setTabsByWorkspace] = useState(() => readTabsByWorkspace(currentCompanyKey));
@@ -245,6 +247,23 @@ const TabManager = ({ darkMode }) => {
     tabsByWorkspace[currentWorkspace] || [getWorkspaceDefaultTab(currentWorkspace)];
   const activeTab = activeTabsByWorkspace[currentWorkspace] || workspaceTabs[0]?.id;
   const sortedTabs = [...workspaceTabs].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+  const currentTabTitle = useMemo(() => {
+    const directMatch = workspaceTabs.find((tab) => tab.route === location.pathname);
+    if (directMatch?.title) return directMatch.title;
+
+    const activeMatch = workspaceTabs.find((tab) => tab.id === activeTab);
+    if (activeMatch?.title) return activeMatch.title;
+
+    return getPageTitle(location.pathname);
+  }, [activeTab, location.pathname, workspaceTabs]);
+
+  useEffect(() => {
+    const pageTitle = currentTabTitle || getPageTitle(location.pathname) || 'Milik';
+    document.title = currentCompanyName
+      ? `${pageTitle} | ${currentCompanyName} | Milik`
+      : `${pageTitle} | Milik`;
+  }, [currentCompanyName, currentTabTitle, location.pathname]);
 
   const switchTab = (tabId, route) => {
     setActiveTabsByWorkspace((prev) => ({

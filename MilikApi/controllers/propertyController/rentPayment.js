@@ -35,6 +35,24 @@ const populateReceiptQuery = (query) =>
 
 const safeLower = (value = "") => String(value || "").trim().toLowerCase();
 
+const normalizeDepositHolder = (value = "") => {
+  const normalized = safeLower(value);
+  if (["landlord", "held_by_landlord"].includes(normalized)) return "landlord";
+  if (
+    [
+      "management company",
+      "management_company",
+      "propertymanager",
+      "property manager",
+      "property_manager",
+      "manager",
+    ].includes(normalized)
+  ) {
+    return "manager";
+  }
+  return "";
+};
+
 const normalizeTakeOnBillItemKey = (value = "") =>
   String(value || "")
     .trim()
@@ -455,9 +473,38 @@ const shouldIncludeInLandlordStatement = (payment) => {
 const getReceiptStatementCategoryForGroup = (group, paidDirectToLandlord) => {
   const normalized = String(group || "").toLowerCase();
   if (normalized === "utility") return paidDirectToLandlord ? "UTILITY_RECEIPT_LANDLORD" : "UTILITY_RECEIPT_MANAGER";
-  if (normalized === "deposit") return "DEPOSIT_RECEIVED";
+  if (normalized === "deposit" || normalized === "deposit_landlord") return "DEPOSIT_RECEIVED";
   if (["unapplied", "late_penalty", "debit_note", "other"].includes(normalized)) return "ADJUSTMENT";
   return paidDirectToLandlord ? "RENT_RECEIPT_LANDLORD" : "RENT_RECEIPT_MANAGER";
+};
+
+const isLandlordHeldDepositAllocationRow = (row = {}) => {
+  const priorityGroup = safeLower(row?.priorityGroup || "");
+  if (priorityGroup !== "deposit") return false;
+
+  const depositHolder =
+    normalizeDepositHolder(row?.depositHeldBy) ||
+    normalizeDepositHolder(row?.metadata?.depositHeldBy) ||
+    normalizeDepositHolder(row?.sourceInvoice?.depositHeldBy) ||
+    normalizeDepositHolder(row?.sourceInvoice?.metadata?.depositHeldBy);
+
+  const ledgerMode = safeLower(
+    row?.invoiceLedgerMode ||
+      row?.ledgerMode ||
+      row?.sourceInvoice?.ledgerMode ||
+      row?.sourceInvoice?.metadata?.ledgerMode ||
+      ""
+  );
+
+  return depositHolder === "landlord" || ledgerMode === "off_ledger";
+};
+
+const getReceiptPostingBucketFromAllocationRow = (row = {}) => {
+  const priorityGroup = safeLower(row?.priorityGroup || "other");
+  if (priorityGroup === "deposit" && isLandlordHeldDepositAllocationRow(row)) {
+    return "deposit_landlord";
+  }
+  return priorityGroup || "other";
 };
 
 const resolveUnallocatedReceiptsLiabilityAccount = async (businessId) => {
@@ -487,7 +534,17 @@ const resolveCreditAccountForAllocationGroup = async (businessId, groupKey) => {
     return resolveUnallocatedReceiptsLiabilityAccount(businessId);
   }
 
-  // Deposits are recognized as a liability when the deposit invoice is raised.
+  if (normalized === "deposit_landlord") {
+    const account = await resolveLandlordRemittancePayableAccount(businessId);
+
+    if (!account?._id) {
+      throw new Error("Landlord Remittance Payable account not found. Landlord-held deposit receipt cannot be posted correctly.");
+    }
+
+    return account;
+  }
+
+  // Manager-held deposits are recognized as a liability when the deposit invoice is raised.
   // A receipt allocated to that invoice should therefore clear tenant receivable,
   // not create the deposit liability a second time.
   return resolveCreditAccount(businessId, { paymentType: "rent" });
@@ -497,6 +554,7 @@ const getPostingRoleForAllocationGroup = (groupKey) => {
   const normalized = String(groupKey || "").trim().toLowerCase();
   if (normalized === "utility") return "tenant_receivable_utility";
   if (normalized === "unapplied") return "tenant_advance_liability";
+  if (normalized === "deposit_landlord") return "landlord_deposit_remittance";
   return "tenant_receivable";
 };
 
@@ -749,6 +807,8 @@ const buildReceiptAllocationWorkspace = async (payment) => {
           category: row?.category || "",
           priorityGroup: row?.priorityGroup || "other",
           utilityType: row?.utilityType || "",
+          depositHeldBy: row?.depositHeldBy || "",
+          invoiceLedgerMode: row?.invoiceLedgerMode || row?.ledgerMode || "",
           appliedAmount: round2(Math.abs(Number(row?.appliedAmount || 0))),
           beforeOutstanding: round2(Math.abs(Number(row?.beforeOutstanding || 0))),
           afterOutstanding: round2(Math.abs(Number(row?.afterOutstanding || 0))),
@@ -777,6 +837,8 @@ const buildReceiptAllocationWorkspace = async (payment) => {
       category: snapshot?.category || "",
       priorityGroup: snapshot?.priorityGroup || "other",
       utilityType: snapshot?.utilityType || "",
+      depositHeldBy: snapshot?.depositHeldBy || snapshot?.metadata?.depositHeldBy || "",
+      invoiceLedgerMode: snapshot?.ledgerMode || snapshot?.metadata?.ledgerMode || "",
       description: snapshot?.description || "",
       invoiceDate: snapshot?.invoiceDate || null,
       dueDate: snapshot?.dueDate || null,
@@ -856,6 +918,8 @@ const buildManualReceiptAllocationData = async ({ payment, requestedAllocations 
       category: option.category || "",
       priorityGroup: option.priorityGroup || "other",
       utilityType: option.utilityType || "",
+      depositHeldBy: option.depositHeldBy || "",
+      invoiceLedgerMode: option.invoiceLedgerMode || "",
       appliedAmount,
       beforeOutstanding: maxAllocatable,
       afterOutstanding: round2(Math.max(0, maxAllocatable - appliedAmount)),
@@ -919,12 +983,12 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
   const grouped = new Map();
 
   allocationRows.forEach((row) => {
-    const key = String(row?.priorityGroup || "other");
+    const key = getReceiptPostingBucketFromAllocationRow(row);
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(row);
   });
 
-  ["rent", "deposit", "utility", "late_penalty", "debit_note", "other"].forEach((key) => {
+  ["rent", "deposit", "deposit_landlord", "utility", "late_penalty", "debit_note", "other"].forEach((key) => {
     const rows = grouped.get(key) || [];
     const total = rows.reduce((sum, row) => sum + Math.abs(Number(row?.appliedAmount || 0)), 0);
     if (total > 0) postingGroups.push({ key, total, rows });
@@ -1063,12 +1127,12 @@ const postReceiptJournal = async (payment, actorId) => {
   const postingGroups = [];
   const grouped = new Map();
   allocationRows.forEach((row) => {
-    const key = String(row?.priorityGroup || "other");
+    const key = getReceiptPostingBucketFromAllocationRow(row);
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(row);
   });
 
-  ["rent", "deposit", "utility", "late_penalty", "debit_note", "other"].forEach((key) => {
+  ["rent", "deposit", "deposit_landlord", "utility", "late_penalty", "debit_note", "other"].forEach((key) => {
     const rows = grouped.get(key) || [];
     const total = rows.reduce((sum, row) => sum + Math.abs(Number(row?.appliedAmount || 0)), 0);
     if (total > 0) postingGroups.push({ key, total, rows });

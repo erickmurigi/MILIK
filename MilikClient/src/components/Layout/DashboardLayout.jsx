@@ -298,7 +298,7 @@ const TopToolbar = ({
       "instant-receipts": "/receipts/instant",
       "landlord-receipt": "/receipts/landlord",
       "expense-requisition": "/expenses/requisition",
-      "payment-vouchers-list": "/expenses/payment-vouchers",
+      "expenses-service-providers": "/financial/service-providers",
       "landlord-standing-orders": "/landlords/standing-orders",
       "landlord-advancement": "/landlords/advancement",
       "commission-landlord-statement": "/financial/landlord-statement",
@@ -440,7 +440,6 @@ const TopToolbar = ({
           { id: "payment-vouchers", label: "Payment Vouchers", icon: FaCreditCard, category: "expenses", categoryColor: "#FF8C00" },
           { id: "expenses", label: "Expenses", hasSubmenu: true, icon: FaMoneyBillWave, category: "expenses", categoryColor: "#FF8C00" },
           { id: "landlord-payments", label: "Landlord Payments", hasSubmenu: true, icon: FaHandHolding, category: "landlord", categoryColor: "#8B5CF6" },
-          { id: "service-providers", label: "Service Providers", icon: FaCog, category: "landlord", categoryColor: "#8B5CF6" },
           { type: "separator" },
           { id: "chart-of-accounts", label: "Chart of Accounts", icon: FaBook, category: "ledger", categoryColor: "#0B3B2E" },
           { id: "journals", label: "Journals", icon: FaBook, category: "ledger", categoryColor: "#0B3B2E" },
@@ -512,7 +511,7 @@ const TopToolbar = ({
       ],
       expenses: [
         { id: "expense-requisition", label: "Expense Requisition", icon: FaFileInvoice },
-        { id: "payment-vouchers-list", label: "Payment Vouchers", icon: FaMoneyBillWave },
+        { id: "expenses-service-providers", label: "Service Providers", icon: FaCog },
       ],
       "landlord-payments": [
         { id: "landlord-standing-orders", label: "Landlord Standing Orders", icon: FaCalendarAlt },

@@ -1,5 +1,5 @@
 // pages/ModulesDashboard/ModulesDashboard.jsx
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
@@ -110,6 +110,13 @@ const ModulesDashboard = () => {
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
+
+  useEffect(() => {
+    const companyName = String(activeCompanyContext?.companyName || activeCompanyContext?.name || '').trim();
+    document.title = companyName
+      ? `Choose Module | ${companyName} | Milik`
+      : 'Choose Module | Milik';
+  }, [activeCompanyContext]);
   const visibleModules = useMemo(() => {
     if (!activeCompanyContext) return [];
     return moduleRegistry.filter((moduleItem) => hasCompanyModule(activeCompanyContext, moduleItem.moduleKey));

@@ -20,6 +20,12 @@ const PaymentVoucherSchema = new mongoose.Schema(
     paidDate: { type: Date },
     reference: { type: String },
     narration: { type: String, trim: true, maxlength: 1000 },
+    sourceRequisition: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ExpenseRequisition",
+      default: null,
+      index: true,
+    },
 
     liabilityAccount: {
       type: mongoose.Schema.Types.ObjectId,
@@ -66,5 +72,6 @@ PaymentVoucherSchema.index({ business: 1, category: 1 });
 PaymentVoucherSchema.index({ property: 1 });
 PaymentVoucherSchema.index({ landlord: 1 });
 PaymentVoucherSchema.index({ liabilityAccount: 1 });
+PaymentVoucherSchema.index({ business: 1, sourceRequisition: 1 });
 
 export default mongoose.model("PaymentVoucher", PaymentVoucherSchema);

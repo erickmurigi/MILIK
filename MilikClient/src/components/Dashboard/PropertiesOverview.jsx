@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { adminRequests } from '../../utils/requestMethods';
 
 const PropertiesOverview = ({ darkMode }) => {
+  const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const properties = useSelector((state) => state.property?.properties || []);
   const units = useSelector((state) => state.unit?.units || []);
+  const tenants = useSelector((state) => state.tenant?.tenants || []);
   const rentPayments = useSelector((state) => state.rentPayment?.rentPayments || []);
   const propertiesLoading = useSelector((state) => state.property?.loading || state.property?.isFetching);
 
@@ -72,6 +75,11 @@ const PropertiesOverview = ({ darkMode }) => {
     return !payment?.reversalOf && !payment?.isReversed && !payment?.isCancelled && postingStatus !== 'reversed';
   };
 
+  const isOperationalTenant = (tenant) => {
+    const status = String(tenant?.status || '').toLowerCase();
+    return !['inactive', 'terminated', 'evicted', 'moved_out'].includes(status);
+  };
+
   const amountFromInvoice = (invoice) =>
     Number(invoice?.adjustedAmount ?? invoice?.netAmount ?? invoice?.amount ?? 0);
 
@@ -81,6 +89,10 @@ const PropertiesOverview = ({ darkMode }) => {
     if (numeric >= 1000) return `KSh ${(numeric / 1000).toFixed(1)}K`;
     return `KSh ${Math.round(numeric).toLocaleString()}`;
   };
+
+  const unitMap = useMemo(() => {
+    return new Map(units.map((unit) => [String(unit?._id || ''), unit]));
+  }, [units]);
 
   const propertiesWithStats = useMemo(() => {
     const propertyStats = activeProperties.map((property) => {
@@ -106,6 +118,29 @@ const PropertiesOverview = ({ darkMode }) => {
       });
 
       const invoicedThisMonth = periodInvoices.reduce((sum, invoice) => sum + amountFromInvoice(invoice), 0);
+      const bookedRentThisMonth = periodInvoices
+        .filter((invoice) => String(invoice?.category || '').toUpperCase() === 'RENT_CHARGE')
+        .reduce((sum, invoice) => sum + amountFromInvoice(invoice), 0);
+
+      const expectedCollections = tenants
+        .filter((tenant) => isOperationalTenant(tenant))
+        .reduce((sum, tenant) => {
+          const primaryUnitId = String(getId(tenant?.unit) || '');
+          const additionalUnitIds = Array.isArray(tenant?.additionalUnits)
+            ? tenant.additionalUnits.map((item) => String(getId(item) || '')).filter(Boolean)
+            : [];
+
+          if (primaryUnitId && unitIds.has(primaryUnitId)) {
+            return sum + Number(tenant?.rent || unitMap.get(primaryUnitId)?.rent || 0);
+          }
+
+          const additionalPropertyRent = additionalUnitIds.reduce((unitSum, additionalUnitId) => {
+            if (!unitIds.has(additionalUnitId)) return unitSum;
+            return unitSum + Number(unitMap.get(additionalUnitId)?.rent || 0);
+          }, 0);
+
+          return sum + additionalPropertyRent;
+        }, 0);
 
       const monthlyCollectionRaw = rentPayments
         .filter((payment) => {
@@ -125,6 +160,13 @@ const PropertiesOverview = ({ darkMode }) => {
       const monthlyCollection = invoicedThisMonth > 0 ? monthlyCollectionRaw : 0;
       const collectionRate = invoicedThisMonth > 0 ? (monthlyCollection / invoicedThisMonth) * 100 : 0;
       const invoicedStatus = invoicedThisMonth > 0 ? 'Invoiced' : 'Not invoiced';
+      const expectedBookingRate = expectedCollections > 0 ? (bookedRentThisMonth / expectedCollections) * 100 : 0;
+      const expectedBookingStatus =
+        expectedCollections <= 0
+          ? 'No expected rent'
+          : bookedRentThisMonth + 0.009 >= expectedCollections
+          ? 'Fully booked'
+          : 'Booking gap';
 
       return {
         id: propertyId,
@@ -135,6 +177,10 @@ const PropertiesOverview = ({ darkMode }) => {
         vacantUnits,
         occupancyRate,
         expectedRevenue: invoicedThisMonth,
+        expectedCollections,
+        bookedRentThisMonth,
+        expectedBookingRate,
+        expectedBookingStatus,
         monthlyCollection,
         collectionRate,
         invoicedStatus,
@@ -142,7 +188,7 @@ const PropertiesOverview = ({ darkMode }) => {
     });
 
     return propertyStats.sort((a, b) => b.occupancyRate - a.occupancyRate);
-  }, [activeProperties, invoices, units, rentPayments, currentMonth, currentYear]);
+  }, [activeProperties, invoices, units, tenants, rentPayments, currentMonth, currentYear, unitMap]);
 
   const portfolioOccupancy = useMemo(() => {
     const totalUnits = propertiesWithStats.reduce((sum, item) => sum + item.totalUnits, 0);
@@ -167,7 +213,11 @@ const PropertiesOverview = ({ darkMode }) => {
             Invoice-aware property billing and collection snapshot.
           </p>
         </div>
-        <button className="text-xs font-bold text-[#31694E] hover:text-[#E85C0D] transition-colors uppercase tracking-wide">
+        <button
+          type="button"
+          onClick={() => navigate('/properties', { state: { tabTitle: 'Properties' } })}
+          className="text-xs font-bold text-[#31694E] hover:text-[#E85C0D] transition-colors uppercase tracking-wide"
+        >
           View all →
         </button>
       </div>
@@ -237,7 +287,7 @@ const PropertiesOverview = ({ darkMode }) => {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <div>
                   <div className="flex items-center justify-between text-[11px] mb-1">
                     <span className={`${darkMode ? 'text-gray-500' : 'text-gray-600'} font-bold`}>Occupancy</span>
@@ -255,6 +305,27 @@ const PropertiesOverview = ({ darkMode }) => {
                   </div>
                   <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-[#E85C0D] to-[#ff8c42] rounded-full" style={{ width: `${Math.min(property.collectionRate, 100)}%` }} />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-2 text-[11px] mb-1">
+                    <span className={`${darkMode ? 'text-gray-500' : 'text-gray-600'} font-bold`}>Expected collections</span>
+                    <div className="flex items-center gap-2 text-right">
+                      <span className="font-extrabold text-[#1f4a35]">{formatMoney(property.bookedRentThisMonth)} / {formatMoney(property.expectedCollections)}</span>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.14em] ${
+                        property.expectedBookingStatus === 'Fully booked'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : property.expectedBookingStatus === 'Booking gap'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}>
+                        {property.expectedBookingStatus}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-[#0B3B2E] to-[#4a9976] rounded-full" style={{ width: `${Math.min(property.expectedBookingRate, 100)}%` }} />
                   </div>
                 </div>
               </div>

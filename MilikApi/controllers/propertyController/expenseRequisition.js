@@ -5,6 +5,10 @@ import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
+const VALID_CATEGORIES = ["maintenance", "repair", "utility", "tax", "insurance", "supplies", "other", "general"];
+const VALID_PRIORITIES = ["low", "normal", "high", "urgent"];
+const VALID_STATUSES = ["draft", "submitted", "approved", "rejected", "converted", "cancelled"];
+
 const resolveBusinessId = (req) =>
   req?.query?.business ||
   req?.query?.company ||
@@ -29,19 +33,20 @@ const parseDate = (value, fallback = null) => {
 
 const normalizeCategory = (value) => {
   const normalized = String(value || "other").trim().toLowerCase();
-  if (["maintenance", "repair", "utility", "tax", "insurance", "supplies", "other", "general"].includes(normalized)) {
-    return normalized;
-  }
-  return "other";
+  return VALID_CATEGORIES.includes(normalized) ? normalized : "other";
+};
+
+const normalizePriority = (value) => {
+  const normalized = String(value || "normal").trim().toLowerCase();
+  return VALID_PRIORITIES.includes(normalized) ? normalized : "normal";
 };
 
 const normalizeStatus = (value, fallback = "draft") => {
   const normalized = String(value || fallback).trim().toLowerCase();
-  if (["draft", "submitted", "approved", "rejected", "converted", "cancelled"].includes(normalized)) {
-    return normalized;
-  }
-  return fallback;
+  return VALID_STATUSES.includes(normalized) ? normalized : fallback;
 };
+
+const sanitizeReason = (value, fallback = "") => String(value || fallback).trim();
 
 const populateQuery = (query) =>
   query
@@ -50,9 +55,12 @@ const populateQuery = (query) =>
     .populate("landlord", "landlordName firstName lastName")
     .populate("serviceProvider", "name providerCode phone email category")
     .populate("requestedBy", "username email firstName lastName")
+    .populate("submittedBy", "username email firstName lastName")
     .populate("approvedBy", "username email firstName lastName")
     .populate("rejectedBy", "username email firstName lastName")
-    .populate("linkedVoucher", "voucherNo status amount dueDate");
+    .populate("cancelledBy", "username email firstName lastName")
+    .populate("convertedBy", "username email firstName lastName")
+    .populate("linkedVoucher", "voucherNo status amount dueDate reference");
 
 const generateRequisitionNo = async (businessId) => {
   const prefix = "ERQ";
@@ -81,6 +89,160 @@ const resolveVendorName = async (serviceProviderId, fallbackVendorName = "") => 
   return String(fallbackVendorName || "").trim();
 };
 
+const ensureEditableDraft = (row) => {
+  if (String(row?.status || "") !== "draft") {
+    const error = new Error("Only draft expense requisitions can be edited. Recall or reopen the requisition first.");
+    error.statusCode = 400;
+    throw error;
+  }
+};
+
+const ensureNoLinkedVoucher = (row, message = "This requisition is already linked to a payment voucher.") => {
+  if (row?.linkedVoucher) {
+    const error = new Error(message);
+    error.statusCode = 400;
+    throw error;
+  }
+};
+
+const setSubmittedAudit = (row, actorUserId) => {
+  row.submittedAt = row.submittedAt || new Date();
+  row.submittedBy = row.submittedBy || actorUserId;
+  row.cancelledAt = null;
+  row.cancelledBy = null;
+  row.cancellationReason = "";
+};
+
+const clearSubmissionAuditForDraft = (row) => {
+  row.submittedAt = null;
+  row.submittedBy = null;
+};
+
+const setApprovedAudit = (row, actorUserId, approvalNote = "") => {
+  row.approvedAt = new Date();
+  row.approvedBy = actorUserId;
+  row.approvalNote = sanitizeReason(approvalNote, row.approvalNote || "");
+  row.rejectedAt = null;
+  row.rejectedBy = null;
+  row.rejectionReason = "";
+  row.cancelledAt = null;
+  row.cancelledBy = null;
+  row.cancellationReason = "";
+};
+
+const setRejectedAudit = (row, actorUserId, reason) => {
+  row.rejectedAt = new Date();
+  row.rejectedBy = actorUserId;
+  row.rejectionReason = sanitizeReason(reason, "Rejected");
+};
+
+const setCancelledAudit = (row, actorUserId, reason) => {
+  row.cancelledAt = new Date();
+  row.cancelledBy = actorUserId;
+  row.cancellationReason = sanitizeReason(reason, "Cancelled");
+};
+
+const applyDraftFieldUpdates = async (row, body = {}) => {
+  if (Object.prototype.hasOwnProperty.call(body || {}, "title")) {
+    const title = String(body?.title || "").trim();
+    if (!title) {
+      const error = new Error("Requisition title is required");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.title = title;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "description")) {
+    row.description = String(body?.description || "").trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "notes")) {
+    row.notes = String(body?.notes || "").trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "category")) {
+    row.category = normalizeCategory(body?.category);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "priority")) {
+    row.priority = normalizePriority(body?.priority);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "amount")) {
+    const amount = Number(body?.amount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      const error = new Error("Valid requisition amount is required");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.amount = amount;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "property")) {
+    if (!isValidObjectId(body?.property)) {
+      const error = new Error("Property is required");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.property = body.property;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "unit")) {
+    row.unit = isValidObjectId(body?.unit) ? body.unit : null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "landlord")) {
+    row.landlord = isValidObjectId(body?.landlord) ? body.landlord : null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "requestDate")) {
+    const requestDate = parseDate(body?.requestDate, null);
+    if (!requestDate) {
+      const error = new Error("Valid request date is required");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.requestDate = requestDate;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "neededBy") || Object.prototype.hasOwnProperty.call(body || {}, "neededByDate")) {
+    const neededBy = parseDate(body?.neededBy || body?.neededByDate, null);
+    row.neededBy = neededBy;
+    row.neededByDate = neededBy;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "serviceProvider")) {
+    row.serviceProvider = isValidObjectId(body?.serviceProvider) ? body.serviceProvider : null;
+    row.vendorName = await resolveVendorName(row.serviceProvider, body?.vendorName || row.vendorName);
+  } else if (Object.prototype.hasOwnProperty.call(body || {}, "vendorName")) {
+    row.vendorName = String(body?.vendorName || "").trim();
+  }
+};
+
+const ensureAllowedTransition = (row, nextStatus) => {
+  const currentStatus = String(row?.status || "draft");
+
+  if (currentStatus === nextStatus) {
+    return;
+  }
+
+  const allowed = {
+    draft: ["submitted", "cancelled"],
+    submitted: ["approved", "rejected", "draft", "cancelled"],
+    approved: ["cancelled"],
+    rejected: ["draft", "cancelled"],
+    converted: [],
+    cancelled: ["draft"],
+  };
+
+  if (!allowed[currentStatus]?.includes(nextStatus)) {
+    const error = new Error(`Cannot move expense requisition from ${currentStatus} to ${nextStatus}.`);
+    error.statusCode = 400;
+    throw error;
+  }
+};
+
 export const createExpenseRequisition = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -102,11 +264,17 @@ export const createExpenseRequisition = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Requisition title is required" });
     }
 
-    const requisitionNo = String(req.body?.requisitionNo || req.body?.referenceNo || "").trim() || (await generateRequisitionNo(businessId));
+    const requestedStatus = normalizeStatus(req.body?.status, "draft");
+    if (!["draft", "submitted"].includes(requestedStatus)) {
+      return res.status(400).json({ success: false, message: "New expense requisitions can only be saved as draft or submitted for approval." });
+    }
+
+    const requisitionNo =
+      String(req.body?.requisitionNo || req.body?.referenceNo || "").trim() ||
+      (await generateRequisitionNo(businessId));
     const requestedDate = parseDate(req.body?.requestDate, new Date());
     const neededBy = parseDate(req.body?.neededBy || req.body?.neededByDate, null);
     const serviceProviderId = isValidObjectId(req.body?.serviceProvider) ? req.body.serviceProvider : null;
-    const status = normalizeStatus(req.body?.status, "draft");
 
     const doc = await ExpenseRequisition.create({
       business: businessId,
@@ -122,14 +290,14 @@ export const createExpenseRequisition = async (req, res, next) => {
       requestDate: requestedDate,
       neededBy,
       neededByDate: neededBy,
-      priority: ["low", "normal", "high", "urgent"].includes(String(req.body?.priority || "").toLowerCase())
-        ? String(req.body?.priority || "").toLowerCase()
-        : "normal",
+      priority: normalizePriority(req.body?.priority),
       category: normalizeCategory(req.body?.category),
-      status,
+      status: requestedStatus,
       notes: String(req.body?.notes || "").trim(),
       vendorName: await resolveVendorName(serviceProviderId, req.body?.vendorName),
       requestedBy: actorUserId,
+      submittedBy: requestedStatus === "submitted" ? actorUserId : null,
+      submittedAt: requestedStatus === "submitted" ? new Date() : null,
     });
 
     const populated = await populateQuery(ExpenseRequisition.findById(doc._id));
@@ -175,66 +343,28 @@ export const updateExpenseRequisition = async (req, res, next) => {
 
     const row = await ExpenseRequisition.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Expense requisition not found" });
-    if (!["draft", "submitted"].includes(String(row.status))) {
-      return res.status(400).json({ success: false, message: "Only draft or submitted requisitions can be edited." });
+
+    ensureEditableDraft(row);
+
+    await applyDraftFieldUpdates(row, req.body || {});
+
+    const requestedStatus = Object.prototype.hasOwnProperty.call(req.body || {}, "status")
+      ? normalizeStatus(req.body?.status, row.status)
+      : row.status;
+
+    if (!["draft", "submitted"].includes(requestedStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Draft edits can only remain as draft or be submitted for approval.",
+      });
     }
 
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "title")) {
-      const title = String(req.body?.title || "").trim();
-      if (!title) return res.status(400).json({ success: false, message: "Requisition title is required" });
-      row.title = title;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "description")) row.description = String(req.body?.description || "").trim();
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "notes")) row.notes = String(req.body?.notes || "").trim();
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "category")) row.category = normalizeCategory(req.body?.category);
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "priority")) {
-      row.priority = ["low", "normal", "high", "urgent"].includes(String(req.body?.priority || "").toLowerCase())
-        ? String(req.body?.priority || "").toLowerCase()
-        : "normal";
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "amount")) {
-      const amount = Number(req.body?.amount || 0);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return res.status(400).json({ success: false, message: "Valid requisition amount is required" });
-      }
-      row.amount = amount;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "property")) {
-      if (!isValidObjectId(req.body?.property)) {
-        return res.status(400).json({ success: false, message: "Property is required" });
-      }
-      row.property = req.body.property;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "unit")) {
-      row.unit = isValidObjectId(req.body?.unit) ? req.body.unit : null;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "landlord")) {
-      row.landlord = isValidObjectId(req.body?.landlord) ? req.body.landlord : null;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "requestDate")) {
-      const requestDate = parseDate(req.body?.requestDate, null);
-      if (!requestDate) return res.status(400).json({ success: false, message: "Valid request date is required" });
-      row.requestDate = requestDate;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "neededBy") || Object.prototype.hasOwnProperty.call(req.body || {}, "neededByDate")) {
-      const neededBy = parseDate(req.body?.neededBy || req.body?.neededByDate, null);
-      row.neededBy = neededBy;
-      row.neededByDate = neededBy;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "serviceProvider")) {
-      row.serviceProvider = isValidObjectId(req.body?.serviceProvider) ? req.body.serviceProvider : null;
-      row.vendorName = await resolveVendorName(row.serviceProvider, req.body?.vendorName || row.vendorName);
-    } else if (Object.prototype.hasOwnProperty.call(req.body || {}, "vendorName")) {
-      row.vendorName = String(req.body?.vendorName || "").trim();
+    row.status = requestedStatus;
+    if (requestedStatus === "submitted") {
+      const actorUserId = await resolveActorUserId(req, businessId);
+      setSubmittedAudit(row, actorUserId);
+    } else {
+      clearSubmissionAuditForDraft(row);
     }
 
     await row.save();
@@ -255,33 +385,62 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Invalid requisition status" });
     }
 
+    if (status === "converted") {
+      return res.status(400).json({
+        success: false,
+        message: "Expense requisitions become converted only when a payment voucher is created from them.",
+      });
+    }
+
     const row = await ExpenseRequisition.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Expense requisition not found" });
+
+    ensureAllowedTransition(row, status);
+
+    if (["cancelled", "draft", "rejected"].includes(status)) {
+      ensureNoLinkedVoucher(
+        row,
+        "This requisition is linked to a payment voucher. Clear or delete the voucher first."
+      );
+    }
 
     const actorUserId = await resolveActorUserId(req, businessId);
 
     row.status = status;
 
-    if (status === "approved") {
-      row.approvedAt = new Date();
-      row.approvedBy = actorUserId;
+    if (status === "submitted") {
+      setSubmittedAudit(row, actorUserId);
+      row.approvedAt = null;
+      row.approvedBy = null;
+      row.approvalNote = "";
       row.rejectedAt = null;
       row.rejectedBy = null;
       row.rejectionReason = "";
+      row.cancelledAt = null;
+      row.cancelledBy = null;
+      row.cancellationReason = "";
+    } else if (status === "approved") {
+      setApprovedAudit(row, actorUserId, req.body?.approvalNote || req.body?.reason || "");
     } else if (status === "rejected") {
-      row.rejectedAt = new Date();
-      row.rejectedBy = actorUserId;
-      row.rejectionReason = String(req.body?.reason || "Rejected").trim();
-    } else if (status === "draft" || status === "submitted" || status === "cancelled") {
-      if (status === "draft") {
-        row.approvedAt = null;
-        row.approvedBy = null;
+      const reason = sanitizeReason(req.body?.reason || req.body?.rejectionReason || "");
+      if (!reason) {
+        return res.status(400).json({ success: false, message: "Rejection reason is required." });
       }
-      if (status !== "rejected") {
-        row.rejectedAt = null;
-        row.rejectedBy = null;
-        row.rejectionReason = "";
-      }
+      setRejectedAudit(row, actorUserId, reason);
+    } else if (status === "cancelled") {
+      const reason = sanitizeReason(req.body?.reason || req.body?.cancellationReason || "Cancelled");
+      setCancelledAudit(row, actorUserId, reason);
+    } else if (status === "draft") {
+      clearSubmissionAuditForDraft(row);
+      row.approvedAt = null;
+      row.approvedBy = null;
+      row.approvalNote = "";
+      row.rejectedAt = null;
+      row.rejectedBy = null;
+      row.rejectionReason = "";
+      row.cancelledAt = null;
+      row.cancelledBy = null;
+      row.cancellationReason = "";
     }
 
     await row.save();
@@ -299,9 +458,15 @@ export const deleteExpenseRequisition = async (req, res, next) => {
 
     const row = await ExpenseRequisition.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Expense requisition not found" });
-    if (["approved", "converted"].includes(String(row.status))) {
-      return res.status(400).json({ success: false, message: "Approved or converted requisitions cannot be deleted." });
+
+    if (!["draft", "rejected", "cancelled"].includes(String(row.status))) {
+      return res.status(400).json({
+        success: false,
+        message: "Only draft, rejected, or cancelled requisitions can be deleted.",
+      });
     }
+
+    ensureNoLinkedVoucher(row, "This requisition is linked to a payment voucher and cannot be deleted.");
 
     await ExpenseRequisition.deleteOne({ _id: row._id, business: businessId });
     res.status(200).json({ success: true, message: "Expense requisition deleted" });

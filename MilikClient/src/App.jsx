@@ -177,8 +177,6 @@ function ProtectedRoute({ children, allowMustChangePassword = false }) {
   return children;
 }
 
-
-
 function PermissionRoute({ children, resource, action = "view", moduleKey = null, fallback = "/moduleDashboard" }) {
   const { currentUser } = useSelector((state) => state.auth);
   const { currentCompany } = useSelector((state) => state.company);
@@ -192,7 +190,6 @@ function PermissionRoute({ children, resource, action = "view", moduleKey = null
   return allowed ? children : <Navigate to={fallback} replace />;
 }
 
-
 function SuperAdminRoute({ children }) {
   const { currentUser } = useSelector((state) => state.auth);
   const storedSession = getStoredAuthSession();
@@ -204,7 +201,6 @@ function SuperAdminRoute({ children }) {
   if (!isAuthenticated) return <Navigate to={getSignedOutRedirectPath()} replace />;
   return canAccess ? children : <Navigate to="/moduleDashboard" replace />;
 }
-
 
 function resolveDefaultAuthenticatedRoute(currentUser) {
   if (
@@ -229,6 +225,42 @@ function PublicOnlyRoute({ children }) {
   return <Navigate to={resolveDefaultAuthenticatedRoute(resolvedUser)} replace />;
 }
 
+function AppDocumentTitleGuard() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    const forceTitle = () => {
+      if (document.title !== "MILIK") {
+        document.title = "MILIK";
+      }
+    };
+
+    forceTitle();
+
+    const observer = new MutationObserver(() => {
+      if (document.title !== "MILIK") {
+        document.title = "MILIK";
+      }
+    });
+
+    if (document.head) {
+      observer.observe(document.head, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      });
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [location.pathname, location.search, location.hash]);
+
+  return null;
+}
+
 function PublicEntryRoute() {
   const { currentUser } = useSelector((state) => state.auth);
   const storedSession = getStoredAuthSession();
@@ -242,7 +274,6 @@ function PublicEntryRoute() {
 
   return <Home />;
 }
-
 
 function App() {
   const dispatch = useDispatch();
@@ -342,6 +373,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <AppDocumentTitleGuard />
       <Routes>
         <Route path="/" element={<PublicEntryRoute />} />
         <Route path="/home" element={<Navigate to="/" replace />} />
@@ -439,4 +471,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;

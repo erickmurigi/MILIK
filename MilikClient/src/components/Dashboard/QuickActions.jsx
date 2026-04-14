@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
   FaArrowRight,
@@ -13,6 +14,7 @@ import {
 import { adminRequests } from '../../utils/requestMethods';
 
 const QuickActions = ({ darkMode }) => {
+  const navigate = useNavigate();
   const currentCompany = useSelector(state => state.company?.currentCompany);
   const currentUser = useSelector(state => state.auth?.currentUser);
   const units = useSelector(state => state.unit?.units || []);
@@ -88,13 +90,76 @@ const QuickActions = ({ darkMode }) => {
   const pendingVoucherApprovals = paymentVouchers.filter((item) => item?.status === 'draft').length;
 
   const items = [
-    { id: 'vacant-units', label: 'Vacant units', value: vacantUnits, icon: <FaHome />, tone: 'green', helper: 'Open inventory reducing occupancy' },
-    { id: 'overdue-invoices', label: 'Overdue invoices', value: overdueInvoices, icon: <FaFileInvoiceDollar />, tone: 'orange', helper: 'Collections that need follow-up now' },
-    { id: 'leases-expiring', label: 'Leases expiring in 30 days', value: leasesExpiringSoon, icon: <FaFileAlt />, tone: 'blue', helper: 'Renewal attention required soon' },
-    { id: 'unposted-receipts', label: 'Unposted receipts', value: unpostedReceipts, icon: <FaReceipt />, tone: 'amber', helper: 'Receipts awaiting posting / confirmation' },
-    { id: 'pending-maintenance', label: 'Pending maintenance requests', value: pendingMaintenance, icon: <FaTools />, tone: 'red', helper: 'Operational issues awaiting action' },
-    { id: 'pending-statements', label: 'Landlord statements pending processing', value: pendingStatements, icon: <FaClipboardList />, tone: 'purple', helper: 'Statements not fully settled yet' },
-    { id: 'pending-vouchers', label: 'Payment vouchers pending approvals', value: pendingVoucherApprovals, icon: <FaExclamationTriangle />, tone: 'slate', helper: 'Draft vouchers still awaiting workflow action' },
+    {
+      id: 'vacant-units',
+      label: 'Vacant units',
+      value: vacantUnits,
+      icon: <FaHome />,
+      tone: 'green',
+      helper: 'Open units workspace to review empty spaces and occupancy.',
+      route: '/units',
+      tabTitle: 'Units',
+    },
+    {
+      id: 'overdue-invoices',
+      label: 'Overdue invoices',
+      value: overdueInvoices,
+      icon: <FaFileInvoiceDollar />,
+      tone: 'orange',
+      helper: 'Open rental invoices to follow up overdue tenant balances.',
+      route: '/invoices/rental',
+      tabTitle: 'Rental Invoices',
+    },
+    {
+      id: 'leases-expiring',
+      label: 'Leases expiring in 30 days',
+      value: leasesExpiringSoon,
+      icon: <FaFileAlt />,
+      tone: 'blue',
+      helper: 'Open tenants workspace to review renewals and tenant records.',
+      route: '/tenants',
+      tabTitle: 'Tenants',
+    },
+    {
+      id: 'unposted-receipts',
+      label: 'Unposted receipts',
+      value: unpostedReceipts,
+      icon: <FaReceipt />,
+      tone: 'amber',
+      helper: 'Open receipts to post or confirm incoming collections.',
+      route: '/receipts',
+      tabTitle: 'Receipts',
+    },
+    {
+      id: 'pending-maintenance',
+      label: 'Pending maintenance requests',
+      value: pendingMaintenance,
+      icon: <FaTools />,
+      tone: 'red',
+      helper: 'Open maintenance workspace for pending operational tasks.',
+      route: '/maintenances',
+      tabTitle: 'Maintenance',
+    },
+    {
+      id: 'pending-statements',
+      label: 'Landlord statements pending processing',
+      value: pendingStatements,
+      icon: <FaClipboardList />,
+      tone: 'purple',
+      helper: 'Open processed statements to review unsettled landlord statements.',
+      route: '/landlord/processed-statements',
+      tabTitle: 'Processed Statements',
+    },
+    {
+      id: 'pending-vouchers',
+      label: 'Payment vouchers pending approvals',
+      value: pendingVoucherApprovals,
+      icon: <FaExclamationTriangle />,
+      tone: 'slate',
+      helper: 'Open payment vouchers for approval and posting workflow.',
+      route: '/financial/payment-vouchers',
+      tabTitle: 'Payment Vouchers',
+    },
   ];
 
   const getToneClasses = (tone) => {
@@ -109,6 +174,17 @@ const QuickActions = ({ darkMode }) => {
     };
     return tones[tone] || tones.green;
   };
+
+  const handleItemOpen = (item) => {
+    if (!item?.route) return;
+    navigate(item.route, { state: { tabTitle: item.tabTitle || item.label } });
+  };
+
+  const priorityItem = useMemo(() => {
+    return items
+      .filter((item) => Number(item.value || 0) > 0)
+      .sort((a, b) => Number(b.value || 0) - Number(a.value || 0))[0] || null;
+  }, [items]);
 
   return (
     <div className={`dashboard-panel rounded-xl ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#f8faf9] border-[#31694E]/10'} shadow-md border p-4`}>
@@ -130,9 +206,11 @@ const QuickActions = ({ darkMode }) => {
         {items.map((item) => {
           const tone = getToneClasses(item.tone);
           return (
-            <div
+            <button
               key={item.id}
-              className={`rounded-xl border p-3 transition-all ${darkMode ? 'border-gray-700 bg-gray-700/30 hover:bg-gray-700/50' : `${tone.border} bg-white hover:shadow-sm`}`}
+              type="button"
+              onClick={() => handleItemOpen(item)}
+              className={`w-full text-left rounded-xl border p-3 transition-all ${darkMode ? 'border-gray-700 bg-gray-700/30 hover:bg-gray-700/50' : `${tone.border} bg-white hover:shadow-sm`} focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/30`}
             >
               <div className="flex items-start gap-3">
                 <div className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} ${tone.icon}`}>
@@ -141,27 +219,41 @@ const QuickActions = ({ darkMode }) => {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-3">
                     <div className={`text-sm font-bold leading-5 ${darkMode ? 'text-white' : 'text-slate-900'}`}>{item.label}</div>
-                    <div className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-extrabold ${darkMode ? 'bg-gray-800 text-white' : tone.badge}`}>
-                      {loading ? '...' : item.value}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className={`rounded-full px-2.5 py-1 text-xs font-extrabold ${darkMode ? 'bg-gray-800 text-white' : tone.badge}`}>
+                        {loading ? '...' : item.value}
+                      </div>
+                      <div className={`hidden sm:inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-[0.14em] ${darkMode ? 'text-gray-400' : 'text-[#31694E]'}`}>
+                        Open
+                        <FaArrowRight className="text-[10px]" />
+                      </div>
                     </div>
                   </div>
                   <div className={`mt-1 text-xs ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>{item.helper}</div>
                 </div>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
 
-      <div className={`mt-4 rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-700/20' : 'border-[#dce9e1] bg-white/90'}`}>
-        <div className="flex items-center justify-between">
+      <button
+        type="button"
+        onClick={() => priorityItem && handleItemOpen(priorityItem)}
+        className={`mt-4 w-full rounded-xl border p-3 text-left transition ${darkMode ? 'border-gray-700 bg-gray-700/20 hover:bg-gray-700/35' : 'border-[#dce9e1] bg-white/90 hover:bg-white'} ${priorityItem ? 'cursor-pointer' : 'cursor-default'}`}
+      >
+        <div className="flex items-center justify-between gap-3">
           <div>
             <div className={`text-[10px] font-extrabold uppercase tracking-[0.18em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>Focus today</div>
-            <div className={`mt-1 text-sm font-bold ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>Collections and pending posting items first.</div>
+            <div className={`mt-1 text-sm font-bold ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>
+              {priorityItem
+                ? `${priorityItem.label} require attention first.`
+                : 'Collections and pending posting items first.'}
+            </div>
           </div>
           <FaArrowRight className={darkMode ? 'text-gray-500' : 'text-[#31694E]'} />
         </div>
-      </div>
+      </button>
     </div>
   );
 };

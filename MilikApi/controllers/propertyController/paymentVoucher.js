@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import PaymentVoucher from "../../models/PaymentVoucher.js";
+import ExpenseRequisition from "../../models/ExpenseRequisition.js";
 import ExpenseProperty from "../../models/ExpenseProperty.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
@@ -338,7 +339,8 @@ const populateVoucherQuery = (query) =>
     .populate("reversedBy", "surname otherNames email")
     .populate("liabilityAccount", "code name type accountType nature accountNature")
     .populate("debitAccount", "code name type accountType nature accountNature")
-    .populate("expenseRecord");
+    .populate("expenseRecord")
+    .populate("sourceRequisition", "requisitionNo referenceNo status title amount property linkedVoucher");
 
 const createExpenseRecordForVoucher = async (voucher) => {
   const expenseCategory = getExpenseCategory(voucher.category);
@@ -357,6 +359,81 @@ const createExpenseRecordForVoucher = async (voucher) => {
   });
 
   return expense;
+};
+
+const resolveVoucherSourceRequisition = async ({
+  businessId,
+  requisitionId = null,
+  propertyId = null,
+  currentVoucherId = null,
+}) => {
+  if (!requisitionId || !isValidObjectId(requisitionId)) {
+    return null;
+  }
+
+  const requisition = await ExpenseRequisition.findOne({
+    _id: requisitionId,
+    business: businessId,
+  });
+
+  if (!requisition) {
+    throw new Error("Source expense requisition was not found.");
+  }
+
+  if (!["approved", "converted"].includes(String(requisition.status || ""))) {
+    throw new Error("Only approved expense requisitions can be converted into payment vouchers.");
+  }
+
+  if (propertyId && String(requisition.property || "") !== String(propertyId || "")) {
+    throw new Error("Selected property must match the approved source requisition.");
+  }
+
+  if (requisition.linkedVoucher) {
+    const sameVoucher = currentVoucherId && String(requisition.linkedVoucher) === String(currentVoucherId);
+    if (!sameVoucher) {
+      const linkedVoucher = await PaymentVoucher.findOne({
+        _id: requisition.linkedVoucher,
+        business: businessId,
+      })
+        .select("_id status voucherNo")
+        .lean();
+
+      if (linkedVoucher && linkedVoucher.status !== "reversed") {
+        throw new Error(`Expense requisition ${requisition.requisitionNo || requisition.referenceNo} is already linked to voucher ${linkedVoucher.voucherNo}.`);
+      }
+    }
+  }
+
+  return requisition;
+};
+
+const syncRequisitionAfterVoucherLink = async ({ requisition, voucher, actorUserId = null }) => {
+  if (!requisition || !voucher) return;
+  requisition.linkedVoucher = voucher._id;
+  requisition.status = "converted";
+  requisition.convertedAt = new Date();
+  requisition.convertedBy = actorUserId || requisition.convertedBy || null;
+  await requisition.save();
+};
+
+const releaseSourceRequisitionFromVoucher = async ({ voucher, businessId }) => {
+  if (!voucher?.sourceRequisition) return;
+
+  const requisition = await ExpenseRequisition.findOne({
+    _id: voucher.sourceRequisition,
+    business: businessId,
+  });
+
+  if (!requisition) return;
+  if (String(requisition.linkedVoucher || "") !== String(voucher._id || "")) return;
+
+  requisition.linkedVoucher = null;
+  if (requisition.status === "converted") {
+    requisition.status = "approved";
+  }
+  requisition.convertedAt = null;
+  requisition.convertedBy = null;
+  await requisition.save();
 };
 
 const deleteExpenseRecordForVoucher = async (voucher) => {
@@ -575,6 +652,12 @@ export const createPaymentVoucher = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Valid voucher amount is required" });
     }
 
+    const sourceRequisition = await resolveVoucherSourceRequisition({
+      businessId,
+      requisitionId: req.body?.sourceRequisition || null,
+      propertyId: req.body?.property,
+    });
+
     const voucherNo = await generateVoucherNo(businessId);
     const accountingContext = await resolveVoucherLandlordContext({
       businessId,
@@ -595,12 +678,21 @@ export const createPaymentVoucher = async (req, res, next) => {
       status: req.body.status || "draft",
       voucherNo,
       business: businessId,
+      sourceRequisition: sourceRequisition?._id || null,
     };
 
     const voucher = await new PaymentVoucher(payload).save();
+    const actorUserId = await resolveActorUserId(req, businessId);
+
+    if (sourceRequisition) {
+      await syncRequisitionAfterVoucherLink({
+        requisition: sourceRequisition,
+        voucher,
+        actorUserId,
+      });
+    }
 
     if (voucher.status === "approved" || voucher.status === "paid") {
-      const actorUserId = await resolveActorUserId(req, businessId);
       await ensureVoucherAccrualPosting({ voucher, actorUserId });
 
       if (voucher.status === "approved") {
@@ -696,6 +788,7 @@ export const updatePaymentVoucher = async (req, res, next) => {
       "paidDate",
       "reference",
       "narration",
+      "sourceRequisition",
     ];
 
     const payload = Object.fromEntries(
@@ -716,7 +809,22 @@ export const updatePaymentVoucher = async (req, res, next) => {
       });
     }
 
+    const requestedSourceRequisitionId = Object.prototype.hasOwnProperty.call(payload, "sourceRequisition")
+      ? payload.sourceRequisition
+      : existing.sourceRequisition;
+
+    if (existing.sourceRequisition && Object.prototype.hasOwnProperty.call(payload, "sourceRequisition")) {
+      payload.sourceRequisition = existing.sourceRequisition;
+    }
+
     const propertyId = payload.property || existing.property;
+    const sourceRequisition = await resolveVoucherSourceRequisition({
+      businessId: business,
+      requisitionId: requestedSourceRequisitionId || null,
+      propertyId,
+      currentVoucherId: existing._id,
+    });
+
     const accountingContext = await resolveVoucherLandlordContext({
       businessId: business,
       propertyId,
@@ -724,6 +832,7 @@ export const updatePaymentVoucher = async (req, res, next) => {
     });
 
     payload.landlord = accountingContext.landlordId;
+    payload.sourceRequisition = sourceRequisition?._id || existing.sourceRequisition || null;
 
     const updated = await populateVoucherQuery(
       PaymentVoucher.findOneAndUpdate(
@@ -732,6 +841,15 @@ export const updatePaymentVoucher = async (req, res, next) => {
         { new: true }
       )
     );
+
+    if (sourceRequisition) {
+      const actorUserId = await resolveActorUserId(req, business);
+      await syncRequisitionAfterVoucherLink({
+        requisition: sourceRequisition,
+        voucher: updated,
+        actorUserId,
+      });
+    }
 
     emitToCompany(updated.business, "voucher:updated", { voucherId: updated._id });
     res.status(200).json(updated);
@@ -803,6 +921,8 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
       voucher.reversedBy = actorUserId;
       voucher.reversalReason = reason || "Voucher reversed";
       voucher.expenseRecord = null;
+
+      await releaseSourceRequisitionFromVoucher({ voucher, businessId: business });
     }
 
     await voucher.save();
@@ -843,6 +963,8 @@ export const deletePaymentVoucher = async (req, res, next) => {
 
       await deleteExpenseRecordForVoucher(row);
     }
+
+    await releaseSourceRequisitionFromVoucher({ voucher: row, businessId: business });
 
     await PaymentVoucher.findOneAndDelete({ _id: req.params.id, business });
     emitToCompany(row.business, "voucher:deleted", { voucherId: row._id });

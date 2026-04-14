@@ -93,6 +93,15 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    submittedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    submittedAt: {
+      type: Date,
+      default: null,
+    },
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -101,6 +110,11 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
     approvedAt: {
       type: Date,
       default: null,
+    },
+    approvalNote: {
+      type: String,
+      default: "",
+      trim: true,
     },
     rejectedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -115,6 +129,29 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
       type: String,
       default: "",
       trim: true,
+    },
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+    cancellationReason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    convertedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    convertedAt: {
+      type: Date,
+      default: null,
     },
     linkedVoucher: {
       type: mongoose.Schema.Types.ObjectId,

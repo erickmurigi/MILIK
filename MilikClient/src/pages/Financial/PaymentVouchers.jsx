@@ -13,6 +13,7 @@ import {
 } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
+import { useLocation, useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { hasCompanyPermission } from "../../utils/permissions";
 import {
@@ -47,10 +48,14 @@ const blankForm = {
   narration: "",
   status: "draft",
   reference: "",
+  sourceRequisitionId: "",
+  sourceRequisitionNo: "",
 };
 
 const PaymentVouchers = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const properties = useSelector((state) => state.property?.properties || []);
@@ -79,12 +84,35 @@ const PaymentVouchers = () => {
     landlordName: voucher?.landlord?.landlordName || voucher?.landlord?.name || voucher?.landlordName || "N/A",
     liabilityAccountId: voucher?.liabilityAccount?._id || voucher?.liabilityAccount || voucher?.liabilityAccountId || "",
     liabilityAccountName: voucher?.liabilityAccount?.name || voucher?.liabilityAccountName || "N/A",
+    sourceRequisitionId: voucher?.sourceRequisition?._id || voucher?.sourceRequisition || voucher?.sourceRequisitionId || "",
+    sourceRequisitionNo: voucher?.sourceRequisition?.requisitionNo || voucher?.sourceRequisition?.referenceNo || voucher?.sourceRequisitionNo || "",
   });
 
   useEffect(() => {
     if (!currentCompany?._id) return;
     dispatch(getProperties({ business: currentCompany._id }));
   }, [dispatch, currentCompany?._id]);
+
+  useEffect(() => {
+    if (!location.state) return;
+
+    const { openCreate, prefill, search } = location.state || {};
+
+    if (search) {
+      setFilters((prev) => ({ ...prev, search: String(search || "") }));
+    }
+
+    if (openCreate && prefill) {
+      setEditingVoucherId("");
+      setForm({
+        ...blankForm,
+        ...prefill,
+      });
+      setShowModal(true);
+    }
+
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
 
   useEffect(() => {
     const loadLiabilityAccounts = async () => {
@@ -127,9 +155,9 @@ const PaymentVouchers = () => {
 
   const selectedRows = useMemo(() => filtered.filter((voucher) => selectedIds.includes(voucher._id)), [filtered, selectedIds]);
 
-  const openCreate = () => {
+  const openCreate = (prefill = null) => {
     setEditingVoucherId("");
-    setForm(blankForm);
+    setForm(prefill ? { ...blankForm, ...prefill } : blankForm);
     setShowModal(true);
   };
 
@@ -144,6 +172,8 @@ const PaymentVouchers = () => {
       narration: voucher.narration || "",
       status: voucher.status || "draft",
       reference: voucher.reference || "",
+      sourceRequisitionId: voucher.sourceRequisitionId || "",
+      sourceRequisitionNo: voucher.sourceRequisitionNo || "",
     });
     setShowModal(true);
   };
@@ -173,6 +203,7 @@ const PaymentVouchers = () => {
       narration: form.narration,
       status: form.status,
       reference: form.reference || undefined,
+      sourceRequisition: form.sourceRequisitionId || undefined,
     };
 
     setSaving(true);
@@ -383,6 +414,13 @@ const PaymentVouchers = () => {
               <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10">×</button>
             </div>
             <div className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
+              {form.sourceRequisitionNo ? (
+                <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+                  <span className="font-black uppercase tracking-[0.16em] text-violet-700">Source Requisition</span>
+                  <div className="mt-1 font-bold">{form.sourceRequisitionNo}</div>
+                  <div className="mt-1 text-xs text-violet-700">This voucher will keep the requisition linked and mark it as converted.</div>
+                </div>
+              ) : null}
               <label className="block"><span className="text-sm font-bold text-slate-700">Category</span><select value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20">{categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Property</span><select value={form.propertyId} onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select property</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}</select></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Liability Account</span><select value={form.liabilityAccountId} onChange={(e) => setForm((prev) => ({ ...prev, liabilityAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select liability account</option>{liabilityAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select></label>

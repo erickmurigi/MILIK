@@ -1,7 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { FaCheck, FaEdit, FaPlus, FaSave, FaSearch, FaSquare, FaTrash, FaTimes } from "react-icons/fa";
+import {
+  FaCheck,
+  FaEdit,
+  FaExternalLinkAlt,
+  FaFileInvoiceDollar,
+  FaPlus,
+  FaSave,
+  FaSearch,
+  FaSquare,
+  FaTrash,
+  FaTimes,
+  FaUndo,
+} from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
   createExpenseRequisition,
@@ -13,11 +26,13 @@ import {
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 
+const todayIso = () => new Date().toISOString().split("T")[0];
+
 const blankForm = {
   title: "",
   description: "",
   amount: "",
-  requestDate: new Date().toISOString().split("T")[0],
+  requestDate: todayIso(),
   neededBy: "",
   priority: "normal",
   category: "general",
@@ -28,15 +43,17 @@ const blankForm = {
 };
 
 const statusPill = {
-  draft: "bg-slate-100 text-slate-700",
-  submitted: "bg-blue-100 text-blue-700",
-  approved: "bg-emerald-100 text-emerald-700",
-  rejected: "bg-rose-100 text-rose-700",
-  cancelled: "bg-amber-100 text-amber-700",
+  draft: "bg-slate-100 text-slate-700 border-slate-200",
+  submitted: "bg-blue-100 text-blue-700 border-blue-200",
+  approved: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  converted: "bg-violet-100 text-violet-700 border-violet-200",
+  rejected: "bg-rose-100 text-rose-700 border-rose-200",
+  cancelled: "bg-amber-100 text-amber-700 border-amber-200",
 };
 
 const ExpenseRequisition = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const properties = useSelector((state) => state.property?.properties || []);
 
@@ -78,18 +95,24 @@ const ExpenseRequisition = () => {
 
   const filteredRows = useMemo(() => rows, [rows]);
 
-  const stats = useMemo(() => ({
-    total: filteredRows.length,
-    submitted: filteredRows.filter((row) => row.status === "submitted").length,
-    approvedAmount: filteredRows.filter((row) => row.status === "approved").reduce((sum, row) => sum + Number(row.amount || 0), 0),
-  }), [filteredRows]);
+  const stats = useMemo(
+    () => ({
+      total: filteredRows.length,
+      submitted: filteredRows.filter((row) => row.status === "submitted").length,
+      approvedReady: filteredRows.filter((row) => row.status === "approved" && !row.linkedVoucher).length,
+      converted: filteredRows.filter((row) => row.status === "converted").length,
+    }),
+    [filteredRows]
+  );
 
   const toggleSelect = (id) => {
-    setSelectedIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]);
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   };
 
   const toggleSelectAll = () => {
-    setSelectedIds((prev) => prev.length === filteredRows.length ? [] : filteredRows.map((row) => row._id));
+    setSelectedIds((prev) =>
+      prev.length === filteredRows.length ? [] : filteredRows.map((row) => row._id)
+    );
   };
 
   const openCreate = () => {
@@ -104,7 +127,7 @@ const ExpenseRequisition = () => {
       title: row.title || "",
       description: row.description || "",
       amount: row.amount || "",
-      requestDate: row.requestDate ? new Date(row.requestDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+      requestDate: row.requestDate ? new Date(row.requestDate).toISOString().split("T")[0] : todayIso(),
       neededBy: row.neededBy ? new Date(row.neededBy).toISOString().split("T")[0] : "",
       priority: row.priority || "normal",
       category: row.category || "general",
@@ -116,24 +139,59 @@ const ExpenseRequisition = () => {
     setShowModal(true);
   };
 
-  const handleSave = async () => {
+  const buildVoucherPrefill = (row) => ({
+    category: ["maintenance", "repair"].includes(String(row?.category || "").toLowerCase())
+      ? "landlord_maintenance"
+      : "landlord_other",
+    propertyId: row?.property?._id || row?.property || "",
+    amount: Number(row?.amount || 0),
+    dueDate: row?.neededBy ? new Date(row.neededBy).toISOString().split("T")[0] : todayIso(),
+    narration: [row?.title, row?.description].filter(Boolean).join(" - ").trim(),
+    reference: row?.requisitionNo || row?.referenceNo || "",
+    status: "draft",
+    sourceRequisitionId: row?._id || "",
+    sourceRequisitionNo: row?.requisitionNo || row?.referenceNo || "",
+  });
+
+  const handleSave = async (targetStatus = "draft") => {
     if (!form.title.trim()) {
       toast.warning("Requisition title is required");
+      return;
+    }
+    if (!form.property) {
+      toast.warning("Property is required");
       return;
     }
     if (!Number(form.amount || 0) || Number(form.amount) <= 0) {
       toast.warning("Valid amount is required");
       return;
     }
+
     setSaving(true);
     try {
-      const payload = { ...form, amount: Number(form.amount), business: currentCompany?._id, company: currentCompany?._id };
-      const saved = editingId ? await updateExpenseRequisition(editingId, payload) : await createExpenseRequisition(payload);
-      setRows((prev) => editingId ? prev.map((row) => row._id === editingId ? saved : row) : [saved, ...prev]);
+      const payload = {
+        ...form,
+        status: targetStatus,
+        amount: Number(form.amount),
+        business: currentCompany?._id,
+        company: currentCompany?._id,
+      };
+      const saved = editingId
+        ? await updateExpenseRequisition(editingId, payload)
+        : await createExpenseRequisition(payload);
+      setRows((prev) => (editingId ? prev.map((row) => (row._id === editingId ? saved : row)) : [saved, ...prev]));
       setShowModal(false);
       setEditingId("");
       setForm(blankForm);
-      toast.success(`Expense requisition ${editingId ? "updated" : "saved"}`);
+      toast.success(
+        editingId
+          ? targetStatus === "submitted"
+            ? "Expense requisition updated and submitted for approval"
+            : "Expense requisition draft updated"
+          : targetStatus === "submitted"
+            ? "Expense requisition submitted for approval"
+            : "Expense requisition saved as draft"
+      );
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to save expense requisition");
     } finally {
@@ -155,9 +213,37 @@ const ExpenseRequisition = () => {
 
   const handleStatus = async (row, status) => {
     try {
-      const saved = await updateExpenseRequisitionStatus(row._id, { status, business: currentCompany?._id, company: currentCompany?._id });
-      setRows((prev) => prev.map((item) => item._id === row._id ? saved : item));
-      toast.success(`Requisition ${status}`);
+      let payload = { status, business: currentCompany?._id, company: currentCompany?._id };
+
+      if (status === "approved") {
+        const approvalNote = window.prompt("Approval note (optional)", row?.approvalNote || "");
+        if (approvalNote === null) return;
+        payload = { ...payload, approvalNote };
+      }
+
+      if (status === "rejected") {
+        const reason = window.prompt("Enter rejection reason", row?.rejectionReason || "");
+        if (reason === null) return;
+        if (!String(reason || "").trim()) {
+          toast.warning("Rejection reason is required");
+          return;
+        }
+        payload = { ...payload, reason };
+      }
+
+      if (status === "cancelled") {
+        const reason = window.prompt("Enter cancellation reason", row?.cancellationReason || "Cancelled");
+        if (reason === null) return;
+        payload = { ...payload, reason };
+      }
+
+      const saved = await updateExpenseRequisitionStatus(row._id, payload);
+      setRows((prev) => prev.map((item) => (item._id === row._id ? saved : item)));
+      toast.success(
+        status === "draft"
+          ? "Expense requisition moved back to draft"
+          : `Requisition ${status}`
+      );
     } catch (error) {
       toast.error(error?.response?.data?.message || `Failed to mark requisition ${status}`);
     }
@@ -172,14 +258,118 @@ const ExpenseRequisition = () => {
     for (const id of selectedIds) {
       const row = rows.find((item) => item._id === id);
       if (!row) continue;
-      // Skip approved rows safely
-      if (row.status === "approved") continue;
+      if (!["draft", "rejected", "cancelled"].includes(String(row.status || ""))) continue;
       // eslint-disable-next-line no-await-in-loop
       await deleteExpenseRequisition(id, { business: currentCompany?._id, company: currentCompany?._id }).catch(() => null);
     }
     await loadRows();
     setSelectedIds([]);
-    toast.success("Selected draft/submitted requisitions cleaned up");
+    toast.success("Selected eligible requisitions cleaned up");
+  };
+
+  const handleCreateVoucher = (row) => {
+    navigate("/expenses/payment-vouchers", {
+      state: {
+        openCreate: true,
+        prefill: buildVoucherPrefill(row),
+      },
+    });
+  };
+
+  const openLinkedVoucher = (row) => {
+    navigate("/expenses/payment-vouchers", {
+      state: {
+        search: row?.linkedVoucher?.voucherNo || row?.requisitionNo || "",
+      },
+    });
+  };
+
+  const renderActions = (row) => {
+    const rowStatus = String(row?.status || "draft");
+    return (
+      <div className="inline-flex flex-wrap justify-end gap-2">
+        {rowStatus === "draft" && (
+          <>
+            <button
+              onClick={() => openEdit(row)}
+              className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"
+            >
+              <FaEdit /> Edit
+            </button>
+            <button
+              onClick={() => handleStatus(row, "submitted")}
+              className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700"
+            >
+              <FaCheck /> Submit
+            </button>
+            <button
+              onClick={() => handleDelete(row)}
+              className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"
+            >
+              <FaTrash /> Delete
+            </button>
+          </>
+        )}
+
+        {rowStatus === "submitted" && (
+          <>
+            <button
+              onClick={() => handleStatus(row, "approved")}
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700"
+            >
+              <FaCheck /> Approve
+            </button>
+            <button
+              onClick={() => handleStatus(row, "rejected")}
+              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700"
+            >
+              <FaTimes /> Reject
+            </button>
+            <button
+              onClick={() => handleStatus(row, "draft")}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700"
+            >
+              <FaUndo /> Recall
+            </button>
+          </>
+        )}
+
+        {rowStatus === "approved" && !row.linkedVoucher && (
+          <button
+            onClick={() => handleCreateVoucher(row)}
+            className="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-black text-violet-700"
+          >
+            <FaFileInvoiceDollar /> Create Voucher
+          </button>
+        )}
+
+        {row.linkedVoucher && (
+          <button
+            onClick={() => openLinkedVoucher(row)}
+            className="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-black text-violet-700"
+          >
+            <FaExternalLinkAlt /> Voucher
+          </button>
+        )}
+
+        {["rejected", "cancelled"].includes(rowStatus) && (
+          <>
+            <button
+              onClick={() => handleStatus(row, "draft")}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700"
+            >
+              <FaUndo /> Reopen Draft
+            </button>
+            <button
+              onClick={() => handleDelete(row)}
+              className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"
+            >
+              <FaTrash /> Delete
+            </button>
+          </>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -191,7 +381,9 @@ const ExpenseRequisition = () => {
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Expenses Workflow</p>
                 <h1 className="mt-1 text-2xl font-black text-slate-900">Expense Requisition</h1>
-                <p className="mt-1 text-sm text-slate-500">Raise, review, approve, reject, edit, and delete requisitions without breaking the downstream voucher workflow.</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Submit for approval first. Approval authorizes the spend. Accounting only happens when a payment voucher is created downstream.
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button onClick={handleBulkDelete} className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-black text-rose-700">Delete Selected</button>
@@ -200,10 +392,11 @@ const ExpenseRequisition = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Rows</p><p className="mt-2 text-2xl font-black text-slate-900">{stats.total}</p></div>
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Submitted</p><p className="mt-2 text-2xl font-black text-blue-700">{stats.submitted}</p></div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Approved Amount</p><p className="mt-2 text-2xl font-black text-emerald-700">KES {stats.approvedAmount.toLocaleString()}</p></div>
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Awaiting Approval</p><p className="mt-2 text-2xl font-black text-blue-700">{stats.submitted}</p></div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Approved Ready</p><p className="mt-2 text-2xl font-black text-emerald-700">{stats.approvedReady}</p></div>
+            <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-violet-600">Linked To Voucher</p><p className="mt-2 text-2xl font-black text-violet-700">{stats.converted}</p></div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -227,27 +420,34 @@ const ExpenseRequisition = () => {
                   <option value="draft">Draft</option>
                   <option value="submitted">Submitted</option>
                   <option value="approved">Approved</option>
+                  <option value="converted">Converted</option>
                   <option value="rejected">Rejected</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
-                <div className="hidden xl:flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-black text-slate-600">
-                  {selectedIds.length} selected
-                </div>
+                <button
+                  onClick={loadRows}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50"
+                >
+                  Refresh
+                </button>
+              </div>
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+                {selectedIds.length} selected
               </div>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-[#0B3B2E] text-white">
+                <thead className="bg-slate-100 text-left text-xs font-black uppercase tracking-[0.18em] text-slate-600">
                   <tr>
-                    <th className="px-4 py-3 text-left"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filteredRows.length && filteredRows.length > 0 ? <FaCheck /> : <FaSquare />}</button></th>
-                    <th className="px-4 py-3 text-left">Requisition</th>
-                    <th className="px-4 py-3 text-left">Property / Provider</th>
-                    <th className="px-4 py-3 text-left">Need Date</th>
+                    <th className="px-4 py-3"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filteredRows.length && filteredRows.length > 0 ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></th>
+                    <th className="px-4 py-3">Requisition</th>
+                    <th className="px-4 py-3">Property / Provider</th>
+                    <th className="px-4 py-3">Needed By</th>
                     <th className="px-4 py-3 text-right">Amount</th>
-                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -262,23 +462,18 @@ const ExpenseRequisition = () => {
                       <td className="px-4 py-3">
                         <div className="font-black text-slate-900">{row.requisitionNo}</div>
                         <div className="text-xs text-slate-500">{row.title}</div>
+                        {row.linkedVoucher?.voucherNo ? <div className="mt-1 text-[11px] font-bold text-violet-600">Voucher: {row.linkedVoucher.voucherNo}</div> : null}
                       </td>
                       <td className="px-4 py-3 text-slate-700">
                         <div>{row.property?.propertyName || row.property?.name || "No property"}</div>
-                        <div className="text-xs text-slate-500">{row.serviceProvider?.name || "No provider"}</div>
+                        <div className="text-xs text-slate-500">{row.serviceProvider?.name || row.vendorName || "No provider"}</div>
                       </td>
                       <td className="px-4 py-3 text-slate-700">{row.neededBy ? new Date(row.neededBy).toLocaleDateString() : "-"}</td>
                       <td className="px-4 py-3 text-right font-black text-slate-900">KES {Number(row.amount || 0).toLocaleString()}</td>
-                      <td className="px-4 py-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span></td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="inline-flex flex-wrap justify-end gap-2">
-                          {row.status !== "approved" && <button onClick={() => openEdit(row)} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"><FaEdit /> Edit</button>}
-                          {row.status === "draft" && <button onClick={() => handleStatus(row, "submitted")} className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700"><FaCheck /> Submit</button>}
-                          {row.status === "submitted" && <button onClick={() => handleStatus(row, "approved")} className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700"><FaCheck /> Approve</button>}
-                          {row.status === "submitted" && <button onClick={() => handleStatus(row, "rejected")} className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700"><FaTimes /> Reject</button>}
-                          {row.status !== "approved" && <button onClick={() => handleDelete(row)} className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"><FaTrash /> Delete</button>}
-                        </div>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span>
                       </td>
+                      <td className="px-4 py-3 text-right">{renderActions(row)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -294,7 +489,7 @@ const ExpenseRequisition = () => {
             <div className="flex items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Expense Requisition</p>
-                <h3 className="text-xl font-black">{editingId ? "Edit Requisition" : "New Requisition"}</h3>
+                <h3 className="text-xl font-black">{editingId ? "Edit Draft Requisition" : "New Requisition"}</h3>
               </div>
               <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
             </div>
@@ -310,9 +505,10 @@ const ExpenseRequisition = () => {
               <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Description</span><textarea rows={3} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Internal Notes</span><textarea rows={2} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
             </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
               <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60"><FaSave /> {saving ? "Saving..." : editingId ? "Update Requisition" : "Save Requisition"}</button>
+              <button onClick={() => handleSave("draft")} disabled={saving} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-700 disabled:opacity-60"><FaSave /> {saving ? "Saving..." : editingId ? "Update Draft" : "Save Draft"}</button>
+              <button onClick={() => handleSave("submitted")} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60"><FaCheck /> {saving ? "Saving..." : editingId ? "Update & Submit" : "Save & Submit"}</button>
             </div>
           </div>
         </div>

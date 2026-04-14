@@ -573,6 +573,23 @@ const getReceiptSummaryAmount = (receipt = {}, key = "") => {
   return round2(Number(summary[key] || 0) * sign);
 };
 
+const getEffectiveDepositReceiptAmount = (receipt = {}) => {
+  const summarized = getReceiptSummaryAmount(receipt, "deposit");
+  if (Math.abs(summarized) > 0) return summarized;
+
+  const allocationRows = getReceiptAllocationRows(receipt);
+  if (allocationRows.length > 0) {
+    const fromRows = allocationRows.reduce((sum, row) => {
+      const priorityGroup = String(row?.priorityGroup || "").toLowerCase();
+      if (priorityGroup !== "deposit") return sum;
+      return sum + Number(row?.appliedAmount || 0);
+    }, 0);
+    if (Math.abs(fromRows) > 0) return round2(fromRows);
+  }
+
+  return round2(Number(receipt?.amount || 0));
+};
+
 const calculateCommissionAmount = ({
   paymentMode,
   percentage,
@@ -1118,7 +1135,7 @@ export const generateLandlordStatement = async ({
   }
 
   for (const receipt of depositReceiptsBefore) {
-    applyDepositReceiptToMemo(receipt, receipt.amount, "opening");
+    applyDepositReceiptToMemo(receipt, getEffectiveDepositReceiptAmount(receipt), "opening");
   }
 
   for (const receipt of receiptsBefore) {
@@ -1496,13 +1513,13 @@ export const generateLandlordStatement = async ({
   }
 
   for (const receipt of depositReceiptsInPeriod) {
-    applyDepositReceiptToMemo(receipt, receipt.amount, "current");
+    applyDepositReceiptToMemo(receipt, getEffectiveDepositReceiptAmount(receipt), "current");
 
     const depositHolder = resolveDepositHolderForRecord(receipt);
     if (depositHolder !== "landlord") continue;
 
     const row = ensureRow(receipt.tenant, receipt.unit);
-    const amount = round2(Math.abs(Number(receipt.amount || 0)));
+    const amount = round2(Math.abs(Number(getEffectiveDepositReceiptAmount(receipt) || 0)));
     if (amount === 0) continue;
 
     const sourceId = String(receipt._id || "");
