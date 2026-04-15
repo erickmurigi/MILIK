@@ -14,6 +14,7 @@ import {
   updateExpenseItem,
   deleteExpenseItem,
   updateTaxConfiguration,
+  updateAccountingDefaults,
 } from "../controllers/propertyController/companySettings.js";
 import { verifyUser } from "../controllers/verifyToken.js";
 
@@ -39,6 +40,9 @@ router.delete("/:businessId/commissions/:commissionId", verifyUser, deleteCommis
 
 // Tax Configuration
 router.put("/:businessId/tax-configuration", verifyUser, updateTaxConfiguration);
+
+// Accounting Defaults
+router.put("/:businessId/accounting-defaults", verifyUser, updateAccountingDefaults);
 
 // Expense Items
 router.post("/:businessId/expenses", verifyUser, addExpenseItem);

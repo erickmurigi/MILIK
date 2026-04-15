@@ -167,7 +167,12 @@ const TenantStatement = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const [activeTab, setActiveTab] = useState("statement");
+  const initialRequestedTab = String(location.state?.initialTab || "statement").trim().toLowerCase();
+  const [activeTab, setActiveTab] = useState(
+    ["statement", "billing", "details", "charges", "reviews", "actions"].includes(initialRequestedTab)
+      ? initialRequestedTab
+      : "statement"
+  );
   const [startDate, setStartDate] = useState(() => `${new Date().getFullYear()}-01-01`);
   const [endDate, setEndDate] = useState(() => formatInputDate(new Date()));
   const [transactionType, setTransactionType] = useState("ALL");
@@ -228,6 +233,19 @@ const TenantStatement = () => {
   );
 
   const tenant = tenantsFromStore?.find((t) => t._id === tenantId);
+
+  useEffect(() => {
+    const requestedTab = String(location.state?.initialTab || "").trim().toLowerCase();
+    const allowedTabs = ["statement", "billing", "details", "charges", "reviews", "actions"];
+
+    if (requestedTab && allowedTabs.includes(requestedTab)) {
+      setActiveTab(requestedTab);
+    }
+
+    if (requestedTab === "reviews" && location.state?.openReviewForm) {
+      setReviewFormOpen(true);
+    }
+  }, [tenantId, location.key, location.state]);
 
   const tenantUnitRecord = useMemo(() => {
     const unitId = tenant?.unit?._id || tenant?.unit || null;

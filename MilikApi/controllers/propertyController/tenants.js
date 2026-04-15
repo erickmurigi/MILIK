@@ -955,6 +955,22 @@ export const updateTenantStatus = async (req, res, next) => {
 
     if (status === "terminated") {
       const effectiveTerminationDate = terminationDate ? new Date(terminationDate) : new Date();
+      if (Number.isNaN(effectiveTerminationDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid termination date is required",
+        });
+      }
+
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      if (effectiveTerminationDate.getTime() > today.getTime()) {
+        return res.status(400).json({
+          success: false,
+          message: "Future-dated termination is not supported. Use today or an earlier date.",
+        });
+      }
+
       updateData.moveOutDate = effectiveTerminationDate;
       updateData.terminationDate = effectiveTerminationDate;
       updateData.terminationReason = terminationReason;
@@ -1011,15 +1027,22 @@ export const updateTenantStatus = async (req, res, next) => {
       }
     }
 
-    const updatedTenant = await Tenant.findByIdAndUpdate(
-      req.params.id,
-      { $set: updateData },
-      { new: true, runValidators: true }
+    const updatedTenantDoc = await populateTenantQuery(
+      Tenant.findByIdAndUpdate(
+        req.params.id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      )
     );
 
+    const updatedTenant =
+      typeof updatedTenantDoc?.toObject === "function"
+        ? updatedTenantDoc.toObject()
+        : updatedTenantDoc;
+
     return res.status(200).json({
-      success: true,
-      data: updatedTenant,
+      ...updatedTenant,
+      status: computeOperationalTenantStatus({ tenant: updatedTenant }),
     });
   } catch (err) {
     next(err);

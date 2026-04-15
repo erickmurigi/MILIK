@@ -9,6 +9,7 @@ import PaymentVoucher from "../../models/PaymentVoucher.js";
 import { ensurePropertyControlAccount } from "../../services/propertyAccountingService.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../services/taxCalculationService.js";
+import { getCompanyAccountingDefaults, resolveConfiguredChartAccount } from "../../services/companyAccountingDefaultsService.js";
 import { generateLandlordStatement } from "../../services/landlordStatementService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
@@ -191,27 +192,25 @@ const windowsOverlap = (left = null, right = null) => {
 
 const resolveCommissionIncomeAccount = async (businessId) => {
   await ensureSystemChartOfAccounts(businessId);
+  const accountingDefaults = await getCompanyAccountingDefaults(businessId);
 
-  const exact = await findSystemAccountByCode(businessId, "4210");
-  if (exact) return exact;
-
-  const fallback = await ChartOfAccount.findOne({
-    business: businessId,
-    isPosting: { $ne: false },
-    isHeader: { $ne: true },
+  const account = await resolveConfiguredChartAccount({
+    businessId,
+    configuredValue: accountingDefaults?.managementCommissionIncomeAccountCode,
     type: "income",
-    $or: [
-      { name: { $regex: "^commission income$", $options: "i" } },
-      { name: { $regex: "management fee income", $options: "i" } },
-      { name: { $regex: "commission", $options: "i" } },
+    fallbackCode: "4210",
+    fallbackCandidates: [
+      { nameRegex: "^commission income$", type: "income" },
+      { nameRegex: "management fee income", type: "income" },
+      { nameRegex: "commission", type: "income" },
     ],
-  }).lean();
+  });
 
-  if (!fallback) {
+  if (!account) {
     throw new Error("Commission Income account was not found for this business.");
   }
 
-  return fallback;
+  return account;
 };
 
 const postCommissionAccrualForProcessedStatement = async ({ processedStatement, approvedStatement, userId }) => {

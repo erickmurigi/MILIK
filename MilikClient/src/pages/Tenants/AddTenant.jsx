@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
   FaSave,
@@ -286,6 +286,7 @@ function MilikSelect({
 const AddTenant = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const { id: routeTenantId } = useParams();
   const isEditMode = Boolean(routeTenantId);
 
@@ -346,6 +347,8 @@ const AddTenant = () => {
   const draftRestoredRef = useRef(false);
   const lastPropertyRef = useRef("");
   const skipNextUnitAutofillRef = useRef(false);
+  const additionalUtilitiesSectionRef = useRef(null);
+  const utilityActionAppliedRef = useRef(false);
 
   useEffect(() => {
     if (currentCompany?._id) {
@@ -362,6 +365,33 @@ const AddTenant = () => {
         .catch(() => setUtilityOptions([]));
     }
   }, [dispatch, currentCompany]);
+
+  useEffect(() => {
+    if (utilityActionAppliedRef.current) return;
+    if (location.state?.focusSection !== "additional-utilities") return;
+    if (loading || tenantLoading) return;
+
+    utilityActionAppliedRef.current = true;
+
+    if (location.state?.autoAddUtility && additionalUtilities.length === 0) {
+      setAdditionalUtilities((prev) =>
+        prev.length > 0 ? prev : [{ utility: "", unitCharge: "", isIncluded: false }]
+      );
+    }
+
+    const scrollToUtilities = () => {
+      additionalUtilitiesSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    };
+
+    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(scrollToUtilities);
+    } else {
+      scrollToUtilities();
+    }
+  }, [location.state, loading, tenantLoading, additionalUtilities.length]);
 
   useEffect(() => {
     if (!formData.property) {
@@ -1584,7 +1614,7 @@ for (const request of invoiceRequests) {
                   )}
                 </div>
 
-                <div className="bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-50 border-2 border-dashed border-indigo-300 rounded-xl p-6 space-y-4 shadow-sm">
+                <div ref={additionalUtilitiesSectionRef} className="bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-50 border-2 border-dashed border-indigo-300 rounded-xl p-6 space-y-4 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2">

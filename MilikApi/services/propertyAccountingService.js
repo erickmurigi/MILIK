@@ -6,6 +6,7 @@ import {
   ensureSystemChartOfAccounts,
   findSystemAccountByCode,
 } from "./chartOfAccountsService.js";
+import { getCompanyAccountingDefaults, resolveConfiguredChartAccount } from "./companyAccountingDefaultsService.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -159,25 +160,25 @@ export const ensurePropertyControlAccount = async ({
 export const resolveTenantDepositPayableAccount = async (businessId) => {
   await ensureSystemChartOfAccounts(businessId);
 
-  const exact = await findSystemAccountByCode(businessId, "2100");
-  if (exact) return exact;
-
-  const fallback = await ChartOfAccount.findOne({
-    business: businessId,
+  const accountingDefaults = await getCompanyAccountingDefaults(businessId);
+  const configured = await resolveConfiguredChartAccount({
+    businessId,
+    configuredValue: accountingDefaults?.depositLiabilityAccountCode,
     type: "liability",
-    $or: [
-      { name: { $regex: "^tenant deposit payable$", $options: "i" } },
-      { name: { $regex: "^security deposits payable$", $options: "i" } },
-      { name: { $regex: "tenant deposit", $options: "i" } },
-      { name: { $regex: "security deposit", $options: "i" } },
+    fallbackCode: "2100",
+    fallbackCandidates: [
+      { nameRegex: "^tenant deposit payable$", type: "liability" },
+      { nameRegex: "^security deposits payable$", type: "liability" },
+      { nameRegex: "tenant deposit", type: "liability" },
+      { nameRegex: "security deposit", type: "liability" },
     ],
   });
 
-  if (!fallback) {
+  if (!configured) {
     throw new Error("Tenant Deposit Payable account was not found for this business.");
   }
 
-  return fallback;
+  return configured;
 };
 
 export const resolveLandlordRemittancePayableAccount = async (businessId) => {

@@ -1,6 +1,21 @@
 import CompanySettings from "../../models/CompanySettings.js";
 import mongoose from "mongoose";
-import { DEFAULT_TAX_CODES, DEFAULT_TAX_SETTINGS, normalizeCompanyTaxConfiguration } from "../../services/taxCalculationService.js";
+import {
+  DEFAULT_TAX_CODES,
+  DEFAULT_TAX_SETTINGS,
+  normalizeCompanyTaxConfiguration,
+} from "../../services/taxCalculationService.js";
+import {
+  DEFAULT_ACCOUNTING_DEFAULTS,
+  normalizeAccountingDefaults,
+} from "../../services/companyAccountingDefaultsService.js";
+
+const normalizeText = (value = "") => String(value ?? "").trim();
+const normalizeLower = (value = "") => normalizeText(value).toLowerCase();
+const toNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 
 const resolveAuthorizedBusinessId = (req) => {
   const requested = req.params?.businessId || req.body?.business || req.query?.business || null;
@@ -27,7 +42,6 @@ const resolveAuthorizedBusinessId = (req) => {
 
 const findCompanySettings = (companyId) => CompanySettings.findOne({ company: companyId });
 
-
 const buildDefaultTaxConfiguration = () => ({
   taxSettings: {
     ...DEFAULT_TAX_SETTINGS,
@@ -37,6 +51,12 @@ const buildDefaultTaxConfiguration = () => ({
     _id: new mongoose.Types.ObjectId(),
     ...code,
   })),
+});
+
+const buildDefaultAccountingConfiguration = () => ({
+  accountingDefaults: {
+    ...DEFAULT_ACCOUNTING_DEFAULTS,
+  },
 });
 
 const ensureSettingsTaxConfiguration = (settings) => {
@@ -58,6 +78,65 @@ const ensureSettingsTaxConfiguration = (settings) => {
   return settings;
 };
 
+const ensureSettingsAccountingConfiguration = (settings) => {
+  if (!settings) return settings;
+  settings.accountingDefaults = normalizeAccountingDefaults(
+    settings.accountingDefaults?.toObject?.() || settings.accountingDefaults || {}
+  );
+  return settings;
+};
+
+const ensureSettingsDocument = async (businessId) => {
+  let settings = await findCompanySettings(businessId);
+  if (!settings) {
+    settings = new CompanySettings({ company: businessId });
+    ensureSettingsTaxConfiguration(settings);
+    ensureSettingsAccountingConfiguration(settings);
+  } else {
+    ensureSettingsTaxConfiguration(settings);
+    ensureSettingsAccountingConfiguration(settings);
+  }
+  return settings;
+};
+
+const ensureUniqueCollectionName = ({ items = [], name = "", excludeId = null, label = "Item" }) => {
+  const normalizedName = normalizeLower(name);
+  if (!normalizedName) return;
+
+  const duplicate = items.find(
+    (item) =>
+      String(item?._id || "") !== String(excludeId || "") &&
+      normalizeLower(item?.name) === normalizedName
+  );
+
+  if (duplicate) {
+    const error = new Error(`${label} name already exists. Use a different name.`);
+    error.statusCode = 400;
+    throw error;
+  }
+};
+
+const archiveEmbeddedSetting = async ({ req, res, businessId, itemId, collectionKey, successLabel }) => {
+  const settings = await findCompanySettings(businessId);
+  if (!settings) {
+    return res.status(404).json({ message: "Settings not found" });
+  }
+
+  const item = settings[collectionKey]?.id(itemId);
+  if (!item) {
+    return res.status(404).json({ message: `${successLabel} not found` });
+  }
+
+  item.isActive = false;
+  await settings.save();
+
+  return res.status(200).json({
+    mode: "archived",
+    message: `${successLabel} archived successfully. Historical references stay intact and the setting will no longer be available for new use.`,
+    item,
+    settings,
+  });
+};
 
 // Get company settings
 export const getCompanySettings = async (req, res, next) => {
@@ -66,38 +145,38 @@ export const getCompanySettings = async (req, res, next) => {
 
     let settings = await findCompanySettings(businessId);
 
-    // If no settings exist, create default ones
     if (!settings) {
       const defaults = buildDefaultTaxConfiguration();
+      const accountingDefaults = buildDefaultAccountingConfiguration();
       settings = new CompanySettings({
         company: businessId,
         utilityTypes: [
-          { name: "Electricity", category: "utility" },
-          { name: "Water", category: "utility" },
-          { name: "Garbage", category: "service_charge" },
-          { name: "Security", category: "service_charge" },
+          { _id: new mongoose.Types.ObjectId(), name: "Electricity", category: "utility" },
+          { _id: new mongoose.Types.ObjectId(), name: "Water", category: "utility" },
+          { _id: new mongoose.Types.ObjectId(), name: "Garbage", category: "service_charge" },
+          { _id: new mongoose.Types.ObjectId(), name: "Security", category: "service_charge" },
         ],
         billingPeriods: [
-          { name: "Monthly", durationInMonths: 1, durationInDays: 30 },
-          { name: "Quarterly", durationInMonths: 3, durationInDays: 90 },
-          { name: "Semi-Annual", durationInMonths: 6, durationInDays: 180 },
-          { name: "Annual", durationInMonths: 12, durationInDays: 365 },
+          { _id: new mongoose.Types.ObjectId(), name: "Monthly", durationInMonths: 1, durationInDays: 30 },
+          { _id: new mongoose.Types.ObjectId(), name: "Quarterly", durationInMonths: 3, durationInDays: 90 },
+          { _id: new mongoose.Types.ObjectId(), name: "Semi-Annual", durationInMonths: 6, durationInDays: 180 },
+          { _id: new mongoose.Types.ObjectId(), name: "Annual", durationInMonths: 12, durationInDays: 365 },
         ],
-        commissions: [
-          { name: "Default", percentage: 10, applicableTo: "rent" },
-        ],
+        commissions: [{ _id: new mongoose.Types.ObjectId(), name: "Default", percentage: 10, applicableTo: "rent" }],
         expenseItems: [
-          { name: "Maintenance", category: "maintenance" },
-          { name: "Cleaning", category: "supplies" },
-          { name: "Repairs", category: "maintenance" },
+          { _id: new mongoose.Types.ObjectId(), name: "Maintenance", category: "maintenance" },
+          { _id: new mongoose.Types.ObjectId(), name: "Cleaning", category: "supplies" },
+          { _id: new mongoose.Types.ObjectId(), name: "Repairs", category: "maintenance" },
         ],
         taxSettings: defaults.taxSettings,
         taxCodes: defaults.taxCodes,
+        accountingDefaults: accountingDefaults.accountingDefaults,
       });
 
       await settings.save();
     } else {
       ensureSettingsTaxConfiguration(settings);
+      ensureSettingsAccountingConfiguration(settings);
       if (settings.isModified()) {
         await settings.save();
       }
@@ -109,44 +188,45 @@ export const getCompanySettings = async (req, res, next) => {
   }
 };
 
-// Update utility type
 export const addUtilityType = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
-    const { name, description, category } = req.body;
+    const name = normalizeText(req.body?.name);
+    const description = normalizeText(req.body?.description);
+    const category = normalizeText(req.body?.category) || "utility";
 
     if (!name) {
       return res.status(400).json({ message: "Utility name is required" });
     }
 
-    let settings = await findCompanySettings(businessId);
-    if (!settings) {
-      settings = new CompanySettings({ company: businessId });
-    }
+    const settings = await ensureSettingsDocument(businessId);
+    ensureUniqueCollectionName({ items: settings.utilityTypes, name, label: "Utility" });
 
     const newUtility = {
       _id: new mongoose.Types.ObjectId(),
       name,
-      description: description || "",
-      category: category || "utility",
+      description,
+      category,
       isActive: true,
     };
 
     settings.utilityTypes.push(newUtility);
     await settings.save();
 
-    res.status(201).json({ utility: newUtility, message: "Utility type added successfully" });
+    res.status(201).json({ utility: newUtility, settings, message: "Utility type added successfully" });
   } catch (err) {
     next(err);
   }
 };
 
-// Update utility type
 export const updateUtilityType = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
     const { utilityId } = req.params;
-    const { name, description, category, isActive } = req.body;
+    const { isActive } = req.body;
+    const name = req.body?.name === undefined ? undefined : normalizeText(req.body.name);
+    const description = req.body?.description === undefined ? undefined : normalizeText(req.body.description);
+    const category = req.body?.category === undefined ? undefined : normalizeText(req.body.category);
 
     const settings = await findCompanySettings(businessId);
     if (!settings) {
@@ -158,77 +238,81 @@ export const updateUtilityType = async (req, res, next) => {
       return res.status(404).json({ message: "Utility not found" });
     }
 
-    if (name) utility.name = name;
+    if (name !== undefined) {
+      if (!name) {
+        return res.status(400).json({ message: "Utility name is required" });
+      }
+      ensureUniqueCollectionName({
+        items: settings.utilityTypes,
+        name,
+        excludeId: utilityId,
+        label: "Utility",
+      });
+      utility.name = name;
+    }
     if (description !== undefined) utility.description = description;
-    if (category) utility.category = category;
-    if (isActive !== undefined) utility.isActive = isActive;
+    if (category !== undefined) utility.category = category || "utility";
+    if (isActive !== undefined) utility.isActive = Boolean(isActive);
 
     await settings.save();
-    res.status(200).json({ utility, message: "Utility type updated successfully" });
+    res.status(200).json({ utility, settings, message: "Utility type updated successfully" });
   } catch (err) {
     next(err);
   }
 };
 
-// Delete utility type
 export const deleteUtilityType = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
     const { utilityId } = req.params;
-
-    const settings = await findCompanySettings(businessId);
-    if (!settings) {
-      return res.status(404).json({ message: "Settings not found" });
-    }
-
-    settings.utilityTypes.id(utilityId).deleteOne();
-    await settings.save();
-
-    res.status(200).json({ message: "Utility type deleted successfully" });
+    return await archiveEmbeddedSetting({
+      req,
+      res,
+      businessId,
+      itemId: utilityId,
+      collectionKey: "utilityTypes",
+      successLabel: "Utility",
+    });
   } catch (err) {
     next(err);
   }
 };
 
-// Add billing period
 export const addBillingPeriod = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
-    const { name, durationInMonths, durationInDays } = req.body;
+    const name = normalizeText(req.body?.name);
+    const durationInMonths = toNumber(req.body?.durationInMonths, 0);
+    const durationInDays = toNumber(req.body?.durationInDays, durationInMonths * 30);
 
-    if (!name || !durationInMonths) {
-      return res.status(400).json({ message: "Name and duration are required" });
+    if (!name || durationInMonths <= 0) {
+      return res.status(400).json({ message: "Name and duration in months are required" });
     }
 
-    let settings = await findCompanySettings(businessId);
-    if (!settings) {
-      settings = new CompanySettings({ company: businessId });
-    }
+    const settings = await ensureSettingsDocument(businessId);
+    ensureUniqueCollectionName({ items: settings.billingPeriods, name, label: "Billing period" });
 
     const newPeriod = {
       _id: new mongoose.Types.ObjectId(),
       name,
       durationInMonths,
-      durationInDays: durationInDays || durationInMonths * 30,
+      durationInDays,
       isActive: true,
     };
 
     settings.billingPeriods.push(newPeriod);
     await settings.save();
 
-    res.status(201).json({ period: newPeriod, message: "Billing period added successfully" });
+    res.status(201).json({ period: newPeriod, settings, message: "Billing period added successfully" });
   } catch (err) {
     next(err);
   }
 };
 
-// Update billing period
 export const updateBillingPeriod = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
     const { periodId } = req.params;
-    const { name, durationInMonths, durationInDays, isActive } = req.body;
-
     const settings = await findCompanySettings(businessId);
     if (!settings) {
       return res.status(404).json({ message: "Settings not found" });
@@ -239,78 +323,100 @@ export const updateBillingPeriod = async (req, res, next) => {
       return res.status(404).json({ message: "Billing period not found" });
     }
 
-    if (name) period.name = name;
-    if (durationInMonths !== undefined) period.durationInMonths = durationInMonths;
-    if (durationInDays !== undefined) period.durationInDays = durationInDays;
-    if (isActive !== undefined) period.isActive = isActive;
+    if (req.body?.name !== undefined) {
+      const name = normalizeText(req.body.name);
+      if (!name) {
+        return res.status(400).json({ message: "Billing period name is required" });
+      }
+      ensureUniqueCollectionName({
+        items: settings.billingPeriods,
+        name,
+        excludeId: periodId,
+        label: "Billing period",
+      });
+      period.name = name;
+    }
+
+    if (req.body?.durationInMonths !== undefined) {
+      const durationInMonths = toNumber(req.body.durationInMonths, 0);
+      if (durationInMonths <= 0) {
+        return res.status(400).json({ message: "Billing period duration in months must be greater than zero" });
+      }
+      period.durationInMonths = durationInMonths;
+      if (req.body?.durationInDays === undefined) {
+        period.durationInDays = durationInMonths * 30;
+      }
+    }
+
+    if (req.body?.durationInDays !== undefined) {
+      period.durationInDays = toNumber(req.body.durationInDays, 0);
+    }
+
+    if (req.body?.isActive !== undefined) {
+      period.isActive = Boolean(req.body.isActive);
+    }
 
     await settings.save();
-    res.status(200).json({ period, message: "Billing period updated successfully" });
+    res.status(200).json({ period, settings, message: "Billing period updated successfully" });
   } catch (err) {
     next(err);
   }
 };
 
-// Delete billing period
 export const deleteBillingPeriod = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
     const { periodId } = req.params;
-
-    const settings = await findCompanySettings(businessId);
-    if (!settings) {
-      return res.status(404).json({ message: "Settings not found" });
-    }
-
-    settings.billingPeriods.id(periodId).deleteOne();
-    await settings.save();
-
-    res.status(200).json({ message: "Billing period deleted successfully" });
+    return await archiveEmbeddedSetting({
+      req,
+      res,
+      businessId,
+      itemId: periodId,
+      collectionKey: "billingPeriods",
+      successLabel: "Billing period",
+    });
   } catch (err) {
     next(err);
   }
 };
 
-// Add commission
 export const addCommission = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
-    const { name, percentage, applicableTo, description } = req.body;
+    const name = normalizeText(req.body?.name);
+    const percentage = toNumber(req.body?.percentage, NaN);
+    const applicableTo = normalizeText(req.body?.applicableTo) || "rent";
+    const description = normalizeText(req.body?.description);
 
-    if (!name || percentage === undefined) {
+    if (!name || Number.isNaN(percentage)) {
       return res.status(400).json({ message: "Name and percentage are required" });
     }
 
-    let settings = await findCompanySettings(businessId);
-    if (!settings) {
-      settings = new CompanySettings({ company: businessId });
-    }
+    const settings = await ensureSettingsDocument(businessId);
+    ensureUniqueCollectionName({ items: settings.commissions, name, label: "Commission" });
 
     const newCommission = {
       _id: new mongoose.Types.ObjectId(),
       name,
       percentage,
-      applicableTo: applicableTo || "rent",
-      description: description || "",
+      applicableTo,
+      description,
       isActive: true,
     };
 
     settings.commissions.push(newCommission);
     await settings.save();
 
-    res.status(201).json({ commission: newCommission, message: "Commission added successfully" });
+    res.status(201).json({ commission: newCommission, settings, message: "Commission added successfully" });
   } catch (err) {
     next(err);
   }
 };
 
-// Update commission
 export const updateCommission = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
     const { commissionId } = req.params;
-    const { name, percentage, applicableTo, description, isActive } = req.body;
-
     const settings = await findCompanySettings(businessId);
     if (!settings) {
       return res.status(404).json({ message: "Settings not found" });
@@ -321,80 +427,87 @@ export const updateCommission = async (req, res, next) => {
       return res.status(404).json({ message: "Commission not found" });
     }
 
-    if (name) commission.name = name;
-    if (percentage !== undefined) commission.percentage = percentage;
-    if (applicableTo) commission.applicableTo = applicableTo;
-    if (description !== undefined) commission.description = description;
-    if (isActive !== undefined) commission.isActive = isActive;
+    if (req.body?.name !== undefined) {
+      const name = normalizeText(req.body.name);
+      if (!name) {
+        return res.status(400).json({ message: "Commission name is required" });
+      }
+      ensureUniqueCollectionName({
+        items: settings.commissions,
+        name,
+        excludeId: commissionId,
+        label: "Commission",
+      });
+      commission.name = name;
+    }
+    if (req.body?.percentage !== undefined) commission.percentage = toNumber(req.body.percentage, 0);
+    if (req.body?.applicableTo !== undefined) commission.applicableTo = normalizeText(req.body.applicableTo) || "rent";
+    if (req.body?.description !== undefined) commission.description = normalizeText(req.body.description);
+    if (req.body?.isActive !== undefined) commission.isActive = Boolean(req.body.isActive);
 
     await settings.save();
-    res.status(200).json({ commission, message: "Commission updated successfully" });
+    res.status(200).json({ commission, settings, message: "Commission updated successfully" });
   } catch (err) {
     next(err);
   }
 };
 
-// Delete commission
 export const deleteCommission = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
     const { commissionId } = req.params;
-
-    const settings = await findCompanySettings(businessId);
-    if (!settings) {
-      return res.status(404).json({ message: "Settings not found" });
-    }
-
-    settings.commissions.id(commissionId).deleteOne();
-    await settings.save();
-
-    res.status(200).json({ message: "Commission deleted successfully" });
+    return await archiveEmbeddedSetting({
+      req,
+      res,
+      businessId,
+      itemId: commissionId,
+      collectionKey: "commissions",
+      successLabel: "Commission",
+    });
   } catch (err) {
     next(err);
   }
 };
 
-// Add expense item
 export const addExpenseItem = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
-    const { name, description, code, category, defaultAmount } = req.body;
+    const name = normalizeText(req.body?.name);
+    const description = normalizeText(req.body?.description);
+    const code = normalizeText(req.body?.code);
+    const category = normalizeText(req.body?.category) || "other";
+    const defaultAmount = toNumber(req.body?.defaultAmount, 0);
 
     if (!name) {
       return res.status(400).json({ message: "Expense item name is required" });
     }
 
-    let settings = await findCompanySettings(businessId);
-    if (!settings) {
-      settings = new CompanySettings({ company: businessId });
-    }
+    const settings = await ensureSettingsDocument(businessId);
+    ensureUniqueCollectionName({ items: settings.expenseItems, name, label: "Expense item" });
 
     const newExpenseItem = {
       _id: new mongoose.Types.ObjectId(),
       name,
-      description: description || "",
-      code: code || "",
-      category: category || "other",
-      defaultAmount: defaultAmount || 0,
+      description,
+      code,
+      category,
+      defaultAmount,
       isActive: true,
     };
 
     settings.expenseItems.push(newExpenseItem);
     await settings.save();
 
-    res.status(201).json({ expenseItem: newExpenseItem, message: "Expense item added successfully" });
+    res.status(201).json({ expenseItem: newExpenseItem, settings, message: "Expense item added successfully" });
   } catch (err) {
     next(err);
   }
 };
 
-// Update expense item
 export const updateExpenseItem = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
     const { expenseId } = req.params;
-    const { name, description, code, category, defaultAmount, isActive } = req.body;
-
     const settings = await findCompanySettings(businessId);
     if (!settings) {
       return res.status(404).json({ message: "Settings not found" });
@@ -405,40 +518,48 @@ export const updateExpenseItem = async (req, res, next) => {
       return res.status(404).json({ message: "Expense item not found" });
     }
 
-    if (name) expenseItem.name = name;
-    if (description !== undefined) expenseItem.description = description;
-    if (code) expenseItem.code = code;
-    if (category) expenseItem.category = category;
-    if (defaultAmount !== undefined) expenseItem.defaultAmount = defaultAmount;
-    if (isActive !== undefined) expenseItem.isActive = isActive;
+    if (req.body?.name !== undefined) {
+      const name = normalizeText(req.body.name);
+      if (!name) {
+        return res.status(400).json({ message: "Expense item name is required" });
+      }
+      ensureUniqueCollectionName({
+        items: settings.expenseItems,
+        name,
+        excludeId: expenseId,
+        label: "Expense item",
+      });
+      expenseItem.name = name;
+    }
+    if (req.body?.description !== undefined) expenseItem.description = normalizeText(req.body.description);
+    if (req.body?.code !== undefined) expenseItem.code = normalizeText(req.body.code);
+    if (req.body?.category !== undefined) expenseItem.category = normalizeText(req.body.category) || "other";
+    if (req.body?.defaultAmount !== undefined) expenseItem.defaultAmount = toNumber(req.body.defaultAmount, 0);
+    if (req.body?.isActive !== undefined) expenseItem.isActive = Boolean(req.body.isActive);
 
     await settings.save();
-    res.status(200).json({ expenseItem, message: "Expense item updated successfully" });
+    res.status(200).json({ expenseItem, settings, message: "Expense item updated successfully" });
   } catch (err) {
     next(err);
   }
 };
 
-// Delete expense item
 export const deleteExpenseItem = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
     const { expenseId } = req.params;
-
-    const settings = await findCompanySettings(businessId);
-    if (!settings) {
-      return res.status(404).json({ message: "Settings not found" });
-    }
-
-    settings.expenseItems.id(expenseId).deleteOne();
-    await settings.save();
-
-    res.status(200).json({ message: "Expense item deleted successfully" });
+    return await archiveEmbeddedSetting({
+      req,
+      res,
+      businessId,
+      itemId: expenseId,
+      collectionKey: "expenseItems",
+      successLabel: "Expense item",
+    });
   } catch (err) {
     next(err);
   }
 };
-
 
 export const updateTaxConfiguration = async (req, res, next) => {
   try {
@@ -449,12 +570,13 @@ export const updateTaxConfiguration = async (req, res, next) => {
     }
 
     ensureSettingsTaxConfiguration(settings);
+    ensureSettingsAccountingConfiguration(settings);
 
     const incomingSettings = req.body?.taxSettings || {};
     const incomingCodes = Array.isArray(req.body?.taxCodes) ? req.body.taxCodes : settings.taxCodes;
 
     const normalized = normalizeCompanyTaxConfiguration({
-      taxSettings: { ...settings.taxSettings?.toObject?.() || settings.taxSettings || {}, ...incomingSettings },
+      taxSettings: { ...(settings.taxSettings?.toObject?.() || settings.taxSettings || {}), ...incomingSettings },
       taxCodes: incomingCodes,
     });
 
@@ -476,6 +598,33 @@ export const updateTaxConfiguration = async (req, res, next) => {
       message: "Tax configuration updated successfully",
       taxSettings: settings.taxSettings,
       taxCodes: settings.taxCodes,
+      settings,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+export const updateAccountingDefaults = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    let settings = await findCompanySettings(businessId);
+    if (!settings) {
+      settings = new CompanySettings({ company: businessId });
+    }
+
+    ensureSettingsTaxConfiguration(settings);
+    ensureSettingsAccountingConfiguration(settings);
+
+    const incomingDefaults = normalizeAccountingDefaults(req.body?.accountingDefaults || req.body || {});
+    settings.accountingDefaults = incomingDefaults;
+
+    await settings.save();
+
+    res.status(200).json({
+      message: "Accounting defaults updated successfully",
+      accountingDefaults: settings.accountingDefaults,
       settings,
     });
   } catch (err) {

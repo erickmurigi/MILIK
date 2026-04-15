@@ -93,6 +93,18 @@ const taxSettingsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const accountingDefaultsSchema = new mongoose.Schema(
+  {
+    tenantReceivableAccountCode: { type: String, default: "1200", trim: true },
+    rentIncomeAccountCode: { type: String, default: "4100", trim: true },
+    utilityRechargeIncomeAccountCode: { type: String, default: "4102", trim: true },
+    penaltyIncomeAccountCode: { type: String, default: "", trim: true },
+    depositLiabilityAccountCode: { type: String, default: "2100", trim: true },
+    managementCommissionIncomeAccountCode: { type: String, default: "4210", trim: true },
+  },
+  { _id: false }
+);
+
 const CompanySettingsSchema = new mongoose.Schema(
   {
     company: {
@@ -124,6 +136,10 @@ const CompanySettingsSchema = new mongoose.Schema(
     taxCodes: {
       type: [taxCodeSchema],
       default: [],
+    },
+    accountingDefaults: {
+      type: accountingDefaultsSchema,
+      default: () => ({}),
     },
     currencyCode: { type: String, default: "KES" },
     decimalPlaces: { type: Number, default: 2 },

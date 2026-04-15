@@ -24,6 +24,7 @@ import {
   FaPrint,
   FaSms,
   FaExchangeAlt,
+  FaUserSlash,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getTenants, deleteTenant } from "../../redux/tenantsRedux";
@@ -176,6 +177,9 @@ const Tenants = () => {
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
   const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", effectiveDate: "", reason: "" });
+  const [showTerminateModal, setShowTerminateModal] = useState(false);
+  const [isTerminating, setIsTerminating] = useState(false);
+  const [terminationForm, setTerminationForm] = useState({ tenantId: "", effectiveDate: "", reason: "" });
   const [invoiceRefreshTick, setInvoiceRefreshTick] = useState(0);
   const [paymentsSnapshotReady, setPaymentsSnapshotReady] = useState(false);
 
@@ -488,6 +492,12 @@ const Tenants = () => {
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentTenants = sortedFilteredTenants.slice(startIndex, endIndex);
 
+  const selectedPrimaryTenant = useMemo(
+    () => transformedTenants.find((tenant) => tenant.id === selectedTenants[0]) || null,
+    [transformedTenants, selectedTenants]
+  );
+
+
   // ===== SELECTION HANDLERS =====
   const handleSelectTenant = (tenantId) => {
     setSelectedTenants((prev) =>
@@ -571,10 +581,24 @@ const Tenants = () => {
 
   const handleAddUtility = () => {
     if (selectedTenants.length === 0) {
-      toast.warning("Please select at least one tenant");
+      toast.warning("Please select one tenant to add a utility for");
       return;
     }
-    toast.info("Add utility feature coming soon");
+    if (selectedTenants.length > 1) {
+      toast.warning("Please select only one tenant to add a utility for");
+      return;
+    }
+
+    const selectedTenant = transformedTenants.find((tenant) => tenant.id === selectedTenants[0]);
+    const firstName = (selectedTenant?.tenantName || "Tenant").split(" ")[0];
+
+    navigate(`/tenant/${selectedTenants[0]}/edit`, {
+      state: {
+        tabTitle: `${firstName}-Utilities`,
+        focusSection: "additional-utilities",
+        autoAddUtility: true,
+      },
+    });
     setActionMenuOpen(false);
   };
 
@@ -627,11 +651,82 @@ const confirmTransferUnit = async () => {
 
   const handleReviewRent = () => {
     if (selectedTenants.length === 0) {
-      toast.warning("Please select at least one tenant");
+      toast.warning("Please select one tenant to review rent for");
       return;
     }
-    toast.info("Review rent feature coming soon");
+    if (selectedTenants.length > 1) {
+      toast.warning("Please select only one tenant to review rent for");
+      return;
+    }
+
+    const selectedTenant = transformedTenants.find((tenant) => tenant.id === selectedTenants[0]);
+    const firstName = (selectedTenant?.tenantName || "Tenant").split(" ")[0];
+    const tabTitle = `${firstName}-${selectedTenant?.tenantCode || "TT0000"}`;
+
+    navigate(`/tenant/${selectedTenants[0]}/statement`, {
+      state: {
+        tabTitle,
+        initialTab: "reviews",
+        openReviewForm: true,
+      },
+    });
     setActionMenuOpen(false);
+  };
+
+  const handleOpenTerminateTenant = () => {
+    if (selectedTenants.length === 0) {
+      toast.warning("Please select one tenant to terminate");
+      return;
+    }
+    if (selectedTenants.length > 1) {
+      toast.warning("Please select only one tenant to terminate");
+      return;
+    }
+
+    setTerminationForm({
+      tenantId: selectedTenants[0],
+      effectiveDate: new Date().toISOString().slice(0, 10),
+      reason: "",
+    });
+    setShowTerminateModal(true);
+    setActionMenuOpen(false);
+  };
+
+  const confirmTerminateTenant = async () => {
+    if (!terminationForm.tenantId || !terminationForm.effectiveDate) {
+      toast.error("Termination date is required");
+      return;
+    }
+
+    setIsTerminating(true);
+    try {
+      const response = await adminRequests.put(`/tenants/status/${terminationForm.tenantId}`, {
+        business: currentCompany?._id,
+        status: "terminated",
+        terminationDate: terminationForm.effectiveDate,
+        moveOutDate: terminationForm.effectiveDate,
+        terminationReason: terminationForm.reason,
+      });
+
+      toast.success(response?.data?.message || "Tenant terminated successfully");
+      setShowTerminateModal(false);
+      setTerminationForm({ tenantId: "", effectiveDate: "", reason: "" });
+      setSelectedTenants([]);
+      setSelectAll(false);
+
+      await dispatch(getTenants({ business: currentCompany._id }));
+      await dispatch(getUnits({ business: currentCompany._id }));
+      await loadInvoices();
+    } catch (error) {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          "Failed to terminate tenant"
+      );
+    } finally {
+      setIsTerminating(false);
+    }
   };
 
   const handleResetFilters = () => {
@@ -964,6 +1059,13 @@ const confirmTransferUnit = async () => {
                     >
                       <FaChartLine size={12} />
                       <span>Review Rent for Selected Tenant</span>
+                    </button>
+                    <button
+                      onClick={handleOpenTerminateTenant}
+                      className="w-full text-left px-4 py-2 text-xs hover:bg-amber-50 flex items-center gap-2 text-amber-700 border-t border-gray-200"
+                    >
+                      <FaUserSlash size={12} />
+                      <span>Terminate Tenant</span>
                     </button>
                     <button
                       onClick={() => {
@@ -1481,6 +1583,90 @@ const confirmTransferUnit = async () => {
     </div>
   );
 })()}
+      {showTerminateModal && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="bg-gradient-to-r from-amber-600 to-red-600 px-6 py-4">
+              <h3 className="flex items-center gap-2 text-lg font-bold text-white">
+                <FaUserSlash size={18} />
+                Terminate Tenant
+              </h3>
+            </div>
+            <div className="space-y-5 px-6 py-5">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p className="font-semibold">This will remove the tenant from active occupancy and future active billing flows.</p>
+                <p className="mt-1 text-xs text-amber-800">
+                  Historical invoices, receipts, balances, and statements remain intact. The unit is released back to vacant inventory using the same effective date.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Tenant</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">{selectedPrimaryTenant?.tenantName || "-"}</p>
+                  <p className="mt-1 text-xs text-slate-600">{selectedPrimaryTenant?.tenantCode || "-"}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Occupied Space</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">{selectedPrimaryTenant?.unitNumber || "-"}</p>
+                  <p className="mt-1 text-xs text-slate-600">{selectedPrimaryTenant?.propertyName || "-"}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Effective move-out date</label>
+                  <input
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    value={terminationForm.effectiveDate}
+                    onChange={(e) => setTerminationForm((prev) => ({ ...prev, effectiveDate: e.target.value }))}
+                    className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">Future-dated termination is blocked so unit occupancy and billing remain consistent.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Outstanding balance</label>
+                  <div className="mt-1 flex h-[50px] items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-900">
+                    Ksh {Number(selectedPrimaryTenant?.balance || 0).toLocaleString()}
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">Outstanding balances remain collectible and visible after termination.</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700">Reason / notes</label>
+                <textarea
+                  rows={3}
+                  value={terminationForm.reason}
+                  onChange={(e) => setTerminationForm((prev) => ({ ...prev, reason: e.target.value }))}
+                  placeholder="Tenant moved out, lease ended, voluntary exit..."
+                  className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button
+                onClick={() => {
+                  if (isTerminating) return;
+                  setShowTerminateModal(false);
+                }}
+                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+                disabled={isTerminating}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmTerminateTenant}
+                disabled={isTerminating}
+                className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {isTerminating ? "Terminating..." : "Terminate Tenant"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-md transform transition-all">

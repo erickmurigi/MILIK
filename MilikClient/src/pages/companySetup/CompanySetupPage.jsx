@@ -33,6 +33,7 @@ import {
 } from "react-icons/fa";
 import { getChartOfAccounts, getCompany, updateCompany } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
+import { COMPANY_OPERATING_MODES, MODULE_LABELS, applyCompanyModeBaseModules, normalizeCompanyModules, normalizeCompanyOperatingMode } from "../../utils/companyModules";
 
 const PAYMENT_DRAFT_ID = "__new_mpesa_paybill__";
 const EMAIL_DRAFT_ID = "__new_email_profile__";
@@ -52,6 +53,16 @@ const tabs = [
 ];
 
 const validTabKeys = new Set(tabs.map((tab) => tab.key));
+
+const coreModuleKeys = ["propertyManagement", "accounts", "billing"];
+const companyOperatingModeOptions = [
+  { value: COMPANY_OPERATING_MODES.PROPERTY_MANAGER, label: "Property Manager", description: "Use property-manager wording, landlord workflows, and multi-landlord operations across the workspace." },
+  { value: COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD, label: "Self-Managing Landlord", description: "Use owner-managed wording and defaults while preserving the same accounting-safe transaction engine." },
+];
+const moduleCategories = [
+  { key: "core", title: "Core Modules", description: "These modules form the live property and accounting foundation of MILIK and stay enabled." },
+  { key: "expansion", title: "Expansion Modules", description: "Enable only the additional modules this company truly uses. Disabled modules remain out of the workspace without deleting data." },
+];
 
 const Card = ({ title, subtitle, children, action = null }) => (
   <div className="rounded-2xl border border-slate-200 bg-white/70 backdrop-blur-xl shadow-sm">
@@ -201,25 +212,30 @@ const buildPaymentStatus = (config = {}) => {
   };
 };
 
-const normalizeForm = (company = {}) => ({
-  companyName: company.companyName || "",
-  registrationNo: company.registrationNo || "",
-  taxPIN: company.taxPIN || "",
-  taxExemptCode: company.taxExemptCode || "",
-  postalAddress: company.postalAddress || company.POBOX || "",
-  country: company.country || "Kenya",
-  town: company.town || company.City || "",
-  roadStreet: company.roadStreet || company.Street || "",
-  email: company.email || "",
-  phoneNo: company.phoneNo || "",
-  slogan: company.slogan || "",
-  logo: company.logo || "",
-  baseCurrency: company.baseCurrency || "KES",
-  taxRegime: company.taxRegime || "VAT",
-  fiscalStartMonth: company.fiscalStartMonth || "January",
-  fiscalStartYear: company.fiscalStartYear || new Date().getFullYear(),
-  operationPeriodType: company.operationPeriodType || "Monthly",
-});
+const normalizeForm = (company = {}) => {
+  const companyMode = normalizeCompanyOperatingMode(company.companyMode || company.operatingMode || company.mode);
+  return {
+    companyName: company.companyName || "",
+    registrationNo: company.registrationNo || "",
+    taxPIN: company.taxPIN || "",
+    taxExemptCode: company.taxExemptCode || "",
+    postalAddress: company.postalAddress || company.POBOX || "",
+    country: company.country || "Kenya",
+    town: company.town || company.City || "",
+    roadStreet: company.roadStreet || company.Street || "",
+    email: company.email || "",
+    phoneNo: company.phoneNo || "",
+    slogan: company.slogan || "",
+    logo: company.logo || "",
+    baseCurrency: company.baseCurrency || "KES",
+    taxRegime: company.taxRegime || "VAT",
+    fiscalStartMonth: company.fiscalStartMonth || "January",
+    fiscalStartYear: company.fiscalStartYear || new Date().getFullYear(),
+    operationPeriodType: company.operationPeriodType || "Monthly",
+    companyMode,
+    modules: applyCompanyModeBaseModules(normalizeCompanyModules(company), companyMode),
+  };
+};
 
 
 const normalizeTaxConfiguration = (settings = {}) => ({
@@ -884,6 +900,37 @@ export default function CompanySetupPage() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("tab", tabKey);
     setSearchParams(nextParams);
+  };
+
+  const handleCompanyFieldChange = (field, value) => {
+    setCompany((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleCompanyModeChange = (value) => {
+    const normalizedMode = normalizeCompanyOperatingMode(value);
+    setCompany((prev) => ({
+      ...prev,
+      companyMode: normalizedMode,
+      modules: applyCompanyModeBaseModules(prev.modules, normalizedMode),
+    }));
+  };
+
+  const handleModuleToggle = (moduleKey, checked) => {
+    setCompany((prev) => {
+      const baseModules = applyCompanyModeBaseModules(prev.modules, prev.companyMode);
+      const nextModules = {
+        ...baseModules,
+        [moduleKey]: coreModuleKeys.includes(moduleKey) ? true : checked,
+      };
+
+      return {
+        ...prev,
+        modules: applyCompanyModeBaseModules(nextModules, prev.companyMode),
+      };
+    });
   };
 
   const beginCreatePaymentConfig = () => {
@@ -1912,6 +1959,208 @@ export default function CompanySetupPage() {
       </div>
     </div>
   );
+
+
+  const renderStructureTab = () => {
+    const selectedMode = normalizeCompanyOperatingMode(company.companyMode);
+    const enabledModuleCount = Object.values(company.modules || {}).filter(Boolean).length;
+
+    return (
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card
+          title="Operating Mode"
+          subtitle="Choose how the active company should be treated across MILIK. This changes workspace wording and defaults, but it must not rewrite posted history."
+        >
+          <div className="space-y-3">
+            {companyOperatingModeOptions.map((option) => {
+              const isActive = selectedMode === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleCompanyModeChange(option.value)}
+                  className={[
+                    "w-full rounded-2xl border px-4 py-4 text-left transition",
+                    isActive
+                      ? "border-emerald-300 bg-emerald-50 shadow-sm"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-extrabold text-slate-900">{option.label}</div>
+                      <div className="mt-1 text-xs leading-5 text-slate-600">{option.description}</div>
+                    </div>
+                    <span
+                      className={[
+                        "inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold",
+                        isActive
+                          ? "border-emerald-200 bg-emerald-100 text-emerald-700"
+                          : "border-slate-200 bg-slate-100 text-slate-600",
+                      ].join(" ")}
+                    >
+                      {isActive ? "Active" : "Available"}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-extrabold uppercase tracking-wide text-slate-700">Current Structure Snapshot</div>
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
+              <div className="flex items-center justify-between gap-3">
+                <span>Operating mode</span>
+                <span className="font-bold text-slate-900">
+                  {selectedMode === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD ? "Self-Managing Landlord" : "Property Manager"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Enabled modules</span>
+                <span className="font-bold text-slate-900">{enabledModuleCount}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Fiscal start</span>
+                <span className="font-bold text-slate-900">{company.fiscalStartMonth} {company.fiscalStartYear}</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <div className="space-y-4 xl:col-span-2">
+          <Card
+            title="Company Structure Defaults"
+            subtitle="These defaults define the active company’s working posture. They are future-facing operational defaults and must not restate historical transactions."
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-bold text-slate-700">Operating Mode</label>
+                <Select value={selectedMode} onChange={(e) => handleCompanyModeChange(e.target.value)}>
+                  <option value={COMPANY_OPERATING_MODES.PROPERTY_MANAGER}>Property Manager</option>
+                  <option value={COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD}>Self-Managing Landlord</option>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700">Operation Period Type</label>
+                <Select value={company.operationPeriodType} onChange={(e) => handleCompanyFieldChange("operationPeriodType", e.target.value)}>
+                  <option value="Monthly">Monthly</option>
+                  <option value="Quarterly">Quarterly</option>
+                  <option value="Semi Annual">Semi Annual</option>
+                  <option value="Annual">Annual</option>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700">Fiscal Start Month</label>
+                <Select value={company.fiscalStartMonth} onChange={(e) => handleCompanyFieldChange("fiscalStartMonth", e.target.value)}>
+                  {months.map((month) => (
+                    <option key={month} value={month}>
+                      {month}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700">Fiscal Start Year</label>
+                <Input
+                  type="number"
+                  min="2000"
+                  value={company.fiscalStartYear}
+                  onChange={(e) => handleCompanyFieldChange("fiscalStartYear", Number(e.target.value) || new Date().getFullYear())}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Changes here should control future company behavior and workspace wording. They should not mutate posted invoices, receipts, statements, or ledger history.
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={() => setCompany(normalizeForm(currentCompany))}>
+                Reset
+              </button>
+              <button disabled={savingDetails} onClick={handleSaveDetails} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
+                <FaSave /> {savingDetails ? "Saving..." : "Save Structure"}
+              </button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  };
+
+  const renderModulesTab = () => {
+    const normalizedModules = applyCompanyModeBaseModules(company.modules, company.companyMode);
+    const enabledKeys = Object.entries(normalizedModules)
+      .filter(([, enabled]) => Boolean(enabled))
+      .map(([key]) => key);
+
+    return (
+      <div className="space-y-4">
+        <Card
+          title="Modules Configuration"
+          subtitle="Core modules stay enabled. Expansion modules can be switched on only when this company truly uses them."
+          action={
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
+              {enabledKeys.length} enabled
+            </div>
+          }
+        >
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {moduleCategories.map((category) => {
+              const categoryKeys = Object.keys(MODULE_LABELS).filter((moduleKey) =>
+                category.key === "core" ? coreModuleKeys.includes(moduleKey) : !coreModuleKeys.includes(moduleKey)
+              );
+
+              return (
+                <div key={category.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3">
+                    <div className="text-sm font-extrabold text-slate-900">{category.title}</div>
+                    <div className="mt-1 text-xs leading-5 text-slate-600">{category.description}</div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {categoryKeys.map((moduleKey) => {
+                      const isCore = coreModuleKeys.includes(moduleKey);
+                      const checked = Boolean(normalizedModules[moduleKey]);
+
+                      return (
+                        <ToggleRow
+                          key={moduleKey}
+                          checked={checked}
+                          disabled={isCore}
+                          onChange={(e) => handleModuleToggle(moduleKey, e.target.checked)}
+                          title={MODULE_LABELS[moduleKey]}
+                          description={
+                            isCore
+                              ? "This module is part of the live MILIK foundation and remains enabled for this company."
+                              : "Enable this only when the company is ready to use the module in the live workspace."
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            Disabling an expansion module should only remove it from navigation and access control. It should not delete historical records that already exist.
+          </div>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={() => setCompany(normalizeForm(currentCompany))}>
+              Reset
+            </button>
+            <button disabled={savingDetails} onClick={handleSaveDetails} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
+              <FaSave /> {savingDetails ? "Saving..." : "Save Modules"}
+            </button>
+          </div>
+        </Card>
+      </div>
+    );
+  };
 
   const renderPaymentsTab = () => (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_1.6fr]">
@@ -3092,12 +3341,16 @@ export default function CompanySetupPage() {
     switch (activeTab) {
       case "details":
         return renderDetailsTab();
+      case "structure":
+        return renderStructureTab();
       case "payments":
         return renderPaymentsTab();
       case "email":
         return renderEmailTab();
       case "sms":
         return renderSmsTab();
+      case "modules":
+        return renderModulesTab();
       default:
         return (
           <Card title="Coming Soon" subtitle="This tab is preserved and ready for the next implementation pass.">

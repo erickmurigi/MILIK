@@ -1,812 +1,1087 @@
-import React, { useState, useEffect } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { adminRequests } from "../../utils/requestMethods";
+import { toast } from "react-toastify";
 import {
-  FaCog,
-  FaPlus,
-  FaEdit,
-  FaTrash,
+  FaArchive,
+  FaBook,
   FaCheck,
-  FaTimes,
+  FaClock,
+  FaCog,
+  FaEdit,
+  FaExclamationCircle,
+  FaLightbulb,
+  FaMoneyBillWave,
+  FaPlus,
+  FaReceipt,
   FaSave,
   FaSpinner,
-  FaExclamationCircle,
-  FaFilter,
-  FaLightbulb,
-  FaClock,
-  FaMoneyBillWave,
-  FaReceipt,
+  FaTimes,
+  FaArrowRight,
+  FaPowerOff,
 } from "react-icons/fa";
-import { toast } from "react-toastify";
-import * as companySettingsAPI from "../../redux/companySettingsAPI";
 
 const MILIK_GREEN = "#0B3B2E";
 const MILIK_ORANGE = "#FF8C00";
 
-const CompanySettings = () => {
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
-  const { currentCompany } = useSelector((state) => state.company);
-  const { companySettings, isFetching } = useSelector((state) => state.companySettings);
+const TAB_CONFIG = {
+  utilities: {
+    label: "Utility Types",
+    icon: FaLightbulb,
+    endpoint: "utilities",
+    empty: "No utility types saved yet.",
+    subtitle:
+      "Maintain reusable utility and service charge labels for future tenant, unit and meter-reading flows.",
+  },
+  periods: {
+    label: "Billing Periods",
+    icon: FaClock,
+    endpoint: "periods",
+    empty: "No billing periods saved yet.",
+    subtitle:
+      "Maintain reusable billing cycle defaults for future schedules and operational setup. Historical postings stay untouched.",
+  },
+  commissions: {
+    label: "Commissions",
+    icon: FaMoneyBillWave,
+    endpoint: "commissions",
+    empty: "No commission defaults saved yet.",
+    subtitle:
+      "Company-level commission defaults are future-facing policy references. Property-level commission setup remains the source of truth per property.",
+  },
+  expenses: {
+    label: "Expense Items",
+    icon: FaReceipt,
+    endpoint: "expenses",
+    empty: "No reusable expense items saved yet.",
+    subtitle:
+      "Maintain reusable deduction and expense labels for future voucher and operational workflows.",
+  },
+  accounting: {
+    label: "Accounting Defaults",
+    icon: FaBook,
+  },
+  tax: {
+    label: "Tax Configuration",
+    icon: FaCog,
+  },
+};
 
+const emptyForms = {
+  utilities: { name: "", description: "", category: "utility", isActive: true },
+  periods: { name: "", durationInMonths: 1, durationInDays: 30, isActive: true },
+  commissions: { name: "", percentage: "", applicableTo: "rent", description: "", isActive: true },
+  expenses: { name: "", description: "", code: "", category: "other", defaultAmount: 0, isActive: true },
+};
+
+const normalizeTaxConfiguration = (settings = {}) => ({
+  taxSettings: {
+    enabled: Boolean(settings?.taxSettings?.enabled),
+    defaultTaxMode: settings?.taxSettings?.defaultTaxMode || "exclusive",
+    defaultTaxCodeKey: settings?.taxSettings?.defaultTaxCodeKey || "vat_standard",
+    defaultVatRate: Number(settings?.taxSettings?.defaultVatRate || 16),
+    roundingPrecision: Number(settings?.taxSettings?.roundingPrecision ?? 2),
+    outputVatAccountCode: settings?.taxSettings?.outputVatAccountCode || "2140",
+    invoiceTaxableByDefault: Boolean(settings?.taxSettings?.invoiceTaxableByDefault),
+    invoiceTaxabilityByCategory: {
+      rent: Boolean(settings?.taxSettings?.invoiceTaxabilityByCategory?.rent),
+      utility: Boolean(settings?.taxSettings?.invoiceTaxabilityByCategory?.utility),
+      penalty: Boolean(settings?.taxSettings?.invoiceTaxabilityByCategory?.penalty),
+      deposit: Boolean(settings?.taxSettings?.invoiceTaxabilityByCategory?.deposit),
+    },
+  },
+  taxCodes:
+    Array.isArray(settings?.taxCodes) && settings.taxCodes.length > 0
+      ? settings.taxCodes.map((code, index) => ({
+          _id: code?._id || `tax-code-${index + 1}`,
+          key: code?.key || `tax_code_${index + 1}`,
+          name: code?.name || `Tax Code ${index + 1}`,
+          type: code?.type || "vat",
+          rate: Number(code?.rate || 0),
+          isDefault: Boolean(code?.isDefault),
+          isActive: code?.isActive !== false,
+          description: code?.description || "",
+        }))
+      : [
+          {
+            _id: "tax-no-tax",
+            key: "no_tax",
+            name: "No Tax",
+            type: "none",
+            rate: 0,
+            isDefault: false,
+            isActive: true,
+            description: "Non-taxable item",
+          },
+          {
+            _id: "tax-vat-standard",
+            key: "vat_standard",
+            name: "VAT Standard",
+            type: "vat",
+            rate: 16,
+            isDefault: true,
+            isActive: true,
+            description: "Standard output VAT",
+          },
+        ],
+});
+
+const normalizeAccountingDefaults = (settings = {}) => ({
+  tenantReceivableAccountCode: settings?.accountingDefaults?.tenantReceivableAccountCode || "1200",
+  rentIncomeAccountCode: settings?.accountingDefaults?.rentIncomeAccountCode || "4100",
+  utilityRechargeIncomeAccountCode: settings?.accountingDefaults?.utilityRechargeIncomeAccountCode || "4102",
+  penaltyIncomeAccountCode: settings?.accountingDefaults?.penaltyIncomeAccountCode || "",
+  depositLiabilityAccountCode: settings?.accountingDefaults?.depositLiabilityAccountCode || "2100",
+  managementCommissionIncomeAccountCode: settings?.accountingDefaults?.managementCommissionIncomeAccountCode || "4210",
+});
+
+const extractErrorMessage = (error) =>
+  error?.response?.data?.message || error?.message || "Failed to process company settings request";
+
+const Card = ({ title, subtitle, action, children }) => (
+  <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="flex flex-col gap-3 border-b border-slate-200 p-5 md:flex-row md:items-start md:justify-between">
+      <div>
+        <div className="text-sm font-extrabold text-slate-900">{title}</div>
+        {subtitle ? <div className="mt-1 text-xs leading-5 text-slate-600">{subtitle}</div> : null}
+      </div>
+      {action}
+    </div>
+    <div className="p-5">{children}</div>
+  </div>
+);
+
+const StatusBadge = ({ active }) => (
+  <span
+    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${
+      active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-600"
+    }`}
+  >
+    <span className={`h-2 w-2 rounded-full ${active ? "bg-emerald-500" : "bg-slate-400"}`} />
+    {active ? "Active" : "Archived"}
+  </span>
+);
+
+const Input = ({ className = "", ...props }) => (
+  <input
+    {...props}
+    className={`w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 ${className}`}
+  />
+);
+
+const Select = ({ className = "", ...props }) => (
+  <select
+    {...props}
+    className={`w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 ${className}`}
+  />
+);
+
+const ActionButton = ({ children, onClick, variant = "default", disabled = false }) => {
+  const classes = {
+    default: "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+    primary: "border-transparent bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white hover:opacity-95",
+    subtle: "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100",
+    danger: "border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${classes[variant]}`}
+    >
+      {children}
+    </button>
+  );
+};
+
+const ToggleRow = ({ checked, onChange, title, description }) => (
+  <label
+    className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition ${
+      checked ? "border-emerald-200 bg-emerald-50/80" : "border-slate-200 bg-white"
+    } cursor-pointer hover:border-slate-300`}
+  >
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+    />
+    <div>
+      <div className="text-sm font-bold text-slate-900">{title}</div>
+      <div className="mt-1 text-xs leading-5 text-slate-600">{description}</div>
+    </div>
+  </label>
+);
+
+const SettingRow = ({ title, meta, status, children }) => (
+  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="text-sm font-extrabold text-slate-900">{title}</div>
+          {status}
+        </div>
+        {meta ? <div className="mt-2 text-xs leading-5 text-slate-600">{meta}</div> : null}
+      </div>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  </div>
+);
+
+const Modal = ({ open, title, subtitle, children, onClose, footer }) => {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/50 px-4 py-6">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+          <div>
+            <div className="text-lg font-extrabold text-slate-900">{title}</div>
+            {subtitle ? <div className="mt-1 text-sm text-slate-600">{subtitle}</div> : null}
+          </div>
+          <button onClick={onClose} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
+            Close
+          </button>
+        </div>
+        <div className="max-h-[72vh] overflow-y-auto px-6 py-5">{children}</div>
+        {footer ? <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">{footer}</div> : null}
+      </div>
+    </div>
+  );
+};
+
+const CompanySettings = () => {
+  const navigate = useNavigate();
+  const { currentCompany } = useSelector((state) => state.company || {});
+
+  const [settings, setSettings] = useState(null);
+  const [taxConfig, setTaxConfig] = useState(normalizeTaxConfiguration());
+  const [accountingDefaults, setAccountingDefaults] = useState(normalizeAccountingDefaults());
   const [activeTab, setActiveTab] = useState("utilities");
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [formData, setFormData] = useState({});
+  const [showInactive, setShowInactive] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savingTax, setSavingTax] = useState(false);
+  const [savingAccounting, setSavingAccounting] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalTab, setModalTab] = useState("utilities");
+  const [editingItem, setEditingItem] = useState(null);
+  const [formData, setFormData] = useState(emptyForms.utilities);
+
+  const loadSettings = async ({ silent = false } = {}) => {
+    if (!currentCompany?._id) {
+      setSettings(null);
+      setTaxConfig(normalizeTaxConfiguration());
+      setAccountingDefaults(normalizeAccountingDefaults());
+      return;
+    }
+
+    if (!silent) setLoading(true);
+    try {
+      const response = await adminRequests.get(`/company-settings/${currentCompany._id}`);
+      setSettings(response.data);
+      setTaxConfig(normalizeTaxConfiguration(response.data || {}));
+      setAccountingDefaults(normalizeAccountingDefaults(response.data || {}));
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (currentCompany?._id) {
-      companySettingsAPI.getCompanySettings(dispatch, currentCompany._id);
-    }
-  }, [currentCompany?._id, dispatch]);
+    loadSettings();
+  }, [currentCompany?._id]);
 
-  const handleOpenAddModal = (tab) => {
-    setActiveTab(tab);
-    setShowAddModal(true);
-    setEditingId(null);
-    resetForm(tab);
+  const activeCounts = useMemo(
+    () => ({
+      utilities: (settings?.utilityTypes || []).filter((item) => item?.isActive !== false).length,
+      periods: (settings?.billingPeriods || []).filter((item) => item?.isActive !== false).length,
+      commissions: (settings?.commissions || []).filter((item) => item?.isActive !== false).length,
+      expenses: (settings?.expenseItems || []).filter((item) => item?.isActive !== false).length,
+    }),
+    [settings]
+  );
+
+  const openCreateModal = (tabKey) => {
+    setModalTab(tabKey);
+    setEditingItem(null);
+    setFormData({ ...emptyForms[tabKey] });
+    setShowModal(true);
   };
 
-  const resetForm = (tab) => {
-    switch (tab) {
-      case "utilities":
-        setFormData({ name: "", description: "", category: "utility" });
-        break;
-      case "periods":
-        setFormData({ name: "", durationInMonths: "", durationInDays: "" });
-        break;
-      case "commissions":
-        setFormData({ name: "", percentage: "", applicableTo: "rent", description: "" });
-        break;
-      case "expenses":
-        setFormData({ name: "", description: "", code: "", category: "other", defaultAmount: 0 });
-        break;
-      default:
-        setFormData({});
-    }
+  const openEditModal = (tabKey, item) => {
+    setModalTab(tabKey);
+    setEditingItem(item);
+    setFormData({ ...item });
+    setShowModal(true);
   };
 
-  const handleAddItem = async () => {
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingItem(null);
+    setFormData({ ...emptyForms[modalTab] });
+  };
+
+  const collectionMap = {
+    utilities: settings?.utilityTypes || [],
+    periods: settings?.billingPeriods || [],
+    commissions: settings?.commissions || [],
+    expenses: settings?.expenseItems || [],
+  };
+
+  const visibleItems = useMemo(() => {
+    const items = collectionMap[activeTab] || [];
+    return showInactive ? items : items.filter((item) => item?.isActive !== false);
+  }, [activeTab, collectionMap, showInactive]);
+
+  const saveItem = async () => {
     if (!currentCompany?._id) return;
 
+    const endpoint = TAB_CONFIG[modalTab]?.endpoint;
+    if (!endpoint) return;
+
+    if (!String(formData?.name || "").trim()) {
+      toast.error("Name is required before saving.");
+      return;
+    }
+
+    if (modalTab === "periods" && Number(formData?.durationInMonths || 0) <= 0) {
+      toast.error("Duration in months must be greater than zero.");
+      return;
+    }
+
+    if (modalTab === "commissions") {
+      const percentage = Number(formData?.percentage);
+      if (!Number.isFinite(percentage)) {
+        toast.error("Enter a valid commission percentage.");
+        return;
+      }
+    }
+
+    setSaving(true);
     try {
-      switch (activeTab) {
-        case "utilities":
-          if (!formData.name) {
-            toast.error("Utility name is required");
-            return;
-          }
-          if (editingId) {
-            await companySettingsAPI.updateUtilityType(
-              dispatch,
-              currentCompany._id,
-              editingId,
-              formData
-            );
-            toast.success("Utility updated successfully");
-          } else {
-            await companySettingsAPI.addUtilityType(dispatch, currentCompany._id, formData);
-            toast.success("Utility added successfully");
-          }
-          break;
-
-        case "periods":
-          if (!formData.name || !formData.durationInMonths) {
-            toast.error("Name and duration are required");
-            return;
-          }
-          if (editingId) {
-            await companySettingsAPI.updateBillingPeriod(
-              dispatch,
-              currentCompany._id,
-              editingId,
-              formData
-            );
-            toast.success("Billing period updated successfully");
-          } else {
-            await companySettingsAPI.addBillingPeriod(dispatch, currentCompany._id, formData);
-            toast.success("Billing period added successfully");
-          }
-          break;
-
-        case "commissions":
-          if (!formData.name || formData.percentage === "") {
-            toast.error("Name and percentage are required");
-            return;
-          }
-          if (editingId) {
-            await companySettingsAPI.updateCommission(
-              dispatch,
-              currentCompany._id,
-              editingId,
-              formData
-            );
-            toast.success("Commission updated successfully");
-          } else {
-            await companySettingsAPI.addCommission(dispatch, currentCompany._id, formData);
-            toast.success("Commission added successfully");
-          }
-          break;
-
-        case "expenses":
-          if (!formData.name) {
-            toast.error("Expense item name is required");
-            return;
-          }
-          if (editingId) {
-            await companySettingsAPI.updateExpenseItem(
-              dispatch,
-              currentCompany._id,
-              editingId,
-              formData
-            );
-            toast.success("Expense item updated successfully");
-          } else {
-            await companySettingsAPI.addExpenseItem(dispatch, currentCompany._id, formData);
-            toast.success("Expense item added successfully");
-          }
-          break;
-
-        default:
-          break;
+      const payload = { ...formData };
+      if (modalTab === "periods") {
+        payload.durationInMonths = Number(payload.durationInMonths || 0);
+        payload.durationInDays = Number(payload.durationInDays || payload.durationInMonths * 30 || 0);
+      }
+      if (modalTab === "commissions") {
+        payload.percentage = Number(payload.percentage || 0);
+      }
+      if (modalTab === "expenses") {
+        payload.defaultAmount = Number(payload.defaultAmount || 0);
       }
 
-      setShowAddModal(false);
-      resetForm(activeTab);
+      if (editingItem?._id) {
+        await adminRequests.put(`/company-settings/${currentCompany._id}/${endpoint}/${editingItem._id}`, payload);
+      } else {
+        await adminRequests.post(`/company-settings/${currentCompany._id}/${endpoint}`, payload);
+      }
+
+      toast.success(editingItem?._id ? "Setting updated successfully" : "Setting added successfully");
+      closeModal();
+      await loadSettings({ silent: true });
     } catch (error) {
-      toast.error(error.message || "Failed to save item");
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleEdit = (item, tab) => {
-    setActiveTab(tab);
-    setEditingId(item._id);
-    setFormData(item);
-    setShowAddModal(true);
+  const toggleItemStatus = async (tabKey, item, nextActive) => {
+    if (!currentCompany?._id || !item?._id) return;
+    const endpoint = TAB_CONFIG[tabKey]?.endpoint;
+    if (!endpoint) return;
+
+    try {
+      await adminRequests.put(`/company-settings/${currentCompany._id}/${endpoint}/${item._id}`, {
+        ...item,
+        isActive: nextActive,
+      });
+      toast.success(nextActive ? "Setting reactivated successfully" : "Setting disabled successfully");
+      await loadSettings({ silent: true });
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    }
   };
 
-  const handleDelete = async (id, tab) => {
+  const archiveItem = async (tabKey, item) => {
+    if (!currentCompany?._id || !item?._id) return;
+    const endpoint = TAB_CONFIG[tabKey]?.endpoint;
+    if (!endpoint) return;
+
+    const confirmed = window.confirm(
+      `Archive ${item?.name || "this setting"}? It will stay in history but stop being available for future use.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const response = await adminRequests.delete(`/company-settings/${currentCompany._id}/${endpoint}/${item._id}`);
+      toast.success(response?.data?.message || "Setting archived successfully");
+      await loadSettings({ silent: true });
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    }
+  };
+
+  const handleTaxSettingChange = (key, value) => {
+    setTaxConfig((prev) => ({
+      ...prev,
+      taxSettings: {
+        ...prev.taxSettings,
+        [key]: value,
+      },
+    }));
+  };
+
+  const handleTaxCategoryChange = (category, value) => {
+    setTaxConfig((prev) => ({
+      ...prev,
+      taxSettings: {
+        ...prev.taxSettings,
+        invoiceTaxabilityByCategory: {
+          ...prev.taxSettings.invoiceTaxabilityByCategory,
+          [category]: value,
+        },
+      },
+    }));
+  };
+
+  const handleTaxCodeChange = (index, key, value) => {
+    setTaxConfig((prev) => ({
+      ...prev,
+      taxCodes: prev.taxCodes.map((code, codeIndex) =>
+        codeIndex === index
+          ? {
+              ...code,
+              [key]: key === "rate" ? Number(value || 0) : key === "isDefault" || key === "isActive" ? value : value,
+            }
+          : key === "isDefault" && value === true
+          ? { ...code, isDefault: false }
+          : code
+      ),
+    }));
+  };
+
+  const handleAddTaxCode = () => {
+    setTaxConfig((prev) => ({
+      ...prev,
+      taxCodes: [
+        ...prev.taxCodes,
+        {
+          _id: `tax-code-${Date.now()}`,
+          key: `tax_code_${prev.taxCodes.length + 1}`,
+          name: `Tax Code ${prev.taxCodes.length + 1}`,
+          type: "vat",
+          rate: Number(prev.taxSettings.defaultVatRate || 16),
+          isDefault: false,
+          isActive: true,
+          description: "",
+        },
+      ],
+    }));
+  };
+
+  const handleRemoveTaxCode = (index) => {
+    setTaxConfig((prev) => ({
+      ...prev,
+      taxCodes: prev.taxCodes.filter((_, codeIndex) => codeIndex !== index),
+    }));
+  };
+
+  const saveTaxConfiguration = async () => {
     if (!currentCompany?._id) return;
 
-    if (!window.confirm("Are you sure you want to delete this item?")) return;
-
+    setSavingTax(true);
     try {
-      switch (tab) {
-        case "utilities":
-          await companySettingsAPI.deleteUtilityType(dispatch, currentCompany._id, id);
-          toast.success("Utility deleted successfully");
-          break;
-        case "periods":
-          await companySettingsAPI.deleteBillingPeriod(dispatch, currentCompany._id, id);
-          toast.success("Billing period deleted successfully");
-          break;
-        case "commissions":
-          await companySettingsAPI.deleteCommission(dispatch, currentCompany._id, id);
-          toast.success("Commission deleted successfully");
-          break;
-        case "expenses":
-          await companySettingsAPI.deleteExpenseItem(dispatch, currentCompany._id, id);
-          toast.success("Expense item deleted successfully");
-          break;
-        default:
-          break;
-      }
+      await adminRequests.put(`/company-settings/${currentCompany._id}/tax-configuration`, taxConfig);
+      toast.success("Tax configuration saved successfully. New rules apply going forward only.");
+      await loadSettings({ silent: true });
     } catch (error) {
-      toast.error(error.message || "Failed to delete item");
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSavingTax(false);
     }
+  };
+
+
+  const handleAccountingDefaultChange = (key, value) => {
+    setAccountingDefaults((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const saveAccountingDefaults = async () => {
+    if (!currentCompany?._id) return;
+
+    setSavingAccounting(true);
+    try {
+      await adminRequests.put(`/company-settings/${currentCompany._id}/accounting-defaults`, {
+        accountingDefaults,
+      });
+      toast.success("Accounting defaults saved successfully. Future posting flows will prefer these mappings.");
+      await loadSettings({ silent: true });
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSavingAccounting(false);
+    }
+  };
+
+  const renderMeta = (tabKey, item) => {
+    if (tabKey === "utilities") {
+      return [item?.description, item?.category ? `Category: ${String(item.category).replace(/_/g, " ")}` : null]
+        .filter(Boolean)
+        .join(" • ");
+    }
+
+    if (tabKey === "periods") {
+      return `Duration: ${Number(item?.durationInMonths || 0)} month(s) • ${Number(item?.durationInDays || 0)} day(s)`;
+    }
+
+    if (tabKey === "commissions") {
+      return [
+        `Rate: ${Number(item?.percentage || 0)}%`,
+        `Applies to: ${String(item?.applicableTo || "rent").replace(/_/g, " ")}`,
+        item?.description,
+      ]
+        .filter(Boolean)
+        .join(" • ");
+    }
+
+    if (tabKey === "expenses") {
+      return [
+        item?.code ? `Code: ${item.code}` : null,
+        `Category: ${String(item?.category || "other").replace(/_/g, " ")}`,
+        `Default amount: ${Number(item?.defaultAmount || 0).toLocaleString()}`,
+        item?.description,
+      ]
+        .filter(Boolean)
+        .join(" • ");
+    }
+
+    return "";
+  };
+
+  const renderCollectionTab = (tabKey) => {
+    const tab = TAB_CONFIG[tabKey];
+    const list = collectionMap[tabKey] || [];
+    const active = list.filter((item) => item?.isActive !== false).length;
+    const archived = list.length - active;
+
+    return (
+      <div className="space-y-4">
+        <Card
+          title={tab.label}
+          subtitle={tab.subtitle}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={showInactive}
+                  onChange={(e) => setShowInactive(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                Show archived
+              </label>
+              <ActionButton variant="primary" onClick={() => openCreateModal(tabKey)}>
+                <FaPlus /> Add {tab.label.slice(0, -1)}
+              </ActionButton>
+            </div>
+          }
+        >
+          <div className="mb-4 flex flex-wrap gap-2">
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">{active} active</span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{archived} archived</span>
+          </div>
+
+          {visibleItems.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-600">
+              {tab.empty}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {visibleItems.map((item) => (
+                <SettingRow
+                  key={item._id}
+                  title={item?.name || tab.label.slice(0, -1)}
+                  meta={renderMeta(tabKey, item)}
+                  status={<StatusBadge active={item?.isActive !== false} />}
+                >
+                  <ActionButton onClick={() => openEditModal(tabKey, item)}>
+                    <FaEdit /> Edit
+                  </ActionButton>
+                  <ActionButton onClick={() => toggleItemStatus(tabKey, item, item?.isActive === false)}>
+                    <FaPowerOff /> {item?.isActive === false ? "Reactivate" : "Disable"}
+                  </ActionButton>
+                  {item?.isActive !== false ? (
+                    <ActionButton variant="danger" onClick={() => archiveItem(tabKey, item)}>
+                      <FaArchive /> Archive
+                    </ActionButton>
+                  ) : null}
+                </SettingRow>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  };
+
+  const renderAccountingTab = () => (
+    <div className="space-y-4">
+      <Card
+        title="Accounting Defaults"
+        subtitle="These defaults help future posting flows resolve the correct chart accounts without relying only on broad name matching. Historical entries remain untouched."
+        action={
+          <ActionButton variant="primary" onClick={saveAccountingDefaults} disabled={savingAccounting}>
+            {savingAccounting ? <FaSpinner className="animate-spin" /> : <FaSave />} Save Accounting Defaults
+          </ActionButton>
+        }
+      >
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+          Enter a chart code or exact chart account name. Future invoice, receipt and commission posting flows will prefer these defaults before falling back to MILIK's standard account search.
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Tenant Receivable Account</label>
+            <Input
+              value={accountingDefaults.tenantReceivableAccountCode}
+              onChange={(e) => handleAccountingDefaultChange("tenantReceivableAccountCode", e.target.value)}
+              placeholder="1200"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Rent Income Account</label>
+            <Input
+              value={accountingDefaults.rentIncomeAccountCode}
+              onChange={(e) => handleAccountingDefaultChange("rentIncomeAccountCode", e.target.value)}
+              placeholder="4100"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Utility Recharge Income Account</label>
+            <Input
+              value={accountingDefaults.utilityRechargeIncomeAccountCode}
+              onChange={(e) => handleAccountingDefaultChange("utilityRechargeIncomeAccountCode", e.target.value)}
+              placeholder="4102"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Penalty Income Account</label>
+            <Input
+              value={accountingDefaults.penaltyIncomeAccountCode}
+              onChange={(e) => handleAccountingDefaultChange("penaltyIncomeAccountCode", e.target.value)}
+              placeholder="Penalty Income"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Deposit Liability Account</label>
+            <Input
+              value={accountingDefaults.depositLiabilityAccountCode}
+              onChange={(e) => handleAccountingDefaultChange("depositLiabilityAccountCode", e.target.value)}
+              placeholder="2100"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Management Commission Income Account</label>
+            <Input
+              value={accountingDefaults.managementCommissionIncomeAccountCode}
+              onChange={(e) => handleAccountingDefaultChange("managementCommissionIncomeAccountCode", e.target.value)}
+              placeholder="4210"
+            />
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+
+  const renderTaxTab = () => (
+    <div className="space-y-4">
+      <Card
+        title="Tax Configuration"
+        subtitle="These are company-wide future-facing defaults for invoices and commission tax handling. Saving here does not restate posted invoices or processed statements."
+        action={
+          <ActionButton variant="primary" onClick={saveTaxConfiguration} disabled={savingTax}>
+            {savingTax ? <FaSpinner className="animate-spin" /> : <FaSave />} Save Tax Configuration
+          </ActionButton>
+        }
+      >
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+          Use this screen to define future default tax behavior. Historical financial truth remains intact.
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <ToggleRow
+            checked={taxConfig.taxSettings.enabled}
+            onChange={(e) => handleTaxSettingChange("enabled", e.target.checked)}
+            title="Enable tax engine"
+            description="Turns on structured VAT / tax handling for future invoice and statement calculations."
+          />
+          <ToggleRow
+            checked={taxConfig.taxSettings.invoiceTaxableByDefault}
+            onChange={(e) => handleTaxSettingChange("invoiceTaxableByDefault", e.target.checked)}
+            title="Invoices taxable by default"
+            description="Used as the fallback taxability rule when category-specific rules are not stricter."
+          />
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Default Tax Mode</label>
+            <Select value={taxConfig.taxSettings.defaultTaxMode} onChange={(e) => handleTaxSettingChange("defaultTaxMode", e.target.value)}>
+              <option value="exclusive">Exclusive</option>
+              <option value="inclusive">Inclusive</option>
+            </Select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Default VAT Rate (%)</label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={taxConfig.taxSettings.defaultVatRate}
+              onChange={(e) => handleTaxSettingChange("defaultVatRate", Number(e.target.value || 0))}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Default Tax Code</label>
+            <Select
+              value={taxConfig.taxSettings.defaultTaxCodeKey}
+              onChange={(e) => handleTaxSettingChange("defaultTaxCodeKey", e.target.value)}
+            >
+              {taxConfig.taxCodes.map((code) => (
+                <option key={code._id || code.key} value={code.key}>
+                  {code.name} ({code.key})
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Output VAT Account Code</label>
+            <Input
+              value={taxConfig.taxSettings.outputVatAccountCode}
+              onChange={(e) => handleTaxSettingChange("outputVatAccountCode", e.target.value)}
+              placeholder="2140"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Rounding Precision</label>
+            <Select
+              value={taxConfig.taxSettings.roundingPrecision}
+              onChange={(e) => handleTaxSettingChange("roundingPrecision", Number(e.target.value || 2))}
+            >
+              {[0, 1, 2, 3, 4].map((value) => (
+                <option key={value} value={value}>
+                  {value} decimal place{value === 1 ? "" : "s"}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            ["rent", "Rent invoices"],
+            ["utility", "Utility invoices"],
+            ["penalty", "Penalty invoices"],
+            ["deposit", "Deposit invoices"],
+          ].map(([key, label]) => (
+            <ToggleRow
+              key={key}
+              checked={taxConfig.taxSettings.invoiceTaxabilityByCategory[key]}
+              onChange={(e) => handleTaxCategoryChange(key, e.target.checked)}
+              title={label}
+              description={`Future default taxability for ${label.toLowerCase()}.`}
+            />
+          ))}
+        </div>
+      </Card>
+
+      <Card
+        title="Tax Codes"
+        subtitle="Maintain reusable tax codes. Keep one default active code for future transactions."
+        action={
+          <ActionButton variant="subtle" onClick={handleAddTaxCode}>
+            <FaPlus /> Add Tax Code
+          </ActionButton>
+        }
+      >
+        <div className="space-y-4">
+          {taxConfig.taxCodes.map((code, index) => (
+            <div key={code._id || index} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700">Key</label>
+                  <Input value={code.key} onChange={(e) => handleTaxCodeChange(index, "key", e.target.value)} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700">Name</label>
+                  <Input value={code.name} onChange={(e) => handleTaxCodeChange(index, "name", e.target.value)} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700">Type</label>
+                  <Select value={code.type} onChange={(e) => handleTaxCodeChange(index, "type", e.target.value)}>
+                    <option value="vat">VAT</option>
+                    <option value="zero_rated">Zero Rated</option>
+                    <option value="exempt">Exempt</option>
+                    <option value="none">None</option>
+                  </Select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700">Rate (%)</label>
+                  <Input type="number" min="0" step="0.01" value={code.rate} onChange={(e) => handleTaxCodeChange(index, "rate", e.target.value)} />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
+                  <Input value={code.description} onChange={(e) => handleTaxCodeChange(index, "description", e.target.value)} />
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-3">
+                  <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(code.isDefault)}
+                      onChange={(e) => handleTaxCodeChange(index, "isDefault", e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    Default tax code
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={code.isActive !== false}
+                      onChange={(e) => handleTaxCodeChange(index, "isActive", e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    Active
+                  </label>
+                </div>
+                <ActionButton variant="danger" onClick={() => handleRemoveTaxCode(index)} disabled={taxConfig.taxCodes.length <= 1}>
+                  <FaTimes /> Remove
+                </ActionButton>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+
+  const renderModalBody = () => {
+    const tabKey = modalTab;
+
+    if (tabKey === "utilities") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Name *</label>
+            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="Electricity" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
+            <Input value={formData.description || ""} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Optional description" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Category</label>
+            <Select value={formData.category || "utility"} onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}>
+              <option value="utility">Utility</option>
+              <option value="service_charge">Service charge</option>
+              <option value="maintenance">Maintenance</option>
+            </Select>
+          </div>
+        </div>
+      );
+    }
+
+    if (tabKey === "periods") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Name *</label>
+            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="Monthly" />
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Duration in Months *</label>
+              <Input type="number" min="1" value={formData.durationInMonths || 1} onChange={(e) => setFormData((prev) => ({ ...prev, durationInMonths: Number(e.target.value || 0) }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Duration in Days</label>
+              <Input type="number" min="0" value={formData.durationInDays || 0} onChange={(e) => setFormData((prev) => ({ ...prev, durationInDays: Number(e.target.value || 0) }))} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (tabKey === "commissions") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Name *</label>
+            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="Default" />
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Percentage (%) *</label>
+              <Input type="number" min="0" step="0.01" value={formData.percentage || ""} onChange={(e) => setFormData((prev) => ({ ...prev, percentage: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Applies To</label>
+              <Select value={formData.applicableTo || "rent"} onChange={(e) => setFormData((prev) => ({ ...prev, applicableTo: e.target.value }))}>
+                <option value="rent">Rent</option>
+                <option value="utilities">Utilities</option>
+                <option value="all">All</option>
+              </Select>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
+            <Input value={formData.description || ""} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Optional guidance" />
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1 block text-xs font-bold text-slate-700">Name *</label>
+          <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="Maintenance" />
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Code</label>
+            <Input value={formData.code || ""} onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value }))} placeholder="Optional code" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Category</label>
+            <Select value={formData.category || "other"} onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}>
+              <option value="maintenance">Maintenance</option>
+              <option value="utilities">Utilities</option>
+              <option value="staffing">Staffing</option>
+              <option value="supplies">Supplies</option>
+              <option value="other">Other</option>
+            </Select>
+          </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-bold text-slate-700">Default Amount</label>
+          <Input type="number" min="0" step="0.01" value={formData.defaultAmount || 0} onChange={(e) => setFormData((prev) => ({ ...prev, defaultAmount: e.target.value }))} />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
+          <Input value={formData.description || ""} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Optional guidance" />
+        </div>
+      </div>
+    );
   };
 
   return (
     <DashboardLayout>
-      <div className="p-6 bg-white min-h-screen">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <FaCog className="text-3xl" style={{ color: MILIK_GREEN }} />
-            <h1 className="text-4xl font-bold text-slate-900">Company Settings</h1>
-          </div>
-          <p className="text-slate-600">
-            Manage your company's utilities, billing periods, commissions, and expense items
-          </p>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-slate-200 flex-wrap">
-          {[
-            { id: "utilities", label: "Utility Types", icon: FaLightbulb },
-            { id: "periods", label: "Billing Periods", icon: FaClock },
-            { id: "commissions", label: "Commissions", icon: FaMoneyBillWave },
-            { id: "expenses", label: "Expense Items", icon: FaReceipt },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-6 py-3 font-medium flex items-center gap-2 border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? `border-${MILIK_ORANGE} text-orange-600`
-                    : "border-transparent text-slate-600 hover:text-slate-900"
-                }`}
-                style={
-                  activeTab === tab.id ? { borderBottomColor: MILIK_ORANGE, color: MILIK_ORANGE } : {}
-                }
-              >
-                <Icon className="text-lg" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Content */}
-        <div className="mb-6">
-          {activeTab === "utilities" && (
-            <UtilitiesTab
-              data={companySettings?.utilityTypes || []}
-              onAdd={() => handleOpenAddModal("utilities")}
-              onEdit={(item) => handleEdit(item, "utilities")}
-              onDelete={(id) => handleDelete(id, "utilities")}
-              loading={isFetching}
-            />
-          )}
-          {activeTab === "periods" && (
-            <PeriodsTab
-              data={companySettings?.billingPeriods || []}
-              onAdd={() => handleOpenAddModal("periods")}
-              onEdit={(item) => handleEdit(item, "periods")}
-              onDelete={(id) => handleDelete(id, "periods")}
-              loading={isFetching}
-            />
-          )}
-          {activeTab === "commissions" && (
-            <CommissionsTab
-              data={companySettings?.commissions || []}
-              onAdd={() => handleOpenAddModal("commissions")}
-              onEdit={(item) => handleEdit(item, "commissions")}
-              onDelete={(id) => handleDelete(id, "commissions")}
-              onManagePropertySettings={() => navigate("/properties/commission-settings")}
-              loading={isFetching}
-            />
-          )}
-          {activeTab === "expenses" && (
-            <ExpensesTab
-              data={companySettings?.expenseItems || []}
-              onAdd={() => handleOpenAddModal("expenses")}
-              onEdit={(item) => handleEdit(item, "expenses")}
-              onDelete={(id) => handleDelete(id, "expenses")}
-              loading={isFetching}
-            />
-          )}
-        </div>
-
-        {/* Add/Edit Modal */}
-        {showAddModal && (
-          <AddItemModal
-            visible={showAddModal}
-            onClose={() => setShowAddModal(false)}
-            onSave={handleAddItem}
-            formData={formData}
-            setFormData={setFormData}
-            tab={activeTab}
-            editing={!!editingId}
-            loading={isFetching}
-          />
-        )}
-      </div>
-    </DashboardLayout>
-  );
-};
-
-// Utilities Tab Component
-const UtilitiesTab = ({ data, onAdd, onEdit, onDelete, loading }) => (
-  <div>
-    <div className="flex justify-between items-center mb-4">
-      <h2 className="text-xl font-bold text-slate-900">Utility Types</h2>
-      <button
-        onClick={onAdd}
-        className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-        style={{ backgroundColor: "#FF8C00" }}
-      >
-        <FaPlus /> Add Utility
-      </button>
-    </div>
-
-    {data.length === 0 ? (
-      <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg p-8 text-center">
-        <FaLightbulb className="text-4xl text-slate-300 mx-auto mb-3" />
-        <p className="text-slate-600">No utility types added yet</p>
-      </div>
-    ) : (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {data.map((utility) => (
-          <div key={utility._id} className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-lg transition-shadow">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h3 className="font-bold text-slate-900">{utility.name}</h3>
-                <p className="text-xs text-slate-500 mt-1">{utility.category}</p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => onEdit(utility)}
-                  className="text-blue-600 hover:text-blue-800 p-2"
-                  title="Edit"
-                >
-                  <FaEdit />
-                </button>
-                <button
-                  onClick={() => onDelete(utility._id)}
-                  className="text-red-600 hover:text-red-800 p-2"
-                  title="Delete"
-                >
-                  <FaTrash />
-                </button>
-              </div>
+      <div className="mx-auto max-w-[1200px] px-4 py-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <FaCog className="text-2xl" style={{ color: MILIK_GREEN }} />
+              <div className="text-2xl font-extrabold text-slate-900">Operational Settings</div>
             </div>
-            {utility.description && (
-              <p className="text-sm text-slate-600">{utility.description}</p>
-            )}
-            <div className="mt-3 pt-3 border-t border-slate-200">
-              <span
-                className={`px-2 py-1 rounded text-xs font-medium ${
-                  utility.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                }`}
-              >
-                {utility.isActive ? "Active" : "Inactive"}
-              </span>
+            <div className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Use this workspace for reusable operational defaults. These settings are designed to guide future activity and should not rewrite posted accounting history.
             </div>
           </div>
-        ))}
-      </div>
-    )}
-  </div>
-);
+          <div className="flex flex-wrap gap-2">
+            <ActionButton variant="subtle" onClick={() => navigate("/company-setup")}>
+              Open Company Setup <FaArrowRight />
+            </ActionButton>
+          </div>
+        </div>
 
-// Billing Periods Tab Component
-const PeriodsTab = ({ data, onAdd, onEdit, onDelete, loading }) => (
-  <div>
-    <div className="flex justify-between items-center mb-4">
-      <h2 className="text-xl font-bold text-slate-900">Billing Periods</h2>
-      <button
-        onClick={onAdd}
-        className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-        style={{ backgroundColor: "#FF8C00" }}
-      >
-        <FaPlus /> Add Period
-      </button>
-    </div>
-
-    {data.length === 0 ? (
-      <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg p-8 text-center">
-        <FaClock className="text-4xl text-slate-300 mx-auto mb-3" />
-        <p className="text-slate-600">No billing periods added yet</p>
-      </div>
-    ) : (
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="px-4 py-3 text-left font-bold text-slate-900">Period Name</th>
-              <th className="px-4 py-3 text-left font-bold text-slate-900">Duration (Months)</th>
-              <th className="px-4 py-3 text-left font-bold text-slate-900">Duration (Days)</th>
-              <th className="px-4 py-3 text-left font-bold text-slate-900">Status</th>
-              <th className="px-4 py-3 text-center font-bold text-slate-900">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((period) => (
-              <tr key={period._id} className="border-b border-slate-200 hover:bg-slate-50">
-                <td className="px-4 py-3 text-slate-900 font-medium">{period.name}</td>
-                <td className="px-4 py-3 text-slate-600">{period.durationInMonths}</td>
-                <td className="px-4 py-3 text-slate-600">{period.durationInDays}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`px-2 py-1 rounded text-xs font-medium ${
-                      period.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                    }`}
-                  >
-                    {period.isActive ? "Active" : "Inactive"}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-center flex justify-center gap-2">
-                  <button
-                    onClick={() => onEdit(period)}
-                    className="text-blue-600 hover:text-blue-800 p-2"
-                    title="Edit"
-                  >
-                    <FaEdit />
-                  </button>
-                  <button
-                    onClick={() => onDelete(period._id)}
-                    className="text-red-600 hover:text-red-800 p-2"
-                    title="Delete"
-                  >
-                    <FaTrash />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )}
-  </div>
-);
-
-// Commissions Tab Component
-const CommissionsTab = ({ data, onAdd, onEdit, onDelete, onManagePropertySettings, loading }) => (
-  <div>
-    <div className="flex justify-between items-center mb-4">
-      <h2 className="text-xl font-bold text-slate-900">Commission Structures</h2>
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onManagePropertySettings}
-          className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-        >
-          <FaCog /> Per Property Commission
-        </button>
-        <button
-          onClick={onAdd}
-          className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-          style={{ backgroundColor: "#FF8C00" }}
-        >
-          <FaPlus /> Add Commission
-        </button>
-      </div>
-    </div>
-
-    <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-      Property commission values are managed per property under <span className="font-semibold">Per Property Commission</span>.
-      Global commission structures below remain available for reusable templates and defaults.
-    </div>
-
-    {data.length === 0 ? (
-      <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg p-8 text-center">
-        <FaMoneyBillWave className="text-4xl text-slate-300 mx-auto mb-3" />
-        <p className="text-slate-600">No commissions added yet</p>
-      </div>
-    ) : (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {data.map((commission) => (
-          <div key={commission._id} className="bg-gradient-to-br from-orange-50 to-yellow-50 border-2 border-orange-200 rounded-lg p-4 hover:shadow-lg transition-shadow">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h3 className="font-bold text-slate-900">{commission.name}</h3>
-                <p className="text-2xl font-bold text-orange-600 mt-2">{commission.percentage}%</p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => onEdit(commission)}
-                  className="text-blue-600 hover:text-blue-800 p-2"
-                  title="Edit"
-                >
-                  <FaEdit />
-                </button>
-                <button
-                  onClick={() => onDelete(commission._id)}
-                  className="text-red-600 hover:text-red-800 p-2"
-                  title="Delete"
-                >
-                  <FaTrash />
-                </button>
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
+          <div className="flex items-start gap-3">
+            <FaExclamationCircle className="mt-0.5 text-base text-amber-600" />
+            <div>
+              <div className="font-extrabold">Future-facing defaults only</div>
+              <div className="mt-1 text-xs leading-5 text-amber-800">
+                Disabling or archiving an item keeps historical invoices, receipts, statements and ledgers intact. Use Company Setup for company identity, integrations, modules and structural configuration, then maintain tax and account-mapping defaults here for future posting behavior.
               </div>
             </div>
-            <div className="space-y-2">
-              <p className="text-sm text-slate-600">
-                <span className="font-medium">Applies to:</span> {commission.applicableTo}
-              </p>
-              {commission.description && (
-                <p className="text-sm text-slate-600">{commission.description}</p>
-              )}
-              <div className="mt-3 pt-3 border-t border-orange-200">
-                <span
-                  className={`px-2 py-1 rounded text-xs font-medium ${
-                    commission.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-white/40 bg-white/50 p-2 backdrop-blur-xl">
+          <div className="flex gap-2 overflow-x-auto">
+            {Object.entries(TAB_CONFIG).map(([key, tab]) => {
+              const Icon = tab.icon;
+              const isActive = key === activeTab;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`flex items-center gap-2 whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-extrabold transition ${
+                    isActive
+                      ? "border-transparent bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white"
+                      : "border-slate-200 bg-white/70 text-slate-800 hover:bg-white"
                   }`}
                 >
-                  {commission.isActive ? "Active" : "Inactive"}
-                </span>
+                  <Icon className="text-sm" />
+                  {tab.label}
+                  {!["tax", "accounting"].includes(key) ? (
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${isActive ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"}`}>
+                      {activeCounts[key] ?? 0}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {loading ? (
+            <Card title="Loading settings" subtitle="Fetching the current company operational defaults.">
+              <div className="flex items-center gap-3 text-sm text-slate-600">
+                <FaSpinner className="animate-spin" /> Loading...
               </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-);
-
-// Expenses Tab Component
-const ExpensesTab = ({ data, onAdd, onEdit, onDelete, loading }) => (
-  <div>
-    <div className="flex justify-between items-center mb-4">
-      <h2 className="text-xl font-bold text-slate-900">Expense Items</h2>
-      <button
-        onClick={onAdd}
-        className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-        style={{ backgroundColor: "#FF8C00" }}
-      >
-        <FaPlus /> Add Expense
-      </button>
-    </div>
-
-    {data.length === 0 ? (
-      <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg p-8 text-center">
-        <FaReceipt className="text-4xl text-slate-300 mx-auto mb-3" />
-        <p className="text-slate-600">No expense items added yet</p>
-      </div>
-    ) : (
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="px-4 py-3 text-left font-bold text-slate-900">Item Name</th>
-              <th className="px-4 py-3 text-left font-bold text-slate-900">Category</th>
-              <th className="px-4 py-3 text-left font-bold text-slate-900">Default Amount</th>
-              <th className="px-4 py-3 text-left font-bold text-slate-900">Status</th>
-              <th className="px-4 py-3 text-center font-bold text-slate-900">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((expense) => (
-              <tr key={expense._id} className="border-b border-slate-200 hover:bg-slate-50">
-                <td className="px-4 py-3 text-slate-900 font-medium">{expense.name}</td>
-                <td className="px-4 py-3 text-slate-600 capitalize">{expense.category}</td>
-                <td className="px-4 py-3 text-slate-600">Ksh {(expense.defaultAmount || 0).toLocaleString()}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`px-2 py-1 rounded text-xs font-medium ${
-                      expense.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                    }`}
-                  >
-                    {expense.isActive ? "Active" : "Inactive"}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-center flex justify-center gap-2">
-                  <button
-                    onClick={() => onEdit(expense)}
-                    className="text-blue-600 hover:text-blue-800 p-2"
-                    title="Edit"
-                  >
-                    <FaEdit />
-                  </button>
-                  <button
-                    onClick={() => onDelete(expense._id)}
-                    className="text-red-600 hover:text-red-800 p-2"
-                    title="Delete"
-                  >
-                    <FaTrash />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )}
-  </div>
-);
-
-// Add/Edit Modal Component
-const AddItemModal = ({ visible, onClose, onSave, formData, setFormData, tab, editing, loading }) => {
-  if (!visible) return null;
-
-  const getTitle = () => {
-    if (editing) {
-      return `Edit ${tab === "utilities" ? "Utility" : tab === "periods" ? "Period" : tab === "commissions" ? "Commission" : "Expense"}`;
-    }
-    return `Add New ${tab === "utilities" ? "Utility" : tab === "periods" ? "Period" : tab === "commissions" ? "Commission" : "Expense"}`;
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-2xl max-w-md w-full mx-4 p-6">
-        <h2 className="text-2xl font-bold text-slate-900 mb-4">{getTitle()}</h2>
-
-        {tab === "utilities" && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">
-                Utility Name *
-              </label>
-              <input
-                type="text"
-                value={formData.name || ""}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., Electricity, Water"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">Description</label>
-              <textarea
-                value={formData.description || ""}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Optional description"
-                rows="3"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">Category</label>
-              <select
-                value={formData.category || "utility"}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              >
-                <option value="utility">Utility</option>
-                <option value="service_charge">Service Charge</option>
-                <option value="maintenance">Maintenance</option>
-              </select>
-            </div>
-          </div>
-        )}
-
-        {tab === "periods" && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">
-                Period Name *
-              </label>
-              <input
-                type="text"
-                value={formData.name || ""}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., Monthly, Quarterly"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">
-                Duration (Months) *
-              </label>
-              <input
-                type="number"
-                value={formData.durationInMonths || ""}
-                onChange={(e) => setFormData({ ...formData, durationInMonths: parseInt(e.target.value) || "" })}
-                placeholder="e.g., 1, 3, 12"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">
-                Duration (Days)
-              </label>
-              <input
-                type="number"
-                value={formData.durationInDays || ""}
-                onChange={(e) => setFormData({ ...formData, durationInDays: parseInt(e.target.value) || "" })}
-                placeholder="e.g., 30, 90, 365"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-          </div>
-        )}
-
-        {tab === "commissions" && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">
-                Commission Name *
-              </label>
-              <input
-                type="text"
-                value={formData.name || ""}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., Default, Premium"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">
-                Percentage (%) *
-              </label>
-              <input
-                type="number"
-                value={formData.percentage || ""}
-                onChange={(e) => setFormData({ ...formData, percentage: parseFloat(e.target.value) || "" })}
-                placeholder="e.g., 5, 10, 15"
-                min="0"
-                max="100"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">Applies To</label>
-              <select
-                value={formData.applicableTo || "rent"}
-                onChange={(e) => setFormData({ ...formData, applicableTo: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              >
-                <option value="rent">Rent Only</option>
-                <option value="utilities">Utilities Only</option>
-                <option value="all">All Income</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">Description</label>
-              <textarea
-                value={formData.description || ""}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Optional description"
-                rows="2"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-          </div>
-        )}
-
-        {tab === "expenses" && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">
-                Expense Name *
-              </label>
-              <input
-                type="text"
-                value={formData.name || ""}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., Repairs, Cleaning"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">Category</label>
-              <select
-                value={formData.category || "other"}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              >
-                <option value="maintenance">Maintenance</option>
-                <option value="utilities">Utilities</option>
-                <option value="staffing">Staffing</option>
-                <option value="supplies">Supplies</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">Default Amount</label>
-              <input
-                type="number"
-                value={formData.defaultAmount || 0}
-                onChange={(e) => setFormData({ ...formData, defaultAmount: parseFloat(e.target.value) || 0 })}
-                placeholder="0.00"
-                min="0"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">Description</label>
-              <textarea
-                value={formData.description || ""}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Optional description"
-                rows="2"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-          </div>
-        )}
-
-        <div className="flex gap-3 mt-6">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium flex items-center justify-center gap-2"
-          >
-            <FaTimes /> Cancel
-          </button>
-          <button
-            onClick={onSave}
-            disabled={loading}
-            className="flex-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50"
-            style={{ backgroundColor: "#FF8C00" }}
-          >
-            {loading ? <FaSpinner className="animate-spin" /> : <FaSave />}
-            {loading ? "Saving..." : "Save"}
-          </button>
+            </Card>
+          ) : activeTab === "tax" ? (
+            renderTaxTab()
+          ) : activeTab === "accounting" ? (
+            renderAccountingTab()
+          ) : (
+            renderCollectionTab(activeTab)
+          )}
         </div>
       </div>
-    </div>
+
+      <Modal
+        open={showModal}
+        onClose={closeModal}
+        title={editingItem?._id ? `Edit ${TAB_CONFIG[modalTab].label.slice(0, -1)}` : `Add ${TAB_CONFIG[modalTab].label.slice(0, -1)}`}
+        subtitle="These settings guide future defaults and remain safe for historical accounting records."
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <ActionButton onClick={closeModal}>
+              <FaTimes /> Cancel
+            </ActionButton>
+            <ActionButton variant="primary" onClick={saveItem} disabled={saving}>
+              {saving ? <FaSpinner className="animate-spin" /> : <FaSave />}
+              {saving ? "Saving..." : editingItem?._id ? "Update" : "Save"}
+            </ActionButton>
+          </div>
+        }
+      >
+        {renderModalBody()}
+      </Modal>
+    </DashboardLayout>
   );
 };
 
