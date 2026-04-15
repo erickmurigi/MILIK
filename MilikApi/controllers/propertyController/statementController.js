@@ -108,8 +108,8 @@ export const createDraft = async (req, res, next) => {
     const periodEndStart = startOfDay(periodEnd);
     const periodEndEnd = endOfDay(periodEnd);
 
-    // Reopen existing draft for same period even if stored date has time component.
-    const existingDraft = await LandlordStatement.findOne({
+    // Always regenerate the current workspace from live data instead of reopening a stale draft snapshot.
+    const existingDrafts = await LandlordStatement.find({
       business: businessId,
       property: propertyId,
       landlord: landlordId,
@@ -120,32 +120,45 @@ export const createDraft = async (req, res, next) => {
       ...(periodEndStart && periodEndEnd
         ? { periodEnd: { $gte: periodEndStart, $lte: periodEndEnd } }
         : {}),
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1, _id: -1 });
+
+    const existingDraft = existingDrafts[0] || null;
 
     if (existingDraft) {
-      const result = refreshRequested
-        ? await refreshDraftStatement(existingDraft._id, userId, notes || "", statementType)
-        : { statement: existingDraft, lineCount: existingDraft.lineCount || 0 };
+      const duplicateDraftIds = existingDrafts
+        .slice(1)
+        .map((item) => item?._id)
+        .filter(Boolean);
+
+      if (duplicateDraftIds.length > 0) {
+        await LandlordStatementLine.deleteMany({ statement: { $in: duplicateDraftIds }, business: businessId });
+        await LandlordStatement.deleteMany({ _id: { $in: duplicateDraftIds }, business: businessId, status: "draft" });
+      }
+
+      const result = await refreshDraftStatement(
+        existingDraft._id,
+        userId,
+        notes || "",
+        statementType
+      );
 
       const lines = await LandlordStatementLine.find({ statement: existingDraft._id })
         .sort({ lineNumber: 1 })
         .lean();
 
-      const reopenedStatement = refreshRequested
-        ? result.statement
-        : await LandlordStatement.findById(existingDraft._id).lean();
+      const refreshedStatement = await LandlordStatement.findById(existingDraft._id).lean();
 
       return res.status(200).json({
         success: true,
         message: refreshRequested
-          ? "Existing draft regenerated successfully"
-          : "Existing draft reopened successfully",
+          ? "Draft statement regenerated successfully"
+          : "Draft statement refreshed from current transactions",
         data: {
-          statement: reopenedStatement,
+          statement: refreshedStatement || result.statement,
           lines,
           lineCount: lines.length,
           isExisting: true,
-          refreshed: refreshRequested,
+          refreshed: true,
         },
       });
     }

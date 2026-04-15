@@ -13,6 +13,7 @@ const formatPercent = (value) => (value === null || value === undefined ? '—' 
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '—');
 const formatMethod = (value) => (value ? String(value).replace(/_/g, ' ') : 'All methods');
+const ITEMS_PER_PAGE = 50;
 
 const RentalCollectionReport = () => {
   const dispatch = useDispatch();
@@ -42,6 +43,7 @@ const RentalCollectionReport = () => {
     cashbook: '',
   });
   const [report, setReport] = useState({ summary: {}, byProperty: [], rows: [] });
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (!businessId) return;
@@ -99,6 +101,27 @@ const RentalCollectionReport = () => {
     { label: 'Method', value: filters.paymentMethod ? formatMethod(filters.paymentMethod) : 'All methods' },
     { label: 'Cashbook', value: filters.cashbook || 'All cashbooks' },
   ]), [filters, propertyNameMap, tenantNameMap, unitNameMap, landlordNameMap]);
+
+  const paginatedRows = useMemo(() => {
+    const rows = Array.isArray(report.rows) ? report.rows : [];
+    const startIndex = (Math.max(currentPage, 1) - 1) * ITEMS_PER_PAGE;
+    return rows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [report.rows, currentPage]);
+
+  const totalPages = useMemo(() => {
+    const rows = Array.isArray(report.rows) ? report.rows.length : 0;
+    return Math.max(1, Math.ceil(rows / ITEMS_PER_PAGE));
+  }, [report.rows]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.startDate, filters.endDate, filters.propertyId, filters.tenantId, filters.unitId, filters.landlordId, filters.paymentMethod, filters.cashbook]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const collectionInsights = useMemo(() => {
     const rows = Array.isArray(report.rows) ? report.rows : [];
@@ -336,7 +359,7 @@ const RentalCollectionReport = () => {
               </div>
             </div>
 
-            <div className="border-b border-slate-200 bg-slate-50 p-4">
+            <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50 p-4 shadow-sm">
               <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700"><FaFilter className="text-amber-600" /> Filters</div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
@@ -410,9 +433,9 @@ const RentalCollectionReport = () => {
             <div className="grid gap-6 p-4">
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                 <div className="bg-[#0B3B2E] px-4 py-3 text-sm font-bold text-white">Collection Summary by Property</div>
-                <div className="overflow-x-auto">
+                <div className="max-h-[260px] overflow-auto">
                   <table className="min-w-full text-sm">
-                    <thead className="bg-slate-100 text-slate-700">
+                    <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
                       <tr>
                         {['Property', 'Receipts', 'Tenants', 'Collected', 'Rent', 'Utilities', 'Penalty', 'Unapplied'].map((header) => <th key={header} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em]">{header}</th>)}
                       </tr>
@@ -439,9 +462,9 @@ const RentalCollectionReport = () => {
 
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                 <div className="bg-[#0B3B2E] px-4 py-3 text-sm font-bold text-white">Detailed Receipts</div>
-                <div className="overflow-x-auto">
+                <div className="max-h-[56vh] overflow-auto">
                   <table className="min-w-full text-sm">
-                    <thead className="bg-slate-100 text-slate-700">
+                    <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
                       <tr>
                         {['Date', 'Receipt #', 'Property', 'Tenant', 'Unit', 'Method', 'Collected', 'Allocated', 'Rent', 'Utilities', 'Penalty', 'Unapplied', 'Cashbook'].map((header) => <th key={header} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em]">{header}</th>)}
                       </tr>
@@ -449,7 +472,7 @@ const RentalCollectionReport = () => {
                     <tbody>
                       {(report.rows || []).length === 0 ? (
                         <tr><td colSpan={13} className="px-4 py-10 text-center text-slate-500">No receipts found for the current filters.</td></tr>
-                      ) : (report.rows || []).map((row) => (
+                      ) : paginatedRows.map((row) => (
                         <tr key={row.receiptId} className="border-t border-slate-200 hover:bg-slate-50/80">
                           <td className="px-4 py-3 text-slate-700">{formatDate(row.paymentDate)}</td>
                           <td className="px-4 py-3 font-semibold text-slate-900">{row.receiptNumber || '—'}</td>
@@ -468,6 +491,32 @@ const RentalCollectionReport = () => {
                       ))}
                     </tbody>
                   </table>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                  <div>
+                    Showing {report.rows?.length ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}-
+                    {Math.min(currentPage * ITEMS_PER_PAGE, report.rows?.length || 0)} of {report.rows?.length || 0} receipt row(s)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-700">50 items per page</span>
+                    <button
+                      type="button"
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="font-semibold text-slate-700">Page {currentPage} of {totalPages}</span>
+                    <button
+                      type="button"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -854,12 +854,12 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
       businessId,
       tenantIds,
       asOfDate,
-      invoiceQuery: { category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"] } },
+      invoiceQuery: {},
     });
 
     const rows = baseRows.map((row) => {
       const snapshot = snapshotMap.get(String(row.tenantId)) || { invoiceSnapshots: [], receiptAllocations: [] };
-      const invoices = normalizeArray(snapshot.invoiceSnapshots).filter((invoice) => ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"].includes(String(invoice?.category || "")));
+      const invoices = normalizeArray(snapshot.invoiceSnapshots);
       const receipts = normalizeArray(snapshot.receiptAllocations);
 
       let totalInvoiced = 0;
@@ -868,18 +868,23 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
       let rentBalance = 0;
       let utilityBalance = 0;
       let penaltyBalance = 0;
+      let depositBalance = 0;
+      let otherBalance = 0;
       let oldestDueDate = null;
 
       invoices.forEach((invoice) => {
         const amount = Number(invoice?.amount || 0);
         const applied = Number(invoice?.applied || 0);
         const remaining = Number(invoice?.outstanding || 0);
+        const category = String(invoice?.category || "").toUpperCase();
         totalInvoiced += amount;
         totalPaidApplied += applied;
         outstanding += remaining;
-        if (String(invoice?.category) === "RENT_CHARGE") rentBalance += remaining;
-        if (String(invoice?.category) === "UTILITY_CHARGE") utilityBalance += remaining;
-        if (String(invoice?.category) === "LATE_PENALTY_CHARGE") penaltyBalance += remaining;
+        if (category === "RENT_CHARGE") rentBalance += remaining;
+        else if (category === "UTILITY_CHARGE") utilityBalance += remaining;
+        else if (category === "LATE_PENALTY_CHARGE") penaltyBalance += remaining;
+        else if (category === "DEPOSIT_CHARGE") depositBalance += remaining;
+        else otherBalance += remaining;
         if (remaining > 0 && invoice?.dueDate && (!oldestDueDate || new Date(invoice.dueDate) < new Date(oldestDueDate))) {
           oldestDueDate = invoice.dueDate;
         }
@@ -907,6 +912,8 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
         rentBalance: round2(rentBalance),
         utilityBalance: round2(utilityBalance),
         penaltyBalance: round2(penaltyBalance),
+        depositBalance: round2(depositBalance),
+        otherBalance: round2(otherBalance),
         oldestDueDate: oldestDueDate || null,
         lastPaymentDate: lastPaymentDate || null,
         status,

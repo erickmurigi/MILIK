@@ -10,6 +10,7 @@ const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefine
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '—');
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
+const ITEMS_PER_PAGE = 50;
 
 const PaidBalanceReport = () => {
   const dispatch = useDispatch();
@@ -33,6 +34,7 @@ const PaidBalanceReport = () => {
     search: '',
   });
   const [report, setReport] = useState({ summary: {}, rows: [] });
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (!businessId) return;
@@ -58,6 +60,27 @@ const PaidBalanceReport = () => {
   useEffect(() => {
     loadReport();
   }, [businessId, filters.asOfDate, filters.propertyId, filters.status, filters.search]);
+
+  const paginatedRows = useMemo(() => {
+    const rows = Array.isArray(report.rows) ? report.rows : [];
+    const startIndex = (Math.max(currentPage, 1) - 1) * ITEMS_PER_PAGE;
+    return rows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [report.rows, currentPage]);
+
+  const totalPages = useMemo(() => {
+    const rows = Array.isArray(report.rows) ? report.rows.length : 0;
+    return Math.max(1, Math.ceil(rows / ITEMS_PER_PAGE));
+  }, [report.rows]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.asOfDate, filters.propertyId, filters.status, filters.search]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const summary = report.summary || {};
   const propertyNameMap = useMemo(() => new Map(properties.map((property) => [String(property?._id), property?.propertyName || property?.name || 'Unnamed Property'])), [properties]);
@@ -106,7 +129,7 @@ const PaidBalanceReport = () => {
   const printGeneratedAt = useMemo(() => new Date().toLocaleString(), [report, filters]);
 
   const handleExportCSV = () => {
-    const header = ['Tenant', 'Property', 'Unit', 'Invoiced', 'Paid Applied', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Balance', 'Utility Balance', 'Penalty Balance', 'Oldest Due', 'Last Payment', 'Status'];
+    const header = ['Tenant', 'Property', 'Unit', 'Invoiced', 'Paid Applied', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Balance', 'Utility Balance', 'Penalty Balance', 'Deposit Balance', 'Other Balance', 'Oldest Due', 'Last Payment', 'Status'];
     const rows = (report.rows || []).map((row) => [
       row.tenantName || '',
       row.propertyName || '',
@@ -119,6 +142,8 @@ const PaidBalanceReport = () => {
       row.rentBalance || 0,
       row.utilityBalance || 0,
       row.penaltyBalance || 0,
+      row.depositBalance || 0,
+      row.otherBalance || 0,
       row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '',
       row.lastPaymentDate ? new Date(row.lastPaymentDate).toLocaleDateString() : '',
       row.status || '',
@@ -240,12 +265,12 @@ const PaidBalanceReport = () => {
             <table className="report-print-table">
               <thead>
                 <tr>
-                  {['Tenant', 'Property', 'Unit', 'Invoiced', 'Paid', 'Outstanding', 'Credit', 'Net Balance', 'Oldest Due', 'Last Payment', 'Status'].map((header) => <th key={header}>{header}</th>)}
+                  {['Tenant', 'Property', 'Unit', 'Invoiced', 'Paid', 'Outstanding', 'Credit', 'Net Balance', 'Rent Balance', 'Utility Balance', 'Penalty Balance', 'Deposit Balance', 'Other Balance', 'Oldest Due', 'Last Payment', 'Status'].map((header) => <th key={header}>{header}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {(report.rows || []).length === 0 ? (
-                  <tr><td colSpan={11}>No tenants matched the selected filters.</td></tr>
+                  <tr><td colSpan={16}>No tenants matched the selected filters.</td></tr>
                 ) : (report.rows || []).map((row) => (
                   <tr key={row.tenantId}>
                     <td>{row.tenantName}</td>
@@ -256,6 +281,11 @@ const PaidBalanceReport = () => {
                     <td className="text-right text-red">{formatMoney(row.outstanding)}</td>
                     <td className="text-right text-amber">{formatMoney(row.unappliedCredit)}</td>
                     <td className={`text-right ${Number(row.netBalance || 0) > 0 ? 'text-red' : Number(row.netBalance || 0) < 0 ? 'text-emerald' : ''}`}>{formatMoney(row.netBalance)}</td>
+                    <td className="text-right">{formatMoney(row.rentBalance)}</td>
+                    <td className="text-right">{formatMoney(row.utilityBalance)}</td>
+                    <td className="text-right">{formatMoney(row.penaltyBalance)}</td>
+                    <td className="text-right">{formatMoney(row.depositBalance)}</td>
+                    <td className="text-right">{formatMoney(row.otherBalance)}</td>
                     <td>{formatDate(row.oldestDueDate)}</td>
                     <td>{formatDate(row.lastPaymentDate)}</td>
                     <td>{row.status}</td>
@@ -287,7 +317,7 @@ const PaidBalanceReport = () => {
               </div>
             </div>
 
-            <div className="border-b border-slate-200 bg-slate-50 p-4">
+            <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50 p-4 shadow-sm">
               <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700"><FaFilter className="text-amber-600" /> Filters</div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <input type="date" value={filters.asOfDate} onChange={(e) => setFilters((prev) => ({ ...prev, asOfDate: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
@@ -354,17 +384,18 @@ const PaidBalanceReport = () => {
                 <span>Settled: {summary.settledCount || 0}</span>
                 {balanceInsights.earliestArrear?.tenantName && <span>Oldest due: {balanceInsights.earliestArrear.tenantName} ({formatDate(balanceInsights.earliestArrear.oldestDueDate)})</span>}
               </div>
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-100 text-slate-700">
+              <div className="overflow-hidden rounded-2xl border border-slate-200">
+                <div className="max-h-[58vh] overflow-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
                     <tr>
-                      {['Tenant', 'Property', 'Unit', 'Invoiced', 'Paid', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Bal', 'Utility Bal', 'Penalty Bal', 'Oldest Due', 'Last Payment', 'Status'].map((header) => <th key={header} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em]">{header}</th>)}
+                      {['Tenant', 'Property', 'Unit', 'Invoiced', 'Paid', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Bal', 'Utility Bal', 'Penalty Bal', 'Deposit Bal', 'Other Bal', 'Oldest Due', 'Last Payment', 'Status'].map((header) => <th key={header} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em]">{header}</th>)}
                     </tr>
                   </thead>
                   <tbody>
                     {(report.rows || []).length === 0 ? (
-                      <tr><td colSpan={14} className="px-4 py-10 text-center text-slate-500">No tenants matched the selected filters.</td></tr>
-                    ) : (report.rows || []).map((row) => (
+                      <tr><td colSpan={16} className="px-4 py-10 text-center text-slate-500">No tenants matched the selected filters.</td></tr>
+                    ) : paginatedRows.map((row) => (
                       <tr key={row.tenantId} className="border-t border-slate-200 hover:bg-slate-50/80">
                         <td className="px-4 py-3 font-semibold text-slate-900">{row.tenantName}</td>
                         <td className="px-4 py-3 text-slate-700">{row.propertyName}</td>
@@ -377,6 +408,8 @@ const PaidBalanceReport = () => {
                         <td className="px-4 py-3 text-slate-700">{formatMoney(row.rentBalance)}</td>
                         <td className="px-4 py-3 text-slate-700">{formatMoney(row.utilityBalance)}</td>
                         <td className="px-4 py-3 text-slate-700">{formatMoney(row.penaltyBalance)}</td>
+                        <td className="px-4 py-3 text-slate-700">{formatMoney(row.depositBalance)}</td>
+                        <td className="px-4 py-3 text-slate-700">{formatMoney(row.otherBalance)}</td>
                         <td className="px-4 py-3 text-slate-700">{formatDate(row.oldestDueDate)}</td>
                         <td className="px-4 py-3 text-slate-700">{formatDate(row.lastPaymentDate)}</td>
                         <td className="px-4 py-3">
@@ -388,6 +421,33 @@ const PaidBalanceReport = () => {
                     ))}
                   </tbody>
                 </table>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                  <div>
+                    Showing {report.rows?.length ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}-
+                    {Math.min(currentPage * ITEMS_PER_PAGE, report.rows?.length || 0)} of {report.rows?.length || 0} tenant row(s)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-700">50 items per page</span>
+                    <button
+                      type="button"
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="font-semibold text-slate-700">Page {currentPage} of {totalPages}</span>
+                    <button
+                      type="button"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

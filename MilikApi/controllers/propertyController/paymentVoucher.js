@@ -34,6 +34,28 @@ const buildStatementPeriod = (value) => {
   };
 };
 
+const resolveVoucherPostingDate = ({ voucher = {}, statementDate = null } = {}) => {
+  const candidates = [
+    statementDate,
+    voucher?.paidDate,
+    voucher?.paidAt,
+    voucher?.approvedAt,
+    voucher?.createdAt,
+    voucher?.updatedAt,
+    voucher?.dueDate,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = normalizeDate(candidate, null);
+    if (parsed instanceof Date && !Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return new Date();
+};
+
 const resolveBusinessId = async (req) => {
   const direct =
     req?.query?.business ||
@@ -342,19 +364,53 @@ const populateVoucherQuery = (query) =>
     .populate("expenseRecord")
     .populate("sourceRequisition", "requisitionNo referenceNo status title amount property linkedVoucher");
 
-const createExpenseRecordForVoucher = async (voucher) => {
+const createExpenseRecordForVoucher = async (voucher, { statementDate = null } = {}) => {
   const expenseCategory = getExpenseCategory(voucher.category);
   if (!expenseCategory) return null;
+
+  const effectiveDate = normalizeDate(resolveVoucherPostingDate({ voucher, statementDate }));
+  const description = String(voucher.narration || voucher.reference || `Payment voucher ${voucher.voucherNo}`).trim();
+
   if (voucher.expenseRecord) {
-    return ExpenseProperty.findById(voucher.expenseRecord).lean();
+    const existingExpense = await ExpenseProperty.findById(voucher.expenseRecord);
+    if (!existingExpense) return null;
+
+    let dirty = false;
+    if (String(existingExpense.property || "") !== String(voucher.property || "")) {
+      existingExpense.property = voucher.property;
+      dirty = true;
+    }
+    if (String(existingExpense.business || "") !== String(voucher.business || "")) {
+      existingExpense.business = voucher.business;
+      dirty = true;
+    }
+    if (existingExpense.category !== expenseCategory) {
+      existingExpense.category = expenseCategory;
+      dirty = true;
+    }
+    if (Number(existingExpense.amount || 0) !== Number(voucher.amount || 0)) {
+      existingExpense.amount = Number(voucher.amount || 0);
+      dirty = true;
+    }
+    if (String(existingExpense.description || "").trim() !== description) {
+      existingExpense.description = description;
+      dirty = true;
+    }
+    if (normalizeDate(existingExpense.date).getTime() !== effectiveDate.getTime()) {
+      existingExpense.date = effectiveDate;
+      dirty = true;
+    }
+
+    if (dirty) await existingExpense.save();
+    return existingExpense.toObject();
   }
 
   const expense = await ExpenseProperty.create({
     property: voucher.property,
     category: expenseCategory,
     amount: Number(voucher.amount || 0),
-    description: String(voucher.narration || voucher.reference || `Payment voucher ${voucher.voucherNo}`).trim(),
-    date: normalizeDate(voucher.dueDate || voucher.createdAt || new Date()),
+    description,
+    date: effectiveDate,
     business: voucher.business,
   });
 
@@ -492,7 +548,7 @@ const reverseVoucherLedgerEntries = async ({ voucher, userId, reason }) => {
   return reversalResults;
 };
 
-const ensureVoucherAccrualPosting = async ({ voucher, actorUserId }) => {
+const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate = null }) => {
   const existingEntries = await FinancialLedgerEntry.find({
     business: voucher.business,
     sourceTransactionType: "payment_voucher",
@@ -528,13 +584,15 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId }) => {
     accountingContext,
   });
 
+  const postingDate = normalizeDate(resolveVoucherPostingDate({ voucher, statementDate }));
+
   let expenseRecord = null;
   if (voucher.category !== "deposit_refund") {
-    expenseRecord = await createExpenseRecordForVoucher(voucher);
+    expenseRecord = await createExpenseRecordForVoucher(voucher, { statementDate: postingDate });
   }
 
-  const { start, end } = buildStatementPeriod(voucher.dueDate || voucher.createdAt || new Date());
-  const txDate = normalizeDate(voucher.dueDate || new Date());
+  const { start, end } = buildStatementPeriod(postingDate);
+  const txDate = postingDate;
   const journalGroupId = new mongoose.Types.ObjectId();
   const narration = String(voucher.narration || voucher.reference || `Payment voucher ${voucher.voucherNo}`).trim();
   const amount = Math.abs(Number(voucher.amount || 0));
@@ -693,21 +751,24 @@ export const createPaymentVoucher = async (req, res, next) => {
     }
 
     if (voucher.status === "approved" || voucher.status === "paid") {
-      await ensureVoucherAccrualPosting({ voucher, actorUserId });
+      const postingDate = voucher.status === "paid"
+        ? normalizeDate(voucher.paidDate || new Date())
+        : new Date();
 
       if (voucher.status === "approved") {
         voucher.approvedBy = actorUserId;
-        voucher.approvedAt = voucher.approvedAt || new Date();
+        voucher.approvedAt = voucher.approvedAt || postingDate;
       }
 
       if (voucher.status === "paid") {
         voucher.approvedBy = voucher.approvedBy || actorUserId;
-        voucher.approvedAt = voucher.approvedAt || new Date();
+        voucher.approvedAt = voucher.approvedAt || postingDate;
         voucher.paidBy = actorUserId;
-        voucher.paidAt = voucher.paidAt || new Date();
-        voucher.paidDate = voucher.paidDate || new Date();
+        voucher.paidAt = voucher.paidAt || postingDate;
+        voucher.paidDate = voucher.paidDate || postingDate;
       }
 
+      await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: postingDate });
       await voucher.save();
     }
 
@@ -880,10 +941,11 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
     }
 
     if (status === "approved") {
-      await ensureVoucherAccrualPosting({ voucher, actorUserId });
-      voucher.status = "approved";
-      voucher.approvedAt = new Date();
+      const approvalDate = new Date();
+      voucher.approvedAt = approvalDate;
       voucher.approvedBy = actorUserId;
+      await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: approvalDate });
+      voucher.status = "approved";
     }
 
     if (status === "paid") {
@@ -894,13 +956,14 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
         });
       }
 
-      await ensureVoucherAccrualPosting({ voucher, actorUserId });
-      voucher.status = "paid";
-      voucher.approvedAt = voucher.approvedAt || new Date();
+      const paidDate = normalizeDate(req.body?.paidDate || new Date());
+      voucher.approvedAt = voucher.approvedAt || paidDate;
       voucher.approvedBy = voucher.approvedBy || actorUserId;
-      voucher.paidAt = new Date();
+      voucher.paidAt = paidDate;
       voucher.paidBy = actorUserId;
-      voucher.paidDate = new Date();
+      voucher.paidDate = paidDate;
+      await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: voucher.approvedAt || paidDate });
+      voucher.status = "paid";
     }
 
     if (status === "reversed") {

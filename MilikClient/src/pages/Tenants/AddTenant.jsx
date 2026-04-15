@@ -48,10 +48,22 @@ const buildTakeOnMetadata = (config = {}) => ({
 
 const normalizeId = (value) => {
   if (!value) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "object" && value._id) return String(value._id);
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (typeof value === "object") {
+    if (value._id) return normalizeId(value._id);
+    if (value.id) return normalizeId(value.id);
+  }
   return String(value);
 };
+
+const getUnitPropertyId = (unit = {}) =>
+  normalizeId(unit?.property?._id || unit?.property?.id || unit?.property);
+
+const dedupeUnitsById = (items = []) =>
+  (Array.isArray(items) ? items : []).filter((item, index, list) => {
+    const itemId = normalizeId(item?._id || item?.id || item);
+    return itemId && list.findIndex((candidate) => normalizeId(candidate?._id || candidate?.id || candidate) === itemId) === index;
+  });
 
 const formatDateInput = (value) => {
   if (!value) return "";
@@ -90,6 +102,54 @@ const buildUtilitySignature = (item = {}) => {
     item.isIncluded ? "1" : "0",
   ].join("|");
 };
+
+const mergeUtilityEntries = (utilities = []) => {
+  const merged = new Map();
+
+  (Array.isArray(utilities) ? utilities : []).forEach((entry) => {
+    const normalized = normalizeUtilityEntry(entry);
+    const utilityValue = String(normalized.utility || normalized.utilityLabel || "").trim();
+    const utilityLabel = String(normalized.utilityLabel || utilityValue || "").trim();
+    const unitCharge = Number(normalized.unitCharge || 0);
+    const isIncluded = !!normalized.isIncluded;
+
+    if (!utilityValue && !utilityLabel) {
+      return;
+    }
+
+    const signature = [utilityValue.toLowerCase(), utilityLabel.toLowerCase(), isIncluded ? "1" : "0"].join("|");
+    const current = merged.get(signature) || {
+      utility: utilityValue || utilityLabel,
+      utilityLabel: utilityLabel || utilityValue,
+      unitCharge: 0,
+      isIncluded,
+    };
+
+    current.unitCharge = Number(current.unitCharge || 0) + unitCharge;
+    if (!current.utility && utilityValue) current.utility = utilityValue;
+    if (!current.utilityLabel && utilityLabel) current.utilityLabel = utilityLabel;
+
+    merged.set(signature, current);
+  });
+
+  return Array.from(merged.values()).map((item) => ({
+    utility: item.utility || item.utilityLabel || "",
+    utilityLabel: item.utilityLabel || item.utility || "",
+    unitCharge: Number(item.unitCharge || 0),
+    isIncluded: !!item.isIncluded,
+  }));
+};
+
+const buildUtilitiesPayload = ({ inheritedUtilities = [], customUtilities = [] } = {}) =>
+  mergeUtilityEntries([
+    ...(Array.isArray(inheritedUtilities) ? inheritedUtilities : []),
+    ...(Array.isArray(customUtilities) ? customUtilities : []).map((item) => ({
+      utility: String(item?.utility || item?.utilityLabel || "").trim(),
+      utilityLabel: String(item?.utilityLabel || item?.utility || "").trim(),
+      unitCharge: Number(item?.unitCharge || 0),
+      isIncluded: !!item?.isIncluded,
+    })),
+  ]);
 
 /**
  * Custom dropdown with Milik styling
@@ -247,7 +307,10 @@ const AddTenant = () => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [generalError, setGeneralError] = useState("");
   const [availableUnits, setAvailableUnits] = useState([]);
+  const [currentEditUnit, setCurrentEditUnit] = useState(null);
+  const [currentEditAdditionalUnits, setCurrentEditAdditionalUnits] = useState([]);
   const [additionalUtilities, setAdditionalUtilities] = useState([]);
+  const [showAdditionalUnits, setShowAdditionalUnits] = useState(false);
   const [showInvoicePrompt, setShowInvoicePrompt] = useState(false);
   const [pendingInvoiceContext, setPendingInvoiceContext] = useState(null);
   const [isCreatingInitialInvoices, setIsCreatingInitialInvoices] = useState(false);
@@ -279,43 +342,67 @@ const AddTenant = () => {
     if (!formData.property) {
       lastPropertyRef.current = "";
       setAvailableUnits([]);
+      setShowAdditionalUnits(false);
       setFormData((prev) => ({ ...prev, unit: "", additionalUnits: [], utilities: [] }));
       setAdditionalUtilities([]);
       return;
     }
 
-    if (unitLoading && (!Array.isArray(units) || units.length === 0)) {
+    if (unitLoading && (!Array.isArray(units) || units.length === 0) && !currentEditUnit) {
       return;
     }
 
-    const propertyUnits = units.filter((u) => {
-      const unitPropertyId = normalizeId(u.property?._id || u.property);
-      return unitPropertyId === normalizeId(formData.property);
+    const propertyId = normalizeId(formData.property);
+    const propertyUnitsFromStore = (Array.isArray(units) ? units : []).filter(
+      (unit) => getUnitPropertyId(unit) === propertyId
+    );
+
+    const propertyUnitsForEdit = dedupeUnitsById(
+      [currentEditUnit, ...(Array.isArray(currentEditAdditionalUnits) ? currentEditAdditionalUnits : [])].filter(
+        (unit) => getUnitPropertyId(unit) === propertyId
+      )
+    );
+
+    const propertyUnits = dedupeUnitsById([...propertyUnitsFromStore, ...propertyUnitsForEdit]);
+
+    const vacant = propertyUnits.filter((unit) => {
+      const status = String(unit?.status || "").toLowerCase();
+      return status === "vacant" && unit?.isVacant !== false;
     });
 
-    const vacant = propertyUnits.filter((u) => {
-      const status = String(u.status || "").toLowerCase();
-      return status === "vacant" && u.isVacant !== false;
-    });
+    const selectedUnitIds = new Set(
+      [
+        normalizeId(formData.unit),
+        ...(Array.isArray(formData.additionalUnits)
+          ? formData.additionalUnits.map((unitId) => normalizeId(unitId))
+          : []),
+      ].filter(Boolean)
+    );
 
-    const activeUnitId = normalizeId(formData.unit);
-    const selectedOccupiedUnit = activeUnitId
-      ? propertyUnits.find((u) => normalizeId(u?._id) === activeUnitId)
-      : null;
+    const selectedOccupiedUnits = propertyUnits.filter((unit) =>
+      selectedUnitIds.has(normalizeId(unit?._id || unit?.id || unit))
+    );
 
-    const unitOptions = selectedOccupiedUnit && !vacant.some((u) => normalizeId(u?._id) === activeUnitId)
-      ? [selectedOccupiedUnit, ...vacant]
-      : vacant;
+    const unitOptions = dedupeUnitsById([...selectedOccupiedUnits, ...vacant]);
 
     setAvailableUnits(unitOptions);
 
     if (lastPropertyRef.current && lastPropertyRef.current !== formData.property) {
+      setShowAdditionalUnits(false);
       setFormData((prev) => ({ ...prev, unit: "", additionalUnits: [], utilities: [], rent: "", depositAmount: "" }));
       setAdditionalUtilities([]);
     }
 
     lastPropertyRef.current = formData.property;
-  }, [formData.property, formData.unit, unitLoading, units]);
+  }, [
+    currentEditAdditionalUnits,
+    currentEditUnit,
+    formData.additionalUnits,
+    formData.property,
+    formData.unit,
+    unitLoading,
+    units,
+  ]);
 
 
 useEffect(() => {
@@ -353,13 +440,21 @@ useEffect(() => {
   useEffect(() => {
     if (!formData.unit || availableUnits.length === 0) return;
 
-    const selectedUnit = availableUnits.find(
+    const assignedUnitRecords = availableUnits.filter((unit) =>
+      [formData.unit, ...(Array.isArray(formData.additionalUnits) ? formData.additionalUnits : [])].some(
+        (unitId) => normalizeId(unitId) === normalizeId(unit?._id)
+      )
+    );
+
+    const selectedUnit = assignedUnitRecords.find(
       (u) => normalizeId(u._id) === normalizeId(formData.unit)
     );
 
     if (!selectedUnit) return;
 
-    const mappedUtilities = (selectedUnit.utilities || []).map((util) => normalizeUtilityEntry(util));
+    const mappedUtilities = mergeUtilityEntries(
+      assignedUnitRecords.flatMap((unit) => (unit?.utilities || []).map((util) => normalizeUtilityEntry(util)))
+    );
 
     if (skipNextUnitAutofillRef.current) {
       skipNextUnitAutofillRef.current = false;
@@ -368,32 +463,54 @@ useEffect(() => {
 
     setFormData((prev) => ({
       ...prev,
-      rent: selectedUnit.rent || "",
       depositAmount:
         prev.depositAmount !== "" && prev.depositAmount !== null && prev.depositAmount !== undefined
           ? prev.depositAmount
           : String(selectedUnit.deposit || selectedUnit.rent || ""),
       utilities: mappedUtilities,
     }));
-  }, [formData.unit, availableUnits]);
+  }, [availableUnits, formData.additionalUnits, formData.unit]);
 
 
-  const selectedUnitRecord = useMemo(
-    () =>
-      availableUnits.find((unit) => normalizeId(unit?._id) === normalizeId(formData.unit)) || null,
-    [availableUnits, formData.unit]
+  const selectedUnitRecord = useMemo(() => {
+    const selectedUnitId = normalizeId(formData.unit);
+    if (!selectedUnitId) return null;
+
+    return (
+      availableUnits.find((unit) => normalizeId(unit?._id || unit?.id || unit) === selectedUnitId) ||
+      (normalizeId(currentEditUnit?._id || currentEditUnit?.id || currentEditUnit) === selectedUnitId
+        ? currentEditUnit
+        : null) ||
+      null
+    );
+  }, [availableUnits, currentEditUnit, formData.unit]);
+
+  const selectedAdditionalUnitRecords = useMemo(() => {
+    const selectedIds = new Set(
+      Array.isArray(formData.additionalUnits)
+        ? formData.additionalUnits.map((unitId) => normalizeId(unitId)).filter(Boolean)
+        : []
+    );
+
+    return dedupeUnitsById([
+      ...availableUnits.filter((unit) =>
+        selectedIds.has(normalizeId(unit?._id || unit?.id || unit))
+      ),
+      ...(Array.isArray(currentEditAdditionalUnits) ? currentEditAdditionalUnits.filter((unit) =>
+        selectedIds.has(normalizeId(unit?._id || unit?.id || unit))
+      ) : []),
+    ]);
+  }, [availableUnits, currentEditAdditionalUnits, formData.additionalUnits]);
+
+  const inheritedUnitUtilities = useMemo(
+    () => mergeUtilityEntries([...(Array.isArray(formData.utilities) ? formData.utilities : [])]),
+    [formData.utilities]
   );
 
-
-
-const selectedAdditionalUnitRecords = useMemo(
-  () =>
-    availableUnits.filter((unit) =>
-      Array.isArray(formData.additionalUnits) &&
-      formData.additionalUnits.some((unitId) => normalizeId(unitId) === normalizeId(unit?._id))
-    ),
-  [availableUnits, formData.additionalUnits]
-);
+  const combinedUtilitiesPreview = useMemo(
+    () => buildUtilitiesPayload({ inheritedUtilities: inheritedUnitUtilities, customUtilities: additionalUtilities }),
+    [additionalUtilities, inheritedUnitUtilities]
+  );
 
 
   const selectedPropertyRecord = useMemo(
@@ -421,6 +538,9 @@ const selectedAdditionalUnitRecords = useMemo(
       if (parsedDraft?.openingInvoiceMode) {
         setOpeningInvoiceMode(parsedDraft.openingInvoiceMode);
       }
+      if (typeof parsedDraft?.showAdditionalUnits === "boolean") {
+        setShowAdditionalUnits(parsedDraft.showAdditionalUnits);
+      }
     } catch (draftError) {
       console.warn("Failed to restore tenant draft", draftError);
     } finally {
@@ -437,12 +557,13 @@ const selectedAdditionalUnitRecords = useMemo(
           formData,
           additionalUtilities,
           openingInvoiceMode,
+          showAdditionalUnits,
         })
       );
     } catch (draftError) {
       console.warn("Failed to persist tenant draft", draftError);
     }
-  }, [additionalUtilities, draftStorageKey, formData, isEditMode, openingInvoiceMode]);
+  }, [additionalUtilities, draftStorageKey, formData, isEditMode, openingInvoiceMode, showAdditionalUnits]);
 
 
   useEffect(() => {
@@ -464,16 +585,25 @@ const selectedAdditionalUnitRecords = useMemo(
           throw new Error("Tenant record could not be loaded for editing.");
         }
 
-        const unitId = normalizeId(tenant.unit?._id || tenant.unit);
-        const propertyId = normalizeId(tenant.unit?.property?._id || tenant.unit?.property);
+        const unitId = normalizeId(tenant.unit?._id || tenant.unit?.id || tenant.unit);
+        const propertyId = normalizeId(
+          tenant.property?._id ||
+          tenant.property?.id ||
+          tenant.property ||
+          tenant.unit?.property?._id ||
+          tenant.unit?.property?.id ||
+          tenant.unit?.property
+        );
         const normalizedTenantUtilities = Array.isArray(tenant.utilities)
           ? tenant.utilities.map((item) => normalizeUtilityEntry(item))
           : [];
-        const normalizedUnitUtilities = Array.isArray(tenant.unit?.utilities)
-          ? tenant.unit.utilities.map((item) => normalizeUtilityEntry(item))
-          : [];
+        const normalizedAssignedUnitUtilities = mergeUtilityEntries(
+          [tenant.unit, ...(Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits : [])].flatMap((unitRecord) =>
+            (Array.isArray(unitRecord?.utilities) ? unitRecord.utilities : []).map((item) => normalizeUtilityEntry(item))
+          )
+        );
 
-        const unitUtilityCounts = normalizedUnitUtilities.reduce((map, item) => {
+        const unitUtilityCounts = normalizedAssignedUnitUtilities.reduce((map, item) => {
           const signature = buildUtilitySignature(item);
           map.set(signature, (map.get(signature) || 0) + 1);
           return map;
@@ -494,6 +624,10 @@ const selectedAdditionalUnitRecords = useMemo(
 
         skipNextUnitAutofillRef.current = true;
         lastPropertyRef.current = propertyId || "";
+        setCurrentEditUnit(tenant.unit || null);
+        setCurrentEditAdditionalUnits(
+          Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits.filter(Boolean) : []
+        );
         setFormData((prev) => ({
           ...prev,
           tenantCode: tenant.tenantCode || "",
@@ -502,7 +636,7 @@ const selectedAdditionalUnitRecords = useMemo(
           idNumber: tenant.idNumber || "",
           property: propertyId,
           unit: unitId,
-          additionalUnits: Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits.map((item) => normalizeId(item?._id || item)) : [],
+          additionalUnits: Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits.map((item) => normalizeId(item?._id || item?.id || item)) : [],
           moveInDate: formatDateInput(tenant.moveInDate),
           moveOutDate: formatDateInput(tenant.moveOutDate),
           leaseType: tenant.leaseType || "at_will",
@@ -518,11 +652,14 @@ const selectedAdditionalUnitRecords = useMemo(
           emergencyContactPhone: tenant.emergencyContact?.phone || "",
           emergencyContactRelationship:
             tenant.emergencyContact?.relationship || "Family",
-          utilities: normalizedUnitUtilities.length
-            ? normalizedUnitUtilities
+          utilities: normalizedAssignedUnitUtilities.length
+            ? normalizedAssignedUnitUtilities
             : normalizedTenantUtilities,
         }));
         setAdditionalUtilities(derivedAdditionalUtilities);
+        setShowAdditionalUnits(
+          Array.isArray(tenant.additionalUnits) && tenant.additionalUnits.length > 0
+        );
       } catch (error) {
         if (!isMounted) return;
         const message =
@@ -545,13 +682,35 @@ const selectedAdditionalUnitRecords = useMemo(
     };
   }, [currentCompany?._id, isEditMode, routeTenantId]);
 
+  useEffect(() => {
+    if (!isEditMode) return;
+    if (currentEditUnit || !formData.unit || !Array.isArray(units) || units.length === 0) return;
+
+    const matchedUnit = units.find(
+      (unit) => normalizeId(unit?._id || unit?.id || unit) === normalizeId(formData.unit)
+    );
+
+    if (matchedUnit) {
+      setCurrentEditUnit(matchedUnit);
+    }
+  }, [currentEditUnit, formData.unit, isEditMode, units]);
+
+  useEffect(() => {
+    if (!isEditMode || formData.unit || !currentEditUnit) return;
+
+    const currentUnitId = normalizeId(currentEditUnit?._id || currentEditUnit?.id || currentEditUnit);
+    if (!currentUnitId) return;
+
+    setFormData((prev) => (prev.unit ? prev : { ...prev, unit: currentUnitId }));
+  }, [currentEditUnit, formData.unit, isEditMode]);
+
   const clearDraftState = () => {
     if (isEditMode || !draftStorageKey) return;
     sessionStorage.removeItem(draftStorageKey);
   };
 
   const invoicePreviewItems = useMemo(() => {
-    const utilityRows = [...(formData.utilities || []), ...additionalUtilities]
+    const utilityRows = combinedUtilitiesPreview
       .filter((item) => item && !item.isIncluded && Number(item.unitCharge || 0) > 0)
       .map((item) => ({
         label: item.utilityLabel || item.utility || "Utility",
@@ -592,7 +751,7 @@ const selectedAdditionalUnitRecords = useMemo(
     }
 
     return items;
-  }, [additionalUtilities, formData.depositAmount, formData.depositHeldBy, formData.rent, formData.utilities, selectedUnitRecord]);
+  }, [combinedUtilitiesPreview, formData.depositAmount, formData.depositHeldBy, formData.rent, selectedUnitRecord]);
 
   const buildTenantInvoiceContext = (savedTenantPayload) => {
     const savedTenant =
@@ -641,7 +800,7 @@ const selectedAdditionalUnitRecords = useMemo(
       invoiceDate,
       dueDate,
       items: invoicePreviewItems,
-      utilityRows: [...(formData.utilities || []), ...additionalUtilities]
+      utilityRows: combinedUtilitiesPreview
         .filter((item) => item && !item.isIncluded && Number(item.unitCharge || 0) > 0)
         .map((item) => ({
           label: item.utilityLabel || item.utility || "Utility",
@@ -706,7 +865,12 @@ const selectedAdditionalUnitRecords = useMemo(
   const updateAdditionalUtility = (index, field, value) => {
     setAdditionalUtilities((prev) => {
       const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
+      const normalizedValue = field === "utility" ? String(value || "").trim() : value;
+      updated[index] = {
+        ...updated[index],
+        [field]: normalizedValue,
+        ...(field === "utility" ? { utilityLabel: normalizedValue } : {}),
+      };
       return updated;
     });
   };
@@ -731,6 +895,16 @@ const selectedAdditionalUnitRecords = useMemo(
     }
     if (!["Management Company", "Landlord"].includes(formData.depositHeldBy)) {
       errors.depositHeldBy = "Choose who holds the deposit";
+    }
+
+    const invalidAdditionalUtility = (Array.isArray(additionalUtilities) ? additionalUtilities : []).find((item) => {
+      const hasAnyValue = String(item?.utility || item?.utilityLabel || "").trim() || String(item?.unitCharge || "").trim();
+      if (!hasAnyValue) return false;
+      return !String(item?.utility || item?.utilityLabel || "").trim() || Number(item?.unitCharge || 0) < 0;
+    });
+
+    if (invalidAdditionalUtility) {
+      errors.additionalUtilities = "Complete each added utility with a utility type and a valid charge.";
     }
 
     if (formData.leaseType === "fixed" && !formData.moveOutDate) {
@@ -762,14 +936,16 @@ const selectedAdditionalUnitRecords = useMemo(
     try {
       const payload = {
         ...formData,
+        additionalUnits: showAdditionalUnits
+          ? Array.from(new Set((Array.isArray(formData.additionalUnits) ? formData.additionalUnits : []).map((unitId) => normalizeId(unitId)).filter(Boolean)))
+          : [],
         rent: parseFloat(formData.rent),
         depositAmount: parseFloat(formData.depositAmount || 0),
         business: currentCompany?._id,
-        paymentMethod: formData.paymentMethod || "bank_transfer",
-        utilities: [
-          ...formData.utilities,
-          ...additionalUtilities.filter((u) => u.utility),
-        ],
+        utilities: buildUtilitiesPayload({
+          inheritedUtilities: inheritedUnitUtilities,
+          customUtilities: additionalUtilities,
+        }),
         emergencyContact: {
           name: formData.emergencyContactName || "",
           phone: formData.emergencyContactPhone || "",
@@ -1065,7 +1241,7 @@ for (const request of invoiceRequests) {
                         }
                       }}
                       getLabel={(p) => p.propertyName || p.name || "Unknown"}
-                      getValue={(p) => p._id}
+                      getValue={(p) => p._id || p.id}
                       error={fieldErrors.property}
                     />
 
@@ -1082,7 +1258,7 @@ for (const request of invoiceRequests) {
                         }
                       }}
                       getLabel={(u) => `${u.unitNumber} - Ksh ${(u.rent || 0).toLocaleString()}`}
-                      getValue={(u) => u._id}
+                      getValue={(u) => u._id || u.id}
                       error={fieldErrors.unit}
                       disabled={!formData.property}
                     />
@@ -1090,38 +1266,57 @@ for (const request of invoiceRequests) {
 
                   {formData.property && availableUnits.length > 1 && (
                     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-sm font-semibold text-slate-800">Additional Units (Optional)</div>
-                      <p className="mt-1 text-xs text-slate-500">Keep the selected unit as the primary unit, then tick any extra units that belong to the same tenant.</p>
-                      {selectedAdditionalUnitRecords.length > 0 && (
+                      <label className="flex items-center gap-3 text-sm font-semibold text-slate-800">
+                        <input
+                          type="checkbox"
+                          checked={showAdditionalUnits}
+                          onChange={(e) => {
+                            const enabled = e.target.checked;
+                            setShowAdditionalUnits(enabled);
+                            if (!enabled) {
+                              setFormData((prev) => ({ ...prev, additionalUnits: [] }));
+                            }
+                            if (fieldErrors.additionalUnits) {
+                              setFieldErrors((prev) => ({ ...prev, additionalUnits: "" }));
+                            }
+                          }}
+                          className="rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                        />
+                        Assign additional units to this tenant
+                      </label>
+                      <p className="mt-1 text-xs text-slate-500">Keep the selected unit as the primary unit, then reveal and tick extra units only when this tenant should occupy more than one unit.</p>
+                      {showAdditionalUnits && selectedAdditionalUnitRecords.length > 0 && (
                         <p className="mt-2 text-xs font-semibold text-emerald-700">{selectedAdditionalUnitRecords.length} additional unit(s) selected.</p>
                       )}
-                      <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                        {availableUnits
-                          .filter((unit) => normalizeId(unit?._id) !== normalizeId(formData.unit))
-                          .map((unit) => {
-                            const checked = Array.isArray(formData.additionalUnits) && formData.additionalUnits.some((unitId) => normalizeId(unitId) === normalizeId(unit?._id));
-                            return (
-                              <label key={unit._id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                                <span>{unit.unitNumber} - Ksh {Number(unit.rent || 0).toLocaleString()}</span>
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={(e) => {
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      additionalUnits: e.target.checked
-                                        ? [...(Array.isArray(prev.additionalUnits) ? prev.additionalUnits : []), unit._id]
-                                        : (Array.isArray(prev.additionalUnits) ? prev.additionalUnits : []).filter((unitId) => normalizeId(unitId) !== normalizeId(unit._id)),
-                                    }));
-                                    if (fieldErrors.additionalUnits) {
-                                      setFieldErrors((prev) => ({ ...prev, additionalUnits: "" }));
-                                    }
-                                  }}
-                                />
-                              </label>
-                            );
-                          })}
-                      </div>
+                      {showAdditionalUnits ? (
+                        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                          {availableUnits
+                            .filter((unit) => normalizeId(unit?._id) !== normalizeId(formData.unit))
+                            .map((unit) => {
+                              const checked = Array.isArray(formData.additionalUnits) && formData.additionalUnits.some((unitId) => normalizeId(unitId) === normalizeId(unit?._id));
+                              return (
+                                <label key={unit._id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                                  <span>{unit.unitNumber} - Ksh {Number(unit.rent || 0).toLocaleString()}</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        additionalUnits: e.target.checked
+                                          ? [...(Array.isArray(prev.additionalUnits) ? prev.additionalUnits : []), unit._id || unit.id]
+                                          : (Array.isArray(prev.additionalUnits) ? prev.additionalUnits : []).filter((unitId) => normalizeId(unitId) !== normalizeId(unit._id)),
+                                      }));
+                                      if (fieldErrors.additionalUnits) {
+                                        setFieldErrors((prev) => ({ ...prev, additionalUnits: "" }));
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              );
+                            })}
+                        </div>
+                      ) : null}
                       {fieldErrors.additionalUnits && <p className="mt-2 text-xs text-red-600">{fieldErrors.additionalUnits}</p>}
                     </div>
                   )}
@@ -1210,9 +1405,9 @@ for (const request of invoiceRequests) {
                     <div className="md:col-span-2">
                       <label className={labelClass}>Utilities & Charges (Ksh)</label>
                       <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-3 min-h-10 max-h-32 overflow-y-auto">
-                        {formData.utilities && formData.utilities.length > 0 ? (
+                        {combinedUtilitiesPreview.length > 0 ? (
                           <div className="space-y-1">
-                            {formData.utilities.map((util, idx) => {
+                            {combinedUtilitiesPreview.map((util, idx) => {
                               const charge = parseFloat(util.unitCharge) || 0;
                               return (
                                 <div key={idx} className="text-xs flex justify-between items-center">
@@ -1239,7 +1434,7 @@ for (const request of invoiceRequests) {
                           <p className="text-2xl font-black text-orange-900">
                             {(
                               parseFloat(formData.rent || 0) +
-                              (formData.utilities?.reduce(
+                              (combinedUtilitiesPreview.reduce(
                                 (sum, u) => sum + (parseFloat(u.unitCharge) || 0),
                                 0
                               ) || 0)
@@ -1422,6 +1617,9 @@ for (const request of invoiceRequests) {
                         </div>
                       ))}
                     </div>
+                  )}
+                  {fieldErrors.additionalUtilities && (
+                    <p className="mt-3 text-xs text-red-600">{fieldErrors.additionalUtilities}</p>
                   )}
                 </div>
 

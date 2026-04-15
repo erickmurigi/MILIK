@@ -37,7 +37,7 @@ import {
 } from "../../utils/excelTemplates";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
-import { getRentPayments, getTenantInvoices, getTenantInvoiceNotes } from "../../redux/apiCalls";
+import { getLeases, getRentPayments, getTenantInvoices, getTenantInvoiceNotes } from "../../redux/apiCalls";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -80,6 +80,72 @@ const computeOperationalStatus = ({ tenant }) => {
   }
 
   return "active";
+};
+
+const EXPIRY_WARNING_DAYS = 30;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+const getDaysUntil = (value) => {
+  if (!value) return null;
+  const targetDate = new Date(value);
+  if (Number.isNaN(targetDate.getTime())) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  targetDate.setHours(0, 0, 0, 0);
+
+  return Math.ceil((targetDate.getTime() - today.getTime()) / ONE_DAY_MS);
+};
+
+const formatWarningDate = (value) => {
+  if (!value) return "";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toLocaleDateString();
+};
+
+const buildExpiryWarning = ({ tenant = {}, lease = null } = {}) => {
+  const messages = [];
+  const normalizedLeaseType = String(lease?.leaseType || tenant?.leaseType || "").toLowerCase();
+  const normalizedLeaseStatus = String(lease?.status || "active").toLowerCase();
+
+  const leaseEndDate = lease?.endDate || null;
+  const leaseDaysRemaining = getDaysUntil(leaseEndDate);
+  const hasLeaseWarning =
+    normalizedLeaseType === "fixed" &&
+    normalizedLeaseStatus === "active" &&
+    leaseDaysRemaining !== null &&
+    leaseDaysRemaining <= EXPIRY_WARNING_DAYS;
+
+  if (hasLeaseWarning) {
+    if (leaseDaysRemaining < 0) {
+      messages.push(`Lease expired ${Math.abs(leaseDaysRemaining)} day${Math.abs(leaseDaysRemaining) === 1 ? "" : "s"} ago (${formatWarningDate(leaseEndDate)})`);
+    } else {
+      messages.push(`Lease expires in ${leaseDaysRemaining} day${leaseDaysRemaining === 1 ? "" : "s"} (${formatWarningDate(leaseEndDate)})`);
+    }
+  }
+
+  const billingEndDate = tenant?.moveOutDate || null;
+  const billingDaysRemaining = getDaysUntil(billingEndDate);
+  const hasBillingWarning =
+    billingDaysRemaining !== null &&
+    billingDaysRemaining <= EXPIRY_WARNING_DAYS;
+
+  if (hasBillingWarning) {
+    if (billingDaysRemaining < 0) {
+      messages.push(`Billing schedule expired ${Math.abs(billingDaysRemaining)} day${Math.abs(billingDaysRemaining) === 1 ? "" : "s"} ago (${formatWarningDate(billingEndDate)})`);
+    } else {
+      messages.push(`Billing schedule ends in ${billingDaysRemaining} day${billingDaysRemaining === 1 ? "" : "s"} (${formatWarningDate(billingEndDate)})`);
+    }
+  }
+
+  return {
+    hasWarning: messages.length > 0,
+    isLeaseWarning: hasLeaseWarning,
+    isBillingWarning: hasBillingWarning,
+    leaseDaysRemaining,
+    billingDaysRemaining,
+    summary: messages.join(" • "),
+  };
 };
 
 const Tenants = () => {
@@ -141,6 +207,9 @@ const Tenants = () => {
       dispatch(getTenants({ business: currentCompany._id }));
       dispatch(getUnits({ business: currentCompany._id }));
       dispatch(getProperties({ business: currentCompany._id }));
+      getLeases(dispatch, currentCompany._id).catch((error) => {
+        console.error("Failed to load leases:", error);
+      });
     }
   }, [dispatch, currentCompany]);
 
@@ -234,6 +303,37 @@ const Tenants = () => {
     );
   };
 
+
+  const leaseByTenantId = useMemo(() => {
+    const map = new Map();
+
+    (Array.isArray(leases) ? leases : []).forEach((lease) => {
+      const tenantId = normalizeId(lease?.tenant?._id || lease?.tenant);
+      if (!tenantId) return;
+
+      const current = map.get(tenantId);
+      if (!current) {
+        map.set(tenantId, lease);
+        return;
+      }
+
+      const currentStatusScore = String(current?.status || "").toLowerCase() === "active" ? 1 : 0;
+      const nextStatusScore = String(lease?.status || "").toLowerCase() === "active" ? 1 : 0;
+      if (nextStatusScore > currentStatusScore) {
+        map.set(tenantId, lease);
+        return;
+      }
+
+      const currentEnd = new Date(current?.endDate || 0).getTime();
+      const nextEnd = new Date(lease?.endDate || 0).getTime();
+      if (nextEnd > currentEnd) {
+        map.set(tenantId, lease);
+      }
+    });
+
+    return map;
+  }, [leases]);
+
   const calculateTenantBalance = useCallback(
     (tenantId) => {
       const tenantIdStr = String(tenantId);
@@ -292,11 +392,10 @@ const Tenants = () => {
 
   const transformedTenants = useMemo(() => {
     return (Array.isArray(tenantsData) ? tenantsData : []).map((tenant) => {
-      const tenantLease = leases.find(
-        (l) => normalizeId(l.tenant) === normalizeId(tenant._id)
-      );
+      const tenantLease = leaseByTenantId.get(normalizeId(tenant._id)) || null;
       const resolvedStartDate = tenantLease?.startDate || tenant.moveInDate;
       const resolvedEndDate = tenantLease?.endDate || tenant.moveOutDate;
+      const expiryWarning = buildExpiryWarning({ tenant, lease: tenantLease });
       const balance = paymentsSnapshotReady ? calculateTenantBalance(tenant._id) : Number(tenant?.balance || 0);
       const tenantOperationalStatus = computeOperationalStatus({ tenant });
 
@@ -312,8 +411,10 @@ const Tenants = () => {
         endDate: resolvedEndDate
           ? new Date(resolvedEndDate).toLocaleDateString()
           : "-",
-        rent: tenant.unit?.rent
-          ? `Ksh ${tenant.unit.rent.toLocaleString()}`
+        rent: tenant.rent
+          ? `Ksh ${Number(tenant.rent).toLocaleString()}`
+          : tenant.unit?.rent
+          ? `Ksh ${Number(tenant.unit.rent).toLocaleString()}`
           : tenantLease?.rentAmount
           ? `Ksh ${Number(tenantLease.rentAmount).toLocaleString()}`
           : "-",
@@ -322,9 +423,10 @@ const Tenants = () => {
         status: tenantOperationalStatus,
         phone: tenant.phone || "-",
         email: tenant.email || "-",
+        expiryWarning,
       };
     });
-  }, [tenantsData, units, properties, leases, calculateTenantBalance, paymentsSnapshotReady, tenantInvoices]);
+  }, [tenantsData, units, properties, leaseByTenantId, calculateTenantBalance, paymentsSnapshotReady]);
 
   // ===== FILTER TENANTS =====
   const filteredTenants = useMemo(() => {
@@ -1017,9 +1119,13 @@ const confirmTransferUnit = async () => {
                       )}
 
                       <tr
-                        className={`border-b border-gray-200 cursor-pointer transition-colors text-xs ${
+                        className={`border-b cursor-pointer transition-colors text-xs ${
+                          tenant.expiryWarning?.hasWarning ? "border-red-200" : "border-gray-200"
+                        } ${
                           selectedTenants.includes(tenant.id)
                             ? "bg-orange-50 hover:bg-orange-100"
+                            : tenant.expiryWarning?.hasWarning
+                            ? "bg-red-50/70 hover:bg-red-100/80"
                             : "bg-white hover:bg-gray-50"
                         }`}
                         onClick={() => handleSelectTenant(tenant.id)}
@@ -1047,8 +1153,13 @@ const confirmTransferUnit = async () => {
                         <td className="px-2 py-1 font-mono text-gray-600 border-r border-gray-200 text-xs">
                           {tenant.tenantCode}
                         </td>
-                        <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
-                          {tenant.tenantName}
+                        <td className="px-2 py-1 border-r border-gray-200">
+                          <div className="font-bold text-gray-900">{tenant.tenantName}</div>
+                          {tenant.expiryWarning?.hasWarning && (
+                            <div className="mt-0.5 text-[10px] font-semibold text-red-700">
+                              {tenant.expiryWarning.summary}
+                            </div>
+                          )}
                         </td>
                         <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
                           {tenant.propertyName}
@@ -1059,7 +1170,9 @@ const confirmTransferUnit = async () => {
                         <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
                           {tenant.startDate}
                         </td>
-                        <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
+                        <td className={`px-2 py-1 font-bold border-r border-gray-200 ${
+                          tenant.expiryWarning?.hasWarning ? "text-red-700" : "text-gray-900"
+                        }`}>
                           {tenant.endDate}
                         </td>
                         <td className="px-2 py-1 font-bold text-gray-900 text-right border-r border-gray-200">
@@ -1079,17 +1192,24 @@ const confirmTransferUnit = async () => {
                           </span>
                         </td>
                         <td className="px-2 py-1 text-center border-r border-gray-200">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                              tenant.status === "active"
-                                ? "bg-green-100 text-green-800"
-                                : tenant.status === "terminated"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-gray-100 text-gray-800"
-                            }`}
-                          >
-                            {tenant.status}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                                tenant.status === "active"
+                                  ? "bg-green-100 text-green-800"
+                                  : tenant.status === "terminated"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-gray-100 text-gray-800"
+                              }`}
+                            >
+                              {tenant.status}
+                            </span>
+                            {tenant.expiryWarning?.hasWarning && (
+                              <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                                Expiring Soon
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-2 py-1 font-bold text-gray-900">
                           {tenant.phone}
@@ -1173,8 +1293,14 @@ const confirmTransferUnit = async () => {
                                   </div>
                                   <div>
                                     <span className="font-bold text-gray-700 block text-xs">Lease End Date:</span>
-                                    <p className="text-gray-600 font-bold text-xs">{tenant.endDate}</p>
+                                    <p className={`${tenant.expiryWarning?.hasWarning ? "text-red-700" : "text-gray-600"} font-bold text-xs`}>{tenant.endDate}</p>
                                   </div>
+                                  {tenant.expiryWarning?.hasWarning && (
+                                    <div className="rounded-lg border border-red-200 bg-red-50 px-2 py-2">
+                                      <span className="font-bold text-red-700 block text-xs">Expiry Warning:</span>
+                                      <p className="text-red-700 text-xs font-semibold">{tenant.expiryWarning.summary}</p>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 

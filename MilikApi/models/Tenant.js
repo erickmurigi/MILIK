@@ -167,7 +167,7 @@ const TenantSchema = new mongoose.Schema(
     paymentMethod: {
       type: String,
       enum: ["bank_transfer", "mobile_money", "cash", "check", "credit_card"],
-      required: true,
+      default: "bank_transfer",
     },
 
     leaseType: {

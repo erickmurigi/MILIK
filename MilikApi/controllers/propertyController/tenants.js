@@ -7,6 +7,7 @@ import TenantInvoice from "../../models/TenantInvoice.js";
 
 
 const ACTIVE_TENANT_STATUSES = ["active", "overdue"];
+const VALID_PAYMENT_METHODS = ["bank_transfer", "mobile_money", "cash", "check", "credit_card"];
 
 const isValidObjectIdString = (value) =>
   typeof value === "string" && mongoose.Types.ObjectId.isValid(value);
@@ -182,12 +183,78 @@ const normalizeTenantStatus = (value) => {
 
 const sanitizeUtilities = (utilities = []) => {
   if (!Array.isArray(utilities)) return [];
-  return utilities.map((item) => ({
-    utility: normalizeString(item?.utility) || "",
-    utilityLabel: normalizeString(item?.utilityLabel) || "",
-    unitCharge: Number(item?.unitCharge || 0),
-    isIncluded: !!item?.isIncluded,
+
+  const mergedUtilities = new Map();
+
+  utilities.forEach((item) => {
+    const utility = normalizeString(item?.utility) || normalizeString(item?.utilityLabel) || "";
+    const utilityLabel = normalizeString(item?.utilityLabel) || utility;
+    const unitCharge = Number(item?.unitCharge || 0);
+    const isIncluded = !!item?.isIncluded;
+
+    if (!utility && !utilityLabel) {
+      return;
+    }
+
+    const signature = [String(utility || "").toLowerCase(), String(utilityLabel || "").toLowerCase(), isIncluded ? "1" : "0"].join("|");
+    const current = mergedUtilities.get(signature) || {
+      utility,
+      utilityLabel,
+      unitCharge: 0,
+      isIncluded,
+    };
+
+    current.unitCharge = Number(current.unitCharge || 0) + unitCharge;
+    if (!current.utility && utility) current.utility = utility;
+    if (!current.utilityLabel && utilityLabel) current.utilityLabel = utilityLabel;
+
+    mergedUtilities.set(signature, current);
+  });
+
+  return Array.from(mergedUtilities.values()).map((item) => ({
+    utility: item.utility || item.utilityLabel || "",
+    utilityLabel: item.utilityLabel || item.utility || "",
+    unitCharge: Number(item.unitCharge || 0),
+    isIncluded: !!item.isIncluded,
   }));
+};
+
+const deriveAssignedUtilitiesFromUnitDocs = (unitDocs = []) =>
+  sanitizeUtilities(
+    (Array.isArray(unitDocs) ? unitDocs : []).flatMap((unit) =>
+      (Array.isArray(unit?.utilities) ? unit.utilities : []).map((item) => ({
+        utility: normalizeString(item?.utility) || "",
+        utilityLabel: normalizeString(item?.utilityLabel) || normalizeString(item?.utility) || "",
+        unitCharge: Number(item?.unitCharge || 0),
+        isIncluded: !!item?.isIncluded,
+      }))
+    )
+  );
+
+const normalizePaymentMethod = (value) => {
+  const normalized = normalizeLower(value || "bank_transfer") || "bank_transfer";
+  return VALID_PAYMENT_METHODS.includes(normalized) ? normalized : "bank_transfer";
+};
+
+const normalizeImportedAdditionalUnitNumbers = (record = {}) => {
+  if (Array.isArray(record?.additionalUnitNumbers)) {
+    return Array.from(new Set(record.additionalUnitNumbers.map((item) => normalizeString(item)).filter(Boolean)));
+  }
+
+  const rawValue =
+    record?.additionalUnits ||
+    record?.additionalUnitNumbers ||
+    record?.additionalUnitNumbersCsv ||
+    "";
+
+  return Array.from(
+    new Set(
+      String(rawValue || "")
+        .split(/[;,|]/)
+        .map((item) => normalizeString(item))
+        .filter(Boolean)
+    )
+  );
 };
 
 const sanitizeDocuments = (documents = []) => {
@@ -383,13 +450,13 @@ export const createTenant = async (req, res, next) => {
     const normalizedName = normalizeString(req.body.name);
     const normalizedPhone = normalizeString(req.body.phone);
     const normalizedIdNumber = normalizeString(req.body.idNumber);
-    const normalizedPaymentMethod = normalizeLower(req.body.paymentMethod);
+    const normalizedPaymentMethod = normalizePaymentMethod(req.body.paymentMethod);
     const normalizedTenantCode = normalizeString(req.body.tenantCode);
 
-    if (!normalizedName || !normalizedPhone || !normalizedIdNumber || !normalizedPaymentMethod) {
+    if (!normalizedName || !normalizedPhone || !normalizedIdNumber) {
       return res.status(400).json({
         success: false,
-        message: "Tenant name, phone, ID number, and payment method are required",
+        message: "Tenant name, phone, and ID number are required",
       });
     }
 
@@ -433,23 +500,36 @@ export const createTenant = async (req, res, next) => {
       tenantCode,
       business: businessId,
       unit: unit._id,
-      rent: Number(req.body.rent || unit.rent || 0),
+      additionalUnits: requestedUnits.additional,
+      rent: calculateTenantAssignedRent(unitDocs, req.body.rent || unit.rent || 0),
       depositAmount: defaultDepositAmount,
       depositHeldBy: normalizeDepositHolder(req.body.depositHeldBy, unit.property?.depositHeldBy),
       status: normalizeTenantStatus(req.body.status || "active"),
       depositRefundStatus: defaultDepositAmount > 0 ? "pending" : "not_applicable",
       depositRefundAmount: defaultDepositAmount,
       documents: sanitizeDocuments(req.body.documents),
-      utilities: sanitizeUtilities(req.body.utilities),
+      utilities: sanitizeUtilities(
+        Array.isArray(req.body.utilities) && req.body.utilities.length > 0
+          ? req.body.utilities
+          : deriveAssignedUtilitiesFromUnitDocs(unitDocs)
+      ),
       emergencyContact: sanitizeEmergencyContact(req.body.emergencyContact),
     });
 
     const savedTenant = await newTenant.save();
-    await setUnitOccupied(unit._id, savedTenant._id);
+
+    await syncTenantAssignedUnitOccupancy({
+      previousUnitIds: [],
+      nextUnitIds: getTenantAssignedUnitIds(savedTenant),
+      tenantId: savedTenant._id,
+      effectiveDate: new Date(),
+    });
+
+    const populatedTenant = await populateTenantQuery(Tenant.findById(savedTenant._id));
 
     return res.status(201).json({
       success: true,
-      data: savedTenant,
+      data: populatedTenant,
       message: "Tenant created successfully",
     });
   } catch (err) {
@@ -538,7 +618,9 @@ export const getTenant = async (req, res, next) => {
   try {
     const tenant = await Tenant.findById(req.params.id)
       .populate("unit", "unitNumber property rent amenities status utilities")
-      .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy");
+      .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
+      .populate("additionalUnits", "unitNumber property rent status utilities")
+      .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy");
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
@@ -593,7 +675,7 @@ export const updateTenant = async (req, res, next) => {
     }
 
     if (normalizedPayload.paymentMethod !== undefined) {
-      normalizedPayload.paymentMethod = normalizeLower(normalizedPayload.paymentMethod);
+      normalizedPayload.paymentMethod = normalizePaymentMethod(normalizedPayload.paymentMethod);
     }
 
     if (normalizedPayload.leaseType !== undefined) {
@@ -675,13 +757,11 @@ export const updateTenant = async (req, res, next) => {
         normalizedPayload.rent = calculateTenantAssignedRent(requestedUnitDocs, tenant.rent || 0);
       }
 
-      if (isChangingUnit) {
-        normalizedPayload.utilities = sanitizeUtilities(
-          normalizedPayload.utilities !== undefined
-            ? normalizedPayload.utilities
-            : targetUnit?.utilities || []
-        );
+      if (normalizedPayload.utilities === undefined) {
+        normalizedPayload.utilities = deriveAssignedUtilitiesFromUnitDocs(requestedUnitDocs);
+      }
 
+      if (isChangingUnit) {
         normalizedPayload.unitTransferHistory = [
           ...(Array.isArray(tenant.unitTransferHistory) ? tenant.unitTransferHistory : []),
           {
@@ -1128,8 +1208,6 @@ export const transferTenantUnit = async (req, res, next) => {
       currentlyAssignedUnitIds: getTenantAssignedUnitIds(tenant),
     });
 
-    const nextPrimaryUnitDoc = requestedUnitDocs.find((unit) => String(unit._id) === requestedUnits.primary) || null;
-
     const updatedTenant = await populateTenantQuery(
       Tenant.findByIdAndUpdate(
         tenant._id,
@@ -1138,7 +1216,7 @@ export const transferTenantUnit = async (req, res, next) => {
             unit: requestedUnits.primary,
             additionalUnits: requestedUnits.additional,
             rent: calculateTenantAssignedRent(requestedUnitDocs, tenant.rent || 0),
-            utilities: sanitizeUtilities(nextPrimaryUnitDoc?.utilities || []),
+            utilities: deriveAssignedUtilitiesFromUnitDocs(requestedUnitDocs),
           },
           $push: {
             unitTransferHistory: {
@@ -1224,11 +1302,10 @@ export const bulkImportTenants = async (req, res, next) => {
 
     const successful = [];
     const failed = [];
-    const touchedPropertyIds = new Set();
 
     for (let i = 0; i < tenantsData.length; i++) {
       const record = tenantsData[i];
-      const rowIndex = i + 1;
+      const rowIndex = Number(record?.rowNumber || i + 2);
 
       try {
         if (!record.propertyCode) {
@@ -1240,15 +1317,12 @@ export const bulkImportTenants = async (req, res, next) => {
           continue;
         }
 
-        const unitLookupKey = `${String(record.propertyCode).trim().toLowerCase()}|${String(
-          record.unitNumber || ""
-        )
-          .trim()
-          .toLowerCase()}`;
+        const propertyCode = String(record.propertyCode || "").trim().toLowerCase();
+        const primaryUnitNumber = String(record.unitNumber || "").trim().toLowerCase();
+        const unitLookupKey = `${propertyCode}|${primaryUnitNumber}`;
+        const primaryUnitDoc = unitMap.get(unitLookupKey);
 
-        const unitDoc = unitMap.get(unitLookupKey);
-
-        if (!unitDoc) {
+        if (!primaryUnitDoc) {
           failed.push({
             tenantName: record.tenantName,
             error: `Combination not found: Property "${record.propertyCode}" + Unit "${record.unitNumber}"`,
@@ -1257,14 +1331,39 @@ export const bulkImportTenants = async (req, res, next) => {
           continue;
         }
 
-        if (String(unitDoc.status || "").toLowerCase() !== "vacant" || unitDoc.isVacant === false) {
+        const additionalUnitNumbers = normalizeImportedAdditionalUnitNumbers(record).filter(
+          (unitNumber) => unitNumber.toLowerCase() !== primaryUnitNumber
+        );
+        const requestedUnitDocs = [primaryUnitDoc];
+        let missingAdditionalUnit = null;
+
+        for (const additionalUnitNumber of additionalUnitNumbers) {
+          const additionalUnitDoc = unitMap.get(`${propertyCode}|${String(additionalUnitNumber).trim().toLowerCase()}`);
+          if (!additionalUnitDoc) {
+            missingAdditionalUnit = additionalUnitNumber;
+            break;
+          }
+          requestedUnitDocs.push(additionalUnitDoc);
+        }
+
+        if (missingAdditionalUnit) {
           failed.push({
             tenantName: record.tenantName,
-            error: `Unit "${record.unitNumber}" is not vacant`,
+            error: `Additional unit "${missingAdditionalUnit}" was not found under property "${record.propertyCode}"`,
             row: rowIndex,
           });
           continue;
         }
+
+        const requestedUnits = buildRequestedTenantUnits({
+          primaryUnitId: primaryUnitDoc._id,
+          additionalUnits: requestedUnitDocs.slice(1).map((unit) => unit._id),
+        });
+
+        await ensureUnitsAvailableForTenant({
+          businessId,
+          unitDocs: requestedUnitDocs,
+        });
 
         const normalizedIdNumber = String(record.idNumber || "").trim().toLowerCase();
         if (existingIds.has(normalizedIdNumber)) {
@@ -1330,40 +1429,53 @@ export const bulkImportTenants = async (req, res, next) => {
           continue;
         }
 
-        const propertyDepositHeldBy = unitDoc?.property?.depositHeldBy || "propertyManager";
-        const depositAmount = Number(record.depositAmount ?? record.rent ?? unitDoc.rent ?? 0);
+        const propertyDepositHeldBy = primaryUnitDoc?.property?.depositHeldBy || "propertyManager";
+        const requestedRent = Number(record.rent || 0);
+        const computedRent = calculateTenantAssignedRent(requestedUnitDocs, primaryUnitDoc.rent || 0);
+        const depositAmount = Number(record.depositAmount ?? requestedRent ?? primaryUnitDoc.deposit ?? computedRent);
+        const importedUtilities = Array.isArray(record.utilities)
+          ? record.utilities
+          : Array.isArray(record.additionalUtilities)
+          ? record.additionalUtilities
+          : [];
 
         const newTenant = new Tenant({
           name: normalizeString(record.tenantName),
           phone: normalizeString(record.phoneNumber),
           idNumber: normalizeString(record.idNumber),
-          unit: unitDoc._id,
-          rent: Number(record.rent || unitDoc.rent || 0),
+          unit: primaryUnitDoc._id,
+          additionalUnits: requestedUnits.additional,
+          rent: requestedRent > 0 ? requestedRent : computedRent,
           balance: 0,
           status: normalizeTenantStatus(record.status || "active"),
           depositAmount,
           depositHeldBy: normalizeDepositHolder(record.depositHeldBy, propertyDepositHeldBy),
           depositRefundStatus: depositAmount > 0 ? "pending" : "not_applicable",
           depositRefundAmount: depositAmount,
-          paymentMethod: normalizeLower(record.paymentMethod || "bank_transfer"),
+          paymentMethod: normalizePaymentMethod(record.paymentMethod),
           leaseType,
           moveInDate,
           moveOutDate: leaseType === "fixed" ? moveOutDate : null,
           tenantCode,
           business: businessId,
+          utilities: sanitizeUtilities(importedUtilities.length > 0 ? importedUtilities : deriveAssignedUtilitiesFromUnitDocs(requestedUnitDocs)),
           emergencyContact: {
             name: normalizeString(record.emergencyContactName) || "",
             phone: normalizeString(record.emergencyContactPhone) || "",
-            relationship: "",
+            relationship: normalizeString(record.emergencyContactRelationship) || "",
           },
         });
 
         await newTenant.save();
-        await setUnitOccupied(unitDoc._id, newTenant._id);
+        await syncTenantAssignedUnitOccupancy({
+          previousUnitIds: [],
+          nextUnitIds: getTenantAssignedUnitIds(newTenant),
+          tenantId: newTenant._id,
+          effectiveDate: moveInDate,
+        });
 
         existingIds.add(normalizedIdNumber);
         existingCodes.add(String(tenantCode).toLowerCase());
-        touchedPropertyIds.add(String(unitDoc.property?._id || unitDoc.property));
 
         successful.push({
           tenantName: record.tenantName,
@@ -1377,10 +1489,6 @@ export const bulkImportTenants = async (req, res, next) => {
           row: rowIndex,
         });
       }
-    }
-
-    for (const propertyId of touchedPropertyIds) {
-      await updatePropertyUnitCounts(propertyId);
     }
 
     return res.status(200).json({

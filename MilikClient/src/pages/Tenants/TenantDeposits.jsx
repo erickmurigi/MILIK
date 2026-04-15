@@ -40,6 +40,28 @@ const formatInvoiceDescriptionPeriod = (value) => {
 
 const buildDepositInvoiceDescription = (invoiceDate) => `${formatInvoiceDescriptionPeriod(invoiceDate)} Security Deposit`;
 
+const normalizeDepositHolder = (value = "") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["landlord", "held_by_landlord"].includes(normalized)) return "landlord";
+  if (
+    [
+      "management company",
+      "management_company",
+      "propertymanager",
+      "property manager",
+      "property_manager",
+      "manager",
+    ].includes(normalized)
+  ) {
+    return "manager";
+  }
+  return "";
+};
+
+const formatDepositHolderLabel = (value = "") =>
+  normalizeDepositHolder(value) === "landlord" ? "Landlord" : "Management Company";
+
+
 const getTenantDisplayName = (tenant) =>
   tenant?.name ||
   tenant?.tenantName ||
@@ -84,6 +106,33 @@ const buildAppliedAmountsByInvoice = (payments = []) => {
   });
 
   return appliedByInvoice;
+};
+
+
+const buildRecognizedDepositAmountsByTenant = (payments = []) => {
+  const totals = new Map();
+
+  payments.forEach((payment) => {
+    if (payment?.ledgerType !== "receipts") return;
+    if (payment?.isConfirmed !== true) return;
+    if (payment?.isCancelled === true || payment?.isReversed === true || payment?.reversalOf) return;
+    if (String(payment?.postingStatus || "").toLowerCase() === "reversed") return;
+
+    const tenantId = safeId(payment?.tenant);
+    if (!tenantId) return;
+
+    const allocationSummary = payment?.allocationSummary || {};
+    const recognizedAmount = Math.max(
+      0,
+      Number(allocationSummary.deposit || 0),
+      String(payment?.paymentType || "").toLowerCase() === "deposit" ? Number(payment?.amount || 0) : 0
+    );
+
+    if (recognizedAmount <= 0) return;
+    totals.set(tenantId, Number(totals.get(tenantId) || 0) + recognizedAmount);
+  });
+
+  return totals;
 };
 
 const TenantDeposits = () => {
@@ -162,6 +211,7 @@ const TenantDeposits = () => {
   }, [tenantInvoices]);
 
   const appliedByInvoice = useMemo(() => buildAppliedAmountsByInvoice(rentPayments), [rentPayments]);
+  const recognizedDepositPaidByTenant = useMemo(() => buildRecognizedDepositAmountsByTenant(rentPayments), [rentPayments]);
 
   const depositRows = useMemo(() => {
     return tenants
@@ -179,7 +229,7 @@ const TenantDeposits = () => {
           null;
         const matchedProperty = properties.find((property) => String(property?._id || "") === String(propertyId || "")) || null;
         const depositAmount = Number(tenant?.depositAmount ?? matchedUnit?.deposit ?? tenant?.unit?.deposit ?? 0);
-        const depositHolder = tenant?.depositHeldBy || (matchedProperty?.depositHeldBy === "landlord" ? "Landlord" : "Management Company");
+        const depositHolder = formatDepositHolderLabel(tenant?.depositHeldBy || matchedProperty?.depositHeldBy || "manager");
         const invoices = (invoiceMapByTenant[tenantId] || []).filter((invoice) => {
           const status = String(invoice?.status || "").toLowerCase();
           return !["cancelled", "reversed"].includes(status);
@@ -191,10 +241,12 @@ const TenantDeposits = () => {
           (sum, invoice) => sum + Number(invoice?.adjustedAmount ?? invoice?.amount ?? 0),
           0
         );
-        const paid = invoices.reduce((sum, invoice) => {
+        const invoiceAppliedPaid = invoices.reduce((sum, invoice) => {
           const invoiceId = String(invoice?._id || "");
           return sum + Math.max(0, Number(appliedByInvoice.get(invoiceId) || 0));
         }, 0);
+        const recognizedReceiptPaid = Math.max(0, Number(recognizedDepositPaidByTenant.get(tenantId) || 0));
+        const paid = Math.max(invoiceAppliedPaid, recognizedReceiptPaid);
         const outstanding = Math.max(0, billed - paid);
 
         let status = "Not configured";
@@ -237,7 +289,7 @@ const TenantDeposits = () => {
         return true;
       })
       .sort((a, b) => a.tenantName.localeCompare(b.tenantName));
-  }, [tenants, units, properties, invoiceMapByTenant, appliedByInvoice, filters]);
+  }, [tenants, units, properties, invoiceMapByTenant, appliedByInvoice, recognizedDepositPaidByTenant, filters]);
 
   const totals = useMemo(() => {
     return depositRows.reduce(
@@ -278,6 +330,7 @@ const TenantDeposits = () => {
     const unitId = row.unit?._id || row.tenant?.unit?._id || row.tenant?.unit || null;
     const propertyId = row.property?._id || row.tenant?.property?._id || row.tenant?.property || null;
     const amount = Number(billingForm.amount || 0);
+    const normalizedDepositHolder = normalizeDepositHolder(row?.tenant?.depositHeldBy || row?.depositHolder || row?.property?.depositHeldBy || "manager") || "manager";
 
     if (!propertyId || !unitId || !landlordId) {
       toast.error("Tenant deposit context is incomplete. Check property, unit, and landlord linkage first.");
@@ -299,6 +352,8 @@ const TenantDeposits = () => {
         unit: unitId,
         category: "DEPOSIT_CHARGE",
         amount,
+        depositHeldBy: normalizedDepositHolder,
+        ledgerMode: normalizedDepositHolder === "landlord" ? "off_ledger" : undefined,
         description: billingForm.description || `Security deposit charge for ${row.tenantName}`,
         invoiceDate: billingForm.invoiceDate,
         dueDate: billingForm.dueDate,
@@ -309,6 +364,8 @@ const TenantDeposits = () => {
           sourceTransactionType: "tenant_deposit_module",
           includeInLandlordStatement: false,
           includeInCategoryTotals: false,
+          depositHeldBy: normalizedDepositHolder,
+          ledgerMode: normalizedDepositHolder === "landlord" ? "off_ledger" : undefined,
         },
       });
 

@@ -166,6 +166,31 @@ const getPropertyLabel = (property) => {
 };
 
 
+const resolveStatementType = (statement = null, fallback = "provisional") =>
+  String(
+    statement?.metadata?.statementType ||
+      statement?.metadata?.workspace?.statementType ||
+      fallback
+  );
+
+const buildStatementSelectionKey = ({
+  companyId = "",
+  propertyId = "",
+  landlordId = "",
+  statementType = "provisional",
+  periodStart = "",
+  periodEnd = "",
+} = {}) =>
+  [
+    String(companyId || "").trim(),
+    normalizeId(propertyId),
+    normalizeId(landlordId),
+    String(statementType || "provisional").trim().toLowerCase(),
+    resolveDayKey(periodStart),
+    resolveDayKey(periodEnd),
+  ].join("|");
+
+
 const toUtilityKey = (value = "") =>
   String(value || "")
     .trim()
@@ -277,6 +302,7 @@ const Statements = () => {
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState("workspace");
+  const [collapseAdditionalUnitRows, setCollapseAdditionalUnitRows] = useState(false);
   const [processedStatements, setProcessedStatements] = useState([]);
   const [loadingProcessedContext, setLoadingProcessedContext] = useState(false);
   const [processedContextLoaded, setProcessedContextLoaded] = useState(false);
@@ -306,6 +332,44 @@ const Statements = () => {
   const landlord = useMemo(
     () => landlords.find((item) => normalizeId(item?._id) === landlordId) || null,
     [landlords, landlordId]
+  );
+
+  const currentSelectionKey = useMemo(
+    () =>
+      buildStatementSelectionKey({
+        companyId: currentCompany?._id || "",
+        propertyId: selectedPropertyId,
+        landlordId,
+        statementType,
+        periodStart,
+        periodEnd,
+      }),
+    [currentCompany?._id, landlordId, periodEnd, periodStart, selectedPropertyId, statementType]
+  );
+
+  const draftSelectionKey = useMemo(
+    () =>
+      draftStatement?._id
+        ? buildStatementSelectionKey({
+            companyId: currentCompany?._id || "",
+            propertyId: draftStatement?.property,
+            landlordId: draftStatement?.landlord,
+            statementType: resolveStatementType(draftStatement, statementType),
+            periodStart: draftStatement?.periodStart,
+            periodEnd: draftStatement?.periodEnd,
+          })
+        : "",
+    [
+      currentCompany?._id,
+      draftStatement?._id,
+      draftStatement?.property,
+      draftStatement?.landlord,
+      draftStatement?.periodStart,
+      draftStatement?.periodEnd,
+      draftStatement?.metadata?.statementType,
+      draftStatement?.metadata?.workspace?.statementType,
+      statementType,
+    ]
   );
 
   const latestProcessedStatement = useMemo(
@@ -437,6 +501,116 @@ const Statements = () => {
       })),
     [rows]
   );
+
+  const tenantUnitMeta = useMemo(() => {
+    const meta = new Map();
+
+    preparedRows.forEach((row) => {
+      const tenantKey = String(row?.tenantId || "");
+      if (!tenantKey) return;
+      const current = meta.get(tenantKey) || {
+        count: 0,
+        unitLabels: [],
+      };
+      current.count += 1;
+      if (row?.unit && !current.unitLabels.includes(String(row.unit))) {
+        current.unitLabels.push(String(row.unit));
+      }
+      meta.set(tenantKey, current);
+    });
+
+    return meta;
+  }, [preparedRows]);
+
+  const statementDisplayRows = useMemo(() => {
+    if (!collapseAdditionalUnitRows) {
+      return preparedRows.map((row) => {
+        const tenantMeta = tenantUnitMeta.get(String(row?.tenantId || "")) || null;
+        return {
+          ...row,
+          multiUnitCount: Number(tenantMeta?.count || 1),
+          displayUnitLabel: row.unit,
+          allUnitLabels: tenantMeta?.unitLabels || [row.unit].filter(Boolean),
+        };
+      });
+    }
+
+    const grouped = new Map();
+
+    preparedRows.forEach((row) => {
+      const tenantKey = String(row?.tenantId || "");
+      if (!tenantKey) {
+        const uniqueKey = `vacant:${row?.unitId || row?.unit || Math.random()}`;
+        grouped.set(uniqueKey, {
+          ...row,
+          multiUnitCount: 1,
+          displayUnitLabel: row.unit,
+          allUnitLabels: [row.unit].filter(Boolean),
+        });
+        return;
+      }
+
+      const existing = grouped.get(tenantKey);
+      if (!existing) {
+        grouped.set(tenantKey, {
+          ...row,
+          multiUnitCount: 1,
+          allUnitLabels: [row.unit].filter(Boolean),
+          displayUnitLabel: row.unit,
+          __utilityMap: { ...(row.__utilityMap || {}) },
+        });
+        return;
+      }
+
+      existing.multiUnitCount += 1;
+      if (row?.unit && !existing.allUnitLabels.includes(String(row.unit))) {
+        existing.allUnitLabels.push(String(row.unit));
+      }
+
+      [
+        "openingBalance",
+        "balanceBF",
+        "invoicedRent",
+        "paidRent",
+        "totalPaid",
+        "closingBalance",
+        "balanceCF",
+        "balance",
+      ].forEach((field) => {
+        existing[field] = Number(existing[field] || 0) + Number(row[field] || 0);
+      });
+
+      const mergedUtilityMap = { ...(existing.__utilityMap || {}) };
+      Object.entries(row.__utilityMap || {}).forEach(([utilityKey, utilityPhases]) => {
+        const currentUtility = mergedUtilityMap[utilityKey] || {
+          invoiced: 0,
+          paid: 0,
+          label: utilityPhases?.label || utilityKey,
+        };
+        currentUtility.invoiced = Number(currentUtility.invoiced || 0) + Number(utilityPhases?.invoiced || 0);
+        currentUtility.paid = Number(currentUtility.paid || 0) + Number(utilityPhases?.paid || 0);
+        currentUtility.label = currentUtility.label || utilityPhases?.label || utilityKey;
+        mergedUtilityMap[utilityKey] = currentUtility;
+      });
+      existing.__utilityMap = mergedUtilityMap;
+    });
+
+    return Array.from(grouped.values())
+      .map((row) => ({
+        ...row,
+        displayUnitLabel:
+          row.allUnitLabels.length > 1
+            ? `${row.allUnitLabels[0]} + ${row.allUnitLabels.length - 1} more`
+            : row.allUnitLabels[0] || row.unit,
+      }))
+      .sort((a, b) =>
+        String(a.displayUnitLabel || a.unit || "").localeCompare(
+          String(b.displayUnitLabel || b.unit || ""),
+          undefined,
+          { numeric: true }
+        )
+      );
+  }, [collapseAdditionalUnitRows, preparedRows, tenantUnitMeta]);
   const nonDepositAdditionRows = useMemo(
     () => additionRows.filter((item) => String(item?.category || "") !== "deposit_remittance"),
     [additionRows]
@@ -475,6 +649,17 @@ const Statements = () => {
     new Date(periodStart) <= new Date(periodEnd);
 
   const loadDraftWorkspace = async (options = {}) => {
+    const requestedSelectionKey =
+      options.selectionKey ||
+      buildStatementSelectionKey({
+        companyId: currentCompany?._id || "",
+        propertyId: selectedPropertyId,
+        landlordId,
+        statementType,
+        periodStart,
+        periodEnd,
+      });
+
     if (!currentCompany?._id || !selectedPropertyId) {
       setDraftStatement(null);
       return;
@@ -507,24 +692,40 @@ const Statements = () => {
           periodEnd,
           statementType,
           notes: `${statementType} statement workspace`,
-          refresh: options.refresh === true,
+          refresh: options.refresh !== false,
         })
       );
       const full = await dispatch(getStatement(created._id));
       const nextStatement = full?.statement || null;
+      const nextPeriodStart = nextStatement?.periodStart ? toIsoDate(nextStatement.periodStart) : periodStart;
+      const nextPeriodEnd = nextStatement?.periodEnd ? toIsoDate(nextStatement.periodEnd) : periodEnd;
+      const nextSelectionKey = buildStatementSelectionKey({
+        companyId: currentCompany?._id || "",
+        propertyId: nextStatement?.property || selectedPropertyId,
+        landlordId: nextStatement?.landlord || landlordId,
+        statementType: resolveStatementType(nextStatement, statementType),
+        periodStart: nextPeriodStart,
+        periodEnd: nextPeriodEnd,
+      });
 
-      if (nextStatement?.periodStart) {
-        setPeriodStart(toIsoDate(nextStatement.periodStart));
+      lastAutoLoadedSelectionRef.current = nextSelectionKey || requestedSelectionKey;
+
+      if (nextStatement?.periodStart && nextPeriodStart !== periodStart) {
+        setPeriodStart(nextPeriodStart);
       }
-      if (nextStatement?.periodEnd) {
-        setPeriodEnd(toIsoDate(nextStatement.periodEnd));
+      if (nextStatement?.periodEnd && nextPeriodEnd !== periodEnd) {
+        setPeriodEnd(nextPeriodEnd);
       }
 
       setDraftStatement(nextStatement);
     } catch (error) {
+      lastAutoLoadedSelectionRef.current = requestedSelectionKey;
       toast.error(error?.response?.data?.message || "Failed to load landlord statement workspace");
       setDraftStatement(null);
     } finally {
+      if (inFlightSelectionRef.current === requestedSelectionKey) {
+        inFlightSelectionRef.current = "";
+      }
       setLoadingDraft(false);
     }
   };
@@ -541,33 +742,23 @@ const Statements = () => {
       return;
     }
 
-    const statementMatchesSelection =
-      Boolean(draftStatement?._id) &&
-      normalizeId(draftStatement?.property) === normalizeId(selectedPropertyId) &&
-      normalizeId(draftStatement?.landlord) === normalizeId(landlordId) &&
-      resolveDayKey(draftStatement?.periodStart) === resolveDayKey(periodStart) &&
-      resolveDayKey(draftStatement?.periodEnd) === resolveDayKey(periodEnd) &&
-      String(draftStatement?.metadata?.statementType || draftStatement?.metadata?.workspace?.statementType || "provisional") === String(statementType);
-
-    if (!statementMatchesSelection) {
+    if (
+      draftStatement?._id &&
+      draftSelectionKey &&
+      currentSelectionKey &&
+      draftSelectionKey !== currentSelectionKey &&
+      !loadingDraft
+    ) {
       setDraftStatement(null);
     }
   }, [
-    selectedPropertyId,
-    landlordId,
-    periodStart,
-    periodEnd,
-    currentCompany?._id,
-    processedContextLoaded,
-    hasValidPeriodSelection,
-    statementType,
+    currentSelectionKey,
+    draftSelectionKey,
     draftStatement?._id,
-    draftStatement?.property,
-    draftStatement?.landlord,
-    draftStatement?.periodStart,
-    draftStatement?.periodEnd,
-    draftStatement?.metadata?.statementType,
-    draftStatement?.metadata?.workspace?.statementType,
+    hasValidPeriodSelection,
+    loadingDraft,
+    processedContextLoaded,
+    selectedPropertyId,
   ]);
 
   useEffect(() => {
@@ -579,28 +770,18 @@ const Statements = () => {
       return undefined;
     }
 
-    const selectionKey = [
-      currentCompany?._id || "",
-      selectedPropertyId,
-      landlordId || "",
-      statementType,
-      periodStart,
-      periodEnd,
-    ].join("|");
-
-    const statementMatchesSelection =
-      Boolean(draftStatement?._id) &&
-      normalizeId(draftStatement?.property) === normalizeId(selectedPropertyId) &&
-      normalizeId(draftStatement?.landlord) === normalizeId(landlordId) &&
-      resolveDayKey(draftStatement?.periodStart) === resolveDayKey(periodStart) &&
-      resolveDayKey(draftStatement?.periodEnd) === resolveDayKey(periodEnd) &&
-      String(draftStatement?.metadata?.statementType || draftStatement?.metadata?.workspace?.statementType || "provisional") === String(statementType);
-
-    if (statementMatchesSelection && lastAutoLoadedSelectionRef.current === selectionKey) {
+    if (!currentSelectionKey) {
       return undefined;
     }
 
-    if (inFlightSelectionRef.current === selectionKey) {
+    if (draftStatement?._id && draftSelectionKey === currentSelectionKey) {
+      return undefined;
+    }
+
+    if (
+      inFlightSelectionRef.current === currentSelectionKey ||
+      lastAutoLoadedSelectionRef.current === currentSelectionKey
+    ) {
       return undefined;
     }
 
@@ -609,15 +790,8 @@ const Statements = () => {
     }
 
     autoDraftTimerRef.current = window.setTimeout(async () => {
-      inFlightSelectionRef.current = selectionKey;
-      try {
-        await loadDraftWorkspace();
-        lastAutoLoadedSelectionRef.current = selectionKey;
-      } finally {
-        if (inFlightSelectionRef.current === selectionKey) {
-          inFlightSelectionRef.current = "";
-        }
-      }
+      inFlightSelectionRef.current = currentSelectionKey;
+      await loadDraftWorkspace({ selectionKey: currentSelectionKey });
     }, 450);
 
     return () => {
@@ -627,22 +801,13 @@ const Statements = () => {
       }
     };
   }, [
-    currentCompany?._id,
-    selectedPropertyId,
-    landlordId,
-    statementType,
-    periodStart,
-    periodEnd,
-    processedContextLoaded,
+    currentSelectionKey,
+    draftSelectionKey,
+    draftStatement?._id,
     hasValidPeriodSelection,
     loadingDraft,
-    draftStatement?._id,
-    draftStatement?.property,
-    draftStatement?.landlord,
-    draftStatement?.periodStart,
-    draftStatement?.periodEnd,
-    draftStatement?.metadata?.statementType,
-    draftStatement?.metadata?.workspace?.statementType,
+    processedContextLoaded,
+    selectedPropertyId,
   ]);
 
   const handleApprove = async () => {
@@ -1113,17 +1278,29 @@ const Statements = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 bg-white">
-                        {preparedRows.length === 0 ? (
+                        {statementDisplayRows.length === 0 ? (
                           <tr>
                             <td colSpan={statementColSpan} className="px-4 py-8 text-center text-slate-500">
                               No tenant or unit rows were generated for this period. Adjust the date range and regenerate the draft.
                             </td>
                           </tr>
                         ) : (
-                          preparedRows.map((row, index) => (
+                          statementDisplayRows.map((row, index) => (
                             <tr key={`${row.unitId || row.unitNumber || "row"}-${index}`}>
-                              <td className="sticky left-0 z-10 bg-white px-4 py-3 text-slate-700">{row.unit || row.unitNumber || "-"}</td>
-                              <td className="sticky left-[120px] z-10 bg-white px-4 py-3 text-slate-700">{row.tenantName || "-"}</td>
+                              <td className="sticky left-0 z-10 bg-white px-4 py-3 text-slate-700">
+                                <div className="font-medium text-slate-900">{row.displayUnitLabel || row.unit || row.unitNumber || "-"}</div>
+                                {Array.isArray(row.allUnitLabels) && row.allUnitLabels.length > 1 ? (
+                                  <div className="text-[11px] text-slate-500">{row.allUnitLabels.join(", ")}</div>
+                                ) : null}
+                              </td>
+                              <td className="sticky left-[120px] z-10 bg-white px-4 py-3 text-slate-700">
+                                <div className="font-medium text-slate-900">{row.tenantName || "-"}</div>
+                                {Number(row.multiUnitCount || 1) > 1 ? (
+                                  <div className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                                    {row.multiUnitCount} units
+                                  </div>
+                                ) : null}
+                              </td>
                               <td className="px-4 py-3 text-right text-slate-700">{currency(row.openingBalance ?? row.balanceBF ?? 0)}</td>
                               <td className="px-4 py-3 text-right text-slate-700">{currency(row.invoicedRent)}</td>
                               <td className="px-4 py-3 text-right text-slate-700">{currency(row.paidRent)}</td>

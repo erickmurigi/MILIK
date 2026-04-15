@@ -53,6 +53,89 @@ const normalizeDepositHolder = (value = "") => {
   return "";
 };
 
+
+const buildResolvedDepositMetadata = ({ tenant = null, property = null, metadata = {}, paymentType = "", allocationData = null }) => {
+  const nextMetadata = metadata && typeof metadata === "object" ? { ...metadata } : {};
+  const resolvedFromAllocations = Array.isArray(allocationData?.allocations)
+    ? allocationData.allocations.reduce((resolved, row) => {
+        const enriched = enrichDepositAllocationMetadata(row);
+        return resolved || enriched.depositHeldBy || "";
+      }, "")
+    : "";
+
+  const hasDepositPortion = safeLower(paymentType) === "deposit" || Number(allocationData?.allocationSummary?.deposit || 0) > 0;
+  const candidateHolder =
+    normalizeDepositHolder(nextMetadata?.depositHeldBy) ||
+    normalizeDepositHolder(tenant?.depositHeldBy) ||
+    normalizeDepositHolder(property?.depositHeldBy) ||
+    normalizeDepositHolder(resolvedFromAllocations) ||
+    (hasDepositPortion ? "manager" : "");
+
+  if (!candidateHolder) {
+    return {
+      metadata: nextMetadata,
+      allocations: Array.isArray(allocationData?.allocations) ? allocationData.allocations : [],
+    };
+  }
+
+  nextMetadata.depositHeldBy = candidateHolder;
+  if (candidateHolder === "landlord") {
+    nextMetadata.ledgerMode = "off_ledger";
+  }
+
+  const nextAllocations = Array.isArray(allocationData?.allocations)
+    ? allocationData.allocations.map((row) => {
+        if (String(row?.priorityGroup || "").toLowerCase() !== "deposit") return row;
+        const enriched = enrichDepositAllocationMetadata({
+          ...row,
+          depositHeldBy: row?.depositHeldBy || candidateHolder,
+          invoiceLedgerMode: row?.invoiceLedgerMode || (candidateHolder === "landlord" ? "off_ledger" : ""),
+          metadata: {
+            ...(row?.metadata && typeof row.metadata === "object" ? row.metadata : {}),
+            depositHeldBy: row?.depositHeldBy || candidateHolder,
+            ledgerMode: row?.invoiceLedgerMode || (candidateHolder === "landlord" ? "off_ledger" : ""),
+          },
+        });
+        return {
+          ...row,
+          depositHeldBy: enriched.depositHeldBy || candidateHolder,
+          invoiceLedgerMode: enriched.invoiceLedgerMode || (candidateHolder === "landlord" ? "off_ledger" : ""),
+        };
+      })
+    : [];
+
+  return {
+    metadata: nextMetadata,
+    allocations: nextAllocations,
+  };
+};
+
+
+const enrichDepositAllocationMetadata = (row = {}) => {
+  const normalizedHolder =
+    normalizeDepositHolder(row?.depositHeldBy) ||
+    normalizeDepositHolder(row?.metadata?.depositHeldBy) ||
+    normalizeDepositHolder(row?.sourceInvoice?.depositHeldBy) ||
+    normalizeDepositHolder(row?.sourceInvoice?.metadata?.depositHeldBy);
+
+  const normalizedLedgerMode = safeLower(
+    row?.invoiceLedgerMode ||
+      row?.ledgerMode ||
+      row?.metadata?.ledgerMode ||
+      row?.sourceInvoice?.ledgerMode ||
+      row?.sourceInvoice?.metadata?.ledgerMode ||
+      ""
+  );
+
+  const resolvedLedgerMode =
+    normalizedLedgerMode || (normalizedHolder === "landlord" ? "off_ledger" : "");
+
+  return {
+    depositHeldBy: normalizedHolder,
+    invoiceLedgerMode: resolvedLedgerMode,
+  };
+};
+
 const normalizeTakeOnBillItemKey = (value = "") =>
   String(value || "")
     .trim()
@@ -623,6 +706,12 @@ const buildReceiptAllocationData = async ({ businessId, tenantId, amount, paymen
     if (appliedAmount <= 0) continue;
 
     const utilityType = String(snapshot.utilityType || "").trim();
+    const depositMeta = enrichDepositAllocationMetadata({
+      depositHeldBy: snapshot?.depositHeldBy || snapshot?.metadata?.depositHeldBy || "",
+      invoiceLedgerMode: snapshot?.ledgerMode || snapshot?.metadata?.ledgerMode || "",
+      metadata: snapshot?.metadata || {},
+      sourceInvoice: snapshot,
+    });
 
     allocations.push({
       invoice: snapshot._id,
@@ -630,6 +719,8 @@ const buildReceiptAllocationData = async ({ businessId, tenantId, amount, paymen
       category: snapshot.category || "",
       priorityGroup,
       utilityType,
+      depositHeldBy: depositMeta.depositHeldBy || "",
+      invoiceLedgerMode: depositMeta.invoiceLedgerMode || "",
       appliedAmount,
       beforeOutstanding: outstanding,
       afterOutstanding: Math.max(0, outstanding - appliedAmount),
@@ -912,14 +1003,20 @@ const buildManualReceiptAllocationData = async ({ payment, requestedAllocations 
       throw error;
     }
 
+    const depositMeta = enrichDepositAllocationMetadata({
+      depositHeldBy: option.depositHeldBy || "",
+      invoiceLedgerMode: option.invoiceLedgerMode || "",
+      sourceInvoice: option,
+    });
+
     rows.push({
       invoice: invoiceId,
       invoiceNumber: option.invoiceNumber || "",
       category: option.category || "",
       priorityGroup: option.priorityGroup || "other",
       utilityType: option.utilityType || "",
-      depositHeldBy: option.depositHeldBy || "",
-      invoiceLedgerMode: option.invoiceLedgerMode || "",
+      depositHeldBy: depositMeta.depositHeldBy || "",
+      invoiceLedgerMode: depositMeta.invoiceLedgerMode || "",
       appliedAmount,
       beforeOutstanding: maxAllocatable,
       afterOutstanding: round2(Math.max(0, maxAllocatable - appliedAmount)),
@@ -1304,7 +1401,7 @@ export const createPayment = async (req, res, next) => {
       });
     }
 
-    const tenant = await Tenant.findOne({ _id: tenantId, business: businessId }).select("_id unit business");
+    const tenant = await Tenant.findOne({ _id: tenantId, business: businessId }).select("_id unit business depositHeldBy").lean();
     if (!tenant) {
       return res.status(404).json({
         success: false,
@@ -1312,7 +1409,7 @@ export const createPayment = async (req, res, next) => {
       });
     }
 
-    const unit = await Unit.findOne({ _id: unitId, business: businessId }).select("_id property business");
+    const unit = await Unit.findOne({ _id: unitId, business: businessId }).select("_id property business").lean();
     if (!unit) {
       return res.status(404).json({
         success: false,
@@ -1397,12 +1494,41 @@ export const createPayment = async (req, res, next) => {
       }
     }
 
-    const allocationData = await buildReceiptAllocationData({
-      businessId,
-      tenantId,
-      amount: req.body?.amount,
-      paymentTypeOverride: isTakeOnCredit ? (metadata?.paymentType || req.body?.paymentType || "") : "",
+    const useManualAllocations =
+      String(req.body?.allocationMode || "").trim().toLowerCase() === "manual" ||
+      Array.isArray(req.body?.allocations);
+
+    const allocationData = useManualAllocations
+      ? await buildManualReceiptAllocationData({
+          payment: {
+            business: businessId,
+            tenant: tenantId,
+            amount: req.body?.amount,
+            paymentType: req.body?.paymentType,
+            metadata,
+            isConfirmed: false,
+            postingStatus: "unposted",
+          },
+          requestedAllocations: req.body?.allocations,
+        })
+      : await buildReceiptAllocationData({
+          businessId,
+          tenantId,
+          amount: req.body?.amount,
+          paymentTypeOverride: isTakeOnCredit ? (metadata?.paymentType || req.body?.paymentType || "") : "",
+          metadata,
+        });
+
+    const property = unit?.property
+      ? await Property.findOne({ _id: unit.property, business: businessId }).select("_id depositHeldBy").lean()
+      : null;
+
+    const depositContext = buildResolvedDepositMetadata({
+      tenant,
+      property,
       metadata,
+      paymentType: allocationData.primaryPaymentType || req.body?.paymentType || "",
+      allocationData,
     });
 
     const payment = new RentPayment({
@@ -1413,7 +1539,7 @@ export const createPayment = async (req, res, next) => {
       paidDirectToLandlord: isDirectToLandlord,
       paymentType: allocationData.primaryPaymentType,
       breakdown: allocationData.breakdown,
-      allocations: allocationData.allocations,
+      allocations: depositContext.allocations,
       allocationSummary: allocationData.allocationSummary,
       ledgerType: "receipts",
       referenceNumber: refNumber,
@@ -1427,7 +1553,7 @@ export const createPayment = async (req, res, next) => {
       postingStatus: "unposted",
       postingError: null,
       ledgerEntries: [],
-      metadata,
+      metadata: depositContext.metadata,
     });
 
     const savedPayment = await payment.save();
@@ -1651,11 +1777,26 @@ export const updatePaymentAllocations = async (req, res, next) => {
     if (actorUserId) nextMetadata.lastAllocationChangedBy = actorUserId;
     if (req.body?.reason) nextMetadata.lastAllocationChangeReason = String(req.body.reason).trim();
 
-    payment.allocations = allocationData.allocations;
+    const linkedTenant = await Tenant.findOne({ _id: payment.tenant, business: payment.business }).select("_id depositHeldBy").lean();
+    const linkedUnit = payment.unit
+      ? await Unit.findOne({ _id: payment.unit, business: payment.business }).select("_id property").lean()
+      : null;
+    const linkedProperty = linkedUnit?.property
+      ? await Property.findOne({ _id: linkedUnit.property, business: payment.business }).select("_id depositHeldBy").lean()
+      : null;
+    const depositContext = buildResolvedDepositMetadata({
+      tenant: linkedTenant,
+      property: linkedProperty,
+      metadata: nextMetadata,
+      paymentType: allocationData.primaryPaymentType || payment.paymentType || "",
+      allocationData,
+    });
+
+    payment.allocations = depositContext.allocations;
     payment.allocationSummary = allocationData.allocationSummary;
     payment.breakdown = allocationData.breakdown;
     payment.paymentType = allocationData.primaryPaymentType;
-    payment.metadata = nextMetadata;
+    payment.metadata = depositContext.metadata;
     await payment.save();
 
     await recomputeInvoiceStatusesForTenant({
@@ -1696,7 +1837,7 @@ export const updatePayment = async (req, res, next) => {
     const tenantId = req.body?.tenant || payment.tenant;
     const unitId = req.body?.unit || payment.unit;
 
-    const tenant = await Tenant.findOne({ _id: tenantId, business: payment.business }).select("_id unit");
+    const tenant = await Tenant.findOne({ _id: tenantId, business: payment.business }).select("_id unit depositHeldBy").lean();
     if (!tenant) {
       return res.status(404).json({
         success: false,
@@ -1704,7 +1845,7 @@ export const updatePayment = async (req, res, next) => {
       });
     }
 
-    const unit = await Unit.findOne({ _id: unitId, business: payment.business }).select("_id");
+    const unit = await Unit.findOne({ _id: unitId, business: payment.business }).select("_id property").lean();
     if (!unit) {
       return res.status(404).json({
         success: false,
@@ -1783,12 +1924,43 @@ export const updatePayment = async (req, res, next) => {
       });
     }
 
-    const allocationData = await buildReceiptAllocationData({
-      businessId: payment.business,
-      tenantId,
-      amount: req.body?.amount ?? payment.amount,
-      paymentTypeOverride: isTakeOnCredit ? (metadata?.paymentType || req.body?.paymentType || payment.paymentType || "") : "",
+    const useManualAllocations =
+      String(req.body?.allocationMode || "").trim().toLowerCase() === "manual" ||
+      Array.isArray(req.body?.allocations);
+
+    const allocationData = useManualAllocations
+      ? await buildManualReceiptAllocationData({
+          payment: {
+            ...payment.toObject(),
+            business: payment.business,
+            tenant: tenantId,
+            unit: unitId,
+            amount: req.body?.amount ?? payment.amount,
+            paymentType: req.body?.paymentType || payment.paymentType,
+            metadata,
+            isConfirmed: Boolean(payment.isConfirmed),
+            postingStatus: payment.postingStatus || "unposted",
+          },
+          requestedAllocations: req.body?.allocations,
+        })
+      : await buildReceiptAllocationData({
+          businessId: payment.business,
+          tenantId,
+          amount: req.body?.amount ?? payment.amount,
+          paymentTypeOverride: isTakeOnCredit ? (metadata?.paymentType || req.body?.paymentType || payment.paymentType || "") : "",
+          metadata,
+        });
+
+    const property = unit?.property
+      ? await Property.findOne({ _id: unit.property, business: payment.business }).select("_id depositHeldBy").lean()
+      : null;
+
+    const depositContext = buildResolvedDepositMetadata({
+      tenant,
+      property,
       metadata,
+      paymentType: allocationData.primaryPaymentType || req.body?.paymentType || payment.paymentType || "",
+      allocationData,
     });
 
     const safeUpdate = {
@@ -1801,10 +1973,10 @@ export const updatePayment = async (req, res, next) => {
       receiptNumber: requestedReceiptNumber || payment.receiptNumber,
       paymentType: allocationData.primaryPaymentType,
       breakdown: allocationData.breakdown,
-      allocations: allocationData.allocations,
+      allocations: depositContext.allocations,
       allocationSummary: allocationData.allocationSummary,
       ledgerType: "receipts",
-      metadata,
+      metadata: depositContext.metadata,
     };
 
     delete safeUpdate.business;
@@ -1812,6 +1984,7 @@ export const updatePayment = async (req, res, next) => {
     delete safeUpdate.journalGroupId;
     delete safeUpdate.postingStatus;
     delete safeUpdate.postingError;
+    delete safeUpdate.allocationMode;
     delete safeUpdate.reversalEntry;
     delete safeUpdate.reversalOf;
     delete safeUpdate.confirmedBy;
@@ -1884,13 +2057,29 @@ export const confirmPayment = async (req, res, next) => {
       metadata: confirmationMetadata,
     });
 
+    const linkedTenant = await Tenant.findOne({ _id: existingPayment.tenant, business: existingPayment.business }).select("_id depositHeldBy").lean();
+    const linkedUnit = existingPayment.unit
+      ? await Unit.findOne({ _id: existingPayment.unit, business: existingPayment.business }).select("_id property").lean()
+      : null;
+    const linkedProperty = linkedUnit?.property
+      ? await Property.findOne({ _id: linkedUnit.property, business: existingPayment.business }).select("_id depositHeldBy").lean()
+      : null;
+    const depositContext = buildResolvedDepositMetadata({
+      tenant: linkedTenant,
+      property: linkedProperty,
+      metadata: confirmationMetadata,
+      paymentType: allocationData.primaryPaymentType || existingPayment.paymentType || "",
+      allocationData,
+    });
+
     existingPayment.isConfirmed = true;
     existingPayment.confirmedBy = actorUserId;
     existingPayment.confirmedAt = new Date();
     existingPayment.paymentType = allocationData.primaryPaymentType;
     existingPayment.breakdown = allocationData.breakdown;
-    existingPayment.allocations = allocationData.allocations;
+    existingPayment.allocations = depositContext.allocations;
     existingPayment.allocationSummary = allocationData.allocationSummary;
+    existingPayment.metadata = depositContext.metadata;
     existingPayment.postingStatus = "unposted";
     existingPayment.postingError = null;
     existingPayment.ledgerType = "receipts";

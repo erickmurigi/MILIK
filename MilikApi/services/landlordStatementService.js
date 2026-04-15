@@ -6,6 +6,7 @@ import Landlord from "../models/Landlord.js";
 import TenantInvoice from "../models/TenantInvoice.js";
 import RentPayment from "../models/RentPayment.js";
 import ExpenseProperty from "../models/ExpenseProperty.js";
+import PaymentVoucher from "../models/PaymentVoucher.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import TenantInvoiceNote from "../models/TenantInvoiceNote.js";
 import ProcessedStatement from "../models/ProcessedStatement.js";
@@ -39,6 +40,31 @@ const oid = (value) =>
 const isValidObjectId = (value) =>
   value instanceof mongoose.Types.ObjectId ||
   (typeof value === "string" && mongoose.Types.ObjectId.isValid(value));
+
+const getEntityId = (value) => {
+  if (!value) return "";
+
+  if (value instanceof mongoose.Types.ObjectId) {
+    return value.toString();
+  }
+
+  if (typeof value === "string" || typeof value === "number") return String(value);
+
+  if (typeof value === "object") {
+    if (typeof value.toHexString === "function") {
+      try {
+        return value.toHexString();
+      } catch {
+        // fall through to nested id extraction
+      }
+    }
+
+    if (value._id && value._id !== value) return getEntityId(value._id);
+    if (value.id && value.id !== value) return getEntityId(value.id);
+  }
+
+  return "";
+};
 
 const safeName = (value = "") => String(value || "").trim().toLowerCase();
 
@@ -587,7 +613,112 @@ const getEffectiveDepositReceiptAmount = (receipt = {}) => {
     if (Math.abs(fromRows) > 0) return round2(fromRows);
   }
 
-  return round2(Number(receipt?.amount || 0));
+  return 0;
+};
+
+const normalizeDepositHolderValue = (value = "") => {
+  const normalized = safeName(value);
+  if (!normalized) return "";
+  if (["landlord", "held_by_landlord"].includes(normalized)) return "landlord";
+  if (["management company", "management_company", "propertymanager", "property manager", "property_manager", "manager"].includes(normalized)) {
+    return "manager";
+  }
+  return "";
+};
+
+const getVoucherExpenseCategory = (voucherCategory = "") => {
+  const normalized = safeName(voucherCategory);
+  if (normalized === "landlord_maintenance") return "maintenance";
+  if (normalized === "landlord_other") return "other";
+  return "";
+};
+
+const resolveVoucherStatementDate = (voucher = {}) => {
+  const candidates = [
+    voucher?.paidDate,
+    voucher?.paidAt,
+    voucher?.approvedAt,
+    voucher?.createdAt,
+    voucher?.updatedAt,
+    voucher?.dueDate,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const date = new Date(candidate);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+
+  return null;
+};
+
+const isLandlordDepositAllocationRow = (row = {}) => {
+  const priorityGroup = safeName(row?.priorityGroup || "");
+  if (priorityGroup !== "deposit") return false;
+
+  const depositHolder =
+    normalizeDepositHolderValue(row?.depositHeldBy) ||
+    normalizeDepositHolderValue(row?.metadata?.depositHeldBy) ||
+    normalizeDepositHolderValue(row?.sourceInvoice?.depositHeldBy) ||
+    normalizeDepositHolderValue(row?.sourceInvoice?.metadata?.depositHeldBy);
+
+  const ledgerMode = safeName(
+    row?.invoiceLedgerMode ||
+      row?.ledgerMode ||
+      row?.sourceInvoice?.ledgerMode ||
+      row?.sourceInvoice?.metadata?.ledgerMode ||
+      ""
+  );
+
+  return depositHolder === "landlord" || ledgerMode === "off_ledger";
+};
+
+const getReceiptDepositAllocationBreakdown = (receipt = {}, fallbackHolderResolver = null) => {
+  const allocationRows = getReceiptAllocationRows(receipt).filter(
+    (row) => safeName(row?.priorityGroup || "") === "deposit" && Math.abs(Number(row?.appliedAmount || 0)) > 0
+  );
+
+  if (allocationRows.length > 0) {
+    return allocationRows.reduce(
+      (acc, row) => {
+        const amount = round2(Math.abs(Number(row?.appliedAmount || 0)));
+        if (amount === 0) return acc;
+        if (isLandlordDepositAllocationRow(row)) acc.landlord = round2(acc.landlord + amount);
+        else acc.manager = round2(acc.manager + amount);
+        acc.total = round2(acc.total + amount);
+        return acc;
+      },
+      { manager: 0, landlord: 0, total: 0 }
+    );
+  }
+
+  const effectiveAmount = round2(Math.abs(Number(getEffectiveDepositReceiptAmount(receipt) || 0)));
+  if (effectiveAmount === 0) {
+    return { manager: 0, landlord: 0, total: 0 };
+  }
+
+  const holder = typeof fallbackHolderResolver === "function" ? fallbackHolderResolver(receipt) : "manager";
+  if (holder === "landlord") {
+    return { manager: 0, landlord: effectiveAmount, total: effectiveAmount };
+  }
+  return { manager: effectiveAmount, landlord: 0, total: effectiveAmount };
+};
+
+const hasAnyDepositReceiptAllocation = (receipt = {}, fallbackHolderResolver = null) => {
+  const breakdown = getReceiptDepositAllocationBreakdown(receipt, fallbackHolderResolver);
+  return breakdown.total > 0;
+};
+
+const mergeUniqueReceiptsById = (...lists) => {
+  const merged = [];
+  const seen = new Set();
+  lists.flat().forEach((item) => {
+    const key = String(item?._id || "");
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    merged.push(item);
+  });
+  return merged;
 };
 
 const calculateCommissionAmount = ({
@@ -656,7 +787,7 @@ export const generateLandlordStatement = async ({
 
   const property = await Property.findById(propertyObjectId)
     .select(
-      "dateAcquired propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount commissionTaxSettings totalUnits business landlords"
+      "dateAcquired propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount commissionTaxSettings totalUnits business landlords depositHeldBy"
     )
     .lean();
 
@@ -732,6 +863,7 @@ export const generateLandlordStatement = async ({
     depositReceiptsBefore,
     depositReceiptsInPeriod,
     expensesInPeriod,
+    vouchersInPeriod,
     statementAdjustments,
   ] = await Promise.all([
     TenantInvoice.find({
@@ -826,7 +958,7 @@ export const generateLandlordStatement = async ({
       paymentType: "deposit",
     })
       .select(
-        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber allocations allocationSummary metadata"
+        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber allocations allocationSummary metadata depositHeldBy ledgerMode"
       )
       .lean(),
 
@@ -842,7 +974,7 @@ export const generateLandlordStatement = async ({
       paymentType: "deposit",
     })
       .select(
-        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber allocations allocationSummary metadata"
+        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber allocations allocationSummary metadata depositHeldBy ledgerMode"
       )
       .lean(),
 
@@ -852,6 +984,20 @@ export const generateLandlordStatement = async ({
       date: { $gte: periodStart, $lte: periodEnd },
     })
       .select("_id amount description date category unit")
+      .lean(),
+
+    PaymentVoucher.find({
+      property: propertyObjectId,
+      business: businessObjectId,
+      category: { $in: ["landlord_maintenance", "landlord_other"] },
+      status: { $in: ["approved", "paid"] },
+      $or: [
+        { landlord: landlordObjectId },
+        { landlord: null },
+        { landlord: { $exists: false } },
+      ],
+    })
+      .select("_id voucherNo category amount narration reference dueDate paidDate approvedAt paidAt createdAt expenseRecord landlord property status")
       .lean(),
 
     FinancialLedgerEntry.find({
@@ -891,17 +1037,18 @@ export const generateLandlordStatement = async ({
   const rowsMap = new Map();
 
   const ensureRow = (tenantId, unitId, fallback = {}) => {
-    const resolvedUnitId = String(unitId || fallback.unitId || fallback.unit || "");
+    const resolvedUnitId = getEntityId(unitId || fallback.unitId || fallback.unit);
     const unit = unitMap.get(resolvedUnitId) || {};
-    const tenant = tenantId
-      ? tenantMap.get(String(tenantId)) || {}
+    const resolvedTenantId = getEntityId(tenantId || fallback.tenantId || fallback.tenant);
+    const tenant = resolvedTenantId
+      ? tenantMap.get(resolvedTenantId) || {}
       : {};
-    const key = `${resolvedUnitId}:${String(tenant._id || tenantId || "vacant")}`;
+    const key = `${resolvedUnitId}:${String(tenant._id || resolvedTenantId || "vacant")}`;
 
     if (!rowsMap.has(key)) {
       rowsMap.set(key, {
         key,
-        tenantId: String(tenant._id || tenantId || ""),
+        tenantId: String(tenant._id || resolvedTenantId || ""),
         unitId: resolvedUnitId,
         unit: unit.unitNumber || unit.name || fallback.unitLabel || "-",
         accountNo: tenant.tenantCode || fallback.accountNo || "-",
@@ -1002,25 +1149,45 @@ export const generateLandlordStatement = async ({
       : amount;
   };
 
-  const normalizeDepositHolder = (value = "") => {
-    const normalized = safeName(value);
-    if (!normalized) return "";
-    if (["landlord", "held_by_landlord"].includes(normalized)) return "landlord";
-    if (["management company", "management_company", "propertymanager", "property manager", "property_manager", "manager"].includes(normalized)) {
-      return "manager";
+  const resolveDepositHolderForRecord = (record = {}) => {
+    const tenantId = getEntityId(record?.tenant);
+    const tenant = tenantId ? tenantMap.get(tenantId) || {} : {};
+
+    const allocationRows = Array.isArray(record?.allocations) ? record.allocations : [];
+    const allocationHolder = allocationRows.reduce((resolved, row) => {
+      return (
+        resolved ||
+        normalizeDepositHolderValue(row?.depositHeldBy) ||
+        normalizeDepositHolderValue(row?.metadata?.depositHeldBy) ||
+        normalizeDepositHolderValue(row?.sourceInvoice?.depositHeldBy) ||
+        normalizeDepositHolderValue(row?.sourceInvoice?.metadata?.depositHeldBy)
+      );
+    }, "");
+
+    const tenantHolder = normalizeDepositHolderValue(tenant?.depositHeldBy);
+    const recordHolder =
+      normalizeDepositHolderValue(record?.depositHeldBy) ||
+      normalizeDepositHolderValue(record?.metadata?.depositHeldBy);
+    const propertyHolder = normalizeDepositHolderValue(property?.depositHeldBy);
+    const normalizedPaymentType = safeName(record?.paymentType || "");
+
+    if (allocationHolder) return allocationHolder;
+
+    if (normalizedPaymentType === "deposit") {
+      return tenantHolder || recordHolder || propertyHolder || "manager";
     }
-    return "";
+
+    return recordHolder || tenantHolder || propertyHolder || "manager";
   };
 
-  const resolveDepositHolderForRecord = (record = {}) => {
-    const tenant = record?.tenant ? tenantMap.get(String(record.tenant)) || {} : {};
-    const resolved =
-      normalizeDepositHolder(record?.depositHeldBy) ||
-      normalizeDepositHolder(record?.metadata?.depositHeldBy) ||
-      normalizeDepositHolder(tenant?.depositHeldBy) ||
-      normalizeDepositHolder(property?.depositHeldBy);
-    return resolved || "manager";
-  };
+  const allDepositReceiptsBefore = mergeUniqueReceiptsById(
+    depositReceiptsBefore,
+    receiptsBefore.filter((receipt) => hasAnyDepositReceiptAllocation(receipt, resolveDepositHolderForRecord))
+  );
+  const allDepositReceiptsInPeriod = mergeUniqueReceiptsById(
+    depositReceiptsInPeriod,
+    receiptsInPeriod.filter((receipt) => hasAnyDepositReceiptAllocation(receipt, resolveDepositHolderForRecord))
+  );
 
   const createDepositMemoBucket = (key, label) => ({
     key,
@@ -1134,8 +1301,14 @@ export const generateLandlordStatement = async ({
     }
   }
 
-  for (const receipt of depositReceiptsBefore) {
-    applyDepositReceiptToMemo(receipt, getEffectiveDepositReceiptAmount(receipt), "opening");
+  for (const receipt of allDepositReceiptsBefore) {
+    const depositBreakdown = getReceiptDepositAllocationBreakdown(receipt, resolveDepositHolderForRecord);
+    if (depositBreakdown.manager > 0) {
+      applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "manager" }, depositBreakdown.manager, "opening");
+    }
+    if (depositBreakdown.landlord > 0) {
+      applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "landlord" }, depositBreakdown.landlord, "opening");
+    }
   }
 
   for (const receipt of receiptsBefore) {
@@ -1512,16 +1685,21 @@ export const generateLandlordStatement = async ({
     }
   }
 
-  for (const receipt of depositReceiptsInPeriod) {
-    applyDepositReceiptToMemo(receipt, getEffectiveDepositReceiptAmount(receipt), "current");
+  for (const receipt of allDepositReceiptsInPeriod) {
+    const depositBreakdown = getReceiptDepositAllocationBreakdown(receipt, resolveDepositHolderForRecord);
 
-    const depositHolder = resolveDepositHolderForRecord(receipt);
-    if (depositHolder !== "landlord") continue;
+    if (depositBreakdown.manager > 0) {
+      applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "manager" }, depositBreakdown.manager, "current");
+    }
+    if (depositBreakdown.landlord > 0) {
+      applyDepositReceiptToMemo({ ...receipt, depositHeldBy: "landlord" }, depositBreakdown.landlord, "current");
+    }
 
+    const amount = round2(Number(depositBreakdown.landlord || 0));
+    if (amount <= 0) continue;
+
+    const depositHolder = "landlord";
     const row = ensureRow(receipt.tenant, receipt.unit);
-    const amount = round2(Math.abs(Number(getEffectiveDepositReceiptAmount(receipt) || 0)));
-    if (amount === 0) continue;
-
     const sourceId = String(receipt._id || "");
     const additionDescription = receipt.paidDirectToLandlord
       ? `Landlord-held deposit recognised from direct landlord receipt - ${row.tenantName}`
@@ -1683,30 +1861,72 @@ export const generateLandlordStatement = async ({
     }
   }
 
-  const rawExpenseRows = expensesInPeriod.map((expense) => ({
-    date: expense.date,
-    description: expense.description || `Property expense - ${expense.category}`,
-    amount: round2(expense.amount),
-    category: expense.category || "expense",
-    sourceId: String(expense._id),
-    unit: expense.unit ? String(expense.unit) : "",
-  }));
+  const expenseRecordIdsInPeriod = new Set(
+    expensesInPeriod.map((expense) => String(expense?._id || "")).filter(Boolean)
+  );
+
+  const voucherExpenseRows = vouchersInPeriod
+    .map((voucher) => {
+      const voucherCategory = getVoucherExpenseCategory(voucher?.category);
+      if (!voucherCategory) return null;
+
+      const effectiveDate = resolveVoucherStatementDate(voucher);
+      if (!effectiveDate) return null;
+      if (effectiveDate.getTime() < periodStart.getTime() || effectiveDate.getTime() > periodEnd.getTime()) {
+        return null;
+      }
+
+      const expenseRecordId = String(voucher?.expenseRecord || "");
+      if (expenseRecordId && expenseRecordIdsInPeriod.has(expenseRecordId)) {
+        return null;
+      }
+
+      return {
+        date: effectiveDate,
+        description:
+          String(voucher?.narration || voucher?.reference || `Payment voucher ${voucher?.voucherNo || ""}`).trim() ||
+          `Payment voucher ${voucher?.voucherNo || ""}`.trim(),
+        amount: round2(voucher?.amount),
+        category: voucherCategory,
+        sourceId: String(voucher?._id || ""),
+        unit: "",
+        sourceTransactionType: "payment_voucher",
+        metadata: {
+          voucherNo: voucher?.voucherNo || "",
+          voucherCategory: voucher?.category || "",
+          expenseRecordId,
+        },
+      };
+    })
+    .filter(Boolean);
+
+  const rawExpenseRows = [
+    ...expensesInPeriod.map((expense) => ({
+      date: expense.date,
+      description: expense.description || `Property expense - ${expense.category}`,
+      amount: round2(expense.amount),
+      category: expense.category || "expense",
+      sourceId: String(expense._id),
+      unit: expense.unit ? String(expense.unit) : "",
+      sourceTransactionType: "expense",
+      metadata: {
+        expenseCategory: expense.category,
+      },
+    })),
+    ...voucherExpenseRows,
+  ];
 
   const cleanedPropertyExpenseRows = dedupeExpenseRowsAgainstAdditions({
     expenseRows: rawExpenseRows,
     additionRows,
   });
 
-  const propertyExpenseSourceIds = new Set(
-    cleanedPropertyExpenseRows.map((row) => row.sourceId).filter(Boolean)
-  );
-
   let totalExpenses = 0;
 
-  for (const expense of expensesInPeriod) {
-    if (!propertyExpenseSourceIds.has(String(expense._id))) continue;
-
+  for (const expense of cleanedPropertyExpenseRows) {
     const amount = Number(expense.amount || 0);
+    if (amount <= 0) continue;
+
     totalExpenses += amount;
 
     pushEntry({
@@ -1717,10 +1937,11 @@ export const generateLandlordStatement = async ({
       amount,
       direction: "debit",
       description: expense.description || `Property expense - ${expense.category}`,
-      sourceTransactionType: "expense",
-      sourceTransactionId: String(expense._id),
+      sourceTransactionType: expense.sourceTransactionType || "expense",
+      sourceTransactionId: String(expense.sourceId || ""),
       metadata: {
         expenseCategory: expense.category,
+        ...(expense.metadata && typeof expense.metadata === "object" ? expense.metadata : {}),
       },
     });
   }

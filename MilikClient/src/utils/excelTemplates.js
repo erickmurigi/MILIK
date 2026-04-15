@@ -1236,230 +1236,223 @@ export const exportUnitsToExcel = (units) => {
  * @param {Array} units - Optional array of unit objects with unitNumber and property info
  */
 export const generateTenantsTemplate = (units = []) => {
-  // Sheet 1: Data Template (Headers only)
-  const dataSheet = XLSX.utils.aoa_to_sheet([
-    [
-      'Tenant Name *',
-      'Phone Number *',
-      'ID Number *',
-      'Property Code *',
-      'Unit Number *',
-      'Rent *',
-      'Move-in Date *',
-      'Lease Type',
-      'Payment Method *',
-      'Emergency Contact Name',
-      'Emergency Contact Phone',
-      'Status',
-      'Move-out Date',
-      'Notes'
-    ]
-  ]);
-
-  // Set column widths
-  dataSheet['!cols'] = [
-    { wch: 25 }, // Tenant Name
-    { wch: 18 }, // Phone Number
-    { wch: 18 }, // ID Number
-    { wch: 18 }, // Property Code
-    { wch: 20 }, // Unit Number
-    { wch: 15 }, // Rent
-    { wch: 18 }, // Move-in Date
-    { wch: 14 }, // Lease Type
-    { wch: 18 }, // Payment Method
-    { wch: 25 }, // Emergency Contact Name
-    { wch: 18 }, // Emergency Contact Phone
-    { wch: 15 }, // Status
-    { wch: 18 }, // Move-out Date
-    { wch: 30 }  // Notes
+  const headers = [
+    "Tenant Code",
+    "Tenant Name *",
+    "Phone Number *",
+    "ID Number *",
+    "Property Code *",
+    "Unit Number *",
+    "Additional Unit Numbers",
+    "Rent",
+    "Deposit Amount",
+    "Deposit Held By",
+    "Move-in Date *",
+    "Lease Type",
+    "Move-out Date",
+    "Status",
+    "Additional Utilities",
+    "Emergency Contact Name",
+    "Emergency Contact Phone",
+    "Emergency Contact Relationship",
+    "Notes",
   ];
 
-  // Sheet 2: Instructions & Examples
+  const dataSheet = XLSX.utils.aoa_to_sheet([headers]);
+  dataSheet["!cols"] = [
+    { wch: 16 },
+    { wch: 28 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 24 },
+    { wch: 14 },
+    { wch: 16 },
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 14 },
+    { wch: 18 },
+    { wch: 14 },
+    { wch: 42 },
+    { wch: 24 },
+    { wch: 20 },
+    { wch: 24 },
+    { wch: 36 },
+  ];
+
   const instructionsSheet = XLSX.utils.aoa_to_sheet([
-    ['TENANT IMPORT INSTRUCTIONS'],
-    [''],
-    ['REQUIRED FIELDS (marked with *)'],
-    ['• Tenant Name: Full name of the tenant'],
-    ['• Phone Number: Contact phone number (must be unique)'],
-    ['• ID Number: National ID or Passport number (must be unique)'],
-    ['• Property Code: Must match an existing property code in the system (e.g., PRO001)'],
-    ['• Unit Number: Must match an existing unit in the selected property'],
-    ['• Rent: Monthly rent amount in Kenyan Shillings (KES)'],
-    ['• Move-in Date: Date tenant moved in (format: MM/DD/YYYY)'],
-    ['• Lease Type: at_will or fixed (default: at_will). If fixed, Move-out Date is required'],
-    ['• Payment Method: How tenant pays rent (bank_transfer, mobile_money, cash, check, or credit_card)'],
-    [''],
-    ['OPTIONAL FIELDS'],
-    ['• Emergency Contact Name: Name of emergency contact person'],
-    ['• Emergency Contact Phone: Phone number of emergency contact'],
-    ['• Status: active, inactive, overdue, evicted, or moved_out (default: active)'],
-    ['• Move-out Date: Date tenant moved out (format: MM/DD/YYYY)'],
-    ['• Notes: Additional information about the tenant'],
-    [''],
-    ['EXAMPLE DATA (Copy to Data Sheet)'],
-    [''],
-    // Headers
+    ["TENANT IMPORT INSTRUCTIONS"],
+    [""],
+    ["REQUIRED FIELDS (marked with *)"],
+    ["• Tenant Name: Full tenant name"],
+    ["• Phone Number: Contact number"],
+    ["• ID Number: National ID / passport number"],
+    ["• Property Code: Must match an existing property code in MILIK"],
+    ["• Unit Number: Primary unit number under the selected property"],
+    ["• Move-in Date: Use YYYY-MM-DD for best results"],
+    [""],
+    ["OPTIONAL FIELDS"],
+    ["• Tenant Code: Leave blank to let MILIK auto-generate TT codes"],
+    ["• Additional Unit Numbers: Separate multiple units with commas or semicolons"],
+    ["• Rent: Leave blank to let MILIK use the assigned unit rent total"],
+    ["• Deposit Amount: Leave blank to fall back to current unit/property defaults"],
+    ["• Deposit Held By: Landlord or Management Company"],
+    ["• Lease Type: at_will or fixed (default: at_will)"],
+    ["• Move-out Date: Required when Lease Type is fixed"],
+    ["• Status: active, inactive, overdue, evicted, or moved_out (default: active)"],
+    ["• Additional Utilities: Format each item as Utility:Amount or Utility:Amount:included"],
+    ["• Emergency Contact Relationship: Example Family, Spouse, Employer, Relative"],
+    ["• Notes: Optional tenant remarks"],
+    [""],
+    ["ADDITIONAL UTILITIES EXAMPLES"],
+    ["• Water:1500"],
+    ["• Garbage:500; Security:0:included"],
+    ["• Internet:2500; Parking:1000; Service Charge:0:included"],
+    [""],
+    ["EXAMPLE DATA (Copy these rows into the Data sheet if helpful)"],
+    [""],
+    headers,
     [
-      'Tenant Name',
-      'Phone Number',
-      'ID Number',
-      'Property Code',
-      'Unit Number',
-      'Rent',
-      'Move-in Date',
-      'Lease Type',
-      'Payment Method',
-      'Emergency Contact Name',
-      'Emergency Contact Phone',
-      'Status',
-      'Move-out Date',
-      'Notes'
+      "",
+      "John Mwangi",
+      "+254701234567",
+      "12345678",
+      "PRO001",
+      "A1",
+      "A2",
+      "",
+      "35000",
+      "Management Company",
+      "2025-01-15",
+      "at_will",
+      "",
+      "active",
+      "Water:1500; Garbage:500",
+      "Jane Mwangi",
+      "+254701234568",
+      "Family",
+      "Auto-code, primary plus one extra unit",
     ],
-    // Example 1
     [
-      'John Mwangi',
-      '+254701234567',
-      '12345678',
-      'PRO001',
-      'A1',
-      '35000',
-      '01/15/2023',
-      'at_will',
-      'mobile_money',
-      'Jane Mwangi',
-      '+254701234568',
-      'active',
-      '',
-      'Excellent tenant, on-time payments'
+      "TT0042",
+      "Sarah Kipchoge",
+      "+254722345678",
+      "87654321",
+      "PRO002",
+      "201",
+      "",
+      "25000",
+      "25000",
+      "Landlord",
+      "2025-03-20",
+      "fixed",
+      "2026-03-19",
+      "active",
+      "Service Charge:0:included",
+      "David Kipchoge",
+      "+254722345679",
+      "Brother",
+      "Fixed lease with landlord-held deposit",
     ],
-    // Example 2
     [
-      'Sarah Kipchoge',
-      '+254722345678',
-      '87654321',
-      'PRO002',
-      '201',
-      '25000',
-      '03/20/2023',
-      'fixed',
-      'bank_transfer',
-      'David Kipchoge',
-      '+254722345679',
-      'active',
-      '03/19/2024',
-      'One-year fixed lease'
+      "",
+      "Michael Okonkwo",
+      "+254733456789",
+      "11223344",
+      "PRO003",
+      "B3",
+      "B4; B5",
+      "",
+      "",
+      "",
+      "2025-06-10",
+      "at_will",
+      "",
+      "active",
+      "",
+      "Mary Okonkwo",
+      "+254733456790",
+      "Relative",
+      "Rent and deposit will be derived by MILIK",
     ],
-    // Example 3
-    [
-      'Michael Okonkwo',
-      '+254733456789',
-      '11223344',
-      'PRO003',
-      'B3',
-      '15000',
-      '06/10/2023',
-      'at_will',
-      'cash',
-      'Mary Okonkwo',
-      '+254733456790',
-      'active',
-      '',
-      'Student, pays by cash monthly'
-    ],
-    [''],
-    ['IMPORTANT NOTES'],
-    ['• Do not modify the column headers in the Data sheet'],
-    ['• All required fields marked with * must have values'],
-    ['• Phone numbers must be unique within the system'],
-    ['• ID numbers must be unique within the system'],
-    ['• Property Code must match existing properties in your system'],
-    ['• Unit Number must belong to the selected Property Code'],
-    ['• Move-in Date must be a valid date (MM/DD/YYYY format)'],
-    ['• Lease Type must be one of: at_will, fixed'],
-    ['• If Lease Type is fixed, Move-out Date is required and must be after Move-in Date'],
-    ['• Payment Method must be one of: bank_transfer, mobile_money, cash, check, credit_card'],
-    ['• Status must be one of: active, inactive, overdue, evicted, moved_out (lowercase)'],
-    ['• Rent must be a numeric value greater than 0'],
-    ['• Delete these instruction rows before uploading'],
-    ['• Maximum 1000 tenants per import']
+    [""],
+    ["IMPORTANT NOTES"],
+    ["• Do not rename the Data sheet headers"],
+    ["• Property Code and Unit Number must already exist in MILIK"],
+    ["• Additional Unit Numbers must belong to the same property as the primary unit"],
+    ["• Fixed leases must include a Move-out Date after Move-in Date"],
+    ["• Deposit Held By accepts Landlord or Management Company"],
+    ["• Additional Utilities must use numeric amounts"],
+    ["• Delete instruction rows before upload"],
   ]);
 
-  instructionsSheet['!cols'] = [
-    { wch: 80 }, { wch: 15 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 15 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 25 }, { wch: 18 }, { wch: 15 }, { wch: 18 }, { wch: 30 }
-  ];
+  instructionsSheet["!cols"] = headers.map(() => ({ wch: 28 }));
 
-  // Sheet 3: Dropdown Values Reference
   const dropdownData = [
-    ['VALID VALUES FOR DROPDOWNS'],
-    [''],
-    ['Payment Method Options:'],
-    ['bank_transfer'],
-    ['mobile_money'],
-    ['cash'],
-    ['check'],
-    ['credit_card'],
-    [''],
-    ['Lease Type Options:'],
-    ['at_will'],
-    ['fixed'],
-    [''],
-    ['Status Options:'],
-    ['active'],
-    ['inactive'],
-    ['overdue'],
-    ['evicted'],
-    ['moved_out'],
+    ["VALID VALUES / REFERENCE"],
+    [""],
+    ["Lease Type Options"],
+    ["at_will"],
+    ["fixed"],
+    [""],
+    ["Status Options"],
+    ["active"],
+    ["inactive"],
+    ["overdue"],
+    ["evicted"],
+    ["moved_out"],
+    [""],
+    ["Deposit Held By Options"],
+    ["Management Company"],
+    ["Landlord"],
   ];
 
-  // Add Property + Units section if units are provided
-  if (units && units.length > 0) {
-    dropdownData.push(['']);
-    dropdownData.push(['AVAILABLE PROPERTY CODE + UNIT COMBINATIONS:']);
-    dropdownData.push(['(Use both Property Code and Unit Number exactly as shown)']);
+  if (Array.isArray(units) && units.length > 0) {
+    dropdownData.push([""]);
+    dropdownData.push(["AVAILABLE PROPERTY CODE + UNIT NUMBER COMBINATIONS"]);
+    dropdownData.push(["(Use Property Code and Unit Number exactly as listed)"]);
+
     const groupedByProperty = {};
-    units.forEach(unit => {
-      const propertyCode = unit.property?.propertyCode || 'UNKNOWN';
-      const propName = unit.property?.propertyName || 'Unknown Property';
-      const groupKey = `${propertyCode} - ${propName}`;
-      if (!groupedByProperty[groupKey]) {
-        groupedByProperty[groupKey] = [];
-      }
-      groupedByProperty[groupKey].push({
-        propertyCode,
-        unitNumber: unit.unitNumber
-      });
+    units.forEach((unit) => {
+      const propertyCode = unit?.property?.propertyCode || "UNKNOWN";
+      const propertyName = unit?.property?.propertyName || unit?.property?.name || "Unknown Property";
+      const key = `${propertyCode} - ${propertyName}`;
+      if (!groupedByProperty[key]) groupedByProperty[key] = [];
+      groupedByProperty[key].push(unit?.unitNumber || "");
     });
-    
-    Object.keys(groupedByProperty).forEach(groupKey => {
-      dropdownData.push([`\n${groupKey}:`]);
-      groupedByProperty[groupKey].forEach(({ propertyCode, unitNumber }) => {
-        dropdownData.push([`  ${propertyCode} | ${unitNumber}`]);
+
+    Object.keys(groupedByProperty)
+      .sort()
+      .forEach((groupKey) => {
+        dropdownData.push([groupKey]);
+        groupedByProperty[groupKey]
+          .filter(Boolean)
+          .sort()
+          .forEach((unitNumber) => {
+            dropdownData.push([`  ${unitNumber}`]);
+          });
       });
-    });
   }
 
-  dropdownData.push(['']);
-  dropdownData.push(['TIPS:']);
-  dropdownData.push(['• Copy and paste these values into your Data sheet']);
-  dropdownData.push(['• All values are case-sensitive']);
-  dropdownData.push(['• Property Code and Unit Number must both match EXACTLY']);
-  dropdownData.push(['• Payment Method must be lowercase']);
-  dropdownData.push(['• Each tenant must be assigned to an existing unit']);
+  dropdownData.push([""]);
+  dropdownData.push(["UTILITY ENTRY TIPS"]);
+  dropdownData.push(["• Separate utility rows with semicolons"]);
+  dropdownData.push(["• Use Utility:Amount or Utility:Amount:included"]);
+  dropdownData.push(["• Example: Water:1500; Garbage:500; Service Charge:0:included"]);
 
   const dropdownSheet = XLSX.utils.aoa_to_sheet(dropdownData);
-  dropdownSheet['!cols'] = [{ wch: 60 }];
+  dropdownSheet["!cols"] = [{ wch: 60 }];
 
-  // Create workbook
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, dataSheet, 'Data');
-  XLSX.utils.book_append_sheet(workbook, instructionsSheet, 'Instructions & Examples');
-  XLSX.utils.book_append_sheet(workbook, dropdownSheet, 'Valid Values');
+  XLSX.utils.book_append_sheet(workbook, dataSheet, "Data");
+  XLSX.utils.book_append_sheet(workbook, instructionsSheet, "Instructions & Examples");
+  XLSX.utils.book_append_sheet(workbook, dropdownSheet, "Valid Values");
 
-  // Generate Excel file
-  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  
-  return blob;
+  const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  return new Blob([excelBuffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
 };
 
 /**
@@ -1469,13 +1462,173 @@ export const generateTenantsTemplate = (units = []) => {
 export const downloadTenantsTemplate = (units = []) => {
   const blob = generateTenantsTemplate(units);
   const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
+  const link = document.createElement("a");
   link.href = url;
-  link.download = `MILIK_Tenants_Import_Template_${new Date().toISOString().split('T')[0]}.xlsx`;
+  link.download = `MILIK_Tenants_Import_Template_${new Date().toISOString().split("T")[0]}.xlsx`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
   window.URL.revokeObjectURL(url);
+};
+
+const normalizeTenantImportKey = (key = "") =>
+  String(key)
+    .replace(/\u00A0/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/\*/g, "")
+    .replace(/[\s_\-\/]+/g, "");
+
+const getTenantImportValue = (row, aliases = []) => {
+  const normalizedRow = {};
+  Object.keys(row || {}).forEach((key) => {
+    normalizedRow[normalizeTenantImportKey(key)] = row[key];
+  });
+
+  for (const alias of aliases) {
+    const match = normalizedRow[normalizeTenantImportKey(alias)];
+    if (match !== undefined && match !== null && String(match).trim() !== "") {
+      return match;
+    }
+  }
+
+  return "";
+};
+
+const cleanImportString = (value) => {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+};
+
+const parseImportNumber = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const cleaned = String(value).replace(/,/g, "").trim();
+  if (!cleaned) return null;
+  const numericValue = Number(cleaned);
+  return Number.isFinite(numericValue) ? numericValue : Number.NaN;
+};
+
+const parseImportDate = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "number") {
+    const parsedCode = XLSX.SSF.parse_date_code(value);
+    if (parsedCode) {
+      const parsedDate = new Date(Date.UTC(parsedCode.y, parsedCode.m - 1, parsedCode.d));
+      return Number.isNaN(parsedDate.getTime()) ? "" : parsedDate.toISOString();
+    }
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return "";
+
+  const nativeParsed = new Date(raw);
+  if (!Number.isNaN(nativeParsed.getTime())) {
+    return nativeParsed.toISOString();
+  }
+
+  const match = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (!match) return "";
+
+  let [, first, second, year] = match;
+  let month = Number(first);
+  let day = Number(second);
+  const yearValue = Number(year.length === 2 ? `20${year}` : year);
+
+  if (month > 12 && day <= 12) {
+    const swappedMonth = day;
+    day = month;
+    month = swappedMonth;
+  }
+
+  const fallbackDate = new Date(Date.UTC(yearValue, month - 1, day));
+  return Number.isNaN(fallbackDate.getTime()) ? "" : fallbackDate.toISOString();
+};
+
+const parseAdditionalUnitNumbers = (value) =>
+  Array.from(
+    new Set(
+      String(value || "")
+        .split(/[;,|\n]+/)
+        .map((item) => cleanImportString(item))
+        .filter(Boolean)
+    )
+  );
+
+const normalizeImportedDepositHolder = (value) => {
+  const normalized = cleanImportString(value).toLowerCase();
+  if (!normalized) return "";
+  if (["landlord"].includes(normalized)) return "Landlord";
+  if (
+    [
+      "management company",
+      "managementcompany",
+      "manager",
+      "property manager",
+      "propertymanager",
+      "property_manager",
+      "pm",
+    ].includes(normalized)
+  ) {
+    return "Management Company";
+  }
+  return "";
+};
+
+const parseImportedUtilities = (value) => {
+  const raw = cleanImportString(value);
+  if (!raw) {
+    return { utilities: [], errors: [] };
+  }
+
+  const utilities = [];
+  const errors = [];
+
+  raw
+    .split(/[;\n]+/)
+    .map((item) => cleanImportString(item))
+    .filter(Boolean)
+    .forEach((entry) => {
+      const parts = entry.split(":").map((item) => cleanImportString(item));
+      if (parts.length < 2) {
+        errors.push(`Invalid utility format "${entry}". Use Utility:Amount or Utility:Amount:included`);
+        return;
+      }
+
+      const utilityName = parts[0];
+      const amountValue = parseImportNumber(parts[1]);
+      const inclusionRaw = cleanImportString(parts[2]).toLowerCase();
+
+      if (!utilityName) {
+        errors.push(`Utility name is missing in "${entry}"`);
+        return;
+      }
+
+      if (!Number.isFinite(amountValue)) {
+        errors.push(`Utility amount is invalid in "${entry}"`);
+        return;
+      }
+
+      let isIncluded = false;
+      if (inclusionRaw) {
+        if (["included", "include", "yes", "true", "1"].includes(inclusionRaw)) {
+          isIncluded = true;
+        } else if (["excluded", "exclude", "no", "false", "0"].includes(inclusionRaw)) {
+          isIncluded = false;
+        } else {
+          errors.push(`Utility inclusion flag is invalid in "${entry}". Use included or excluded`);
+          return;
+        }
+      }
+
+      utilities.push({
+        utility: utilityName,
+        utilityLabel: utilityName,
+        unitCharge: Number(amountValue || 0),
+        isIncluded,
+      });
+    });
+
+  return { utilities, errors };
 };
 
 /**
@@ -1484,219 +1637,255 @@ export const downloadTenantsTemplate = (units = []) => {
 export const parseTenantsExcel = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    
+
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        // Read the Data sheet
+        const workbook = XLSX.read(data, { type: "array" });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        
-        // Convert to JSON
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
-          raw: false,
-          defval: ''
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+          raw: true,
+          defval: "",
         });
-        
+
         if (jsonData.length === 0) {
-          reject(new Error('No data found in Excel file'));
+          reject(new Error("No data found in Excel file"));
           return;
         }
-        
-        // Normalize headers to support starred headers and minor header variations.
-        const normalizeKey = (key = '') =>
-          String(key)
-            .replace(/\u00A0/g, ' ')
-            .trim()
-            .toLowerCase()
-            .replace(/\*/g, '')
-            .replace(/[\s_\-\/]+/g, '');
 
-        const toStringValue = (value) => {
-          if (value === null || value === undefined) return '';
-          return String(value).trim();
-        };
-
-        const getRowValue = (row, aliases = []) => {
-          const normalizedRow = {};
-          Object.keys(row || {}).forEach((key) => {
-            normalizedRow[normalizeKey(key)] = row[key];
-          });
-
-          for (const alias of aliases) {
-            const match = normalizedRow[normalizeKey(alias)];
-            if (match !== undefined && match !== null && String(match).trim() !== '') {
-              return toStringValue(match);
-            }
-          }
-          return '';
-        };
-
-        const safeIsoDate = (value) => {
-          if (!value) return '';
-          const parsed = new Date(value);
-          if (Number.isNaN(parsed.getTime())) return '';
-          return parsed.toISOString();
-        };
-
-        // Map Excel columns to database fields
         const mappedData = jsonData.map((row, index) => {
-          const tenantName = getRowValue(row, ['Tenant Name *', 'Tenant Name', 'tenantName']);
-          const phoneNumber = getRowValue(row, ['Phone Number *', 'Phone Number', 'phoneNumber']);
-          const idNumber = getRowValue(row, ['ID Number *', 'ID Number', 'idNumber']);
-          const propertyCode = getRowValue(row, ['Property Code *', 'Property Code', 'propertyCode']).toUpperCase();
-          const unitNumber = getRowValue(row, ['Unit Number *', 'Unit Number', 'unitNumber']);
-          const rentRaw = getRowValue(row, ['Rent *', 'Rent', 'rent']);
-          const moveInDateRaw = getRowValue(row, ['Move-in Date *', 'Move-in Date', 'Move In Date', 'moveInDate']);
-          const leaseType =
-            getRowValue(row, ['Lease Type', 'Lease Type *', 'leaseType']).toLowerCase() ||
-            'at_will';
-          const paymentMethod =
-            getRowValue(row, ['Payment Method *', 'Payment Method', 'paymentMethod']).toLowerCase() ||
-            'bank_transfer';
-          const emergencyContactName = getRowValue(row, [
-            'Emergency Contact Name',
-            'emergencyContactName',
-          ]);
-          const emergencyContactPhone = getRowValue(row, [
-            'Emergency Contact Phone',
-            'Emergency Contact Ph',
-            'emergencyContactPhone',
-          ]);
-          const status = getRowValue(row, ['Status', 'status']).toLowerCase() || 'active';
-          const moveOutDateRaw = getRowValue(row, ['Move-out Date', 'Move Out Date', 'moveOutDate']);
-          const description = getRowValue(row, ['Notes', 'Description', 'description']);
+          const utilitiesResult = parseImportedUtilities(
+            getTenantImportValue(row, ["Additional Utilities", "Utilities", "additionalUtilities", "utilities"])
+          );
+
+          const rentValue = parseImportNumber(
+            getTenantImportValue(row, ["Rent", "Rent *", "rent"])
+          );
+          const depositAmountValue = parseImportNumber(
+            getTenantImportValue(row, ["Deposit Amount", "depositAmount"])
+          );
 
           return {
-            tenantName,
-            phoneNumber,
-            idNumber,
-            propertyCode,
-            unitNumber,
-            rent: rentRaw ? parseFloat(rentRaw) : 0,
-            moveInDate: safeIsoDate(moveInDateRaw),
-            leaseType,
-            paymentMethod,
-            emergencyContactName,
-            emergencyContactPhone,
-            status,
-            moveOutDate: safeIsoDate(moveOutDateRaw) || null,
-            description,
-            rowNumber: index + 2 // Excel row numbers start at 2 (after header)
+            rowNumber: index + 2,
+            tenantCode: cleanImportString(
+              getTenantImportValue(row, ["Tenant Code", "tenantCode"])
+            ),
+            tenantName: cleanImportString(
+              getTenantImportValue(row, ["Tenant Name *", "Tenant Name", "tenantName"])
+            ),
+            phoneNumber: cleanImportString(
+              getTenantImportValue(row, ["Phone Number *", "Phone Number", "phoneNumber"])
+            ),
+            idNumber: cleanImportString(
+              getTenantImportValue(row, ["ID Number *", "ID Number", "idNumber"])
+            ),
+            propertyCode: cleanImportString(
+              getTenantImportValue(row, ["Property Code *", "Property Code", "propertyCode"])
+            ).toUpperCase(),
+            unitNumber: cleanImportString(
+              getTenantImportValue(row, ["Unit Number *", "Unit Number", "unitNumber"])
+            ),
+            additionalUnitNumbers: parseAdditionalUnitNumbers(
+              getTenantImportValue(row, [
+                "Additional Unit Numbers",
+                "Additional Units",
+                "additionalUnitNumbers",
+                "additionalUnits",
+              ])
+            ),
+            rent: Number.isFinite(rentValue) ? rentValue : rentValue === null ? 0 : Number.NaN,
+            depositAmount:
+              depositAmountValue === null
+                ? undefined
+                : Number.isFinite(depositAmountValue)
+                ? depositAmountValue
+                : Number.NaN,
+            depositHeldByRaw: cleanImportString(
+              getTenantImportValue(row, ["Deposit Held By", "depositHeldBy"])
+            ),
+            depositHeldBy: normalizeImportedDepositHolder(
+              getTenantImportValue(row, ["Deposit Held By", "depositHeldBy"])
+            ),
+            moveInDate: parseImportDate(
+              getTenantImportValue(row, ["Move-in Date *", "Move-in Date", "Move In Date", "moveInDate"])
+            ),
+            leaseType:
+              cleanImportString(
+                getTenantImportValue(row, ["Lease Type", "Lease Type *", "leaseType"])
+              ).toLowerCase() || "at_will",
+            moveOutDate:
+              parseImportDate(
+                getTenantImportValue(row, ["Move-out Date", "Move Out Date", "moveOutDate"])
+              ) || null,
+            status:
+              cleanImportString(getTenantImportValue(row, ["Status", "status"])).toLowerCase() ||
+              "active",
+            utilities: utilitiesResult.utilities,
+            utilityErrors: utilitiesResult.errors,
+            emergencyContactName: cleanImportString(
+              getTenantImportValue(row, ["Emergency Contact Name", "emergencyContactName"])
+            ),
+            emergencyContactPhone: cleanImportString(
+              getTenantImportValue(row, ["Emergency Contact Phone", "Emergency Contact Ph", "emergencyContactPhone"])
+            ),
+            emergencyContactRelationship: cleanImportString(
+              getTenantImportValue(row, [
+                "Emergency Contact Relationship",
+                "emergencyContactRelationship",
+              ])
+            ),
+            description: cleanImportString(
+              getTenantImportValue(row, ["Notes", "Description", "description"])
+            ),
           };
         });
-        
-        // Validate and categorize
+
         const validRecords = [];
         const errors = [];
-        
-        const validPaymentMethods = ['bank_transfer', 'mobile_money', 'cash', 'check', 'credit_card'];
-        const validLeaseTypes = ['at_will', 'fixed'];
-        const validStatuses = ['active', 'inactive', 'overdue', 'evicted', 'moved_out'];
-        
-        // Track duplicates within the file
+        const validLeaseTypes = ["at_will", "fixed"];
+        const validStatuses = ["active", "inactive", "overdue", "evicted", "moved_out"];
+
         const seenPhones = new Set();
         const seenIds = new Set();
-        
+        const seenTenantCodes = new Set();
+
         mappedData.forEach((record) => {
           const rowErrors = [];
-          
-          // Required field validations
-          if (!record.tenantName) {
-            rowErrors.push('Tenant Name is required');
-          }
-          if (!record.phoneNumber) {
-            rowErrors.push('Phone Number is required');
-          }
-          if (!record.idNumber) {
-            rowErrors.push('ID Number is required');
-          }
-          if (!record.propertyCode) {
-            rowErrors.push('Property Code is required');
-          }
-          if (!record.unitNumber) {
-            rowErrors.push('Unit Number is required');
-          }
-          if (record.rent <= 0) {
-            rowErrors.push('Rent must be greater than 0');
-          }
-          if (!record.moveInDate) {
-            rowErrors.push('Move-in Date is required and must be valid');
-          }
-          if (!record.paymentMethod) {
-            rowErrors.push('Payment Method is required');
+
+          if (!record.tenantName) rowErrors.push("Tenant Name is required");
+          if (!record.phoneNumber) rowErrors.push("Phone Number is required");
+          if (!record.idNumber) rowErrors.push("ID Number is required");
+          if (!record.propertyCode) rowErrors.push("Property Code is required");
+          if (!record.unitNumber) rowErrors.push("Unit Number is required");
+          if (!record.moveInDate) rowErrors.push("Move-in Date is required and must be valid");
+
+          if (record.tenantCode) {
+            const normalizedTenantCode = record.tenantCode.toLowerCase();
+            if (seenTenantCodes.has(normalizedTenantCode)) {
+              rowErrors.push("Duplicate Tenant Code within file");
+            }
+            seenTenantCodes.add(normalizedTenantCode);
           }
 
-          if (!record.leaseType) {
-            rowErrors.push('Lease Type is required');
-          }
-          
-          // Enum validations
-          if (record.leaseType && !validLeaseTypes.includes(record.leaseType)) {
-            rowErrors.push(`Invalid Lease Type. Must be one of: ${validLeaseTypes.join(', ')}`);
-          }
-          if (record.paymentMethod && !validPaymentMethods.includes(record.paymentMethod)) {
-            rowErrors.push(`Invalid Payment Method. Must be one of: ${validPaymentMethods.join(', ')}`);
-          }
-          if (record.status && !validStatuses.includes(record.status)) {
-            rowErrors.push(`Invalid Status. Must be one of: ${validStatuses.join(', ')}`);
+          if (record.phoneNumber) {
+            const normalizedPhone = record.phoneNumber.toLowerCase();
+            if (seenPhones.has(normalizedPhone)) {
+              rowErrors.push("Duplicate Phone Number within file");
+            }
+            seenPhones.add(normalizedPhone);
           }
 
-          // Fixed leases require a valid move-out date after move-in date
-          if (record.leaseType === 'fixed') {
+          if (record.idNumber) {
+            const normalizedIdNumber = record.idNumber.toLowerCase();
+            if (seenIds.has(normalizedIdNumber)) {
+              rowErrors.push("Duplicate ID Number within file");
+            }
+            seenIds.add(normalizedIdNumber);
+          }
+
+          if (!validLeaseTypes.includes(record.leaseType)) {
+            rowErrors.push(`Invalid Lease Type. Must be one of: ${validLeaseTypes.join(", ")}`);
+          }
+
+          if (!validStatuses.includes(record.status)) {
+            rowErrors.push(`Invalid Status. Must be one of: ${validStatuses.join(", ")}`);
+          }
+
+          if (record.rent !== 0 && !Number.isFinite(record.rent)) {
+            rowErrors.push("Rent must be numeric when provided");
+          } else if (Number.isFinite(record.rent) && record.rent < 0) {
+            rowErrors.push("Rent cannot be negative");
+          }
+
+          if (record.depositAmount !== undefined) {
+            if (!Number.isFinite(record.depositAmount)) {
+              rowErrors.push("Deposit Amount must be numeric when provided");
+            } else if (record.depositAmount < 0) {
+              rowErrors.push("Deposit Amount cannot be negative");
+            }
+          }
+
+          if (record.depositHeldByRaw && !record.depositHeldBy) {
+            rowErrors.push("Deposit Held By must be Landlord or Management Company");
+          }
+
+          if (
+            Array.isArray(record.additionalUnitNumbers) &&
+            record.additionalUnitNumbers.some(
+              (unitNumber) =>
+                String(unitNumber || "").trim().toLowerCase() ===
+                String(record.unitNumber || "").trim().toLowerCase()
+            )
+          ) {
+            rowErrors.push("Additional Unit Numbers cannot include the primary Unit Number");
+          }
+
+          if (record.leaseType === "fixed") {
             if (!record.moveOutDate) {
-              rowErrors.push('Move-out Date is required when Lease Type is fixed');
+              rowErrors.push("Move-out Date is required when Lease Type is fixed");
             } else if (record.moveInDate) {
               const moveInDate = new Date(record.moveInDate);
               const moveOutDate = new Date(record.moveOutDate);
-              if (!Number.isNaN(moveInDate.getTime()) && !Number.isNaN(moveOutDate.getTime()) && moveOutDate <= moveInDate) {
-                rowErrors.push('Move-out Date must be after Move-in Date for fixed leases');
+              if (
+                !Number.isNaN(moveInDate.getTime()) &&
+                !Number.isNaN(moveOutDate.getTime()) &&
+                moveOutDate <= moveInDate
+              ) {
+                rowErrors.push("Move-out Date must be after Move-in Date for fixed leases");
               }
             }
           }
-          
-          // Check for duplicates within the file
-          if (seenPhones.has(record.phoneNumber)) {
-            rowErrors.push('Duplicate Phone Number within file');
+
+          if (Array.isArray(record.utilityErrors) && record.utilityErrors.length > 0) {
+            rowErrors.push(...record.utilityErrors);
           }
-          seenPhones.add(record.phoneNumber);
-          
-          if (seenIds.has(record.idNumber)) {
-            rowErrors.push('Duplicate ID Number within file');
-          }
-          seenIds.add(record.idNumber);
-          
+
           if (rowErrors.length > 0) {
             errors.push({
               row: record.rowNumber,
               tenantName: record.tenantName,
               errors: rowErrors,
-              data: record
+              data: record,
             });
           } else {
-            validRecords.push(record);
+            validRecords.push({
+              tenantCode: record.tenantCode || undefined,
+              tenantName: record.tenantName,
+              phoneNumber: record.phoneNumber,
+              idNumber: record.idNumber,
+              propertyCode: record.propertyCode,
+              unitNumber: record.unitNumber,
+              additionalUnitNumbers: record.additionalUnitNumbers,
+              rent: Number(record.rent || 0),
+              depositAmount: record.depositAmount,
+              depositHeldBy: record.depositHeldBy || undefined,
+              moveInDate: record.moveInDate,
+              leaseType: record.leaseType,
+              moveOutDate: record.moveOutDate,
+              status: record.status,
+              utilities: Array.isArray(record.utilities) ? record.utilities : [],
+              emergencyContactName: record.emergencyContactName,
+              emergencyContactPhone: record.emergencyContactPhone,
+              emergencyContactRelationship: record.emergencyContactRelationship,
+              description: record.description,
+            });
           }
         });
-        
+
         resolve({
           valid: validRecords,
-          errors: errors,
+          errors,
           total: mappedData.length,
           validCount: validRecords.length,
-          errorCount: errors.length
+          errorCount: errors.length,
         });
-        
       } catch (error) {
         reject(new Error(`Failed to parse Excel file: ${error.message}`));
       }
     };
-    
-    reader.onerror = () => {
-      reject(new Error('Failed to read file'));
-    };
-    
+
+    reader.onerror = () => reject(new Error("Failed to read file"));
     reader.readAsArrayBuffer(file);
   });
 };

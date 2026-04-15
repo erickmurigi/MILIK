@@ -1447,7 +1447,7 @@ const TenantStatement = () => {
 
       <div
         className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden flex flex-col"
-        style={{ height: "500px" }}
+        style={{ height: "360px" }}
       >
         <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex-shrink-0">
           <h3 className="text-sm font-bold text-slate-900">

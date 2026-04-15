@@ -10,6 +10,7 @@ import { getTenants } from "../../redux/tenantsRedux";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
+const PREPAYMENT_OPTION_KEY = "__prepayment__";
 
 const todayInput = () => new Date().toISOString().split("T")[0];
 
@@ -148,6 +149,7 @@ const AddReceipt = () => {
   const [priorityInvoiceKeys, setPriorityInvoiceKeys] = useState([]);
   const [tenantInvoices, setTenantInvoices] = useState([]);
   const [cashbookOptions, setCashbookOptions] = useState([]);
+  const [manualSelectionMode, setManualSelectionMode] = useState(false);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -318,6 +320,7 @@ const AddReceipt = () => {
         const invoiceLabel = String(inv?.description || inv?.invoiceNumber || periodLabel).trim() || periodLabel;
 
         return {
+          invoiceId: String(inv._id || ""),
           invoiceKey: String(inv._id || inv.invoiceNumber || periodLabel),
           period: periodLabel,
           invoiceNumber: String(inv?.invoiceNumber || "").trim(),
@@ -345,6 +348,7 @@ const AddReceipt = () => {
 
   useEffect(() => {
     setPriorityInvoiceKeys([]);
+    setManualSelectionMode(false);
   }, [formData.tenantId]);
 
   useEffect(() => {
@@ -381,27 +385,49 @@ const AddReceipt = () => {
 
   const allocationPreview = useMemo(() => {
     const receiptAmount = Number(formData.amount) || 0;
+    const sourceInvoices = manualSelectionMode
+      ? orderedOutstandingInvoices.filter((invoice) => priorityInvoiceKeys.includes(invoice.invoiceKey))
+      : orderedOutstandingInvoices;
+
     let remaining = receiptAmount;
 
-    const lines = orderedOutstandingInvoices.map((invoice) => {
+    const lines = sourceInvoices.map((invoice) => {
       const apply = Math.min(invoice.outstanding, Math.max(0, remaining));
       remaining -= apply;
       return {
+        invoiceId: String(invoice.invoiceId || invoice.invoiceKey || ""),
         invoiceKey: invoice.invoiceKey,
         period: invoice.period,
         chargeType: invoice.chargeType,
+        chargeTypeLabel: invoice.chargeTypeLabel || getChargeTypeLabel(invoice.chargeType),
         beforeOutstanding: invoice.outstanding,
         apply,
         afterOutstanding: Math.max(0, invoice.outstanding - apply),
       };
     });
 
+    const unappliedAmount = Math.max(0, remaining);
+
+    if (unappliedAmount > 0) {
+      lines.push({
+        invoiceId: PREPAYMENT_OPTION_KEY,
+        invoiceKey: PREPAYMENT_OPTION_KEY,
+        period: "Prepayment",
+        chargeType: "unapplied",
+        chargeTypeLabel: "Prepayment / Unapplied Credit",
+        beforeOutstanding: unappliedAmount,
+        apply: unappliedAmount,
+        afterOutstanding: 0,
+      });
+    }
+
     return {
       lines,
-      unappliedAmount: Math.max(0, remaining),
+      invoiceLines: lines.filter((line) => line.invoiceId && line.invoiceId !== PREPAYMENT_OPTION_KEY),
+      unappliedAmount,
       projectedBalance: balanceSummary.balance - receiptAmount,
     };
-  }, [formData.amount, orderedOutstandingInvoices, balanceSummary.balance]);
+  }, [formData.amount, orderedOutstandingInvoices, balanceSummary.balance, manualSelectionMode, priorityInvoiceKeys]);
 
   const combinedOutstandingInvoices = useMemo(
     () => outstandingInvoices.filter((invoice) => invoice.chargeType === "combined"),
@@ -484,6 +510,13 @@ const AddReceipt = () => {
 
     const paymentDateObj = new Date(formData.paymentDate);
 
+    const manualAllocationRows = allocationPreview.invoiceLines
+      .filter((line) => Number(line?.apply || 0) > 0 && String(line?.invoiceId || "").trim())
+      .map((line) => ({
+        invoiceId: String(line.invoiceId),
+        appliedAmount: Number(line.apply || 0),
+      }));
+
     const payload = {
       tenant: formData.tenantId,
       unit: unitId,
@@ -503,6 +536,8 @@ const AddReceipt = () => {
       month: paymentDateObj.getMonth() + 1,
       year: paymentDateObj.getFullYear(),
       business: currentCompany._id,
+      allocations: manualAllocationRows,
+      allocationMode: "manual",
       metadata: prefilledCollectionId
         ? {
             mpesa: {
@@ -571,17 +606,31 @@ const AddReceipt = () => {
 
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-2">
                   <h3 className="text-[11px] font-bold text-slate-700 mb-1">Invoice Preview</h3>
-                  <div className="mb-1 flex items-center justify-between text-[10px]">
-                    <p className="text-slate-500">All active tenant invoices appear here. Click an invoice with outstanding balance to prioritize it for clearing first.</p>
-                    {priorityInvoiceKeys.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setPriorityInvoiceKeys([])}
-                        className="text-blue-700 font-semibold hover:underline"
-                      >
-                        Clear Priority
-                      </button>
-                    )}
+                  <div className="mb-1 flex items-center justify-between gap-3 text-[10px]">
+                    <p className="text-slate-500">
+                      {manualSelectionMode
+                        ? "Manual selection mode is on. Only the invoice(s) you pick below will be allocated. Any remaining amount stays as prepayment."
+                        : "All active tenant invoices appear here. Click an invoice with outstanding balance to prioritize it for clearing first."}
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <label className="inline-flex items-center gap-2 font-semibold text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={manualSelectionMode}
+                          onChange={(e) => setManualSelectionMode(e.target.checked)}
+                        />
+                        Manual selection / prepayment mode
+                      </label>
+                      {priorityInvoiceKeys.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setPriorityInvoiceKeys([])}
+                          className="text-blue-700 font-semibold hover:underline"
+                        >
+                          Clear Priority
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {outstandingInvoices.length > 0 ? (
                     <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
@@ -790,23 +839,24 @@ const AddReceipt = () => {
                             key={`${line.period}-${line.chargeType}-${idx}`}
                             className="flex items-center justify-between bg-white border border-amber-100 rounded px-2 py-0.5"
                           >
-                            <span>{line.period} ({line.chargeType})</span>
                             <span>
-                              Apply Ksh {line.apply.toLocaleString()} | Remaining: Ksh {line.afterOutstanding.toLocaleString()}
+                              {line.period} ({line.chargeTypeLabel || line.chargeType})
+                            </span>
+                            <span>
+                              {line.invoiceId === PREPAYMENT_OPTION_KEY
+                                ? `Hold Ksh ${line.apply.toLocaleString()} as prepayment`
+                                : `Apply Ksh ${line.apply.toLocaleString()} | Remaining: Ksh ${line.afterOutstanding.toLocaleString()}`}
                             </span>
                           </div>
                         ) : null
                       )}
 
-                      {allocationPreview.unappliedAmount > 0 && (
-                        <div className="flex items-center justify-between bg-white border border-amber-100 rounded px-2 py-0.5">
-                          <span>Unapplied / Credit</span>
-                          <span>Ksh {allocationPreview.unappliedAmount.toLocaleString()}</span>
-                        </div>
-                      )}
-
                       {allocationPreview.lines.every((line) => line.apply === 0) && (
-                        <p className="text-xs">Entered amount does not apply to any open invoice yet.</p>
+                        <p className="text-xs">
+                          {manualSelectionMode
+                            ? "No selected invoice will receive this receipt yet. Save now to hold the amount as prepayment."
+                            : "Entered amount does not apply to any open invoice yet."}
+                        </p>
                       )}
                     </div>
                   ) : (

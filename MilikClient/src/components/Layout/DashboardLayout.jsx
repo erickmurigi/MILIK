@@ -794,9 +794,9 @@ const TopToolbar = ({
       <div className={`flex items-center ${darkMode ? "bg-gray-800" : "bg-[#0A400C]"}`}>
         <div className="px-2 py-1 border-r border-white/10 flex items-center justify-center">
           <img
-            src="/logo.png"
+            src="/logo (2).png"
             alt="Milik Logo"
-            className="h-8 w-auto object-contain"
+            className="h-12 w-20 object-contain border border-white/20"
           />
         </div>
 
