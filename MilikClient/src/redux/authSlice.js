@@ -1,4 +1,22 @@
 import { createSlice } from '@reduxjs/toolkit';
+import { normalizeCompanyCollection, normalizeCompanyEntity } from '../utils/companyModules';
+
+const normalizeUserCompanyContext = (user = null) => {
+  if (!user || typeof user !== 'object') return user;
+
+  return {
+    ...user,
+    company: normalizeCompanyEntity(user.company),
+    primaryCompany: normalizeCompanyEntity(user.primaryCompany),
+    accessibleCompanies: normalizeCompanyCollection(user.accessibleCompanies),
+    companyAssignments: Array.isArray(user.companyAssignments)
+      ? user.companyAssignments.map((assignment) => ({
+          ...assignment,
+          company: normalizeCompanyEntity(assignment?.company),
+        }))
+      : [],
+  };
+};
 
 const initialState = {
   currentUser: null,
@@ -19,13 +37,13 @@ const authSlice = createSlice({
     },
     loginSuccess: (state, action) => {
       state.isFetching = false;
-      state.currentUser = action.payload.user;
+      state.currentUser = normalizeUserCompanyContext(action.payload.user);
       state.token = action.payload.token;
       state.isLoggedIn = true;
       state.error = false;
       // Also sync to localStorage for interceptor fallback
       localStorage.setItem('milik_token', action.payload.token);
-      localStorage.setItem('milik_user', JSON.stringify(action.payload.user));
+      localStorage.setItem('milik_user', JSON.stringify(state.currentUser));
     },
     loginFailure: (state) => {
       state.isFetching = false;
@@ -59,10 +77,10 @@ const authSlice = createSlice({
     },
     getCurrentUserSuccess: (state, action) => {
       state.isFetching = false;
-      state.currentUser = action.payload;
+      state.currentUser = normalizeUserCompanyContext(action.payload);
       state.error = false;
       // Sync to localStorage
-      localStorage.setItem('milik_user', JSON.stringify(action.payload));
+      localStorage.setItem('milik_user', JSON.stringify(state.currentUser));
     },
     getCurrentUserFailure: (state) => {
       state.isFetching = false;
@@ -76,7 +94,7 @@ const authSlice = createSlice({
 
     // Initialize auth from localStorage
     initializeAuth: (state, action) => {
-      state.currentUser = action.payload.user;
+      state.currentUser = normalizeUserCompanyContext(action.payload.user);
       state.token = action.payload.token;
       state.isLoggedIn = !!action.payload.token;
     },

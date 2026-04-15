@@ -9,7 +9,7 @@ import { sendUserOnboardingEmail } from '../utils/onboardingMailer.js';
 
 const router = express.Router();
 
-const COMPANY_SELECT = 'companyName companyCode baseCurrency logo country town email phoneNo slogan modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus';
+const COMPANY_SELECT = 'companyName companyCode baseCurrency logo country town email phoneNo slogan companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus';
 const isSystemAdmin = (user = {}) => Boolean(user?.isSystemAdmin || user?.superAdminAccess);
 
 const userAccessibleCompanyIds = (user = {}) => {

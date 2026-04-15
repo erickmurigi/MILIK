@@ -7,29 +7,34 @@ import {
   ResponsiveContainer,
   Tooltip,
   XAxis,
-  YAxis
+  YAxis,
 } from 'recharts';
 import { adminRequests } from '../../utils/requestMethods';
+import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const SNAPSHOT_CATEGORIES = new Set(['RENT_CHARGE', 'UTILITY_CHARGE']);
 
 const FinancialOverview = ({ darkMode }) => {
-  const currentCompany = useSelector(state => state.company?.currentCompany);
-  const currentUser = useSelector(state => state.auth?.currentUser);
+  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const units = useSelector((state) => state.unit?.units || []);
 
-  const rawRentPayments = useSelector(state => state.rentPayment?.rentPayments);
+  const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
 
   const rentPayments = Array.isArray(rawRentPayments)
     ? rawRentPayments
     : Array.isArray(rawRentPayments?.data)
-      ? rawRentPayments.data
-      : Array.isArray(rawRentPayments?.rentPayments)
-        ? rawRentPayments.rentPayments
-        : [];
+    ? rawRentPayments.data
+    : Array.isArray(rawRentPayments?.rentPayments)
+    ? rawRentPayments.rentPayments
+    : [];
 
   const [invoices, setInvoices] = useState([]);
   const [processedStatements, setProcessedStatements] = useState([]);
+
+  const activeCompanyContext = currentCompany || currentUser?.company || null;
+  const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
 
   const businessId =
     currentCompany?._id ||
@@ -62,20 +67,20 @@ const FinancialOverview = ({ darkMode }) => {
         Array.isArray(invoicePayload)
           ? invoicePayload
           : Array.isArray(invoicePayload?.invoices)
-            ? invoicePayload.invoices
-            : Array.isArray(invoicePayload?.data)
-              ? invoicePayload.data
-              : []
+          ? invoicePayload.invoices
+          : Array.isArray(invoicePayload?.data)
+          ? invoicePayload.data
+          : []
       );
 
       setProcessedStatements(
         Array.isArray(statementPayload?.statements)
           ? statementPayload.statements
           : Array.isArray(statementPayload)
-            ? statementPayload
-            : Array.isArray(statementPayload?.data)
-              ? statementPayload.data
-              : []
+          ? statementPayload
+          : Array.isArray(statementPayload?.data)
+          ? statementPayload.data
+          : []
       );
     };
 
@@ -102,8 +107,7 @@ const FinancialOverview = ({ darkMode }) => {
 
   const isSnapshotInvoice = (invoice) => SNAPSHOT_CATEGORIES.has(String(invoice?.category || '').toUpperCase());
 
-  const amountFromInvoice = (invoice) =>
-    Number(invoice?.adjustedAmount ?? invoice?.netAmount ?? invoice?.amount ?? 0);
+  const amountFromInvoice = (invoice) => Number(invoice?.adjustedAmount ?? invoice?.netAmount ?? invoice?.amount ?? 0);
 
   const outstandingFromInvoice = (invoice) => {
     const snapshotOutstanding = Number(invoice?.outstanding ?? invoice?.remainingCreditableAmount ?? 0);
@@ -154,10 +158,11 @@ const FinancialOverview = ({ darkMode }) => {
   const currentMonthExpected = chartData[currentMonthIndex]?.expected || 0;
   const currentMonthCollected = chartData[currentMonthIndex]?.collected || 0;
   const outstandingArrears = useMemo(
-    () => invoices.reduce((sum, invoice) => {
-      if (!isActiveInvoice(invoice)) return sum;
-      return sum + Math.max(0, outstandingFromInvoice(invoice));
-    }, 0),
+    () =>
+      invoices.reduce((sum, invoice) => {
+        if (!isActiveInvoice(invoice)) return sum;
+        return sum + Math.max(0, outstandingFromInvoice(invoice));
+      }, 0),
     [invoices]
   );
   const collectionRate = currentMonthExpected > 0 ? (currentMonthCollected / currentMonthExpected) * 100 : 0;
@@ -169,14 +174,13 @@ const FinancialOverview = ({ darkMode }) => {
       payment?.isCancelled !== true &&
       (payment?.postingStatus === 'unposted' || payment?.isConfirmed !== true)
   ).length;
-  const pendingStatements = processedStatements.filter((item) =>
-    ['processed', 'unpaid', 'part_paid'].includes(item?.status)
-  ).length;
+  const pendingStatements = processedStatements.filter((item) => ['processed', 'unpaid', 'part_paid'].includes(item?.status)).length;
+  const occupiedUnits = units.filter((unit) => String(unit?.status || '').toLowerCase() === 'occupied').length;
 
   const cards = [
-    { label: 'Expected', value: formatMoney(currentMonthExpected) },
+    { label: isLandlordMode ? 'Billed' : 'Expected', value: formatMoney(currentMonthExpected) },
     { label: 'Collected', value: formatMoney(currentMonthCollected) },
-    { label: 'Arrears', value: formatMoney(outstandingArrears) },
+    { label: isLandlordMode ? 'Live arrears' : 'Arrears', value: formatMoney(outstandingArrears) },
     { label: 'Collection rate', value: `${collectionRate.toFixed(1)}%` },
   ];
 
@@ -200,10 +204,12 @@ const FinancialOverview = ({ darkMode }) => {
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <h2 className={`text-sm font-extrabold uppercase tracking-tight ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>
-            Financial Operations Overview
+            {isLandlordMode ? 'Portfolio Cashflow Overview' : 'Financial Operations Overview'}
           </h2>
           <p className={`mt-1 text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-            Current-month expected versus collected, with total live arrears across unpaid invoices.
+            {isLandlordMode
+              ? 'Current-month billed versus collected, with live arrears across your own portfolio.'
+              : 'Current-month expected versus collected, with total live arrears across unpaid invoices.'}
           </p>
         </div>
         <div className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'bg-[#31694E]/20 text-[#8bd1b0]' : 'bg-[#ECF6F1] text-[#1f4a35]'}`}>
@@ -222,12 +228,18 @@ const FinancialOverview = ({ darkMode }) => {
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-700/20' : 'border-[#dce9e1] bg-white/90'}`}>
-          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>Unposted receipts</div>
+          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>
+            Unposted receipts
+          </div>
           <div className={`mt-2 text-lg font-extrabold ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>{unpostedReceipts}</div>
         </div>
         <div className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-700/20' : 'border-[#dce9e1] bg-white/90'}`}>
-          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>Pending statements</div>
-          <div className={`mt-2 text-lg font-extrabold ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>{pendingStatements}</div>
+          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>
+            {isLandlordMode ? 'Occupied units' : 'Pending statements'}
+          </div>
+          <div className={`mt-2 text-lg font-extrabold ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>
+            {isLandlordMode ? occupiedUnits : pendingStatements}
+          </div>
         </div>
       </div>
 
@@ -248,7 +260,7 @@ const FinancialOverview = ({ darkMode }) => {
             <XAxis dataKey="month" stroke={darkMode ? '#9ca3af' : '#6b7280'} fontSize={10} fontWeight={700} />
             <YAxis stroke={darkMode ? '#9ca3af' : '#6b7280'} fontSize={10} fontWeight={700} width={36} tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`} />
             <Tooltip content={<CustomTooltip />} />
-            <Area type="monotone" dataKey="expected" name="Expected" stroke="#E85C0D" strokeWidth={2} fill="url(#expectedFillCompact)" />
+            <Area type="monotone" dataKey="expected" name={isLandlordMode ? 'Billed' : 'Expected'} stroke="#E85C0D" strokeWidth={2} fill="url(#expectedFillCompact)" />
             <Area type="monotone" dataKey="collected" name="Collected" stroke="#31694E" strokeWidth={2} fill="url(#collectedFillCompact)" />
           </AreaChart>
         </ResponsiveContainer>

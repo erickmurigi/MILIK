@@ -21,7 +21,13 @@ import {
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { createCompany, getCompany, updateCompany } from "../../redux/apiCalls";
-import { normalizeCompanyModules } from "../../utils/companyModules";
+import {
+  applyCompanyModeBaseModules,
+  COMPANY_OPERATING_MODES,
+  getCompanyOperatingModeLabel,
+  normalizeCompanyModules,
+  normalizeCompanyOperatingMode,
+} from "../../utils/companyModules";
 
 const MODULE_OPTIONS = [
   {
@@ -94,6 +100,21 @@ const buildInitialModules = () =>
     return acc;
   }, {});
 
+const COMPANY_MODE_OPTIONS = [
+  {
+    key: COMPANY_OPERATING_MODES.PROPERTY_MANAGER,
+    label: "Property Manager",
+    description: "For agencies or teams managing properties on behalf of landlords, with landlord-facing workflows visible.",
+    accent: "emerald",
+  },
+  {
+    key: COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD,
+    label: "Self-Managing Landlord",
+    description: "For landlords managing their own portfolio directly, with landlord-focused wording and PM-only screens hidden.",
+    accent: "orange",
+  },
+];
+
 const INITIAL_STATE = {
   companyName: "",
   registrationNo: "",
@@ -114,7 +135,8 @@ const INITIAL_STATE = {
   phoneNo: "",
   slogan: "",
   logo: "",
-  modules: buildInitialModules(),
+  companyMode: COMPANY_OPERATING_MODES.PROPERTY_MANAGER,
+  modules: applyCompanyModeBaseModules(buildInitialModules(), COMPANY_OPERATING_MODES.PROPERTY_MANAGER),
 };
 
 const mapCompanyToForm = (company = {}) => ({
@@ -137,10 +159,11 @@ const mapCompanyToForm = (company = {}) => ({
   phoneNo: company.phoneNo || "",
   slogan: company.slogan || "",
   logo: company.logo || "",
-  modules: {
+  companyMode: normalizeCompanyOperatingMode(company.companyMode),
+  modules: applyCompanyModeBaseModules({
     ...buildInitialModules(),
     ...normalizeCompanyModules(company),
-  },
+  }, normalizeCompanyOperatingMode(company.companyMode)),
 });
 
 const readFileAsDataUrl = (file) =>
@@ -217,7 +240,21 @@ const AddCompanyWizard = () => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const setCompanyMode = (value) => {
+    const normalizedMode = normalizeCompanyOperatingMode(value);
+    setFormData((prev) => ({
+      ...prev,
+      companyMode: normalizedMode,
+      modules: applyCompanyModeBaseModules(prev.modules, normalizedMode),
+    }));
+  };
+
   const toggleModule = (key) => {
+    const protectedKeys = ["propertyManagement", "billing", "accounts"];
+    if (protectedKeys.includes(key)) {
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       modules: {
@@ -278,7 +315,12 @@ const validateForm = () => {
     }
 
     try {
-      const action = isEditMode ? updateCompany(id, formData) : createCompany(formData);
+      const payload = {
+        ...formData,
+        companyMode: normalizeCompanyOperatingMode(formData.companyMode),
+        modules: applyCompanyModeBaseModules(formData.modules, formData.companyMode),
+      };
+      const action = isEditMode ? updateCompany(id, payload) : createCompany(payload);
       const response = await dispatch(action);
       const savedCompany = response?.company || response;
 
@@ -315,11 +357,16 @@ const validateForm = () => {
               <h1 className="text-2xl font-black md:text-3xl">{pageTitle}</h1>
               <p className="mt-2 max-w-2xl text-sm text-white/85">{pageSubtitle}</p>
             </div>
-            <div className="grid grid-cols-2 gap-3 self-start">
+            <div className="grid grid-cols-1 gap-3 self-start sm:grid-cols-3">
               <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
                 <div className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-200">Module set</div>
                 <div className="mt-2 text-2xl font-black">{selectedModulesCount}</div>
                 <div className="text-xs text-white/80">Selected for this company</div>
+              </div>
+              <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
+                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-200">Operating mode</div>
+                <div className="mt-2 text-sm font-black leading-snug">{getCompanyOperatingModeLabel(formData.companyMode)}</div>
+                <div className="text-xs text-white/80">Controls landlord vs PM workspace behaviour</div>
               </div>
               <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
                 <div className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-200">Logo</div>
@@ -476,22 +523,59 @@ const validateForm = () => {
 
                 <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="mb-4 flex items-center gap-3">
+                    <div className="rounded-2xl bg-amber-50 p-3 text-amber-700"><FaUsers /></div>
+                    <div>
+                      <h2 className="text-lg font-black text-slate-900">Company operating mode</h2>
+                      <p className="text-sm text-slate-500">This decides whether the same Milik engine behaves like a property manager workspace or a self-managing landlord workspace.</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {COMPANY_MODE_OPTIONS.map((option) => {
+                      const selected = formData.companyMode === option.key;
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => setCompanyMode(option.key)}
+                          className={`w-full rounded-2xl border p-4 text-left transition ${selected ? "border-orange-300 bg-orange-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="text-sm font-black text-slate-900">{option.label}</div>
+                              <div className="mt-1 text-xs text-slate-500">{option.description}</div>
+                            </div>
+                            <div className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${selected ? "bg-orange-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+                              {selected ? "Selected" : "Choose"}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="mb-4 flex items-center gap-3">
                     <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-700"><FaCheckCircle /></div>
                     <div>
                       <h2 className="text-lg font-black text-slate-900">Modules for this company</h2>
-                      <p className="text-sm text-slate-500">Only show the module set you want this company to operate with.</p>
+                      <p className="text-sm text-slate-500">Core Milik modules are kept on for both modes. Optional extras can still be enabled here.</p>
                     </div>
+                  </div>
+                  <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                    <span className="font-black text-slate-800">Mode in use:</span> {getCompanyOperatingModeLabel(formData.companyMode)}. Property Management, Billing and Accounting remain enabled because both personas use the same core engine.
                   </div>
                   <div className="space-y-3">
                     {MODULE_OPTIONS.map((module) => {
                       const Icon = module.icon;
                       const enabled = Boolean(formData.modules[module.key]);
+                      const isCoreLocked = ["propertyManagement", "billing", "accounts"].includes(module.key);
                       return (
                         <button
                           key={module.key}
                           type="button"
                           onClick={() => toggleModule(module.key)}
-                          className={`w-full rounded-2xl border p-4 text-left transition ${enabled ? "border-emerald-300 bg-emerald-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                          className={`w-full rounded-2xl border p-4 text-left transition ${enabled ? "border-emerald-300 bg-emerald-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300"} ${isCoreLocked ? "cursor-not-allowed" : ""}`}
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex items-start gap-3">
@@ -502,7 +586,7 @@ const validateForm = () => {
                               </div>
                             </div>
                             <div className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${enabled ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}>
-                              {enabled ? "On" : "Off"}
+                              {isCoreLocked ? "Core" : enabled ? "On" : "Off"}
                             </div>
                           </div>
                         </button>
@@ -516,7 +600,7 @@ const validateForm = () => {
             <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-sm font-black text-slate-900">Ready to save</div>
-                <div className="text-xs text-slate-500">Company name and postal address are required. Email and phone are optional but recommended.</div>
+                <div className="text-xs text-slate-500">Company name, postal address, and operating mode will drive how this company sees Milik. Email and phone are optional but recommended.</div>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button

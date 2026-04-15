@@ -9,6 +9,7 @@ import useInactivityLogout from "./hooks/useInactivityLogout";
 import { clearClientSessionStorage } from "./utils/sessionCleanup";
 import "./App.css";
 import { hasCompanyPermission } from "./utils/permissions";
+import { isSelfManagingLandlordCompany } from "./utils/companyModules";
 
 import Home from "./pages/Home/Home";
 import DemoAccessEntry from "./pages/Home/DemoAccessEntry";
@@ -188,6 +189,26 @@ function PermissionRoute({ children, resource, action = "view", moduleKey = null
   if (!isAuthenticated) return <Navigate to={getSignedOutRedirectPath()} replace />;
   const allowed = hasCompanyPermission(resolvedUser || {}, currentCompany || resolvedUser?.company, resource, action, moduleKey);
   return allowed ? children : <Navigate to={fallback} replace />;
+}
+
+function CompanyModeRoute({ children, allowLandlordMode = true, allowPropertyManagerMode = true, fallback = "/dashboard" }) {
+  const { currentUser } = useSelector((state) => state.auth);
+  const { currentCompany } = useSelector((state) => state.company);
+  const storedSession = getStoredAuthSession();
+  const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
+  const token = storedSession.token;
+  const isAuthenticated = Boolean(resolvedUser || token);
+
+  if (!isAuthenticated) return <Navigate to={getSignedOutRedirectPath()} replace />;
+
+  const activeCompany = currentCompany || resolvedUser?.company || null;
+  const landlordMode = isSelfManagingLandlordCompany(activeCompany);
+
+  if ((landlordMode && !allowLandlordMode) || (!landlordMode && !allowPropertyManagerMode)) {
+    return <Navigate to={fallback} replace />;
+  }
+
+  return children;
 }
 
 function SuperAdminRoute({ children }) {
@@ -391,13 +412,13 @@ function App() {
         <Route path="/system-setup/database" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
         <Route path="/system-setup/sessions" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
         <Route path="/system-setup/audit" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
-        <Route path="/landlords" element={<PermissionRoute resource="landlords" moduleKey="propertyManagement"><Landlords /></PermissionRoute>} />
-        <Route path="/landlords/new" element={<ProtectedRoute><AddLandlord /></ProtectedRoute>} />
-        <Route path="/landlord-payments" element={<ProtectedRoute><LandlordPayments /></ProtectedRoute>} />
-        <Route path="/financial/landlord-statement" element={<ProtectedRoute><LandlordCommissionsStatement /></ProtectedRoute>} />
+        <Route path="/landlords" element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlords" moduleKey="propertyManagement"><Landlords /></PermissionRoute></CompanyModeRoute>} />
+        <Route path="/landlords/new" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><AddLandlord /></ProtectedRoute></CompanyModeRoute>} />
+        <Route path="/landlord-payments" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordPayments /></ProtectedRoute></CompanyModeRoute>} />
+        <Route path="/financial/landlord-statement" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordCommissionsStatement /></ProtectedRoute></CompanyModeRoute>} />
         <Route path="/invoices/landlord" element={<ProtectedRoute><Navigate to="/landlord/statements" replace /></ProtectedRoute>} />
-        <Route path="/landlord/processed-statements" element={<PermissionRoute resource="processedStatements" moduleKey="accounts"><ProcessedStatements /></PermissionRoute>} />
-        <Route path="/landlord/statements" element={<PermissionRoute resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></PermissionRoute>} />
+        <Route path="/landlord/processed-statements" element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="processedStatements" moduleKey="accounts"><ProcessedStatements /></PermissionRoute></CompanyModeRoute>} />
+        <Route path="/landlord/statements" element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></PermissionRoute></CompanyModeRoute>} />
         <Route path="/properties" element={<PermissionRoute resource="properties" moduleKey="propertyManagement"><Properties /></PermissionRoute>} />
         <Route path="/units" element={<PermissionRoute resource="units" moduleKey="propertyManagement"><Units /></PermissionRoute>} />
         <Route path="/units/new" element={<ProtectedRoute><AddUnit /></ProtectedRoute>} />
@@ -424,13 +445,13 @@ function App() {
         <Route path="/receipts/prepayments" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><TenantPrepayments /></PermissionRoute>} />
         <Route path="/receipts/mpesa-import" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><MpesaBatchImport /></PermissionRoute>} />
         <Route path="/receipts/instant" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><InstantReceipts /></PermissionRoute>} />
-        <Route path="/receipts/landlord" element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><LandlordReceipts /></PermissionRoute>} />
+        <Route path="/receipts/landlord" element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="receipts" moduleKey="propertyManagement"><LandlordReceipts /></PermissionRoute></CompanyModeRoute>} />
         <Route path="/receipts/:id" element={<ProtectedRoute><Receipts /></ProtectedRoute>} />
         <Route path="/financial/payment-vouchers" element={<PermissionRoute resource="paymentVouchers" moduleKey="accounts"><PaymentVouchers /></PermissionRoute>} />
         <Route path="/financial/service-providers" element={<PermissionRoute resource="expenses" moduleKey="accounts"><ServiceProviders /></PermissionRoute>} />
         <Route path="/expenses/requisition" element={<ProtectedRoute><ExpenseRequisition /></ProtectedRoute>} />
-        <Route path="/landlords/standing-orders" element={<ProtectedRoute><LandlordStandingOrders /></ProtectedRoute>} />
-        <Route path="/landlords/advancement" element={<ProtectedRoute><LandlordAdvancements /></ProtectedRoute>} />
+        <Route path="/landlords/standing-orders" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordStandingOrders /></ProtectedRoute></CompanyModeRoute>} />
+        <Route path="/landlords/advancement" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordAdvancements /></ProtectedRoute></CompanyModeRoute>} />
         <Route path="/financial/journals" element={<PermissionRoute resource="journals" moduleKey="accounts"><JournalEntries /></PermissionRoute>} />
         <Route path="/financial/chart-of-accounts" element={<PermissionRoute resource="chartOfAccounts" moduleKey="accounts"><ChartOfAccounts /></PermissionRoute>} />
         <Route path="/financial/chart-of-accounts/:accountId/activity" element={<ProtectedRoute><LedgerAccountActivity /></ProtectedRoute>} />
@@ -444,8 +465,8 @@ function App() {
         <Route path="/properties/new" element={<ProtectedRoute><AddProperty /></ProtectedRoute>} />
         <Route path="/properties/:id" element={<ProtectedRoute><PropertyDetail /></ProtectedRoute>} />
         <Route path="/properties/edit/:id" element={<ProtectedRoute><EditProperty /></ProtectedRoute>} />
-        <Route path="/properties/commission-settings" element={<ProtectedRoute><PropertyCommissionSettings /></ProtectedRoute>} />
-        <Route path="/properties/commissions-list" element={<ProtectedRoute><CommissionsList /></ProtectedRoute>} />
+        <Route path="/properties/commission-settings" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><PropertyCommissionSettings /></ProtectedRoute></CompanyModeRoute>} />
+        <Route path="/properties/commissions-list" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><CommissionsList /></ProtectedRoute></CompanyModeRoute>} />
         <Route path="/add-user" element={<SuperAdminRoute><AddUserPage /></SuperAdminRoute>} />
         <Route path="/company-setup" element={<PermissionRoute resource="companySettings" action="update"><CompanySetupPage /></PermissionRoute>} />
         <Route path="/settings" element={<PermissionRoute resource="companySettings" action="view"><CompanySettings /></PermissionRoute>} />
@@ -456,7 +477,7 @@ function App() {
         <Route path="/reports/paid-balance" element={<ProtectedRoute><PaidBalanceReport /></ProtectedRoute>} />
         <Route path="/reports/aged-analysis" element={<ProtectedRoute><AgedAnalysisReport /></ProtectedRoute>} />
         <Route path="/reports/rental-aged-analysis" element={<ProtectedRoute><RentalAgedAnalysisReport /></ProtectedRoute>} />
-        <Route path="/reports/commissions" element={<ProtectedRoute><CommissionReports /></ProtectedRoute>} />
+        <Route path="/reports/commissions" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><CommissionReports /></ProtectedRoute></CompanyModeRoute>} />
         <Route path="/reports/trial-balance" element={<PermissionRoute resource="financialReports" moduleKey="accounts"><TrialBalanceReport /></PermissionRoute>} />
         <Route path="/reports/income-statement" element={<PermissionRoute resource="financialReports" moduleKey="accounts"><IncomeStatementReport /></PermissionRoute>} />
         <Route path="/reports/balance-sheet" element={<PermissionRoute resource="financialReports" moduleKey="accounts"><BalanceSheetReport /></PermissionRoute>} />

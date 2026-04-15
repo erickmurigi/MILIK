@@ -36,6 +36,7 @@ import companySettingsReducer from "./companySettingsRedux";
 import processedStatementsReducer from "./processedStatementsRedux";
 import statementsReducer from "./statementsRedux";
 import { RESET_COMPANY_SCOPED_STATE } from "./companyContextActions";
+import { normalizeCompanyCollection, normalizeCompanyEntity } from "../utils/companyModules";
 
 // WARNING: Client-side encryption provides minimal security.
 // Sensitive data should never be stored in localStorage.
@@ -55,11 +56,28 @@ const encryptor = createTransform(
   (outboundState) => decrypt(outboundState)
 );
 
+const normalizePersistedUserCompanyContext = (user = null) => {
+  if (!user || typeof user !== "object") return user;
+
+  return {
+    ...user,
+    company: normalizeCompanyEntity(user.company),
+    primaryCompany: normalizeCompanyEntity(user.primaryCompany),
+    accessibleCompanies: normalizeCompanyCollection(user.accessibleCompanies),
+    companyAssignments: Array.isArray(user.companyAssignments)
+      ? user.companyAssignments.map((assignment) => ({
+          ...assignment,
+          company: normalizeCompanyEntity(assignment?.company),
+        }))
+      : [],
+  };
+};
+
 const buildPersistedCompanyState = (companyState = {}) => ({
-  companies: Array.isArray(companyState?.companies) ? companyState.companies : [],
+  companies: normalizeCompanyCollection(companyState?.companies),
   isFetching: false,
   error: false,
-  currentCompany: companyState?.currentCompany || null,
+  currentCompany: normalizeCompanyEntity(companyState?.currentCompany) || null,
   isSwitching: false,
   switchTargetCompanyId: null,
 });
@@ -73,11 +91,24 @@ const migrations = {
       company: buildPersistedCompanyState(state.company),
     };
   },
+  4: (state) => {
+    if (!state || typeof state !== "object") return state;
+
+    return {
+      auth: state.auth
+        ? {
+            ...state.auth,
+            currentUser: normalizePersistedUserCompanyContext(state.auth.currentUser),
+          }
+        : undefined,
+      company: buildPersistedCompanyState(state.company),
+    };
+  },
 };
 
 const persistConfig = {
   key: "root",
-  version: 3,
+  version: 4,
   storage,
   transforms: [encryptor],
   whitelist: ["auth", "company"],

@@ -3,9 +3,11 @@ import Property from "../../models/Property.js";
 import Unit from "../../models/Unit.js";
 import Tenant from "../../models/Tenant.js";
 import Landlord from "../../models/Landlord.js";
+import Company from "../../models/Company.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import { ensurePropertyControlAccount } from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { isSelfManagingLandlordCompany } from "../../utils/companyModules.js";
 
 const PROPERTY_CODE_PREFIX = "PRO";
 
@@ -67,6 +69,195 @@ const validatePropertyLandlords = async (businessId, landlords = []) => {
     error.statusCode = 400;
     throw error;
   }
+};
+
+const normalizeOptionalString = (value = "") =>
+  typeof value === "string" ? value.trim() : "";
+
+const normalizeOptionalEmail = (value = "") => normalizeOptionalString(value).toLowerCase();
+
+const generateLandlordCode = async (companyId) => {
+  let code;
+  let exists = true;
+  let counter = 1;
+
+  while (exists) {
+    code = `LL${String(counter).padStart(3, "0")}`;
+    exists = await Landlord.findOne({ company: companyId, landlordCode: code }).lean();
+    counter += 1;
+
+    if (counter > 10000) {
+      throw new Error("Unable to generate unique landlord code for the company owner.");
+    }
+  }
+
+  return code;
+};
+
+const getPropertyCompanyContext = async (businessId) => {
+  if (!businessId || !mongoose.Types.ObjectId.isValid(businessId)) {
+    const error = new Error("A valid company context is required for property creation.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const company = await Company.findById(businessId)
+    .select("companyName businessOwner registrationNo taxPIN email phoneNo postalAddress town roadStreet country companyMode")
+    .lean();
+
+  if (!company) {
+    const error = new Error("Company not found for the supplied property context.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return company;
+};
+
+const resolveSelfManagingCompanyLandlord = async ({ company, req, businessId }) => {
+  const landlordName =
+    normalizeOptionalString(company?.companyName) ||
+    normalizeOptionalString(company?.businessOwner) ||
+    "Company Owner";
+
+  const regId =
+    normalizeOptionalString(company?.registrationNo) ||
+    `COMPANY-${String(company?._id || businessId)}`;
+
+  const email =
+    normalizeOptionalEmail(company?.email) ||
+    `owner+${String(company?._id || businessId)}@milik.local`;
+
+  const phoneNumber = normalizeOptionalString(company?.phoneNo) || "0000000000";
+
+  const postalAddress =
+    normalizeOptionalString(company?.postalAddress) ||
+    normalizeOptionalString(company?.town) ||
+    "Not provided";
+
+  const location = [
+    normalizeOptionalString(company?.roadStreet),
+    normalizeOptionalString(company?.town),
+    normalizeOptionalString(company?.country),
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const taxPin =
+    normalizeOptionalString(company?.taxPIN) ||
+    `COMPANY-TAX-${String(company?._id || businessId).slice(-8).toUpperCase()}`;
+
+  const candidateMatches = [
+    { regId },
+    { idNumber: regId },
+    { landlordName, landlordType: "Company" },
+  ];
+
+  if (email) {
+    candidateMatches.push({ email });
+  }
+
+  let ownerLandlord = await Landlord.findOne({
+    company: businessId,
+    $or: candidateMatches,
+  });
+
+  if (!ownerLandlord) {
+    const createdById = await resolveAuditActorUserId({
+      req,
+      businessId,
+      fallbackErrorMessage: "No valid company user could be resolved for self-managing landlord property setup.",
+    });
+
+    ownerLandlord = new Landlord({
+      landlordCode: await generateLandlordCode(businessId),
+      landlordType: "Company",
+      landlordName,
+      regId,
+      idNumber: regId,
+      taxPin,
+      status: "Active",
+      portalAccess: "Disabled",
+      postalAddress,
+      email,
+      phoneNumber,
+      location,
+      company: businessId,
+      createdBy: createdById,
+    });
+
+    await ownerLandlord.save();
+  } else {
+    ownerLandlord.landlordType = "Company";
+    ownerLandlord.landlordName = landlordName;
+    ownerLandlord.regId = regId;
+    ownerLandlord.idNumber = regId;
+    ownerLandlord.taxPin = taxPin;
+    ownerLandlord.postalAddress = postalAddress;
+    ownerLandlord.email = email;
+    ownerLandlord.phoneNumber = phoneNumber;
+    ownerLandlord.location = location;
+    ownerLandlord.status = "Active";
+
+    await ownerLandlord.save();
+  }
+
+  return [
+    {
+      landlordId: ownerLandlord._id,
+      name: landlordName,
+      contact: ownerLandlord.email || ownerLandlord.phoneNumber || "",
+      isPrimary: true,
+    },
+  ];
+};
+
+const buildModeAwarePropertyAssignment = async ({ company, businessId, req, requestedLandlords = [] }) => {
+  if (isSelfManagingLandlordCompany(company)) {
+    return {
+      landlords: await resolveSelfManagingCompanyLandlord({ company, req, businessId }),
+      tenantsPaysTo: "landlord",
+      depositHeldBy: "landlord",
+      commissionPercentage: 0,
+      commissionFixedAmount: 0,
+      commissionPaymentMode: "percentage",
+      commissionRecognitionBasis: "received",
+      commissionTaxSettings: {
+        enabled: false,
+        taxCodeKey: "vat_standard",
+        taxMode: "company_default",
+        rateOverride: null,
+      },
+    };
+  }
+
+  const validLandlords = (requestedLandlords || [])
+    .filter((landlord) => {
+      const landlordName = landlord?.name?.trim() || landlord?.landlordName?.trim() || "";
+      const hasLandlordId =
+        landlord?.landlordId && mongoose.Types.ObjectId.isValid(landlord.landlordId);
+      return landlordName && landlordName.toLowerCase() !== "default" && hasLandlordId;
+    })
+    .map((landlord, index) => ({
+      landlordId: landlord.landlordId,
+      name: (landlord?.name || landlord?.landlordName || "").trim(),
+      contact: landlord?.contact?.trim() || "",
+      isPrimary: index === 0,
+    }));
+
+  if (validLandlords.length === 0) {
+    const error = new Error(
+      "At least one landlord with a valid landlordId is required. Please select a landlord from the list."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  await validatePropertyLandlords(businessId, validLandlords);
+
+  return {
+    landlords: validLandlords,
+  };
 };
 
 // Create property
@@ -167,6 +358,8 @@ export const createProperty = async (req, res) => {
       });
     }
 
+    const company = await getPropertyCompanyContext(businessId);
+
     await ensureSystemChartOfAccounts(businessId);
 
     const bankingDetails = {
@@ -194,29 +387,12 @@ export const createProperty = async (req, res) => {
       cleanedData.category = category.trim();
     }
 
-    const validLandlords = (landlords || [])
-      .filter((landlord) => {
-        const landlordName = landlord?.name?.trim() || landlord?.landlordName?.trim() || "";
-        const hasLandlordId =
-          landlord?.landlordId && mongoose.Types.ObjectId.isValid(landlord.landlordId);
-        return landlordName && landlordName.toLowerCase() !== "default" && hasLandlordId;
-      })
-      .map((landlord, index) => ({
-        landlordId: landlord.landlordId,
-        name: (landlord?.name || landlord?.landlordName || "").trim(),
-        contact: landlord?.contact?.trim() || "",
-        isPrimary: index === 0,
-      }));
-
-    if (validLandlords.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "At least one landlord with a valid landlordId is required. Please select a landlord from the list.",
-      });
-    }
-
-    await validatePropertyLandlords(businessId, validLandlords);
+    const modeAwareAssignment = await buildModeAwarePropertyAssignment({
+      company,
+      businessId,
+      req,
+      requestedLandlords: landlords,
+    });
 
     const validStandingCharges = (standingCharges || [])
       .filter((charge) => charge?.serviceCharge?.trim())
@@ -249,7 +425,7 @@ export const createProperty = async (req, res) => {
     const property = new Property({
       dateAcquired: dateAcquired ? new Date(dateAcquired) : null,
       letManage,
-      landlords: validLandlords,
+      landlords: modeAwareAssignment.landlords,
       propertyCode: resolvedPropertyCode,
       propertyName: normalizedPropertyName,
       lrNumber: normalizedLrNumber,
@@ -295,6 +471,13 @@ export const createProperty = async (req, res) => {
       createdBy: createdById,
       updatedBy: createdById,
       controlAccount: null,
+      tenantsPaysTo: modeAwareAssignment.tenantsPaysTo || "propertyManager",
+      depositHeldBy: modeAwareAssignment.depositHeldBy || "propertyManager",
+      commissionPercentage: modeAwareAssignment.commissionPercentage ?? 0,
+      commissionFixedAmount: modeAwareAssignment.commissionFixedAmount ?? 0,
+      commissionPaymentMode: modeAwareAssignment.commissionPaymentMode || "percentage",
+      commissionRecognitionBasis: modeAwareAssignment.commissionRecognitionBasis || "received",
+      commissionTaxSettings: modeAwareAssignment.commissionTaxSettings || undefined,
     });
 
     const savedProperty = await property.save();
@@ -512,6 +695,8 @@ export const updateProperty = async (req, res, next) => {
       }
     }
 
+    const company = await getPropertyCompanyContext(property.business);
+
     const trimmedPropertyCode =
       typeof req.body.propertyCode === "string" ? req.body.propertyCode.trim() : undefined;
 
@@ -532,10 +717,6 @@ export const updateProperty = async (req, res, next) => {
           message: "Property with this code already exists",
         });
       }
-    }
-
-    if (Array.isArray(req.body.landlords)) {
-      await validatePropertyLandlords(property.business, req.body.landlords);
     }
 
     if (
@@ -562,32 +743,49 @@ export const updateProperty = async (req, res, next) => {
       }
     });
 
-    if (req.body.landlords) {
-      const validLandlords = (req.body.landlords || [])
-        .filter((landlord) => {
-          const landlordName =
-            landlord?.name?.trim() || landlord?.landlordName?.trim() || "";
-          const hasLandlordId =
-            landlord?.landlordId &&
-            mongoose.Types.ObjectId.isValid(landlord.landlordId);
-          return landlordName && landlordName.toLowerCase() !== "default" && hasLandlordId;
-        })
-        .map((landlord, index) => ({
-          landlordId: landlord.landlordId,
-          name: (landlord?.name || landlord?.landlordName || "").trim(),
-          contact: landlord?.contact?.trim() || "",
-          isPrimary: index === 0,
-        }));
+    if (isSelfManagingLandlordCompany(company)) {
+      const modeAwareAssignment = await buildModeAwarePropertyAssignment({
+        company,
+        businessId: property.business,
+        req,
+        requestedLandlords:
+          Object.prototype.hasOwnProperty.call(req.body || {}, "landlords")
+            ? req.body.landlords
+            : property.landlords,
+      });
 
-      if (validLandlords.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "At least one valid landlord with a valid landlordId is required. Please select a landlord from the list.",
-        });
+      req.body.landlords = modeAwareAssignment.landlords;
+
+      if (modeAwareAssignment.tenantsPaysTo) {
+        req.body.tenantsPaysTo = modeAwareAssignment.tenantsPaysTo;
       }
+      if (modeAwareAssignment.depositHeldBy) {
+        req.body.depositHeldBy = modeAwareAssignment.depositHeldBy;
+      }
+      if (modeAwareAssignment.commissionPercentage !== undefined) {
+        req.body.commissionPercentage = modeAwareAssignment.commissionPercentage;
+      }
+      if (modeAwareAssignment.commissionFixedAmount !== undefined) {
+        req.body.commissionFixedAmount = modeAwareAssignment.commissionFixedAmount;
+      }
+      if (modeAwareAssignment.commissionPaymentMode) {
+        req.body.commissionPaymentMode = modeAwareAssignment.commissionPaymentMode;
+      }
+      if (modeAwareAssignment.commissionRecognitionBasis) {
+        req.body.commissionRecognitionBasis = modeAwareAssignment.commissionRecognitionBasis;
+      }
+      if (modeAwareAssignment.commissionTaxSettings) {
+        req.body.commissionTaxSettings = modeAwareAssignment.commissionTaxSettings;
+      }
+    } else if (Object.prototype.hasOwnProperty.call(req.body || {}, "landlords")) {
+      const modeAwareAssignment = await buildModeAwarePropertyAssignment({
+        company,
+        businessId: property.business,
+        req,
+        requestedLandlords: req.body.landlords,
+      });
 
-      req.body.landlords = validLandlords;
+      req.body.landlords = modeAwareAssignment.landlords;
     }
 
     if (req.body.propertyCode !== undefined && typeof req.body.propertyCode === "string") {

@@ -92,9 +92,7 @@ const UnitSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-UnitSchema.index({ business: 1 });
 UnitSchema.index({ business: 1, status: 1 });
-UnitSchema.index({ property: 1 });
 UnitSchema.index({ property: 1, status: 1 });
 UnitSchema.index({ business: 1, property: 1, unitNumber: 1 }, { unique: true });
 UnitSchema.index({ isVacant: 1 });

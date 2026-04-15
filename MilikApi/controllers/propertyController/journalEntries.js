@@ -56,6 +56,24 @@ const resolveActorUserId = async (req, businessId) =>
     fallbackErrorMessage: "No valid company user could be resolved for journal posting.",
   });
 
+const resolveJournalLandlordId = async ({ businessId, payload = {} }) => {
+  if (payload?.landlord && isValidObjectId(payload.landlord)) {
+    return String(payload.landlord);
+  }
+
+  if (!payload?.property || !isValidObjectId(payload.property)) {
+    return null;
+  }
+
+  const accountingContext = await resolvePropertyAccountingContext({
+    propertyId: payload.property,
+    landlordId: null,
+    businessId,
+  }).catch(() => null);
+
+  return accountingContext?.landlordId ? String(accountingContext.landlordId) : null;
+};
+
 const generateJournalNo = async (businessId) => {
   const prefix = "JRN";
   const lastJournal = await JournalEntry.findOne(
@@ -113,11 +131,13 @@ const validateJournalPayload = async ({ businessId, payload = {} }) => {
     throw new Error("Amount must be greater than zero.");
   }
 
+  const resolvedLandlordId = await resolveJournalLandlordId({ businessId, payload });
+
   if (
     ["landlord_credit_adjustment", "landlord_debit_adjustment"].includes(payload.journalType) &&
-    !payload.landlord
+    !resolvedLandlordId
   ) {
-    throw new Error("Landlord is required for landlord journal types.");
+    throw new Error("A linked property owner/landlord could not be resolved for this journal type.");
   }
 
   const [debitAccount, creditAccount] = await Promise.all([
@@ -140,8 +160,8 @@ const validateJournalPayload = async ({ businessId, payload = {} }) => {
       String(payload.debitAccount) === String(landlordPayable._id) ||
       String(payload.creditAccount) === String(landlordPayable._id);
 
-    if (touchesLandlordPayable && !payload.landlord) {
-      throw new Error("Landlord is required when journal touches Landlord Payable.");
+    if (touchesLandlordPayable && !resolvedLandlordId) {
+      throw new Error("A linked property owner/landlord is required when journal touches Landlord Payable.");
     }
   }
 
@@ -149,6 +169,7 @@ const validateJournalPayload = async ({ businessId, payload = {} }) => {
     debitAccount,
     creditAccount,
     amount,
+    resolvedLandlordId,
   };
 };
 
@@ -359,7 +380,7 @@ export const createJournalEntry = async (req, res, next) => {
 
     const normalizedPayload = normalizeJournalPayload(req.body || {});
 
-    await validateJournalPayload({
+    const { resolvedLandlordId } = await validateJournalPayload({
       businessId,
       payload: normalizedPayload,
     });
@@ -371,7 +392,7 @@ export const createJournalEntry = async (req, res, next) => {
       date: normalizedPayload.date,
       journalType: normalizedPayload.journalType,
       property: normalizedPayload.property,
-      landlord: normalizedPayload.landlord || null,
+      landlord: resolvedLandlordId || null,
       debitAccount: normalizedPayload.debitAccount,
       creditAccount: normalizedPayload.creditAccount,
       amount: Number(normalizedPayload.amount || 0),
@@ -478,7 +499,7 @@ export const updateJournalEntry = async (req, res, next) => {
       ...(req.body || {}),
     });
 
-    await validateJournalPayload({
+    const { resolvedLandlordId } = await validateJournalPayload({
       businessId,
       payload: normalizedPayload,
     });
@@ -486,7 +507,7 @@ export const updateJournalEntry = async (req, res, next) => {
     existing.date = normalizedPayload.date || existing.date;
     existing.journalType = normalizedPayload.journalType || existing.journalType;
     existing.property = normalizedPayload.property || existing.property;
-    existing.landlord = normalizedPayload.landlord || null;
+    existing.landlord = resolvedLandlordId || null;
     existing.debitAccount = normalizedPayload.debitAccount || existing.debitAccount;
     existing.creditAccount = normalizedPayload.creditAccount || existing.creditAccount;
     existing.amount = Number(normalizedPayload.amount || existing.amount || 0);

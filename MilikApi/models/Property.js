@@ -358,7 +358,6 @@ PropertySchema.index({ business: 1, zoneRegion: 1 });
 PropertySchema.index({ "landlords.landlordId": 1 });
 PropertySchema.index({ "landlords.name": 1 });
 PropertySchema.index({ createdAt: -1 });
-PropertySchema.index({ controlAccount: 1 });
 
 PropertySchema.statics.updateUnitCounts = async function (propertyId) {
   const Unit = mongoose.model("Unit");

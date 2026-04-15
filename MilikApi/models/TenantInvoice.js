@@ -162,7 +162,6 @@ TenantInvoiceSchema.index({ business: 1, invoiceNumber: 1 }, { unique: true });
 TenantInvoiceSchema.index({ business: 1, tenant: 1, status: 1 });
 TenantInvoiceSchema.index({ business: 1, tenant: 1, invoiceDate: -1 });
 
-
 TenantInvoiceSchema.index(
   {
     business: 1,

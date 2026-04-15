@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { getCompanyModuleDefaults, getDefaultSmsTemplates, normalizeCompanyUnitTypes, normalizePhoneCountryCode, normalizeSmsProvider } from '../utils/companyModules.js';
+import { COMPANY_OPERATING_MODES, getCompanyModuleDefaults, getDefaultSmsTemplates, normalizeCompanyOperatingMode, normalizeCompanyUnitTypes, normalizePhoneCountryCode, normalizeSmsProvider } from '../utils/companyModules.js';
 
 const companyModuleDefaults = getCompanyModuleDefaults();
 
@@ -480,6 +480,13 @@ const companySchema = new mongoose.Schema(
     baseCurrency: { type: String, required: true, default: 'KES', trim: true },
     taxRegime: { type: String, required: true, default: 'VAT', trim: true },
 
+    companyMode: {
+      type: String,
+      enum: Object.values(COMPANY_OPERATING_MODES),
+      default: COMPANY_OPERATING_MODES.PROPERTY_MANAGER,
+      trim: true,
+    },
+
     // Module Settings – stored as boolean flags
     modules: {
       propertyManagement: {
@@ -593,6 +600,7 @@ companySchema.pre('validate', function normalizeCompany(next) {
   this.unitTypes = normalizeCompanyUnitTypes(this.unitTypes);
   this.registrationNo = optionalIndexedString(this.registrationNo);
   this.isDemoWorkspace = Boolean(this.isDemoWorkspace);
+  this.companyMode = normalizeCompanyOperatingMode(this.companyMode);
 
   if (this.modules) {
     this.modules = {

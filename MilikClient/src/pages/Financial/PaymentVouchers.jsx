@@ -15,6 +15,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { useLocation, useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 import {
   createPaymentVoucher,
@@ -26,10 +27,10 @@ import {
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 
-const categories = [
-  { value: "landlord_maintenance", label: "Landlord Expense - Maintenance" },
-  { value: "deposit_refund", label: "Deposit Refund" },
-  { value: "landlord_other", label: "Landlord Expense - Other" },
+const BASE_CATEGORIES = [
+  { value: "landlord_maintenance", label: "Landlord Expense - Maintenance", landlordLabel: "Owner Expense - Maintenance" },
+  { value: "deposit_refund", label: "Deposit Refund", landlordLabel: "Deposit Refund" },
+  { value: "landlord_other", label: "Landlord Expense - Other", landlordLabel: "Owner Expense - Other" },
 ];
 
 const statusColors = {
@@ -59,6 +60,17 @@ const PaymentVouchers = () => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const properties = useSelector((state) => state.property?.properties || []);
+  const isLandlordWorkspace = useMemo(
+    () => isSelfManagingLandlordCompany(currentCompany || currentUser?.company || null),
+    [currentCompany, currentUser?.company]
+  );
+  const categories = useMemo(
+    () => BASE_CATEGORIES.map((category) => ({
+      ...category,
+      label: isLandlordWorkspace ? category.landlordLabel : category.label,
+    })),
+    [isLandlordWorkspace]
+  );
 
   const canCreateVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "create", "accounts");
   const canUpdateVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "update", "accounts");
@@ -274,7 +286,7 @@ const PaymentVouchers = () => {
           <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Financial Operations</p>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">{isLandlordWorkspace ? "Owner Finance" : "Financial Operations"}</p>
                 <h1 className="mt-1 flex items-center gap-3 text-2xl font-black text-slate-900"><FaFileInvoiceDollar className="text-[#0B3B2E]" /> Payment Vouchers</h1>
                 <p className="mt-1 text-sm text-slate-500">Create, edit, approve, pay, reverse, select, and delete vouchers with stronger operational controls.</p>
               </div>
@@ -299,7 +311,7 @@ const PaymentVouchers = () => {
                 <input
                   value={filters.search}
                   onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                  placeholder="Search voucher, narration, landlord, property"
+                  placeholder={isLandlordWorkspace ? "Search voucher, narration, owner, property" : "Search voucher, narration, landlord, property"}
                   className="w-full rounded-md border border-slate-300 py-2 pl-8 pr-3 text-xs"
                 />
               </div>
@@ -360,7 +372,7 @@ const PaymentVouchers = () => {
                     <th className="px-4 py-3 text-left">Voucher</th>
                     <th className="px-4 py-3 text-left">Category</th>
                     <th className="px-4 py-3 text-left">Property</th>
-                    <th className="px-4 py-3 text-left">Landlord</th>
+                    <th className="px-4 py-3 text-left">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
                     <th className="px-4 py-3 text-right">Amount</th>
                     <th className="px-4 py-3 text-left">Due Date</th>
                     <th className="px-4 py-3 text-left">Status</th>

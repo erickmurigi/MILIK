@@ -17,6 +17,7 @@ import { getUnits } from "../../redux/unitRedux";
 import { createTenant, getTenants, updateTenant } from "../../redux/tenantsRedux";
 import { createTenantInvoice } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
+import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 
 // Milik theme constants
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
@@ -44,6 +45,8 @@ const buildTakeOnMetadata = (config = {}) => ({
   meterUtilityType: config.utilityType || undefined,
   invoicePriorityCategory: config.invoicePriorityCategory || undefined,
   takeOnUtilityBreakdown: Array.isArray(config.utilityBreakdown) ? config.utilityBreakdown : undefined,
+  depositHeldBy: config.depositHeldBy || undefined,
+  ledgerMode: config.ledgerMode || undefined,
 });
 
 const normalizeId = (value) => {
@@ -54,6 +57,24 @@ const normalizeId = (value) => {
     if (value.id) return normalizeId(value.id);
   }
   return String(value);
+};
+
+const normalizeDepositHolder = (value = "") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["landlord", "held_by_landlord"].includes(normalized)) return "landlord";
+  if (
+    [
+      "management company",
+      "management_company",
+      "propertymanager",
+      "property manager",
+      "property_manager",
+      "manager",
+    ].includes(normalized)
+  ) {
+    return "manager";
+  }
+  return "";
 };
 
 const getUnitPropertyId = (unit = {}) =>
@@ -270,6 +291,10 @@ const AddTenant = () => {
 
   const { currentCompany } = useSelector((state) => state.company);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const isSelfManagingLandlordMode = useMemo(
+    () => isSelfManagingLandlordCompany(currentCompany || currentUser?.company || null),
+    [currentCompany, currentUser?.company]
+  );
   const { isFetching: loading } = useSelector(
     (state) => state.tenant || { isFetching: false }
   );
@@ -296,7 +321,7 @@ const AddTenant = () => {
     leaseType: "at_will",
     rent: "",
     depositAmount: "",
-    depositHeldBy: "Management Company",
+    depositHeldBy: isSelfManagingLandlordMode ? "Landlord" : "Management Company",
     status: "active",
     emergencyContactName: "",
     emergencyContactPhone: "",
@@ -518,6 +543,17 @@ useEffect(() => {
       properties.find((property) => normalizeId(property?._id) === normalizeId(formData.property)) || null,
     [properties, formData.property]
   );
+
+  useEffect(() => {
+    if (isEditMode) return;
+    if (!isSelfManagingLandlordMode) return;
+    if (formData.depositHeldBy === "Landlord") return;
+
+    setFormData((prev) => ({
+      ...prev,
+      depositHeldBy: "Landlord",
+    }));
+  }, [formData.depositHeldBy, isEditMode, isSelfManagingLandlordMode]);
 
   useEffect(() => {
     if (isEditMode || !draftStorageKey) {
@@ -746,7 +782,7 @@ useEffect(() => {
         key: "deposit",
         title: "Deposit",
         amount: Number(formData.depositAmount || 0),
-        detail: `Held by ${formData.depositHeldBy || "Management Company"}`,
+        detail: `Held by ${formData.depositHeldBy || (isSelfManagingLandlordMode ? "Landlord" : "Management Company")}`,
       });
     }
 
@@ -1025,6 +1061,8 @@ const utilityTotal = utilityRows.reduce(
   0
 );
 const depositItem = pendingInvoiceContext.items.find((item) => item.key === "deposit");
+const normalizedDepositHolder = normalizeDepositHolder(formData.depositHeldBy) || "manager";
+const depositLedgerMode = normalizedDepositHolder === "landlord" ? "off_ledger" : undefined;
 
 if (Number(rentItem?.amount || 0) > 0) {
   invoiceRequests.push({
@@ -1078,12 +1116,16 @@ if (Number(depositItem?.amount || 0) > 0) {
     ...baseRequest,
     category: "DEPOSIT_CHARGE",
     amount: Number(depositItem.amount || 0),
+    depositHeldBy: normalizedDepositHolder,
+    ledgerMode: depositLedgerMode,
     description: `Opening deposit balance (${formData.depositHeldBy}) for ${pendingInvoiceContext.tenant.name || formData.name}`,
     metadata: buildTakeOnMetadata({
       type: "debit",
       billItemKey: "deposit:security",
       billItemLabel: "Security Deposit",
       invoicePriorityCategory: "deposit",
+      depositHeldBy: normalizedDepositHolder,
+      ledgerMode: depositLedgerMode,
     }),
   });
 }
@@ -1392,11 +1434,23 @@ for (const request of invoiceRequests) {
                         name="depositHeldBy"
                         value={formData.depositHeldBy}
                         onChange={handleInputChange}
-                        className={`${inputClass} ${fieldErrors.depositHeldBy ? "border-red-500" : ""}`}
+                        disabled={isSelfManagingLandlordMode}
+                        className={`${inputClass} ${fieldErrors.depositHeldBy ? "border-red-500" : ""} ${isSelfManagingLandlordMode ? "bg-slate-100 text-slate-600 cursor-not-allowed" : ""}`}
                       >
-                        <option value="Management Company">Management Company</option>
-                        <option value="Landlord">Landlord</option>
+                        {isSelfManagingLandlordMode ? (
+                          <option value="Landlord">Landlord</option>
+                        ) : (
+                          <>
+                            <option value="Management Company">Management Company</option>
+                            <option value="Landlord">Landlord</option>
+                          </>
+                        )}
                       </select>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {isSelfManagingLandlordMode
+                          ? "This company is operating as the owner, so deposits default to landlord-held for new tenants."
+                          : "Choose whether the security deposit is held by the management company or the landlord."}
+                      </p>
                       {fieldErrors.depositHeldBy && (
                         <p className="mt-1 text-xs text-red-600">{fieldErrors.depositHeldBy}</p>
                       )}

@@ -15,6 +15,7 @@ import {
   getRawSmsProfiles,
   mergeSmsTemplatesWithDefaults,
   normalizeCompanyModules,
+  normalizeCompanyOperatingMode,
   normalizeCompanyIdentityFields,
   normalizePhoneCountryCode,
   normalizeSmsProvider,
@@ -30,7 +31,7 @@ import {
 } from "../utils/smtpMailer.js";
 
 const companySummarySelect =
-  "companyName companyCode baseCurrency country town email phoneNo slogan logo unitTypes isActive accountStatus isDemoWorkspace modules fiscalStartMonth fiscalStartYear operationPeriodType paymentIntegration.mpesaPaybills paymentIntegration.mpesaPaybill communication.emailProfiles communication.defaultEmailProfileId communication.smsProfiles communication.defaultSmsProfileId communication.smsTemplates";
+  "companyName companyCode baseCurrency country town email phoneNo slogan logo unitTypes isActive accountStatus isDemoWorkspace companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType paymentIntegration.mpesaPaybills paymentIntegration.mpesaPaybill communication.emailProfiles communication.defaultEmailProfileId communication.smsProfiles communication.defaultSmsProfileId communication.smsTemplates";
 
 const DEMO_COMPANY_EMAIL = "demo.workspace@milik.local";
 const DEMO_COMPANY_NAME_REGEX = /^milik\s+demo\s+workspace$/i;
@@ -1087,6 +1088,7 @@ export const createCompany = async (req, res, next) => {
       operationPeriodType = "Monthly",
       businessOwner,
       slogan,
+      companyMode = 'property_manager',
       modules = {},
       POBOX,
       Street,
@@ -1120,6 +1122,7 @@ export const createCompany = async (req, res, next) => {
       taxRegime,
       fiscalStartMonth,
       fiscalStartYear: fiscalStartYear || new Date().getFullYear(),
+      companyMode: normalizeCompanyOperatingMode(companyMode),
       modules: normalizeCompanyModules(modules),
       operationPeriodType,
       businessOwner,
@@ -1325,6 +1328,7 @@ export const updateCompany = async (req, res, next) => {
       "fiscalStartYear",
       "operationPeriodType",
       "businessOwner",
+      "companyMode",
       "POBOX",
       "Street",
       "City",
@@ -1339,6 +1343,10 @@ export const updateCompany = async (req, res, next) => {
 
     if (req.body.modules !== undefined) {
       company.modules = normalizeCompanyModules(req.body.modules);
+    }
+
+    if (req.body.companyMode !== undefined) {
+      company.companyMode = normalizeCompanyOperatingMode(req.body.companyMode);
     }
 
     const identityFields = normalizeCompanyIdentityFields(req.body);

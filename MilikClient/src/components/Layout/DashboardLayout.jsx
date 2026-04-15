@@ -26,15 +26,19 @@ import {
   getWorkspaceFromRoute,
   getWorkspaceLabel,
 } from "../../utils/workspaceRoutes";
+import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 
 const DashboardLayout = ({ children, lockContentScroll = false }) => {
   const [darkMode, setDarkMode] = useState(false);
   const location = useLocation();
   const currentUser = useSelector((state) => state.auth?.currentUser);
+  const currentCompany = useSelector((state) => state.company?.currentCompany);
   const isCompanySwitching = useSelector((state) => state.company?.isSwitching);
   const [renderTimestamp] = useState(() => Date.now());
   const currentWorkspace = useMemo(() => getWorkspaceFromRoute(location.pathname), [location.pathname]);
   const workspaceLabel = useMemo(() => getWorkspaceLabel(currentWorkspace), [currentWorkspace]);
+  const activeCompanyContext = currentCompany || currentUser?.company || null;
+  const isLandlordMode = useMemo(() => isSelfManagingLandlordCompany(activeCompanyContext), [activeCompanyContext]);
 
   const demoBanner = useMemo(() => {
     if (!currentUser?.isDemoUser) return null;
@@ -95,6 +99,7 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
           setDarkMode={setDarkMode}
           currentWorkspace={currentWorkspace}
           workspaceLabel={workspaceLabel}
+          isLandlordMode={isLandlordMode}
         />
       </div>
 
@@ -204,6 +209,7 @@ const TopToolbar = ({
   setDarkMode,
   currentWorkspace,
   workspaceLabel,
+  isLandlordMode,
 }) => {
   const [activeMenu, setActiveMenu] = useState(null);
   const [hoveredFinancialItem, setHoveredFinancialItem] = useState(null);
@@ -378,6 +384,8 @@ const TopToolbar = ({
       ];
     }
 
+    const landlordModeHiddenMainMenuIds = isLandlordMode ? new Set(["landlord"]) : new Set();
+
     return [
       {
         id: "landlord",
@@ -484,15 +492,70 @@ const TopToolbar = ({
           { id: "about", label: "About", icon: FaInfoCircle },
         ],
       },
-    ];
-  }, [isCompanySetupWorkspace, isSystemAdminWorkspace]);
+    ].filter((item) => !landlordModeHiddenMainMenuIds.has(item.id)).map((item) => {
+      if (!isLandlordMode) return item;
+
+      if (item.id === "properties") {
+        return {
+          ...item,
+          label: "My Properties",
+          submenu: item.submenu
+            .filter((subItem) => !["property-commission-settings", "commissions-list"].includes(subItem.id))
+            .map((subItem) => {
+              if (subItem.id === "properties-list") return { ...subItem, label: "My Properties" };
+              if (subItem.id === "add-property") return { ...subItem, label: "Add Property" };
+              if (subItem.id === "units-spaces") return { ...subItem, label: "Units / Spaces" };
+              if (subItem.id === "availability") return { ...subItem, label: "Occupancy & Availability" };
+              return subItem;
+            }),
+        };
+      }
+
+      if (item.id === "financial") {
+        return {
+          ...item,
+          label: "Finance",
+          submenu: item.submenu
+            .filter((subItem) => subItem.id !== "landlord-payments")
+            .map((subItem) => {
+              if (subItem.id === "payment-vouchers") return { ...subItem, label: "Outgoing Payments" };
+              if (subItem.id === "expenses") return { ...subItem, label: "Expenses & Suppliers" };
+              return subItem;
+            }),
+        };
+      }
+
+      if (item.id === "reports") {
+        return {
+          ...item,
+          label: "Portfolio Reports",
+          submenu: item.submenu
+            .filter((subItem) => subItem.id !== "commission-reports")
+            .map((subItem) => {
+              if (subItem.id === "paid-balance") return { ...subItem, label: "Collections & Balances" };
+              if (subItem.id === "aged-analysis") return { ...subItem, label: "Arrears Analysis" };
+              return subItem;
+            }),
+        };
+      }
+
+      if (item.id === "tools") {
+        return {
+          ...item,
+          label: "Operations",
+        };
+      }
+
+      return item;
+    });
+  }, [isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
 
   const nestedSubmenus = useMemo(() => {
     if (isSystemAdminWorkspace || isCompanySetupWorkspace) {
       return {};
     }
 
-    return {
+    const submenus = {
       "rental-invoicing": [
         { id: "rental-invoices-list", label: "Rental Invoices", icon: FaFileInvoice },
         { id: "new-invoice", label: "Create New Invoice", icon: FaFileInvoice },
@@ -520,7 +583,29 @@ const TopToolbar = ({
         { id: "processed-statements", label: "Processed Statements (Legacy)", icon: FaCheckCircle },
       ],
     };
-  }, [isCompanySetupWorkspace, isSystemAdminWorkspace]);
+
+    if (isLandlordMode) {
+      submenus["rental-invoicing"] = submenus["rental-invoicing"].map((item) => {
+        if (item.id === "new-invoice") return { ...item, label: "Create Tenant Invoice" };
+        if (item.id === "rental-aged-analysis") return { ...item, label: "Tenant Arrears Analysis" };
+        return item;
+      });
+      submenus["rental-receipting"] = submenus["rental-receipting"]
+        .filter((item) => item.id !== "landlord-receipt")
+        .map((item) => {
+          if (item.id === "tenant-prepayments") return { ...item, label: "Prepayments & Credits" };
+          return item;
+        });
+      submenus["expenses"] = submenus["expenses"].map((item) => {
+        if (item.id === "expense-requisition") return { ...item, label: "Expense Requests" };
+        if (item.id === "expenses-service-providers") return { ...item, label: "Suppliers" };
+        return item;
+      });
+      delete submenus["landlord-payments"];
+    }
+
+    return submenus;
+  }, [isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
 
   const handleMenuItemClick = (menuId) => {
     const route = routeConfig[menuId];
@@ -528,7 +613,7 @@ const TopToolbar = ({
       navigate(route);
       setActiveMenu(null);
       clearHoverCloseTimer();
-                    setHoveredFinancialItem(null);
+      setHoveredFinancialItem(null);
     }
   };
 
@@ -796,7 +881,7 @@ const TopToolbar = ({
           <img
             src="/logo (2).png"
             alt="Milik Logo"
-            className="h-12 w-20 object-contain border border-white/20"
+            className="h-8 w-20 object-contain border border-white/20"
           />
         </div>
 

@@ -1,7 +1,7 @@
 import User from "../models/User.js";
 import Company from "../models/Company.js";
 import { createError } from "../utils/error.js";
-import { normalizeCompanyModules, serializeCompanyForClient } from "../utils/companyModules.js";
+import { normalizeCompanyModules, normalizeCompanyOperatingMode, serializeCompanyForClient } from "../utils/companyModules.js";
 import jwt from "jsonwebtoken";
 import { buildTemporaryPassword, normalizeBoolean } from "../utils/onboardingAccess.js";
 import { sendUserOnboardingEmail } from "../utils/onboardingMailer.js";
@@ -22,7 +22,7 @@ const getAdminCredentials = () => ({
 });
 
 const companySummarySelect =
-  "companyName companyCode baseCurrency logo unitTypes country town email phoneNo slogan modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus isDemoWorkspace isDemoWorkspace";
+  "companyName companyCode baseCurrency logo unitTypes country town email phoneNo slogan companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus isDemoWorkspace";
 
 const DEMO_COMPANY_EMAIL = "demo.workspace@milik.local";
 const DEMO_COMPANY_NAME_REGEX = /^milik\s+demo\s+workspace$/i;
@@ -149,7 +149,7 @@ const sanitizeUserForResponse = (userPayload) => {
   return safeUser;
 };
 
-const companyReferenceSelect = "companyName companyCode country town modules isActive accountStatus isDemoWorkspace logo unitTypes";
+const companyReferenceSelect = "companyName companyCode country town companyMode modules isActive accountStatus isDemoWorkspace logo unitTypes";
 
 const sanitizeCompanyLogoForList = (logo) => {
   if (typeof logo !== "string") return "";
@@ -169,6 +169,7 @@ const serializeCompanyReferenceForClient = (company = {}) => {
     companyCode: company.companyCode || "",
     country: company.country || "",
     town: company.town || "",
+    companyMode: normalizeCompanyOperatingMode(company.companyMode || company.operatingMode || company.mode),
     logo: sanitizeCompanyLogoForList(company.logo),
     unitTypes: Array.isArray(company.unitTypes) ? company.unitTypes : [],
     isActive: Boolean(company.isActive),

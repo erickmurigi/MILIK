@@ -122,6 +122,57 @@ const MODULE_REGISTRY = {
 
 const ACCESS_VALUES = ['Not allowed', 'View only', 'Full access'];
 
+export const COMPANY_OPERATING_MODES = {
+  PROPERTY_MANAGER: 'property_manager',
+  SELF_MANAGING_LANDLORD: 'self_managing_landlord',
+};
+
+export const normalizeCompanyOperatingMode = (value = '') => {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+
+  if (
+    [
+      'landlord',
+      'self_managing_landlord',
+      'self_managed_landlord',
+      'self_landlord',
+      'self_managing_owner',
+      'owner',
+    ].includes(normalized)
+  ) {
+    return COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD;
+  }
+
+  if (
+    [
+      COMPANY_OPERATING_MODES.PROPERTY_MANAGER,
+      'property_manager_company',
+      'manager',
+      'property_management',
+      'property_management_company',
+      'agency',
+    ].includes(normalized)
+  ) {
+    return COMPANY_OPERATING_MODES.PROPERTY_MANAGER;
+  }
+
+  return COMPANY_OPERATING_MODES.PROPERTY_MANAGER;
+};
+
+export const isSelfManagingLandlordCompany = (company = {}) =>
+  normalizeCompanyOperatingMode(company?.companyMode || company?.operatingMode || company?.mode) ===
+  COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD;
+
+export const isPropertyManagerCompany = (company = {}) => !isSelfManagingLandlordCompany(company);
+
+export const getCompanyOperatingModeLabel = (value = '') =>
+  normalizeCompanyOperatingMode(value) === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD
+    ? 'Self-Managing Landlord'
+    : 'Property Manager';
+
 const normalizeText = (value = '') => String(value || '').trim();
 const DEFAULT_COMPANY_UNIT_TYPES = ['studio', '1bed', '2bed', '3bed', '4bed', 'commercial'];
 
@@ -1051,6 +1102,7 @@ export const serializeCompanyForClient = (company = {}, user = null) => {
 
   return {
     ...company,
+    companyMode: normalizeCompanyOperatingMode(company.companyMode || company.operatingMode || company.mode),
     modules,
     paymentIntegration,
     communication,

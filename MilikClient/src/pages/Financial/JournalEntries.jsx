@@ -14,6 +14,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { getProperties } from "../../redux/propertyRedux";
 import {
   createJournalEntry,
@@ -76,8 +77,13 @@ const buildInitialForm = () => ({
 const JournalEntries = () => {
   const dispatch = useDispatch();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
   const properties = useSelector((state) => state.property?.properties || []);
   const landlords = useSelector((state) => state.landlord?.landlords || []);
+  const isLandlordWorkspace = useMemo(
+    () => isSelfManagingLandlordCompany(currentCompany || currentUser?.company || null),
+    [currentCompany, currentUser?.company]
+  );
 
   const [journals, setJournals] = useState([]);
   const [accounts, setAccounts] = useState([]);
@@ -99,8 +105,10 @@ const JournalEntries = () => {
   useEffect(() => {
     if (!currentCompany?._id) return;
     dispatch(getProperties({ business: currentCompany._id }));
-    dispatch(getLandlords({ company: currentCompany._id }));
-  }, [dispatch, currentCompany?._id]);
+    if (!isLandlordWorkspace) {
+      dispatch(getLandlords({ company: currentCompany._id }));
+    }
+  }, [dispatch, currentCompany?._id, isLandlordWorkspace]);
 
   useEffect(() => {
     const loadAccounts = async () => {
@@ -168,6 +176,24 @@ const JournalEntries = () => {
     [properties]
   );
 
+
+  const selectedPropertyRecord = useMemo(
+    () => properties.find((property) => String(property?._id || "") === String(form.property || "")) || null,
+    [form.property, properties]
+  );
+
+  const derivedLandlordIdFromProperty = useMemo(() => {
+    if (!selectedPropertyRecord) return "";
+    return (
+      selectedPropertyRecord?.landlords?.find((item) => item?.isPrimary && (item?.landlordId?._id || item?.landlordId || item?._id))?.landlordId?._id ||
+      selectedPropertyRecord?.landlords?.find((item) => item?.isPrimary && (item?.landlordId?._id || item?.landlordId || item?._id))?.landlordId ||
+      selectedPropertyRecord?.landlords?.find((item) => item?.landlordId?._id || item?.landlordId || item?._id)?.landlordId?._id ||
+      selectedPropertyRecord?.landlords?.find((item) => item?.landlordId?._id || item?.landlordId || item?._id)?.landlordId ||
+      selectedPropertyRecord?.landlords?.find((item) => item?._id)?._id ||
+      ""
+    );
+  }, [selectedPropertyRecord]);
+
   const landlordOptions = useMemo(
     () =>
       landlords.map((l) => ({
@@ -186,9 +212,32 @@ const JournalEntries = () => {
     [accounts]
   );
 
-  const activeJournalType = useMemo(
-    () => JOURNAL_TYPES.find((type) => type.value === form.journalType) || JOURNAL_TYPES[0],
-    [form.journalType]
+  const getJournalTypePresentation = (journalType) => {
+    const match = JOURNAL_TYPES.find((type) => type.value === journalType) || JOURNAL_TYPES[0];
+    if (!isLandlordWorkspace) return match;
+
+    if (journalType === "landlord_credit_adjustment") {
+      return {
+        ...match,
+        label: "Owner Credit Adjustment",
+        description: "Raises an owner-facing addition while preserving a balanced manual journal.",
+      };
+    }
+
+    if (journalType === "landlord_debit_adjustment") {
+      return {
+        ...match,
+        label: "Owner Debit Adjustment",
+        description: "Posts an owner-facing deduction while preserving a balanced manual journal.",
+      };
+    }
+
+    return match;
+  };
+
+  const activeJournalTypePresentation = useMemo(
+    () => getJournalTypePresentation(form.journalType),
+    [form.journalType, isLandlordWorkspace]
   );
 
   const isLandlordJournal =
@@ -204,9 +253,14 @@ const JournalEntries = () => {
     setForm((prev) => ({
       ...prev,
       journalType,
-      landlord: journalType === "internal_account_transfer" ? "" : prev.landlord,
       includeInLandlordStatement:
         journalType === "internal_account_transfer" ? false : landlordStatementJournal,
+      landlord:
+        journalType === "internal_account_transfer"
+          ? ""
+          : isLandlordWorkspace
+          ? derivedLandlordIdFromProperty || prev.landlord
+          : prev.landlord,
     }));
   };
 
@@ -217,7 +271,10 @@ const JournalEntries = () => {
 
   const openCreateModal = () => {
     setEditingJournalId("");
-    setForm(buildInitialForm());
+    setForm((prev) => ({
+      ...buildInitialForm(),
+      landlord: isLandlordWorkspace ? derivedLandlordIdFromProperty || "" : "",
+    }));
     setShowCreateModal(true);
   };
 
@@ -248,6 +305,19 @@ const JournalEntries = () => {
     resetForm();
   };
 
+
+  useEffect(() => {
+    if (!isLandlordWorkspace) return;
+    if (!form.property) return;
+    if (!derivedLandlordIdFromProperty) return;
+    if (form.landlord === derivedLandlordIdFromProperty) return;
+
+    setForm((prev) => ({
+      ...prev,
+      landlord: derivedLandlordIdFromProperty,
+    }));
+  }, [derivedLandlordIdFromProperty, form.landlord, form.property, isLandlordWorkspace]);
+
   const handleSaveJournal = async () => {
     if (!currentCompany?._id) {
       toast.warning("Please select a company first");
@@ -259,7 +329,7 @@ const JournalEntries = () => {
       return;
     }
 
-    if (isLandlordJournal && !form.landlord) {
+    if (isLandlordJournal && !isLandlordWorkspace && !form.landlord) {
       toast.warning("Landlord is required for landlord journal types");
       return;
     }
@@ -290,7 +360,7 @@ const JournalEntries = () => {
       date: form.date,
       journalType: form.journalType,
       property: form.property,
-      landlord: isInternalTransferJournal ? undefined : form.landlord || undefined,
+      landlord: isInternalTransferJournal ? undefined : (isLandlordWorkspace ? derivedLandlordIdFromProperty || form.landlord || undefined : form.landlord || undefined),
       debitAccount: form.debitAccount,
       creditAccount: form.creditAccount,
       amount: Number(form.amount),
@@ -468,7 +538,7 @@ const JournalEntries = () => {
                 <option value="all">All Journal Types</option>
                 {JOURNAL_TYPES.map((type) => (
                   <option key={type.value} value={type.value}>
-                    {type.label}
+                    {getJournalTypePresentation(type.value)?.label || type.label}
                   </option>
                 ))}
               </select>
@@ -511,7 +581,7 @@ const JournalEntries = () => {
                     <th className="px-4 py-3 text-left">Date</th>
                     <th className="px-4 py-3 text-left">Type</th>
                     <th className="px-4 py-3 text-left">Property</th>
-                    <th className="px-4 py-3 text-left">Landlord</th>
+                    <th className="px-4 py-3 text-left">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
                     <th className="px-4 py-3 text-left">Debit</th>
                     <th className="px-4 py-3 text-left">Credit</th>
                     <th className="px-4 py-3 text-right">Amount</th>
@@ -551,7 +621,7 @@ const JournalEntries = () => {
                             {journal.date ? new Date(journal.date).toLocaleDateString() : "-"}
                           </td>
                           <td className="px-4 py-3 text-slate-700">
-                            {JOURNAL_TYPES.find((type) => type.value === journal.journalType)?.label || journal.journalType}
+                            {getJournalTypePresentation(journal.journalType)?.label || journal.journalType}
                           </td>
                           <td className="px-4 py-3 text-slate-700">
                             {journal.property?.propertyName || journal.property?.name || "N/A"}
@@ -653,11 +723,11 @@ const JournalEntries = () => {
                   >
                     {JOURNAL_TYPES.map((type) => (
                       <option key={type.value} value={type.value}>
-                        {type.label}
+                        {getJournalTypePresentation(type.value)?.label || type.label}
                       </option>
                     ))}
                   </select>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">{activeJournalType.description}</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">{activeJournalTypePresentation.description}</p>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -687,14 +757,25 @@ const JournalEntries = () => {
                     </select>
                     <p className="mt-1 text-xs text-slate-500">
                       {isInternalTransferJournal
-                        ? "Property stays required because posted ledger entries in the current architecture are property-scoped. The linked landlord is derived automatically during posting."
+                        ? "Property stays required because posted ledger entries in the current architecture are property-scoped. The linked owner context is derived automatically during posting."
+                        : isLandlordWorkspace
+                        ? "Select the property context this owner-side journal belongs to. The linked owner is derived from the property automatically."
                         : "Select the property context this journal belongs to."}
                     </p>
                   </label>
 
                   {isInternalTransferJournal ? (
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 md:col-span-2">
-                      Landlord selection is not needed for internal ledger transfers. MILIK derives the landlord automatically from the selected property's accounting context when the balanced ledger entries are posted.
+                      {isLandlordWorkspace
+                        ? "Owner selection is not needed for internal ledger transfers. MILIK derives the owner automatically from the selected property's accounting context when the balanced ledger entries are posted."
+                        : "Landlord selection is not needed for internal ledger transfers. MILIK derives the landlord automatically from the selected property's accounting context when the balanced ledger entries are posted."}
+                    </div>
+                  ) : isLandlordWorkspace ? (
+                    <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900 md:col-span-2">
+                      <p className="font-black uppercase tracking-[0.16em] text-orange-700">Owner Context</p>
+                      <p className="mt-1 leading-6">
+                        This company is operating as the owner, so MILIK derives the owner ledger context from the selected property automatically. No separate landlord picker is required here.
+                      </p>
                     </div>
                   ) : (
                     <label className="block md:col-span-2">
@@ -800,7 +881,7 @@ const JournalEntries = () => {
                     className="mt-1"
                   />
                   <span>
-                    Include in landlord statement metadata
+                    {isLandlordWorkspace ? "Include in owner adjustment metadata" : "Include in landlord statement metadata"}
                     <span className="mt-1 block text-xs text-slate-500">
                       Disabled for internal ledger transfers because those remain same-company ledger movements only.
                     </span>

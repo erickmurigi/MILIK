@@ -9,29 +9,35 @@ import {
   FaFileInvoiceDollar,
   FaHome,
   FaReceipt,
-  FaTools
+  FaTools,
 } from 'react-icons/fa';
 import { adminRequests } from '../../utils/requestMethods';
+import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
 const QuickActions = ({ darkMode }) => {
   const navigate = useNavigate();
-  const currentCompany = useSelector(state => state.company?.currentCompany);
-  const currentUser = useSelector(state => state.auth?.currentUser);
-  const units = useSelector(state => state.unit?.units || []);
-  const leases = useSelector(state => state.lease?.leases || []);
-  const maintenances = useSelector(state => state.maintenance?.maintenances || []);
-  const rentPayments = useSelector(state => state.rentPayment?.rentPayments || []);
+  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const units = useSelector((state) => state.unit?.units || []);
+  const leases = useSelector((state) => state.lease?.leases || []);
+  const maintenances = useSelector((state) => state.maintenance?.maintenances || []);
+  const rentPayments = useSelector((state) => state.rentPayment?.rentPayments || []);
+
+  const activeCompanyContext = currentCompany || currentUser?.company || null;
+  const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
 
   const [invoices, setInvoices] = useState([]);
   const [paymentVouchers, setPaymentVouchers] = useState([]);
   const [processedStatements, setProcessedStatements] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const businessId = useMemo(() => (
-    currentCompany?._id ||
-    currentUser?.company?._id ||
-    (typeof currentUser?.company === 'string' ? currentUser.company : '')
-  ), [currentCompany?._id, currentUser?.company]);
+  const businessId = useMemo(
+    () =>
+      currentCompany?._id ||
+      currentUser?.company?._id ||
+      (typeof currentUser?.company === 'string' ? currentUser.company : ''),
+    [currentCompany?._id, currentUser?.company]
+  );
 
   useEffect(() => {
     let active = true;
@@ -48,8 +54,16 @@ const QuickActions = ({ darkMode }) => {
 
         if (!active) return;
 
-        setInvoices(invoiceRes.status === 'fulfilled' && Array.isArray(invoiceRes.value?.data) ? invoiceRes.value.data : []);
-        setPaymentVouchers(voucherRes.status === 'fulfilled' && Array.isArray(voucherRes.value?.data) ? voucherRes.value.data : []);
+        setInvoices(
+          invoiceRes.status === 'fulfilled' && Array.isArray(invoiceRes.value?.data)
+            ? invoiceRes.value.data
+            : []
+        );
+        setPaymentVouchers(
+          voucherRes.status === 'fulfilled' && Array.isArray(voucherRes.value?.data)
+            ? voucherRes.value.data
+            : []
+        );
         setProcessedStatements(
           statementRes.status === 'fulfilled' && Array.isArray(statementRes.value?.data?.statements)
             ? statementRes.value.data.statements
@@ -84,83 +98,109 @@ const QuickActions = ({ darkMode }) => {
     return isActive && endDate >= today && endDate <= in30Days;
   }).length;
 
-  const unpostedReceipts = rentPayments.filter((payment) => payment?.postingStatus === 'unposted' || payment?.isConfirmed !== true).length;
+  const unpostedReceipts = rentPayments.filter(
+    (payment) => payment?.postingStatus === 'unposted' || payment?.isConfirmed !== true
+  ).length;
   const pendingMaintenance = maintenances.filter((item) => item?.status === 'pending').length;
-  const pendingStatements = processedStatements.filter((item) => ['processed', 'unpaid', 'part_paid'].includes(item?.status)).length;
+  const pendingStatements = processedStatements.filter((item) =>
+    ['processed', 'unpaid', 'part_paid'].includes(item?.status)
+  ).length;
   const pendingVoucherApprovals = paymentVouchers.filter((item) => item?.status === 'draft').length;
 
-  const items = [
-    {
-      id: 'vacant-units',
-      label: 'Vacant units',
-      value: vacantUnits,
-      icon: <FaHome />,
-      tone: 'green',
-      helper: 'Open units workspace to review empty spaces and occupancy.',
-      route: '/units',
-      tabTitle: 'Units',
-    },
-    {
-      id: 'overdue-invoices',
-      label: 'Overdue invoices',
-      value: overdueInvoices,
-      icon: <FaFileInvoiceDollar />,
-      tone: 'orange',
-      helper: 'Open rental invoices to follow up overdue tenant balances.',
-      route: '/invoices/rental',
-      tabTitle: 'Rental Invoices',
-    },
-    {
-      id: 'leases-expiring',
-      label: 'Leases expiring in 30 days',
-      value: leasesExpiringSoon,
-      icon: <FaFileAlt />,
-      tone: 'blue',
-      helper: 'Open tenants workspace to review renewals and tenant records.',
-      route: '/tenants',
-      tabTitle: 'Tenants',
-    },
-    {
-      id: 'unposted-receipts',
-      label: 'Unposted receipts',
-      value: unpostedReceipts,
-      icon: <FaReceipt />,
-      tone: 'amber',
-      helper: 'Open receipts to post or confirm incoming collections.',
-      route: '/receipts',
-      tabTitle: 'Receipts',
-    },
-    {
-      id: 'pending-maintenance',
-      label: 'Pending maintenance requests',
-      value: pendingMaintenance,
-      icon: <FaTools />,
-      tone: 'red',
-      helper: 'Open maintenance workspace for pending operational tasks.',
-      route: '/maintenances',
-      tabTitle: 'Maintenance',
-    },
-    {
-      id: 'pending-statements',
-      label: 'Landlord statements pending processing',
-      value: pendingStatements,
-      icon: <FaClipboardList />,
-      tone: 'purple',
-      helper: 'Open processed statements to review unsettled landlord statements.',
-      route: '/landlord/processed-statements',
-      tabTitle: 'Processed Statements',
-    },
-    {
-      id: 'pending-vouchers',
-      label: 'Payment vouchers pending approvals',
-      value: pendingVoucherApprovals,
-      icon: <FaExclamationTriangle />,
-      tone: 'slate',
-      helper: 'Open payment vouchers for approval and posting workflow.',
-      route: '/financial/payment-vouchers',
-      tabTitle: 'Payment Vouchers',
-    },
-  ];
+  const items = useMemo(() => {
+    const baseItems = [
+      {
+        id: 'vacant-units',
+        label: isLandlordMode ? 'Vacant units in my portfolio' : 'Vacant units',
+        value: vacantUnits,
+        icon: <FaHome />,
+        tone: 'green',
+        helper: isLandlordMode
+          ? 'Open units to review vacancies and plan new occupancy.'
+          : 'Open units workspace to review empty spaces and occupancy.',
+        route: '/units',
+        tabTitle: 'Units',
+      },
+      {
+        id: 'overdue-invoices',
+        label: 'Overdue invoices',
+        value: overdueInvoices,
+        icon: <FaFileInvoiceDollar />,
+        tone: 'orange',
+        helper: 'Open rental invoices to follow up overdue tenant balances.',
+        route: '/invoices/rental',
+        tabTitle: 'Rental Invoices',
+      },
+      {
+        id: 'leases-expiring',
+        label: isLandlordMode ? 'Lease renewals due in 30 days' : 'Leases expiring in 30 days',
+        value: leasesExpiringSoon,
+        icon: <FaFileAlt />,
+        tone: 'blue',
+        helper: isLandlordMode
+          ? 'Open tenants workspace to review renewals and direct tenant follow-up.'
+          : 'Open tenants workspace to review renewals and tenant records.',
+        route: '/tenants',
+        tabTitle: 'Tenants',
+      },
+      {
+        id: 'unposted-receipts',
+        label: isLandlordMode ? 'Receipts awaiting posting' : 'Unposted receipts',
+        value: unpostedReceipts,
+        icon: <FaReceipt />,
+        tone: 'amber',
+        helper: 'Open receipts to post or confirm incoming collections.',
+        route: '/receipts',
+        tabTitle: 'Receipts',
+      },
+      {
+        id: 'pending-maintenance',
+        label: 'Pending maintenance requests',
+        value: pendingMaintenance,
+        icon: <FaTools />,
+        tone: 'red',
+        helper: 'Open maintenance workspace for pending operational tasks.',
+        route: '/maintenances',
+        tabTitle: 'Maintenance',
+      },
+      {
+        id: 'pending-vouchers',
+        label: isLandlordMode ? 'Outgoing payments pending approval' : 'Payment vouchers pending approvals',
+        value: pendingVoucherApprovals,
+        icon: <FaExclamationTriangle />,
+        tone: 'slate',
+        helper: isLandlordMode
+          ? 'Open outgoing payments to review approvals before cash leaves the business.'
+          : 'Open payment vouchers for approval and posting workflow.',
+        route: '/financial/payment-vouchers',
+        tabTitle: 'Payment Vouchers',
+      },
+    ];
+
+    if (!isLandlordMode) {
+      baseItems.splice(5, 0, {
+        id: 'pending-statements',
+        label: 'Landlord statements pending processing',
+        value: pendingStatements,
+        icon: <FaClipboardList />,
+        tone: 'purple',
+        helper: 'Open processed statements to review unsettled landlord statements.',
+        route: '/landlord/processed-statements',
+        tabTitle: 'Processed Statements',
+      });
+    }
+
+    return baseItems;
+  }, [
+    isLandlordMode,
+    leasesExpiringSoon,
+    overdueInvoices,
+    pendingMaintenance,
+    pendingStatements,
+    pendingVoucherApprovals,
+    unpostedReceipts,
+    vacantUnits,
+  ]);
 
   const getToneClasses = (tone) => {
     const tones = {
@@ -180,25 +220,33 @@ const QuickActions = ({ darkMode }) => {
     navigate(item.route, { state: { tabTitle: item.tabTitle || item.label } });
   };
 
-  const priorityItem = useMemo(() => {
-    return items
-      .filter((item) => Number(item.value || 0) > 0)
-      .sort((a, b) => Number(b.value || 0) - Number(a.value || 0))[0] || null;
-  }, [items]);
+  const priorityItem = useMemo(
+    () =>
+      items
+        .filter((item) => Number(item.value || 0) > 0)
+        .sort((a, b) => Number(b.value || 0) - Number(a.value || 0))[0] || null,
+    [items]
+  );
 
   return (
-    <div className={`dashboard-panel rounded-xl ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#f8faf9] border-[#31694E]/10'} shadow-md border p-4`}>
+    <div
+      className={`dashboard-panel rounded-xl ${
+        darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#f8faf9] border-[#31694E]/10'
+      } shadow-md border p-4`}
+    >
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h3 className={`font-extrabold text-sm tracking-tight uppercase ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>
-            Action Center
+            {isLandlordMode ? 'Landlord Action Center' : 'Action Center'}
           </h3>
           <p className={`mt-1 text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-            Alerts, exceptions and workflow items that need attention.
+            {isLandlordMode
+              ? 'Portfolio alerts, tenant collections and expense approvals that need direct owner attention.'
+              : 'Alerts, exceptions and workflow items that need attention.'}
           </p>
         </div>
         <div className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'bg-[#31694E]/20 text-[#8bd1b0]' : 'bg-[#ECF6F1] text-[#1f4a35]'}`}>
-          {items.filter(item => item.value > 0).length} live alerts
+          {items.filter((item) => item.value > 0).length} live alerts
         </div>
       </div>
 
@@ -210,7 +258,9 @@ const QuickActions = ({ darkMode }) => {
               key={item.id}
               type="button"
               onClick={() => handleItemOpen(item)}
-              className={`w-full text-left rounded-xl border p-3 transition-all ${darkMode ? 'border-gray-700 bg-gray-700/30 hover:bg-gray-700/50' : `${tone.border} bg-white hover:shadow-sm`} focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/30`}
+              className={`w-full text-left rounded-xl border p-3 transition-all ${
+                darkMode ? 'border-gray-700 bg-gray-700/30 hover:bg-gray-700/50' : `${tone.border} bg-white hover:shadow-sm`
+              } focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/30`}
             >
               <div className="flex items-start gap-3">
                 <div className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} ${tone.icon}`}>
@@ -240,14 +290,20 @@ const QuickActions = ({ darkMode }) => {
       <button
         type="button"
         onClick={() => priorityItem && handleItemOpen(priorityItem)}
-        className={`mt-4 w-full rounded-xl border p-3 text-left transition ${darkMode ? 'border-gray-700 bg-gray-700/20 hover:bg-gray-700/35' : 'border-[#dce9e1] bg-white/90 hover:bg-white'} ${priorityItem ? 'cursor-pointer' : 'cursor-default'}`}
+        className={`mt-4 w-full rounded-xl border p-3 text-left transition ${
+          darkMode ? 'border-gray-700 bg-gray-700/20 hover:bg-gray-700/35' : 'border-[#dce9e1] bg-white/90 hover:bg-white'
+        } ${priorityItem ? 'cursor-pointer' : 'cursor-default'}`}
       >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className={`text-[10px] font-extrabold uppercase tracking-[0.18em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>Focus today</div>
+            <div className={`text-[10px] font-extrabold uppercase tracking-[0.18em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>
+              Focus today
+            </div>
             <div className={`mt-1 text-sm font-bold ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>
               {priorityItem
                 ? `${priorityItem.label} require attention first.`
+                : isLandlordMode
+                ? 'Collections, vacancies and expense approvals first.'
                 : 'Collections and pending posting items first.'}
             </div>
           </div>

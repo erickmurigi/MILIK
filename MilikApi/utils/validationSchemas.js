@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizeCompanyOperatingMode } from './companyModules.js';
 
 // ========== USER SCHEMAS ==========
 export const loginSchema = z.object({
@@ -209,6 +210,36 @@ const paymentIntegrationSchema = z.object({
   mpesaPaybills: mpesaPaybillCrudSchema.optional(),
 }).optional();
 
+const normalizeCompanyModeInput = (value = '') =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+
+const COMPANY_MODE_INPUTS = new Set([
+  'property_manager',
+  'property_manager_company',
+  'manager',
+  'property_management',
+  'property_management_company',
+  'agency',
+  'landlord',
+  'self_managing_landlord',
+  'self_managed_landlord',
+  'self_landlord',
+  'self_managing_owner',
+  'owner',
+]);
+
+const companyModeSchema = z
+  .string()
+  .trim()
+  .min(1, 'Company operating mode is required')
+  .refine((value) => COMPANY_MODE_INPUTS.has(normalizeCompanyModeInput(value)), {
+    message: 'Invalid company operating mode',
+  })
+  .transform((value) => normalizeCompanyOperatingMode(value));
+
 // ========== COMPANY SCHEMAS ==========
 export const createCompanySchema = z.object({
   companyName: z.string().min(1, "Company name is required"),
@@ -229,6 +260,7 @@ export const createCompanySchema = z.object({
   modules: z.record(z.string(), z.union([z.boolean(), z.object({ enabled: z.boolean().optional(), required: z.boolean().optional() })])).optional(),
   operationPeriodType: z.string().optional(),
   businessOwner: z.string().optional(),
+  companyMode: companyModeSchema.optional(),
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   phoneNo: z.string().min(7, "Phone number is too short").optional().or(z.literal("")),
   slogan: z.string().optional(),

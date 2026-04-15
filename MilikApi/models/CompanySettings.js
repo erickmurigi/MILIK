@@ -134,7 +134,6 @@ const CompanySettingsSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-CompanySettingsSchema.index({ company: 1 });
 CompanySettingsSchema.index({ "utilityTypes.isActive": 1 });
 CompanySettingsSchema.index({ "billingPeriods.isActive": 1 });
 CompanySettingsSchema.index({ "expenseItems.isActive": 1 });

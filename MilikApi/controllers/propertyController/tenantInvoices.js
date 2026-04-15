@@ -4,6 +4,7 @@ import TenantInvoiceNote, { TENANT_NOTE_TYPES } from "../../models/TenantInvoice
 import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
+import Company from "../../models/Company.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import RentPayment from "../../models/RentPayment.js";
 import MeterReading from "../../models/MeterReading.js";
@@ -18,6 +19,7 @@ import {
 } from "../../services/propertyAccountingService.js";
 import { buildInvoiceTaxSnapshot, getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../services/taxCalculationService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { COMPANY_OPERATING_MODES, normalizeCompanyOperatingMode } from "../../utils/companyModules.js";
 import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
 
 const TENANT_INVOICE_NOTE_SOURCE_TYPE = "invoice_note";
@@ -53,6 +55,26 @@ const resolveTenantOperationalStatus = ({ tenant = null, invoiceSnapshots = [] }
 
 const escapeRegExp = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
+const resolveDepositHolderLabel = ({ requestedValue = null, tenantValue = null, propertyValue = null, companyMode = "" } = {}) => {
+  const normalizeHolder = (value = "") => {
+    const normalized = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if (["landlord", "held_by_landlord"].includes(normalized)) return "Landlord";
+    if (["management_company", "management", "property_manager", "propertymanager", "manager"].includes(normalized)) {
+      return "Management Company";
+    }
+    return "";
+  };
+
+  return (
+    normalizeHolder(requestedValue) ||
+    normalizeHolder(tenantValue) ||
+    normalizeHolder(propertyValue) ||
+    (normalizeCompanyOperatingMode(companyMode) === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD
+      ? "Landlord"
+      : "Management Company")
+  );
+};
+
 const resolveInvoiceLedgerMode = ({ category, depositHeldBy = null }) => {
   const normalizedCategory = String(category || "").toUpperCase();
   if (normalizedCategory !== "DEPOSIT_CHARGE") return "on_ledger";
@@ -2244,13 +2266,13 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     throw contextError;
   }
 
-  const [propertyDoc, unitDoc, tenantDoc] = await Promise.all([
+  const [propertyDoc, unitDoc, tenantDoc, companyDoc] = await Promise.all([
     getOrLoadCachedValue(
       batchContext?.propertyDocCache,
       [String(businessId), String(property)].join(":"),
       () =>
         Property.findOne({ _id: property, business: businessId })
-          .select("_id business landlords")
+          .select("_id business landlords depositHeldBy")
           .lean()
     ),
     getOrLoadCachedValue(
@@ -2268,6 +2290,11 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
         Tenant.findOne({ _id: tenant, business: businessId })
           .select("_id business unit additionalUnits depositHeldBy")
           .lean()
+    ),
+    getOrLoadCachedValue(
+      batchContext?.companyDocCache,
+      ["company", String(businessId)].join(":"),
+      () => Company.findById(businessId).select("_id companyMode").lean()
     ),
   ]);
 
@@ -2304,7 +2331,12 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
 
   const depositHeldBy =
     normalizedCategory === "DEPOSIT_CHARGE"
-      ? tenantDoc.depositHeldBy || "Management Company"
+      ? resolveDepositHolderLabel({
+          requestedValue: payload?.depositHeldBy || req?.body?.depositHeldBy,
+          tenantValue: tenantDoc.depositHeldBy,
+          propertyValue: propertyDoc?.depositHeldBy,
+          companyMode: companyDoc?.companyMode,
+        })
       : null;
 
   const ledgerMode = resolveInvoiceLedgerMode({
@@ -2606,10 +2638,11 @@ export const updateTakeOnBalance = async (req, res) => {
       normalizedDueDate = normalizedInvoiceDate;
     }
 
-    const [propertyDoc, unitDoc, tenantDoc] = await Promise.all([
-      Property.findOne({ _id: invoice.property, business: businessId }).select("_id business landlords").lean(),
+    const [propertyDoc, unitDoc, tenantDoc, companyDoc] = await Promise.all([
+      Property.findOne({ _id: invoice.property, business: businessId }).select("_id business landlords depositHeldBy").lean(),
       Unit.findOne({ _id: invoice.unit, business: businessId }).select("_id business property").lean(),
       Tenant.findOne({ _id: invoice.tenant, business: businessId }).select("_id business unit additionalUnits depositHeldBy").lean(),
+      Company.findById(businessId).select("_id companyMode").lean(),
     ]);
 
     if (!propertyDoc || !unitDoc || !tenantDoc) {
@@ -2635,7 +2668,12 @@ export const updateTakeOnBalance = async (req, res) => {
 
     const depositHeldBy =
       normalizedCategory === "DEPOSIT_CHARGE"
-        ? tenantDoc.depositHeldBy || "Management Company"
+        ? resolveDepositHolderLabel({
+            requestedValue: req.body.depositHeldBy || invoice.depositHeldBy,
+            tenantValue: tenantDoc.depositHeldBy,
+            propertyValue: propertyDoc?.depositHeldBy,
+            companyMode: companyDoc?.companyMode,
+          })
         : null;
 
     const nextLedgerMode = resolveInvoiceLedgerMode({

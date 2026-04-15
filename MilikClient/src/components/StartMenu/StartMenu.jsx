@@ -29,7 +29,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { clearClientSessionStorage } from "../../utils/sessionCleanup";
 import { getAccessibleCompanies, switchCompany } from "../../redux/apiCalls";
-import { hasCompanyModule } from "../../utils/companyModules";
+import { getCompanyOperatingModeLabel, hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 
 const initialsFromName = (value = "") =>
   String(value || "")
@@ -128,6 +128,8 @@ const StartMenu = ({ darkMode = false }) => {
   const companyName = currentCompany?.companyName || currentUser?.company?.companyName || "No active company";
   const companyLogo = currentCompany?.logo || currentUser?.company?.logo || "";
   const activeCompanyContext = currentCompany || currentUser?.company || null;
+  const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
+  const operatingModeLabel = getCompanyOperatingModeLabel(activeCompanyContext?.companyMode);
 
   useEffect(() => {
     const onDown = (e) => {
@@ -155,8 +157,16 @@ const StartMenu = ({ darkMode = false }) => {
 
   const primary = useMemo(() => {
     if (!activeCompanyContext) return [];
-    return moduleRegistry.filter((item) => hasCompanyModule(activeCompanyContext, item.moduleKey));
-  }, [activeCompanyContext]);
+    return moduleRegistry
+      .map((item) => {
+        if (item.id !== "milik") return item;
+        return {
+          ...item,
+          label: isLandlordMode ? "MILIK Landlord Workspace" : item.label,
+        };
+      })
+      .filter((item) => hasCompanyModule(activeCompanyContext, item.moduleKey));
+  }, [activeCompanyContext, isLandlordMode]);
 
   const secondaryTop = useMemo(
     () => [
@@ -293,7 +303,7 @@ const StartMenu = ({ darkMode = false }) => {
 
   return (
     <>
-      <div className="fixed bottom-12 left-1/2 z-[120] -translate-x-1/2">
+      <div className="fixed bottom-4 left-1/2 z-[120] -translate-x-1/2 sm:bottom-12">
         <button
           ref={anchorRef}
           onClick={() => setOpen((v) => !v)}
@@ -314,7 +324,7 @@ const StartMenu = ({ darkMode = false }) => {
         </button>
 
         {open && (
-          <div ref={menuRef} className="absolute bottom-[60px] left-1/2 w-[92vw] max-w-[860px] -translate-x-1/2">
+          <div ref={menuRef} className="absolute bottom-[60px] left-1/2 w-[94vw] max-w-[860px] -translate-x-1/2">
             <div
               className={[
                 "overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-2xl",
@@ -325,7 +335,7 @@ const StartMenu = ({ darkMode = false }) => {
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white/15 text-white shadow-inner">
                     {companyLogo ? (
-                      <img src={companyLogo} alt={companyName} className="h-full w-full object-cover" />
+                      <img src={companyLogo} alt={companyName} className="h-full w-full object-contain p-1.5" />
                     ) : (
                       <span className="font-extrabold">{initialsFromName(companyName)}</span>
                     )}
@@ -333,6 +343,7 @@ const StartMenu = ({ darkMode = false }) => {
                   <div className="min-w-0">
                     <div className="truncate text-white font-extrabold">{userName}</div>
                     <div className="truncate text-xs text-white/80">{companyName}</div>
+                    <div className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">{operatingModeLabel}</div>
                   </div>
                 </div>
 
@@ -344,7 +355,7 @@ const StartMenu = ({ darkMode = false }) => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3">
+              <div className="max-h-[78vh] overflow-y-auto"><div className="grid grid-cols-1 md:grid-cols-3">
                 <div className={["p-4 md:col-span-2", darkMode ? "bg-white/5" : "bg-white/40"].join(" ")}>
                   <div className={darkMode ? "mb-3 text-xs font-bold text-white/80" : "mb-3 text-xs font-bold text-slate-700"}>
                     MODULES
@@ -448,6 +459,8 @@ const StartMenu = ({ darkMode = false }) => {
                 </div>
               </div>
 
+              </div>
+
               <div className="relative">
                 <div className="absolute left-1/2 -bottom-2 h-4 w-4 -translate-x-1/2 rotate-45 border border-white/30 bg-white/70 backdrop-blur-xl" />
               </div>
@@ -458,7 +471,7 @@ const StartMenu = ({ darkMode = false }) => {
 
       {showSwitchModal && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-emerald-100 bg-white shadow-2xl">
+          <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-emerald-100 bg-white shadow-2xl">
             <div className="flex items-center justify-between bg-gradient-to-r from-[#0A400C] via-[#16A34A] to-[#F97316] px-6 py-4 text-white">
               <div>
                 <div className="text-lg font-extrabold">Switch Company</div>
@@ -467,7 +480,7 @@ const StartMenu = ({ darkMode = false }) => {
               <button onClick={() => setShowSwitchModal(false)} className="rounded-xl border border-white/20 px-3 py-2 text-xs font-semibold hover:bg-white/10">Close</button>
             </div>
 
-            <div className="p-5">
+            <div className="overflow-y-auto p-4 sm:p-5">
               <div className="mb-4 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <FaSearch className="text-slate-400" />
                 <input
@@ -478,7 +491,7 @@ const StartMenu = ({ darkMode = false }) => {
                 />
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-slate-200">
+              <div className="max-h-[56vh] overflow-y-auto rounded-2xl border border-slate-200">
                 {loadingCompanies ? (
                   <div className="p-6 text-sm text-slate-500">Loading companies...</div>
                 ) : filteredCompanies.length === 0 ? (
@@ -497,7 +510,7 @@ const StartMenu = ({ darkMode = false }) => {
                           <div className="flex min-w-0 items-center gap-3">
                             <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] font-bold text-white">
                               {company?.logo ? (
-                                <img src={company.logo} alt={company.companyName} className="h-full w-full object-cover" />
+                                <img src={company.logo} alt={company.companyName} className="h-full w-full object-contain p-1.5" />
                               ) : (
                                 initialsFromName(company?.companyName)
                               )}

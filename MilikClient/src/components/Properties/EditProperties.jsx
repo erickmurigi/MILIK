@@ -25,6 +25,7 @@ import { getPropertyById, updateProperty } from "../../redux/propertyRedux";
 import { getLandlords } from "../../redux/apiCalls";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
+import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 
 const MILIK_ORANGE_BG = "bg-orange-600";
 const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
@@ -198,6 +199,16 @@ const EditProperty = () => {
   const { loading, error, currentProperty } = useSelector((state) => state.property);
   const { currentCompany } = useSelector((state) => state.company);
   const { currentUser } = useSelector((state) => state.auth);
+
+  const activeCompanyContext = currentCompany || currentUser?.company || null;
+  const isSelfManagingLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
+  const operatingModeLabel = getCompanyOperatingModeLabel(activeCompanyContext?.companyMode);
+  const ownerCompanyName = activeCompanyContext?.companyName || "Current company";
+  const ownerPrimaryContact =
+    activeCompanyContext?.email ||
+    activeCompanyContext?.phoneNo ||
+    activeCompanyContext?.slogan ||
+    "";
 
   const landlordsFromStore =
     useSelector((state) => state?.landlord?.landlords) ||
@@ -564,7 +575,7 @@ const EditProperty = () => {
     if (!formData.propertyType?.trim()) {
       errors.propertyType = "Property type is required.";
     }
-    if (!formData.landlords?.[0]?.name?.trim()) {
+    if (!isSelfManagingLandlordMode && !formData.landlords?.[0]?.name?.trim()) {
       errors.landlord = "Primary landlord is required.";
     }
 
@@ -631,6 +642,9 @@ const EditProperty = () => {
       ...cleanedFormData,
       business: businessId,
       updatedBy: currentUser?._id,
+      landlords: isSelfManagingLandlordMode ? [] : cleanedFormData.landlords,
+      tenantsPaysTo: isSelfManagingLandlordMode ? "landlord" : cleanedFormData.tenantsPaysTo,
+      depositHeldBy: isSelfManagingLandlordMode ? "landlord" : cleanedFormData.depositHeldBy,
     };
 
     try {
@@ -730,10 +744,16 @@ const EditProperty = () => {
   }, [error]);
 
   useEffect(() => {
-    if (currentCompany?._id) {
+    if (isSelfManagingLandlordMode && fieldErrors.landlord) {
+      setFieldErrors((prev) => ({ ...prev, landlord: "" }));
+    }
+  }, [fieldErrors.landlord, isSelfManagingLandlordMode]);
+
+  useEffect(() => {
+    if (currentCompany?._id && !isSelfManagingLandlordMode) {
       dispatch(getLandlords({ company: currentCompany._id }));
     }
-  }, [currentCompany, dispatch]);
+  }, [currentCompany, dispatch, isSelfManagingLandlordMode]);
 
   useEffect(() => {
     if (!draftStorageKey || !draftRestoredRef.current) return;
@@ -948,61 +968,104 @@ const EditProperty = () => {
           </div>
         </div>
 
-        <div className={`${sectionCard} p-4`}>
-          <div className="flex justify-between items-center mb-3">
-            <h3 className={sectionHeader}>Landlords *</h3>
-            <button
-              type="button"
-              onClick={() => setOpenAddLandlordModal(true)}
-              className={`h-9 px-3 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md flex items-center gap-2 ${MILIK_ORANGE_BG_HOVER} transition-colors`}
-            >
-              <FaPlus /> Add Landlord
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-            <div>
-              <MilikSelect
-                label="Landlord Name"
-                required
-                placeholder={landlordItems.length ? "Select landlord" : "No landlords loaded"}
-                items={landlordItems}
-                value={selectedLandlordId}
-                disabled={loading}
-                getLabel={getLandlordLabel}
-                getValue={getLandlordId}
-                onChange={(id, obj) => handleSelectLandlord(id, obj)}
-              />
-              {fieldErrors.landlord && <p className="mt-1 text-xs text-red-600">{fieldErrors.landlord}</p>}
-              <p className="mt-1 text-xs text-slate-500">
-                Select landlord for this property.
-              </p>
+        {isSelfManagingLandlordMode ? (
+          <div className={`${sectionCard} p-4`}>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <h3 className={sectionHeader}>Ownership</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  This property stays linked to the active self-managing landlord company automatically.
+                </p>
+              </div>
+              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+                Auto owner
+              </span>
             </div>
 
-            <div>
-              <label className={labelClass}>Contact Information</label>
-              <input
-                type="text"
-                name="contact"
-                value={formData.landlords?.[0]?.contact || ""}
-                onChange={(e) => {
-                  const updated = [...formData.landlords];
-                  updated[0] = { ...(updated[0] || { isPrimary: true }), contact: e.target.value, isPrimary: true };
-                  setFormData((p) => ({ ...p, landlords: updated }));
-                }}
-                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                placeholder="Phone/Email"
-              />
-              <p className="mt-1 text-xs text-slate-500">
-                Auto-fills from selected landlord.
-              </p>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className={labelClass}>Owner Company</label>
+                <input
+                  type="text"
+                  value={ownerCompanyName}
+                  readOnly
+                  className={`${inputClass} bg-slate-50 ${MILIK_ORANGE_BORDER_FOCUS}`}
+                />
+              </div>
 
-            <div className="flex items-center">
-              <div className="text-xs text-slate-500 italic">Primary landlord</div>
+              <div>
+                <label className={labelClass}>Primary Contact</label>
+                <input
+                  type="text"
+                  value={ownerPrimaryContact}
+                  readOnly
+                  placeholder="Pulled from company profile"
+                  className={`${inputClass} bg-slate-50 ${MILIK_ORANGE_BORDER_FOCUS}`}
+                />
+              </div>
+
+              <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+                Landlord selection is hidden in this mode. Saving will keep the property owned by this company and preserve direct-to-owner collection defaults.
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className={`${sectionCard} p-4`}>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className={sectionHeader}>Landlords *</h3>
+              <button
+                type="button"
+                onClick={() => setOpenAddLandlordModal(true)}
+                className={`h-9 px-3 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md flex items-center gap-2 ${MILIK_ORANGE_BG_HOVER} transition-colors`}
+              >
+                <FaPlus /> Add Landlord
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+              <div>
+                <MilikSelect
+                  label="Landlord Name"
+                  required
+                  placeholder={landlordItems.length ? "Select landlord" : "No landlords loaded"}
+                  items={landlordItems}
+                  value={selectedLandlordId}
+                  disabled={loading}
+                  getLabel={getLandlordLabel}
+                  getValue={getLandlordId}
+                  onChange={(id, obj) => handleSelectLandlord(id, obj)}
+                />
+                {fieldErrors.landlord && <p className="mt-1 text-xs text-red-600">{fieldErrors.landlord}</p>}
+                <p className="mt-1 text-xs text-slate-500">
+                  Select landlord for this property.
+                </p>
+              </div>
+
+              <div>
+                <label className={labelClass}>Contact Information</label>
+                <input
+                  type="text"
+                  name="contact"
+                  value={formData.landlords?.[0]?.contact || ""}
+                  onChange={(e) => {
+                    const updated = [...formData.landlords];
+                    updated[0] = { ...(updated[0] || { isPrimary: true }), contact: e.target.value, isPrimary: true };
+                    setFormData((p) => ({ ...p, landlords: updated }));
+                  }}
+                  className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                  placeholder="Phone/Email"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Auto-fills from selected landlord.
+                </p>
+              </div>
+
+              <div className="flex items-center">
+                <div className="text-xs text-slate-500 italic">Primary landlord</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <Modal
           open={openAddLandlordModal}
@@ -1748,10 +1811,17 @@ const EditProperty = () => {
             <h1 className="text-lg font-extrabold text-slate-900 tracking-tight">
               Edit Property
             </h1>
-            <p className="text-sm text-slate-600">{formData.propertyName || "Property Details"}</p>
+            <p className="text-sm text-slate-600">
+              {isSelfManagingLandlordMode
+                ? `${formData.propertyName || "Property Details"} · Self-managing landlord workspace`
+                : formData.propertyName || "Property Details"}
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
+            <span className="hidden sm:inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+              {operatingModeLabel}
+            </span>
             <button
               onClick={() => {
                 clearDraftState();

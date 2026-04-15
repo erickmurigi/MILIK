@@ -1,5 +1,6 @@
 // companiesRedux.js
 import { createSlice } from '@reduxjs/toolkit';
+import { normalizeCompanyCollection, normalizeCompanyEntity } from '../utils/companyModules';
 
 export const companySlice = createSlice({
   name: 'company',
@@ -19,7 +20,7 @@ export const companySlice = createSlice({
     },
     getCompaniesSuccess: (state, action) => {
       state.isFetching = false;
-      state.companies = Array.isArray(action.payload) ? action.payload : [];
+      state.companies = normalizeCompanyCollection(action.payload);
       state.error = false;
     },
     getCompaniesFailure: (state) => {
@@ -33,7 +34,7 @@ export const companySlice = createSlice({
     },
     getCompanySuccess: (state, action) => {
       state.isFetching = false;
-      state.currentCompany = action.payload || null;
+      state.currentCompany = normalizeCompanyEntity(action.payload) || null;
       state.error = false;
     },
     getCompanyFailure: (state) => {
@@ -41,7 +42,7 @@ export const companySlice = createSlice({
       state.error = true;
     },
     setCurrentCompany: (state, action) => {
-      state.currentCompany = action.payload || null;
+      state.currentCompany = normalizeCompanyEntity(action.payload) || null;
       state.error = false;
     },
     clearCurrentCompany: (state) => {
@@ -81,7 +82,7 @@ export const companySlice = createSlice({
       if (!Array.isArray(state.companies)) {
         state.companies = [];
       }
-      state.companies.push(action.payload);
+      state.companies.push(normalizeCompanyEntity(action.payload));
       state.error = false;
     },
     createCompanyFailure: (state) => {
@@ -98,10 +99,10 @@ export const companySlice = createSlice({
       const { id, company } = action.payload;
       const index = state.companies.findIndex((item) => item._id === id);
       if (index !== -1) {
-        state.companies[index] = { ...state.companies[index], ...company };
+        state.companies[index] = normalizeCompanyEntity({ ...state.companies[index], ...company });
       }
       if (state.currentCompany?._id === id) {
-        state.currentCompany = { ...state.currentCompany, ...company };
+        state.currentCompany = normalizeCompanyEntity({ ...state.currentCompany, ...company });
       }
       state.error = false;
     },

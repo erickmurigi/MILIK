@@ -9,6 +9,7 @@ import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getRentPayments, createTenantInvoice } from "../../redux/apiCalls";
 import { getTenantInvoices } from "../../redux/invoiceApi";
+import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -139,6 +140,7 @@ const TenantDeposits = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const isLandlordWorkspace = useMemo(() => isSelfManagingLandlordCompany(currentCompany || null), [currentCompany]);
   const tenants = useSelector((state) => ensureArray(state.tenant?.tenants));
   const units = useSelector((state) => ensureArray(state.unit?.units));
   const properties = useSelector((state) => ensureArray(state.property?.properties));
@@ -229,7 +231,7 @@ const TenantDeposits = () => {
           null;
         const matchedProperty = properties.find((property) => String(property?._id || "") === String(propertyId || "")) || null;
         const depositAmount = Number(tenant?.depositAmount ?? matchedUnit?.deposit ?? tenant?.unit?.deposit ?? 0);
-        const depositHolder = formatDepositHolderLabel(tenant?.depositHeldBy || matchedProperty?.depositHeldBy || "manager");
+        const depositHolder = formatDepositHolderLabel(tenant?.depositHeldBy || matchedProperty?.depositHeldBy || (isLandlordWorkspace ? "landlord" : "manager"));
         const invoices = (invoiceMapByTenant[tenantId] || []).filter((invoice) => {
           const status = String(invoice?.status || "").toLowerCase();
           return !["cancelled", "reversed"].includes(status);
@@ -289,7 +291,7 @@ const TenantDeposits = () => {
         return true;
       })
       .sort((a, b) => a.tenantName.localeCompare(b.tenantName));
-  }, [tenants, units, properties, invoiceMapByTenant, appliedByInvoice, recognizedDepositPaidByTenant, filters]);
+  }, [tenants, units, properties, invoiceMapByTenant, appliedByInvoice, recognizedDepositPaidByTenant, filters, isLandlordWorkspace]);
 
   const totals = useMemo(() => {
     return depositRows.reduce(
@@ -330,10 +332,10 @@ const TenantDeposits = () => {
     const unitId = row.unit?._id || row.tenant?.unit?._id || row.tenant?.unit || null;
     const propertyId = row.property?._id || row.tenant?.property?._id || row.tenant?.property || null;
     const amount = Number(billingForm.amount || 0);
-    const normalizedDepositHolder = normalizeDepositHolder(row?.tenant?.depositHeldBy || row?.depositHolder || row?.property?.depositHeldBy || "manager") || "manager";
+    const normalizedDepositHolder = normalizeDepositHolder(row?.tenant?.depositHeldBy || row?.depositHolder || row?.property?.depositHeldBy || (isLandlordWorkspace ? "landlord" : "manager")) || (isLandlordWorkspace ? "landlord" : "manager");
 
-    if (!propertyId || !unitId || !landlordId) {
-      toast.error("Tenant deposit context is incomplete. Check property, unit, and landlord linkage first.");
+    if (!propertyId || !unitId) {
+      toast.error("Tenant deposit context is incomplete. Check property and unit linkage first.");
       return;
     }
 
@@ -347,7 +349,7 @@ const TenantDeposits = () => {
       await createTenantInvoice({
         business: currentCompany._id,
         property: propertyId,
-        landlord: landlordId,
+        landlord: landlordId || undefined,
         tenant: row.tenantId,
         unit: unitId,
         category: "DEPOSIT_CHARGE",
@@ -392,8 +394,10 @@ const TenantDeposits = () => {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Tenants Deposits</h1>
-            <p className="text-sm text-slate-600 mt-1">
-              View, bill, and monitor tenant deposits using the existing invoice, receipt, and ledger foundation.
+            <p className="mt-1 text-sm text-slate-600">
+              {isLandlordWorkspace
+                ? "View, bill, and monitor tenant deposits for your own portfolio using the existing invoice, receipt, and ledger foundation."
+                : "View, bill, and monitor tenant deposits using the existing invoice, receipt, and ledger foundation."}
             </p>
           </div>
           <div className="flex gap-2">
@@ -463,8 +467,8 @@ const TenantDeposits = () => {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               >
                 <option value="all">All holders</option>
-                <option value="Management Company">Management Company</option>
-                <option value="Landlord">Landlord</option>
+                {!isLandlordWorkspace && <option value="Management Company">Management Company</option>}
+                <option value="Landlord">{isLandlordWorkspace ? "Owner / Landlord" : "Landlord"}</option>
               </select>
             </div>
             <div>
@@ -492,7 +496,7 @@ const TenantDeposits = () => {
                 <tr>
                   <th className="px-4 py-3 text-left font-semibold">Tenant</th>
                   <th className="px-4 py-3 text-left font-semibold">Property / Unit</th>
-                  <th className="px-4 py-3 text-left font-semibold">Holder</th>
+                  <th className="px-4 py-3 text-left font-semibold">{holderColumnLabel}</th>
                   <th className="px-4 py-3 text-left font-semibold">Deposit Invoice</th>
                   <th className="px-4 py-3 text-right font-semibold">Configured</th>
                   <th className="px-4 py-3 text-right font-semibold">Billed</th>
@@ -586,9 +590,9 @@ const TenantDeposits = () => {
 
             <div className="p-5 space-y-4">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-                <p className="font-semibold">Deposit holder: {billingModal.row.depositHolder}</p>
+                <p className="font-semibold">{isLandlordWorkspace ? "Owner-held deposit" : "Deposit holder"}: {billingModal.row.depositHolder}</p>
                 <p className="mt-1">Configured deposit: KES {Number(billingModal.row.depositAmount || 0).toLocaleString()}</p>
-                <p className="mt-1 text-xs">This creates a deposit invoice using the existing deposit accounting flow. Deposit invoices remain non-taxable.</p>
+                <p className="mt-1 text-xs">{isLandlordWorkspace ? "This creates an owner-held deposit invoice using the existing deposit accounting flow. Deposit invoices remain non-taxable." : "This creates a deposit invoice using the existing deposit accounting flow. Deposit invoices remain non-taxable."}</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

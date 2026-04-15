@@ -15,7 +15,7 @@ import {
   FaLock,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { hasCompanyModule } from "../../utils/companyModules";
+import { getCompanyOperatingModeLabel, hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import StartMenu from "../../components/StartMenu/StartMenu";
 import "./ModulesDashboard.css";
 
@@ -110,6 +110,8 @@ const ModulesDashboard = () => {
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
+  const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
+  const operatingModeLabel = getCompanyOperatingModeLabel(activeCompanyContext?.companyMode);
 
   useEffect(() => {
     const companyName = String(activeCompanyContext?.companyName || activeCompanyContext?.name || '').trim();
@@ -119,8 +121,19 @@ const ModulesDashboard = () => {
   }, [activeCompanyContext]);
   const visibleModules = useMemo(() => {
     if (!activeCompanyContext) return [];
-    return moduleRegistry.filter((moduleItem) => hasCompanyModule(activeCompanyContext, moduleItem.moduleKey));
-  }, [activeCompanyContext]);
+    return moduleRegistry
+      .map((moduleItem) => {
+        if (moduleItem.id !== "milik") return moduleItem;
+        return {
+          ...moduleItem,
+          subtitle: isLandlordMode ? "Self-managing landlord workspace" : moduleItem.subtitle,
+          description: isLandlordMode
+            ? "Launch a landlord-focused workspace for your own properties, tenants, receipts, expenses and reports."
+            : moduleItem.description,
+        };
+      })
+      .filter((moduleItem) => hasCompanyModule(activeCompanyContext, moduleItem.moduleKey));
+  }, [activeCompanyContext, isLandlordMode]);
 
   const handleOpen = (moduleItem) => {
     if (moduleItem.status === "active" && moduleItem.route) {
@@ -174,7 +187,7 @@ const ModulesDashboard = () => {
           <h1>Choose a Module</h1>
           <p>
             {activeCompanyContext?.companyName
-              ? `Only the modules enabled for ${activeCompanyContext.companyName} are shown here.`
+              ? `Only the modules enabled for ${activeCompanyContext.companyName} are shown here. Operating mode: ${operatingModeLabel}.`
               : "A cleaner, sharper control center for every Milik business line."}
           </p>
         </header>

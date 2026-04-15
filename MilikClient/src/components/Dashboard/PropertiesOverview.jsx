@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { adminRequests } from '../../utils/requestMethods';
+import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
 const PropertiesOverview = ({ darkMode }) => {
   const navigate = useNavigate();
@@ -19,6 +20,8 @@ const PropertiesOverview = ({ darkMode }) => {
     currentCompany?._id ||
     currentUser?.company?._id ||
     (typeof currentUser?.company === 'string' ? currentUser.company : '');
+  const activeCompanyContext = currentCompany || currentUser?.company || null;
+  const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
 
   useEffect(() => {
     let active = true;
@@ -207,24 +210,24 @@ const PropertiesOverview = ({ darkMode }) => {
       <div className="flex items-center justify-between mb-4 gap-3">
         <div>
           <h2 className={`text-sm font-extrabold uppercase tracking-tight ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>
-            Properties Overview
+            Portfolio Overview
           </h2>
           <p className={`mt-1 text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-600'}`}>
-            Invoice-aware property billing and collection snapshot.
+            Invoice-aware property billing and collection snapshot across your portfolio.
           </p>
         </div>
         <button
           type="button"
-          onClick={() => navigate('/properties', { state: { tabTitle: 'Properties' } })}
+          onClick={() => navigate('/properties', { state: { tabTitle: isLandlordMode ? 'My Properties' : 'Properties' } })}
           className="text-xs font-bold text-[#31694E] hover:text-[#E85C0D] transition-colors uppercase tracking-wide"
         >
-          View all →
+          View portfolio →
         </button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
-          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Portfolio occupancy</div>
+          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>{isLandlordMode ? 'Portfolio occupancy' : 'Portfolio occupancy'}</div>
           <div className={`mt-1 text-lg font-extrabold ${darkMode ? 'text-gray-900' : 'text-slate-900'}`}>{portfolioOccupancy.toFixed(1)}%</div>
         </div>
         <div className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
@@ -310,7 +313,7 @@ const PropertiesOverview = ({ darkMode }) => {
 
                 <div>
                   <div className="flex items-center justify-between gap-2 text-[11px] mb-1">
-                    <span className={`${darkMode ? 'text-gray-500' : 'text-gray-600'} font-bold`}>Expected collections</span>
+                    <span className={`${darkMode ? 'text-gray-500' : 'text-gray-600'} font-bold`}>Scheduled rent</span>
                     <div className="flex items-center gap-2 text-right">
                       <span className="font-extrabold text-[#1f4a35]">{formatMoney(property.bookedRentThisMonth)} / {formatMoney(property.expectedCollections)}</span>
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.14em] ${
