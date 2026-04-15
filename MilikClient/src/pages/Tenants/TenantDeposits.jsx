@@ -62,7 +62,6 @@ const normalizeDepositHolder = (value = "") => {
 const formatDepositHolderLabel = (value = "") =>
   normalizeDepositHolder(value) === "landlord" ? "Landlord" : "Management Company";
 
-
 const getTenantDisplayName = (tenant) =>
   tenant?.name ||
   tenant?.tenantName ||
@@ -109,7 +108,6 @@ const buildAppliedAmountsByInvoice = (payments = []) => {
   return appliedByInvoice;
 };
 
-
 const buildRecognizedDepositAmountsByTenant = (payments = []) => {
   const totals = new Map();
 
@@ -141,10 +139,15 @@ const TenantDeposits = () => {
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const isLandlordWorkspace = useMemo(() => isSelfManagingLandlordCompany(currentCompany || null), [currentCompany]);
+  const holderColumnLabel = isLandlordWorkspace ? "Owner / Landlord" : "Deposit Holder";
+
   const tenants = useSelector((state) => ensureArray(state.tenant?.tenants));
   const units = useSelector((state) => ensureArray(state.unit?.units));
   const properties = useSelector((state) => ensureArray(state.property?.properties));
-  const activeProperties = useMemo(() => properties.filter((property) => String(property?.status || "active").toLowerCase() !== "archived"), [properties]);
+  const activeProperties = useMemo(
+    () => properties.filter((property) => String(property?.status || "active").toLowerCase() !== "archived"),
+    [properties]
+  );
   const rentPayments = useSelector((state) => ensureArray(state.rentPayment?.rentPayments));
 
   const [tenantInvoices, setTenantInvoices] = useState([]);
@@ -213,7 +216,10 @@ const TenantDeposits = () => {
   }, [tenantInvoices]);
 
   const appliedByInvoice = useMemo(() => buildAppliedAmountsByInvoice(rentPayments), [rentPayments]);
-  const recognizedDepositPaidByTenant = useMemo(() => buildRecognizedDepositAmountsByTenant(rentPayments), [rentPayments]);
+  const recognizedDepositPaidByTenant = useMemo(
+    () => buildRecognizedDepositAmountsByTenant(rentPayments),
+    [rentPayments]
+  );
 
   const depositRows = useMemo(() => {
     return tenants
@@ -229,15 +235,23 @@ const TenantDeposits = () => {
           tenant?.unit?.property?._id ||
           tenant?.unit?.property ||
           null;
-        const matchedProperty = properties.find((property) => String(property?._id || "") === String(propertyId || "")) || null;
+        const matchedProperty =
+          properties.find((property) => String(property?._id || "") === String(propertyId || "")) || null;
         const depositAmount = Number(tenant?.depositAmount ?? matchedUnit?.deposit ?? tenant?.unit?.deposit ?? 0);
-        const depositHolder = formatDepositHolderLabel(tenant?.depositHeldBy || matchedProperty?.depositHeldBy || (isLandlordWorkspace ? "landlord" : "manager"));
+        const depositHolder = formatDepositHolderLabel(
+          tenant?.depositHeldBy || matchedProperty?.depositHeldBy || (isLandlordWorkspace ? "landlord" : "manager")
+        );
         const invoices = (invoiceMapByTenant[tenantId] || []).filter((invoice) => {
           const status = String(invoice?.status || "").toLowerCase();
           return !["cancelled", "reversed"].includes(status);
         });
 
-        const latestInvoice = [...invoices].sort((a, b) => new Date(b?.invoiceDate || b?.createdAt || 0).getTime() - new Date(a?.invoiceDate || a?.createdAt || 0).getTime())[0] || null;
+        const latestInvoice =
+          [...invoices].sort(
+            (a, b) =>
+              new Date(b?.invoiceDate || b?.createdAt || 0).getTime() -
+              new Date(a?.invoiceDate || a?.createdAt || 0).getTime()
+          )[0] || null;
 
         const billed = invoices.reduce(
           (sum, invoice) => sum + Number(invoice?.adjustedAmount ?? invoice?.amount ?? 0),
@@ -281,8 +295,10 @@ const TenantDeposits = () => {
       })
       .filter((row) => {
         if (filters.propertyId !== "all" && row.propertyId !== String(filters.propertyId)) return false;
-        if (filters.holder !== "all" && String(row.depositHolder).toLowerCase() !== String(filters.holder).toLowerCase()) return false;
-        if (filters.status !== "all" && String(row.status).toLowerCase() !== String(filters.status).toLowerCase()) return false;
+        if (filters.holder !== "all" && String(row.depositHolder).toLowerCase() !== String(filters.holder).toLowerCase())
+          return false;
+        if (filters.status !== "all" && String(row.status).toLowerCase() !== String(filters.status).toLowerCase())
+          return false;
         if (filters.search) {
           const search = filters.search.toLowerCase();
           const haystack = `${row.tenantName} ${row.propertyName} ${row.unitName}`.toLowerCase();
@@ -291,7 +307,16 @@ const TenantDeposits = () => {
         return true;
       })
       .sort((a, b) => a.tenantName.localeCompare(b.tenantName));
-  }, [tenants, units, properties, invoiceMapByTenant, appliedByInvoice, recognizedDepositPaidByTenant, filters, isLandlordWorkspace]);
+  }, [
+    tenants,
+    units,
+    properties,
+    invoiceMapByTenant,
+    appliedByInvoice,
+    recognizedDepositPaidByTenant,
+    filters,
+    isLandlordWorkspace,
+  ]);
 
   const totals = useMemo(() => {
     return depositRows.reduce(
@@ -332,7 +357,13 @@ const TenantDeposits = () => {
     const unitId = row.unit?._id || row.tenant?.unit?._id || row.tenant?.unit || null;
     const propertyId = row.property?._id || row.tenant?.property?._id || row.tenant?.property || null;
     const amount = Number(billingForm.amount || 0);
-    const normalizedDepositHolder = normalizeDepositHolder(row?.tenant?.depositHeldBy || row?.depositHolder || row?.property?.depositHeldBy || (isLandlordWorkspace ? "landlord" : "manager")) || (isLandlordWorkspace ? "landlord" : "manager");
+    const normalizedDepositHolder =
+      normalizeDepositHolder(
+        row?.tenant?.depositHeldBy ||
+          row?.depositHolder ||
+          row?.property?.depositHeldBy ||
+          (isLandlordWorkspace ? "landlord" : "manager")
+      ) || (isLandlordWorkspace ? "landlord" : "manager");
 
     if (!propertyId || !unitId) {
       toast.error("Tenant deposit context is incomplete. Check property and unit linkage first.");
@@ -386,7 +417,7 @@ const TenantDeposits = () => {
     } finally {
       setIsSaving(false);
     }
-   };
+  };
 
   return (
     <DashboardLayout>
@@ -528,12 +559,18 @@ const TenantDeposits = () => {
                       <td className="px-4 py-3">
                         <div className="font-semibold text-slate-900">{row.latestInvoiceNumber}</div>
                         <div className="text-xs text-slate-500">{row.latestInvoiceDescription}</div>
-                        <div className="text-[11px] text-slate-400">{row.latestInvoiceDate ? new Date(row.latestInvoiceDate).toLocaleDateString() : "Not billed yet"}</div>
+                        <div className="text-[11px] text-slate-400">
+                          {row.latestInvoiceDate ? new Date(row.latestInvoiceDate).toLocaleDateString() : "Not billed yet"}
+                        </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-slate-900">KES {row.depositAmount.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                        KES {row.depositAmount.toLocaleString()}
+                      </td>
                       <td className="px-4 py-3 text-right text-slate-700">KES {row.billed.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right text-slate-700">KES {row.paid.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-slate-900">KES {row.outstanding.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                        KES {row.outstanding.toLocaleString()}
+                      </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                           {row.status}
@@ -577,7 +614,9 @@ const TenantDeposits = () => {
             <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Bill Tenant Deposit</h3>
-                <p className="text-xs text-slate-600 mt-1">{billingModal.row.tenantName} • {billingModal.row.propertyName} • {billingModal.row.unitName}</p>
+                <p className="text-xs text-slate-600 mt-1">
+                  {billingModal.row.tenantName} • {billingModal.row.propertyName} • {billingModal.row.unitName}
+                </p>
               </div>
               <button
                 type="button"
@@ -590,9 +629,17 @@ const TenantDeposits = () => {
 
             <div className="p-5 space-y-4">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-                <p className="font-semibold">{isLandlordWorkspace ? "Owner-held deposit" : "Deposit holder"}: {billingModal.row.depositHolder}</p>
-                <p className="mt-1">Configured deposit: KES {Number(billingModal.row.depositAmount || 0).toLocaleString()}</p>
-                <p className="mt-1 text-xs">{isLandlordWorkspace ? "This creates an owner-held deposit invoice using the existing deposit accounting flow. Deposit invoices remain non-taxable." : "This creates a deposit invoice using the existing deposit accounting flow. Deposit invoices remain non-taxable."}</p>
+                <p className="font-semibold">
+                  {isLandlordWorkspace ? "Owner-held deposit" : "Deposit holder"}: {billingModal.row.depositHolder}
+                </p>
+                <p className="mt-1">
+                  Configured deposit: KES {Number(billingModal.row.depositAmount || 0).toLocaleString()}
+                </p>
+                <p className="mt-1 text-xs">
+                  {isLandlordWorkspace
+                    ? "This creates an owner-held deposit invoice using the existing deposit accounting flow. Deposit invoices remain non-taxable."
+                    : "This creates a deposit invoice using the existing deposit accounting flow. Deposit invoices remain non-taxable."}
+                </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
