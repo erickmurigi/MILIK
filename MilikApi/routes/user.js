@@ -3,9 +3,10 @@ import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Company from '../models/Company.js';
 import { verifyUser } from '../controllers/verifyToken.js';
-import { serializeCompanyForClient } from '../utils/companyModules.js';
+import { normalizeCompanyModules, serializeCompanyForClient } from '../utils/companyModules.js';
 import { buildTemporaryPassword, normalizeBoolean } from '../utils/onboardingAccess.js';
 import { sendUserOnboardingEmail } from '../utils/onboardingMailer.js';
+import { sanitizePermissionMap } from '../utils/accessMatrix.js';
 
 const router = express.Router();
 
@@ -28,28 +29,85 @@ const canAccessCompany = (user = {}, companyId) => {
   return userAccessibleCompanyIds(user).includes(String(companyId));
 };
 
-const sanitizeAssignments = (assignments = [], fallbackModuleAccess = {}, fallbackPermissions = {}) => {
-  const seen = new Set();
-  return (Array.isArray(assignments) ? assignments : [])
-    .filter((item) => item?.company)
-    .map((item) => ({
-      company: String(item.company),
-      moduleAccess: item?.moduleAccess && typeof item.moduleAccess === 'object' ? item.moduleAccess : { ...fallbackModuleAccess },
-      permissions: item?.permissions && typeof item.permissions === 'object' ? item.permissions : { ...fallbackPermissions },
-      rights: Array.isArray(item?.rights) ? item.rights.map(String) : [],
-    }))
-    .filter((item) => {
-      if (seen.has(item.company)) return false;
-      seen.add(item.company);
-      return true;
-    });
-};
-
 const buildCompanyIds = (payload = {}) => {
   const primary = String(payload.primaryCompany || payload.company || '');
   const accessible = Array.isArray(payload.accessibleCompanies) ? payload.accessibleCompanies.map(String) : [];
   const fromAssignments = Array.isArray(payload.companyAssignments) ? payload.companyAssignments.map((a) => String(a?.company || '')).filter(Boolean) : [];
   return [...new Set([primary, ...accessible, ...fromAssignments].filter(Boolean))];
+};
+
+const enabledModuleAccessDefaults = (company = {}) => {
+  const modules = normalizeCompanyModules(company?.modules || {});
+  const keyMap = {
+    propertyManagement: 'propertyMgmt',
+    propertySale: 'propertySale',
+    facilityManagement: 'facilityManagement',
+    hotelManagement: 'hotelManagement',
+    accounts: 'accounts',
+    revenueRecognition: 'revenueRecognition',
+    telcoDealership: 'telcoDealership',
+    inventory: 'inventory',
+    procurement: 'procurement',
+    hr: 'humanResource',
+    incidentManagement: 'incidentManagement',
+    sacco: 'sacco',
+    projectManagement: 'projectManagement',
+    assetValuation: 'assetValuation',
+    crm: 'crm',
+    dms: 'dms',
+    academics: 'academics',
+    pos: 'inventory',
+  };
+
+  return Object.entries(modules).reduce((acc, [moduleKey, enabled]) => {
+    if (!enabled) return acc;
+    const accessKey = keyMap[moduleKey] || moduleKey;
+    if (accessKey === 'retailOutlet') return acc;
+    acc[accessKey] = 'View only';
+    return acc;
+  }, {});
+};
+
+const sanitizeModuleAccess = (company = {}, rawAccess = {}) => {
+  const defaults = enabledModuleAccessDefaults(company);
+  const allowedValues = new Set(['Not allowed', 'View only', 'Full access']);
+  const next = { ...defaults };
+
+  Object.keys(defaults).forEach((key) => {
+    const candidate = rawAccess?.[key];
+    if (allowedValues.has(candidate)) {
+      next[key] = candidate;
+    }
+  });
+
+  if (rawAccess?.hidePayDetails !== undefined) {
+    next.hidePayDetails = Boolean(rawAccess.hidePayDetails);
+  }
+
+  return next;
+};
+
+const sanitizeAssignments = (assignments = [], companyDocs = [], fallbackModuleAccess = {}, fallbackPermissions = {}) => {
+  const companyMap = new Map(companyDocs.map((company) => [String(company._id), company]));
+  const seen = new Set();
+
+  return (Array.isArray(assignments) ? assignments : [])
+    .filter((item) => item?.company && companyMap.has(String(item.company)))
+    .map((item) => {
+      const companyId = String(item.company);
+      const company = companyMap.get(companyId);
+      return {
+        company: companyId,
+        moduleAccess: sanitizeModuleAccess(company, item?.moduleAccess && typeof item.moduleAccess === 'object' ? item.moduleAccess : fallbackModuleAccess),
+        permissions: sanitizePermissionMap(item?.permissions && typeof item.permissions === 'object' ? item.permissions : fallbackPermissions),
+        rights: Array.isArray(item?.rights) ? item.rights.map(String) : [],
+      };
+    })
+    .filter((item) => {
+      if (seen.has(item.company)) return false;
+      seen.add(item.company);
+      return true;
+    });
 };
 
 const serializeUser = async (userDoc) => {
@@ -70,6 +128,7 @@ const serializeUser = async (userDoc) => {
   plain.companyAssignments = (Array.isArray(plain.companyAssignments) ? plain.companyAssignments : []).map((item) => ({
     ...item,
     company: map.get(String(item?.company?._id || item?.company || '')) || null,
+    permissions: sanitizePermissionMap(item?.permissions || {}),
   }));
 
   delete plain.password;
@@ -78,9 +137,39 @@ const serializeUser = async (userDoc) => {
   return plain;
 };
 
+const buildAccessSummary = (user = {}) => {
+  const assignments = Array.isArray(user?.companyAssignments) ? user.companyAssignments : [];
+  const enabledModules = new Set();
+  const grantedPermissions = [];
+
+  assignments.forEach((assignment) => {
+    Object.entries(assignment?.moduleAccess || {}).forEach(([key, value]) => {
+      if (value === 'View only' || value === 'Full access') enabledModules.add(key);
+    });
+    const permissions = sanitizePermissionMap(assignment?.permissions || {});
+    Object.entries(permissions).forEach(([resource, actions]) => {
+      Object.entries(actions || {}).forEach(([action, allowed]) => {
+        if (allowed) grantedPermissions.push(`${resource}.${action}`);
+      });
+    });
+  });
+
+  return {
+    assignedCompanies: buildCompanyIds(user).length,
+    enabledModules: [...enabledModules],
+    permissionCount: grantedPermissions.length,
+  };
+};
+
+const ensureSharedCompanyAccess = async (requestUser, targetUser) => {
+  if (isSystemAdmin(requestUser)) return true;
+  const authUser = await User.findById(requestUser.id).select('company primaryCompany accessibleCompanies companyAssignments');
+  return buildCompanyIds(targetUser.toObject ? targetUser.toObject() : targetUser).some((id) => canAccessCompany(authUser, id));
+};
+
 router.get('/', verifyUser, async (req, res) => {
   try {
-    const { companyId, page = 1, limit = 10, search } = req.query;
+    const { companyId, page = 1, limit = 10, search, status = 'all', moduleKey = '' } = req.query;
     const safePage = Math.max(Number(page) || 1, 1);
     const safeLimit = Math.max(Number(limit) || 10, 1);
 
@@ -107,18 +196,33 @@ router.get('/', verifyUser, async (req, res) => {
         }
       : { isSystemAuditUser: { $ne: true } };
 
+    const andFilters = [];
+
     if (search) {
-      query.$and = [
-        {
-          $or: [
-            { surname: { $regex: search, $options: 'i' } },
-            { otherNames: { $regex: search, $options: 'i' } },
-            { email: { $regex: search, $options: 'i' } },
-            { phoneNumber: { $regex: search, $options: 'i' } },
-          ],
-        },
-      ];
+      andFilters.push({
+        $or: [
+          { surname: { $regex: search, $options: 'i' } },
+          { otherNames: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+          { phoneNumber: { $regex: search, $options: 'i' } },
+        ],
+      });
     }
+
+    const normalizedStatus = String(status || 'all').toLowerCase();
+    if (normalizedStatus === 'active') {
+      andFilters.push({ locked: { $ne: true }, isActive: { $ne: false } });
+    } else if (normalizedStatus === 'locked') {
+      andFilters.push({ locked: true });
+    } else if (normalizedStatus === 'inactive') {
+      andFilters.push({ isActive: false });
+    }
+
+    if (moduleKey) {
+      andFilters.push({ [`companyAssignments.moduleAccess.${moduleKey}`]: { $in: ['View only', 'Full access'] } });
+    }
+
+    if (andFilters.length) query.$and = andFilters;
 
     const users = await User.find(query)
       .limit(safeLimit)
@@ -126,7 +230,10 @@ router.get('/', verifyUser, async (req, res) => {
       .sort({ createdAt: -1 });
 
     const total = await User.countDocuments(query);
-    const serializedUsers = await Promise.all(users.map(serializeUser));
+    const serializedUsers = await Promise.all(users.map(async (user) => {
+      const serialized = await serializeUser(user);
+      return { ...serialized, accessSummary: buildAccessSummary(serialized) };
+    }));
 
     res.json({ users: serializedUsers, totalPages: Math.ceil(total / safeLimit), currentPage: safePage, total });
   } catch (error) {
@@ -139,13 +246,11 @@ router.get('/:id', verifyUser, async (req, res) => {
     const user = await User.findById(req.params.id);
     if (!user || user.isSystemAuditUser) return res.status(404).json({ message: 'User not found' });
 
-    if (!isSystemAdmin(req.user)) {
-      const authUser = await User.findById(req.user.id).select('company primaryCompany accessibleCompanies companyAssignments');
-      const shared = buildCompanyIds(user.toObject()).some((id) => canAccessCompany(authUser, id));
-      if (!shared) return res.status(403).json({ message: 'You do not have access to this user' });
-    }
+    const shared = await ensureSharedCompanyAccess(req.user, user);
+    if (!shared) return res.status(403).json({ message: 'You do not have access to this user' });
 
-    res.json(await serializeUser(user));
+    const serialized = await serializeUser(user);
+    res.json({ ...serialized, accessSummary: buildAccessSummary(serialized) });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -195,6 +300,7 @@ router.post('/', verifyUser, async (req, res) => {
 
     const mustChangePassword = normalizeBoolean(req.body.mustChangePassword, autoGeneratePassword);
     const shouldSendOnboardingEmail = normalizeBoolean(req.body.sendOnboardingEmail, autoGeneratePassword);
+    const companyAssignments = sanitizeAssignments(req.body.companyAssignments, companies, req.body.moduleAccess || {}, req.body.permissions || {});
 
     const payload = {
       ...req.body,
@@ -203,7 +309,7 @@ router.post('/', verifyUser, async (req, res) => {
       company: primaryCompany,
       primaryCompany,
       accessibleCompanies: companyIds,
-      companyAssignments: sanitizeAssignments(req.body.companyAssignments, req.body.moduleAccess || {}, req.body.permissions || {}),
+      companyAssignments,
       mustChangePassword,
       passwordProvisioningMethod: autoGeneratePassword ? 'emailed_temp_password' : 'manual',
       lastPasswordChangeAt: autoGeneratePassword ? null : new Date(),
@@ -238,7 +344,7 @@ router.post('/', verifyUser, async (req, res) => {
     const serialized = await serializeUser(user);
     res.status(201).json({
       success: true,
-      user: serialized,
+      user: { ...serialized, accessSummary: buildAccessSummary(serialized) },
       onboardingEmail,
       generatedAccess: autoGeneratePassword
         ? {
@@ -258,11 +364,12 @@ router.put('/:id', verifyUser, async (req, res) => {
     const existingUser = await User.findById(req.params.id);
     if (!existingUser) return res.status(404).json({ message: 'User not found' });
 
+    const shared = await ensureSharedCompanyAccess(req.user, existingUser);
+    if (!shared) return res.status(403).json({ message: 'You do not have access to this user' });
+
     let authUser = req.user;
     if (!isSystemAdmin(req.user)) {
       authUser = await User.findById(req.user.id).select('company primaryCompany accessibleCompanies companyAssignments');
-      const shared = buildCompanyIds(existingUser.toObject()).some((id) => canAccessCompany(authUser, id));
-      if (!shared) return res.status(403).json({ message: 'You do not have access to this user' });
     }
 
     const updatePayload = { ...req.body };
@@ -283,13 +390,24 @@ router.put('/:id', verifyUser, async (req, res) => {
       }
     }
 
+    const companies = await Company.find({ _id: { $in: companyIds } }).select('_id companyName modules');
+    if (companies.length !== companyIds.length) {
+      return res.status(400).json({ message: 'One or more selected companies were not found' });
+    }
+
     updatePayload.company = primaryCompany;
     updatePayload.primaryCompany = primaryCompany;
     updatePayload.accessibleCompanies = companyIds;
-    updatePayload.companyAssignments = sanitizeAssignments(updatePayload.companyAssignments || existingUser.companyAssignments, updatePayload.moduleAccess || existingUser.moduleAccess || {}, updatePayload.permissions || existingUser.permissions || {});
+    updatePayload.companyAssignments = sanitizeAssignments(
+      updatePayload.companyAssignments || existingUser.companyAssignments,
+      companies,
+      updatePayload.moduleAccess || existingUser.moduleAccess || {},
+      updatePayload.permissions || existingUser.permissions || {}
+    );
 
     const user = await User.findByIdAndUpdate(req.params.id, updatePayload, { new: true, runValidators: true });
-    res.json(await serializeUser(user));
+    const serialized = await serializeUser(user);
+    res.json({ ...serialized, accessSummary: buildAccessSummary(serialized) });
   } catch (error) {
     if (error.code === 11000) return res.status(400).json({ message: 'Duplicate field value' });
     res.status(400).json({ message: error.message });
@@ -300,12 +418,15 @@ router.delete('/:id', verifyUser, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user || user.isSystemAuditUser) return res.status(404).json({ message: 'User not found' });
-
-    if (!isSystemAdmin(req.user)) {
-      const authUser = await User.findById(req.user.id).select('company primaryCompany accessibleCompanies companyAssignments');
-      const shared = buildCompanyIds(user.toObject()).some((id) => canAccessCompany(authUser, id));
-      if (!shared) return res.status(403).json({ message: 'You do not have access to this user' });
+    if (String(user._id) === String(req.user?.id)) {
+      return res.status(400).json({ message: 'You cannot delete your own account.' });
     }
+    if (user.superAdminAccess || user.isSystemAdmin) {
+      return res.status(403).json({ message: 'System admin users cannot be deleted from here.' });
+    }
+
+    const shared = await ensureSharedCompanyAccess(req.user, user);
+    if (!shared) return res.status(403).json({ message: 'You do not have access to this user' });
 
     await User.findByIdAndDelete(req.params.id);
     res.json({ message: 'User deleted successfully' });
@@ -318,12 +439,15 @@ router.patch('/:id/toggle-lock', verifyUser, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user || user.isSystemAuditUser) return res.status(404).json({ message: 'User not found' });
-
-    if (!isSystemAdmin(req.user)) {
-      const authUser = await User.findById(req.user.id).select('company primaryCompany accessibleCompanies companyAssignments');
-      const shared = buildCompanyIds(user.toObject()).some((id) => canAccessCompany(authUser, id));
-      if (!shared) return res.status(403).json({ message: 'You do not have access to this user' });
+    if (String(user._id) === String(req.user?.id)) {
+      return res.status(400).json({ message: 'You cannot lock or unlock your own account.' });
     }
+    if (user.superAdminAccess || user.isSystemAdmin) {
+      return res.status(403).json({ message: 'System admin users cannot be locked from here.' });
+    }
+
+    const shared = await ensureSharedCompanyAccess(req.user, user);
+    if (!shared) return res.status(403).json({ message: 'You do not have access to this user' });
 
     user.locked = !user.locked;
     await user.save();

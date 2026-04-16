@@ -27,6 +27,72 @@ import {
   getWorkspaceLabel,
 } from "../../utils/workspaceRoutes";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { hasCompanyPermission } from "../../utils/permissions";
+
+const MENU_PERMISSION_MAP = {
+  "properties-list": { resource: "properties", action: "view", moduleKey: "propertyManagement" },
+  "add-property": { resource: "properties", action: "create", moduleKey: "propertyManagement" },
+  "property-commission-settings": { resource: "properties", action: "update", moduleKey: "propertyManagement" },
+  "commissions-list": { resource: "properties", action: "view", moduleKey: "propertyManagement" },
+  availability: { resource: "units", action: "view", moduleKey: "propertyManagement" },
+  "units-spaces": { resource: "units", action: "view", moduleKey: "propertyManagement" },
+  "units-list": { resource: "units", action: "view", moduleKey: "propertyManagement" },
+  "add-unit": { resource: "units", action: "create", moduleKey: "propertyManagement" },
+  "space-types": { resource: "units", action: "view", moduleKey: "propertyManagement" },
+  "tenants-list": { resource: "tenants", action: "view", moduleKey: "propertyManagement" },
+  "add-tenant": { resource: "tenants", action: "create", moduleKey: "propertyManagement" },
+  "tenant-deposits": { resource: "tenants", action: "view", moduleKey: "propertyManagement" },
+  "tenant-take-on-balances": { resource: "tenants", action: "view", moduleKey: "propertyManagement" },
+  "rental-invoices-list": { resource: "tenantInvoices", action: "view", moduleKey: "propertyManagement" },
+  "new-invoice": { resource: "tenantInvoices", action: "create", moduleKey: "propertyManagement" },
+  "credit-debit-notes": { resource: "tenantInvoices", action: "update", moduleKey: "propertyManagement" },
+  "late-penalties": { resource: "latePenalties", action: "view", moduleKey: "propertyManagement" },
+  "rental-receipts": { resource: "receipts", action: "view", moduleKey: "propertyManagement" },
+  "mpesa-import": { resource: "receipts", action: "create", moduleKey: "propertyManagement" },
+  "tenant-prepayments": { resource: "receipts", action: "view", moduleKey: "propertyManagement" },
+  "instant-receipts": { resource: "receipts", action: "create", moduleKey: "propertyManagement" },
+  "landlord-receipt": { resource: "receipts", action: "view", moduleKey: "propertyManagement" },
+  "payment-vouchers": { resource: "paymentVouchers", action: "view", moduleKey: "accounts" },
+  expenses: { resource: "expenses", action: "view", moduleKey: "accounts" },
+  "service-providers": { resource: "expenses", action: "view", moduleKey: "accounts" },
+  "landlord-payments": { resource: "landlordPayments", action: "view", moduleKey: "accounts" },
+  "chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: "accounts" },
+  journals: { resource: "journals", action: "view", moduleKey: "accounts" },
+  "landlord-statements": { resource: "statements", action: "view", moduleKey: "propertyManagement" },
+  "processed-statements": { resource: "processedStatements", action: "view", moduleKey: "accounts" },
+  "rental-collection": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "paid-balance": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "aged-analysis": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "commission-reports": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "trial-balance": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "income-statement": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "balance-sheet": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "tax-reports": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  settings: { resource: "companySettings", action: "view" },
+  "meter-readings": { resource: "meterReadings", action: "view", moduleKey: "propertyManagement" },
+  maintenance: { resource: "maintenances", action: "view", moduleKey: "propertyManagement" },
+  inspections: { resource: "inspections", action: "view", moduleKey: "propertyManagement" },
+};
+
+const filterMenuByPermissions = (items = [], currentUser = {}, activeCompany = null) =>
+  items
+    .map((item) => {
+      if (!Array.isArray(item?.submenu)) return item;
+      const submenu = item.submenu.filter((entry) => {
+        if (!entry || entry.type === "separator" || !entry.id) return true;
+        const rule = MENU_PERMISSION_MAP[entry.id];
+        if (!rule) return true;
+        return hasCompanyPermission(currentUser, activeCompany, rule.resource, rule.action, rule.moduleKey);
+      });
+      const cleaned = submenu.filter((entry, index) => {
+        if (entry?.type !== "separator") return true;
+        const prev = submenu[index - 1];
+        const next = submenu[index + 1];
+        return prev && prev.type !== "separator" && next && next.type !== "separator";
+      });
+      return cleaned.length ? { ...item, submenu: cleaned } : null;
+    })
+    .filter(Boolean);
 
 const DashboardLayout = ({ children, lockContentScroll = false }) => {
   const [darkMode, setDarkMode] = useState(false);
@@ -38,7 +104,10 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
   const currentWorkspace = useMemo(() => getWorkspaceFromRoute(location.pathname), [location.pathname]);
   const workspaceLabel = useMemo(() => getWorkspaceLabel(currentWorkspace), [currentWorkspace]);
   const activeCompanyContext = currentCompany || currentUser?.company || null;
-  const isLandlordMode = useMemo(() => isSelfManagingLandlordCompany(activeCompanyContext), [activeCompanyContext]);
+  const isLandlordMode = useMemo(
+    () => isSelfManagingLandlordCompany(activeCompanyContext),
+    [activeCompanyContext]
+  );
 
   const demoBanner = useMemo(() => {
     if (!currentUser?.isDemoUser) return null;
@@ -100,6 +169,8 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
           currentWorkspace={currentWorkspace}
           workspaceLabel={workspaceLabel}
           isLandlordMode={isLandlordMode}
+          currentUser={currentUser}
+          activeCompanyContext={activeCompanyContext}
         />
       </div>
 
@@ -210,6 +281,8 @@ const TopToolbar = ({
   currentWorkspace,
   workspaceLabel,
   isLandlordMode,
+  currentUser,
+  activeCompanyContext,
 }) => {
   const [activeMenu, setActiveMenu] = useState(null);
   const [hoveredFinancialItem, setHoveredFinancialItem] = useState(null);
@@ -242,13 +315,12 @@ const TopToolbar = ({
   const routeConfig = useMemo(() => {
     if (isSystemAdminWorkspace) {
       return {
+        overview: "/system-setup/overview",
         "new-company": "/add-company",
         "new-user": "/add-user",
         companies: "/system-setup/companies",
         users: "/system-setup/users",
-        rights: "/system-setup/rights",
-        database: "/system-setup/database",
-        sessions: "/system-setup/sessions",
+        trials: "/system-setup/trials",
         audit: "/system-setup/audit",
         "company-setup-workspace": "/company-setup",
         "property-workspace": "/dashboard",
@@ -258,7 +330,7 @@ const TopToolbar = ({
     if (isCompanySetupWorkspace) {
       return {
         "company-setup-home": "/company-setup",
-        "system-admin-workspace": "/system-setup/companies",
+        "system-admin-workspace": "/system-setup/overview",
         "property-workspace": "/dashboard",
         settings: "/settings",
       };
@@ -330,22 +402,20 @@ const TopToolbar = ({
       support: "/help/support",
       about: "/help/about",
     };
-  }, [isCompanySetupWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
 
   const mainMenuItems = useMemo(() => {
     if (isSystemAdminWorkspace) {
       return [
         {
-          id: "management",
-          label: "Management",
+          id: "control-centre",
+          label: "Control Centre",
           icon: FaCog,
           submenu: [
-            { id: "companies", label: "Companies", icon: FaHome },
-            { id: "users", label: "Users", icon: FaUsers },
-            { id: "rights", label: "System Rights", icon: FaKey },
-            { type: "separator" },
-            { id: "database", label: "Database", icon: FaDatabase },
-            { id: "sessions", label: "Sessions", icon: FaCalendarAlt },
+            { id: "overview", label: "Overview", icon: FaChartBar },
+            { id: "companies", label: "Companies", icon: FaBuilding },
+            { id: "users", label: "Users & Access", icon: FaUsers },
+            { id: "trials", label: "Trials & Demo", icon: FaDatabase },
             { id: "audit", label: "Audit Log", icon: FaClipboard },
           ],
         },
@@ -386,7 +456,7 @@ const TopToolbar = ({
 
     const landlordModeHiddenMainMenuIds = isLandlordMode ? new Set(["landlord"]) : new Set();
 
-    return [
+    const items = [
       {
         id: "landlord",
         label: "Landlords",
@@ -492,63 +562,67 @@ const TopToolbar = ({
           { id: "about", label: "About", icon: FaInfoCircle },
         ],
       },
-    ].filter((item) => !landlordModeHiddenMainMenuIds.has(item.id)).map((item) => {
-      if (!isLandlordMode) return item;
+    ]
+      .filter((item) => !landlordModeHiddenMainMenuIds.has(item.id))
+      .map((item) => {
+        if (!isLandlordMode) return item;
 
-      if (item.id === "properties") {
-        return {
-          ...item,
-          label: "My Properties",
-          submenu: item.submenu
-            .filter((subItem) => !["property-commission-settings", "commissions-list"].includes(subItem.id))
-            .map((subItem) => {
-              if (subItem.id === "properties-list") return { ...subItem, label: "My Properties" };
-              if (subItem.id === "add-property") return { ...subItem, label: "Add Property" };
-              if (subItem.id === "units-spaces") return { ...subItem, label: "Units / Spaces" };
-              if (subItem.id === "availability") return { ...subItem, label: "Occupancy & Availability" };
-              return subItem;
-            }),
-        };
-      }
+        if (item.id === "properties") {
+          return {
+            ...item,
+            label: "My Properties",
+            submenu: item.submenu
+              .filter((subItem) => !["property-commission-settings", "commissions-list"].includes(subItem.id))
+              .map((subItem) => {
+                if (subItem.id === "properties-list") return { ...subItem, label: "My Properties" };
+                if (subItem.id === "add-property") return { ...subItem, label: "Add Property" };
+                if (subItem.id === "units-spaces") return { ...subItem, label: "Units / Spaces" };
+                if (subItem.id === "availability") return { ...subItem, label: "Occupancy & Availability" };
+                return subItem;
+              }),
+          };
+        }
 
-      if (item.id === "financial") {
-        return {
-          ...item,
-          label: "Finance",
-          submenu: item.submenu
-            .filter((subItem) => subItem.id !== "landlord-payments")
-            .map((subItem) => {
-              if (subItem.id === "payment-vouchers") return { ...subItem, label: "Outgoing Payments" };
-              if (subItem.id === "expenses") return { ...subItem, label: "Expenses & Suppliers" };
-              return subItem;
-            }),
-        };
-      }
+        if (item.id === "financial") {
+          return {
+            ...item,
+            label: "Finance",
+            submenu: item.submenu
+              .filter((subItem) => subItem.id !== "landlord-payments")
+              .map((subItem) => {
+                if (subItem.id === "payment-vouchers") return { ...subItem, label: "Outgoing Payments" };
+                if (subItem.id === "expenses") return { ...subItem, label: "Expenses & Suppliers" };
+                return subItem;
+              }),
+          };
+        }
 
-      if (item.id === "reports") {
-        return {
-          ...item,
-          label: "Portfolio Reports",
-          submenu: item.submenu
-            .filter((subItem) => subItem.id !== "commission-reports")
-            .map((subItem) => {
-              if (subItem.id === "paid-balance") return { ...subItem, label: "Collections & Balances" };
-              if (subItem.id === "aged-analysis") return { ...subItem, label: "Arrears Analysis" };
-              return subItem;
-            }),
-        };
-      }
+        if (item.id === "reports") {
+          return {
+            ...item,
+            label: "Portfolio Reports",
+            submenu: item.submenu
+              .filter((subItem) => subItem.id !== "commission-reports")
+              .map((subItem) => {
+                if (subItem.id === "paid-balance") return { ...subItem, label: "Collections & Balances" };
+                if (subItem.id === "aged-analysis") return { ...subItem, label: "Arrears Analysis" };
+                return subItem;
+              }),
+          };
+        }
 
-      if (item.id === "tools") {
-        return {
-          ...item,
-          label: "Operations",
-        };
-      }
+        if (item.id === "tools") {
+          return {
+            ...item,
+            label: "Operations",
+          };
+        }
 
-      return item;
-    });
-  }, [isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
+        return item;
+      });
+
+    return filterMenuByPermissions(items, currentUser, activeCompanyContext);
+  }, [activeCompanyContext, currentUser, isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
 
   const nestedSubmenus = useMemo(() => {
     if (isSystemAdminWorkspace || isCompanySetupWorkspace) {
@@ -596,7 +670,7 @@ const TopToolbar = ({
           if (item.id === "tenant-prepayments") return { ...item, label: "Prepayments & Credits" };
           return item;
         });
-      submenus["expenses"] = submenus["expenses"].map((item) => {
+      submenus.expenses = submenus.expenses.map((item) => {
         if (item.id === "expense-requisition") return { ...item, label: "Expense Requests" };
         if (item.id === "expenses-service-providers") return { ...item, label: "Suppliers" };
         return item;
@@ -604,8 +678,23 @@ const TopToolbar = ({
       delete submenus["landlord-payments"];
     }
 
+    Object.keys(submenus).forEach((key) => {
+      const filtered = submenus[key].filter((entry) => {
+        if (!entry || entry.type === "separator" || !entry.id) return true;
+        const rule = MENU_PERMISSION_MAP[entry.id];
+        if (!rule) return true;
+        return hasCompanyPermission(currentUser, activeCompanyContext, rule.resource, rule.action, rule.moduleKey);
+      });
+      submenus[key] = filtered.filter((entry, index) => {
+        if (entry?.type !== "separator") return true;
+        const prev = filtered[index - 1];
+        const next = filtered[index + 1];
+        return prev && prev.type !== "separator" && next && next.type !== "separator";
+      });
+    });
+
     return submenus;
-  }, [isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
 
   const handleMenuItemClick = (menuId) => {
     const route = routeConfig[menuId];
@@ -924,7 +1013,7 @@ const TopToolbar = ({
 
         <div className="flex items-center space-x-1 px-4 py-1 text-xs">
           <button
-            onClick={() => navigate("/tenants/new")}
+            onClick={() => navigate("/tenant/new")}
             className={`p-2 rounded ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="New Tenant"
           >

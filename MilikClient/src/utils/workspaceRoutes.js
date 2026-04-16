@@ -19,11 +19,11 @@ export const WORKSPACE_CONFIG = {
   [WORKSPACE_IDS.SYSTEM_ADMIN]: {
     id: WORKSPACE_IDS.SYSTEM_ADMIN,
     label: 'System Admin',
-    defaultRoute: '/system-setup/companies',
+    defaultRoute: '/system-setup/overview',
     defaultTab: {
       id: 'system-admin-home',
-      title: 'Companies',
-      route: '/system-setup/companies',
+      title: 'Overview',
+      route: '/system-setup/overview',
       closable: false,
     },
   },

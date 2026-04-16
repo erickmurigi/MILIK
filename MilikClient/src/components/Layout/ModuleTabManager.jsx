@@ -19,7 +19,7 @@ const MODULES = {
   [WORKSPACE_IDS.SYSTEM_ADMIN]: {
     id: WORKSPACE_IDS.SYSTEM_ADMIN,
     title: 'System Admin',
-    route: '/system-setup/companies',
+    route: '/system-setup/overview',
     icon: <FaCog className="w-4 h-4" />,
     closable: true,
   },

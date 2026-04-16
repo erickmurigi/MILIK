@@ -1,21 +1,24 @@
-export const normalizeAction = (action = "view") => {
-  const text = String(action || "view").toLowerCase();
+import { LEGACY_PERMISSION_ALIASES } from './accessMatrix';
+
+export const normalizeAction = (action = 'view') => {
+  const text = String(action || 'view').toLowerCase();
   const aliases = {
-    read: "view",
-    list: "view",
-    add: "create",
-    edit: "update",
-    remove: "delete",
-    confirm: "process",
-    reverse: "reverse",
-    post: "process",
-    pdf: "export",
-    print: "export",
+    read: 'view',
+    list: 'view',
+    add: 'create',
+    edit: 'update',
+    remove: 'delete',
+    confirm: 'process',
+    reverse: 'reverse',
+    post: 'process',
+    pdf: 'export',
+    print: 'export',
+    unlock: 'lock',
   };
   return aliases[text] || text;
 };
 
-const resolveCompanyId = (company) => String(company?._id || company || "");
+const resolveCompanyId = (company) => String(company?._id || company || '');
 
 const getAssignment = (user = {}, currentCompany = null) => {
   const companyId = resolveCompanyId(currentCompany || user?.company);
@@ -26,7 +29,7 @@ const getAssignment = (user = {}, currentCompany = null) => {
 };
 
 const getPermissionValue = (permissions = {}, resource, action) => {
-  if (!permissions || typeof permissions !== "object") return undefined;
+  if (!permissions || typeof permissions !== 'object') return undefined;
   const keys = [
     `${resource}.${action}`,
     `${resource}:${action}`,
@@ -37,8 +40,12 @@ const getPermissionValue = (permissions = {}, resource, action) => {
   for (const key of keys) {
     if (Object.prototype.hasOwnProperty.call(permissions, key)) return permissions[key];
   }
-  if (permissions?.[resource] && typeof permissions[resource] === "object") {
+  if (permissions?.[resource] && typeof permissions[resource] === 'object') {
     return permissions[resource][action];
+  }
+  const legacyKeys = LEGACY_PERMISSION_ALIASES?.[resource]?.[action] || [];
+  for (const key of legacyKeys) {
+    if (Object.prototype.hasOwnProperty.call(permissions, key)) return permissions[key];
   }
   return undefined;
 };
@@ -46,57 +53,67 @@ const getPermissionValue = (permissions = {}, resource, action) => {
 export const hasCompanyPermission = (
   user = {},
   currentCompany = null,
-  resource = "",
-  action = "view",
+  resource = '',
+  action = 'view',
   moduleKey = null
 ) => {
   if (user?.isSystemAdmin || user?.superAdminAccess) return true;
 
   const normalizedAction = normalizeAction(action);
+
+  if (resource === 'companySettings') {
+    if (user?.adminAccess) return true;
+    if (normalizedAction === 'view') {
+      return Boolean(user?.setupAccess || user?.companySetupAccess);
+    }
+    return Boolean(user?.companySetupAccess || user?.setupAccess);
+  }
+
   const assignment = getAssignment(user, currentCompany);
   const permissions = assignment?.permissions || user?.permissions || {};
   const explicit = getPermissionValue(permissions, resource, normalizedAction);
-  if (typeof explicit === "boolean") return explicit;
+  if (explicit === true) return true;
 
   if (user?.adminAccess) return true;
+  if (explicit === false) return false;
 
   const moduleAccess = assignment?.moduleAccess || user?.moduleAccess || {};
   const map = {
-    propertyManagement: "propertyMgmt",
-    accounts: "accounts",
-    hr: "humanResource",
-    inventory: "inventory",
-    procurement: "procurement",
-    propertySale: "propertySale",
-    facilityManagement: "facilityManagement",
-    hotelManagement: "hotelManagement",
-    telcoDealership: "telcoDealership",
-    dms: "dms",
-    academics: "academics",
-    projectManagement: "projectManagement",
-    assetValuation: "assetValuation",
+    propertyManagement: 'propertyMgmt',
+    accounts: 'accounts',
+    hr: 'humanResource',
+    inventory: 'inventory',
+    procurement: 'procurement',
+    propertySale: 'propertySale',
+    facilityManagement: 'facilityManagement',
+    hotelManagement: 'hotelManagement',
+    telcoDealership: 'telcoDealership',
+    dms: 'dms',
+    academics: 'academics',
+    projectManagement: 'projectManagement',
+    assetValuation: 'assetValuation',
   };
-  const accessText = String(moduleAccess?.[map[moduleKey] || moduleKey] || "").toLowerCase();
+  const accessText = String(moduleAccess?.[map[moduleKey] || moduleKey] || '').toLowerCase();
 
   if (!moduleKey) {
-    return normalizedAction === "view" || normalizedAction === "export";
+    return normalizedAction === 'view' || normalizedAction === 'export';
   }
 
-  if (normalizedAction === "view" || normalizedAction === "export") {
-    return accessText === "view only" || accessText === "full access";
+  if (normalizedAction === 'view' || normalizedAction === 'export') {
+    return accessText === 'view only' || accessText === 'full access';
   }
 
-  return accessText === "full access";
+  return accessText === 'full access';
 };
 
 export const guardButtonProps = (
   allowed,
-  titleWhenDenied = "You do not have permission for this action"
+  titleWhenDenied = 'You do not have permission for this action'
 ) =>
   allowed
     ? {}
     : {
         disabled: true,
         title: titleWhenDenied,
-        classNameSuffix: " opacity-50 cursor-not-allowed",
+        classNameSuffix: ' opacity-50 cursor-not-allowed',
       };

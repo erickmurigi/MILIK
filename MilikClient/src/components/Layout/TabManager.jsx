@@ -62,6 +62,7 @@ const getPageTitle = (pathname) => {
     '/units': 'Units',
     '/units/new': 'New Unit',
     '/units/space-types': 'Unit Types',
+    '/vacants': 'Availability Status',
     '/financial/chart-of-accounts': 'Chart of Accounts',
     '/financial/payment-vouchers': 'Payment Vouchers',
     '/financial/service-providers': 'Service Providers',

@@ -116,10 +116,10 @@ const QuickActions = ({ darkMode }) => {
         icon: <FaHome />,
         tone: 'green',
         helper: isLandlordMode
-          ? 'Open units to review vacancies and plan new occupancy.'
-          : 'Open units workspace to review empty spaces and occupancy.',
-        route: '/units',
-        tabTitle: 'Units',
+          ? 'Open availability status to review vacancies, notices and readiness across your portfolio.'
+          : 'Open availability status to review empty spaces, notices and letting readiness.',
+        route: '/vacants',
+        tabTitle: 'Availability Status',
       },
       {
         id: 'overdue-invoices',

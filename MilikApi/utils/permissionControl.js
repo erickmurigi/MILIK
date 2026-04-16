@@ -1,4 +1,5 @@
 import { getUserModuleAccessLevel, hasModuleAccess } from "./companyModules.js";
+import { LEGACY_PERMISSION_ALIASES } from "./accessMatrix.js";
 
 const ACTION_ALIASES = {
   read: "view",
@@ -13,8 +14,8 @@ const ACTION_ALIASES = {
   update: "update",
   modify: "update",
   status: "update",
-  lock: "update",
-  unlock: "update",
+  lock: "lock",
+  unlock: "lock",
   remove: "delete",
   delete: "delete",
   void: "delete",
@@ -87,6 +88,14 @@ export const getScopedModuleAccess = (user = {}, moduleKey, companyId = null) =>
   return getUserModuleAccessLevel(user, moduleKey);
 };
 
+const legacyPermissionMatch = (permissions = {}, resource, action) => {
+  const legacyKeys = LEGACY_PERMISSION_ALIASES?.[resource]?.[action] || [];
+  for (const key of legacyKeys) {
+    if (Object.prototype.hasOwnProperty.call(permissions, key)) return permissions[key];
+  }
+  return undefined;
+};
+
 const getPermissionValue = (permissions = {}, resource, action) => {
   if (!permissions || typeof permissions !== "object") return undefined;
   const variants = [
@@ -108,13 +117,20 @@ const getPermissionValue = (permissions = {}, resource, action) => {
   ) {
     return permissions[resource][action];
   }
-  return undefined;
+  return legacyPermissionMatch(permissions, resource, action);
 };
 
 export const getScopedPermissions = (user = {}, companyId = null) => {
   const assignment = getCompanyAssignment(user, companyId);
   if (assignment?.permissions && typeof assignment.permissions === "object") return assignment.permissions;
-  return user?.permissions && typeof user.permissions === "object" ? user.permissions : {};
+  if (user?.permissions && typeof user.permissions === "object") return user.permissions;
+  return {};
+};
+
+const hasSetupCapability = (user = {}, action = "view") => {
+  if (user?.adminAccess) return true;
+  if (action === "view") return Boolean(user?.setupAccess || user?.companySetupAccess);
+  return Boolean(user?.companySetupAccess || user?.setupAccess);
 };
 
 export const hasCompanyActionPermission = ({ user = {}, company = {}, moduleKey = null, resource = "", action = "view" }) => {
@@ -126,10 +142,14 @@ export const hasCompanyActionPermission = ({ user = {}, company = {}, moduleKey 
   if (!companyId) return false;
   if (!getAccessibleCompanyIds(user).includes(companyId)) return false;
 
+  if (resourceKey === "companySettings") {
+    return hasSetupCapability(user, normalizedAction);
+  }
+
   if (
     moduleKey &&
     !hasModuleAccess(user, company || { _id: companyId, modules: user?.company?.modules || {} }, moduleKey, {
-      requireWrite: normalizedAction !== "view" && normalizedAction !== "export",
+      requireWrite: !["view", "export"].includes(normalizedAction),
     })
   ) {
     return false;
@@ -137,16 +157,23 @@ export const hasCompanyActionPermission = ({ user = {}, company = {}, moduleKey 
 
   const permissions = getScopedPermissions(user, companyId);
   const explicit = getPermissionValue(permissions, resourceKey, normalizedAction);
-  if (typeof explicit === "boolean") return explicit;
+  if (explicit === true) return true;
 
   if (user?.adminAccess) return true;
+  if (explicit === false) return false;
 
   const scopedLevel = moduleKey ? String(getScopedModuleAccess(user, moduleKey, companyId) || "") : "";
   const lower = scopedLevel.toLowerCase();
-  if (normalizedAction === "view" || normalizedAction === "export") {
-    return lower === "view only" || lower === "full access" || !moduleKey;
+
+  if (!moduleKey) {
+    return normalizedAction === "view" || normalizedAction === "export";
   }
-  if (["create", "update", "delete", "process", "approve", "reverse", "send"].includes(normalizedAction)) {
+
+  if (normalizedAction === "view" || normalizedAction === "export") {
+    return lower === "view only" || lower === "full access";
+  }
+
+  if (["create", "update", "delete", "process", "approve", "reverse", "send", "lock"].includes(normalizedAction)) {
     return lower === "full access";
   }
 

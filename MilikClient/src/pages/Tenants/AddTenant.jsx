@@ -59,6 +59,30 @@ const normalizeId = (value) => {
   return String(value);
 };
 
+const parseTakeOnPreselection = (location) => {
+  try {
+    const params = new URLSearchParams(location?.search || "");
+    const state = location?.state || {};
+    const propertyId = normalizeId(state.preselectedPropertyId || params.get("propertyId"));
+    const unitId = normalizeId(state.preselectedUnitId || params.get("unitId") || params.get("unit"));
+
+    if (!propertyId || !unitId) {
+      return null;
+    }
+
+    return {
+      propertyId,
+      unitId,
+      source: String(state.preselectionSource || params.get("source") || "availability_status"),
+      snapshot: state.preselectedUnitSnapshot && typeof state.preselectedUnitSnapshot === "object"
+        ? state.preselectedUnitSnapshot
+        : null,
+    };
+  } catch (error) {
+    return null;
+  }
+};
+
 const normalizeDepositHolder = (value = "") => {
   const normalized = String(value || "").trim().toLowerCase();
   if (["landlord", "held_by_landlord"].includes(normalized)) return "landlord";
@@ -349,6 +373,9 @@ const AddTenant = () => {
   const skipNextUnitAutofillRef = useRef(false);
   const additionalUtilitiesSectionRef = useRef(null);
   const utilityActionAppliedRef = useRef(false);
+  const takeOnPreselectionAppliedRef = useRef(false);
+  const [takeOnPreselection, setTakeOnPreselection] = useState(null);
+  const [takeOnSelectionLocked, setTakeOnSelectionLocked] = useState(false);
 
   useEffect(() => {
     if (currentCompany?._id) {
@@ -392,6 +419,46 @@ const AddTenant = () => {
       scrollToUtilities();
     }
   }, [location.state, loading, tenantLoading, additionalUtilities.length]);
+
+  useEffect(() => {
+    if (isEditMode) return;
+
+    const parsedPreselection = parseTakeOnPreselection(location);
+    if (!parsedPreselection?.propertyId || !parsedPreselection?.unitId) return;
+
+    const preselectionChanged =
+      normalizeId(takeOnPreselection?.propertyId) !== normalizeId(parsedPreselection.propertyId) ||
+      normalizeId(takeOnPreselection?.unitId) !== normalizeId(parsedPreselection.unitId);
+
+    if (takeOnPreselectionAppliedRef.current && !preselectionChanged) {
+      return;
+    }
+
+    takeOnPreselectionAppliedRef.current = true;
+    setTakeOnPreselection(parsedPreselection);
+    setTakeOnSelectionLocked(true);
+    setShowAdditionalUnits(false);
+    setAdditionalUtilities([]);
+    setGeneralError("");
+    lastPropertyRef.current = parsedPreselection.propertyId;
+
+    setFormData((prev) => ({
+      ...prev,
+      property: parsedPreselection.propertyId,
+      unit: parsedPreselection.unitId,
+      additionalUnits: [],
+      rent: "",
+      depositAmount: "",
+      utilities: [],
+    }));
+
+    setFieldErrors((prev) => ({
+      ...prev,
+      property: "",
+      unit: "",
+      additionalUnits: "",
+    }));
+  }, [isEditMode, location, takeOnPreselection?.propertyId, takeOnPreselection?.unitId]);
 
   useEffect(() => {
     if (!formData.property) {
@@ -573,6 +640,42 @@ useEffect(() => {
       properties.find((property) => normalizeId(property?._id) === normalizeId(formData.property)) || null,
     [properties, formData.property]
   );
+
+  const selectedPrimaryUnitStatus = useMemo(() => {
+    const unitRecord = selectedUnitRecord || (Array.isArray(units)
+      ? units.find((unit) => normalizeId(unit?._id || unit?.id || unit) === normalizeId(formData.unit))
+      : null);
+    const rawStatus = String(unitRecord?.status || takeOnPreselection?.snapshot?.status || "").toLowerCase();
+    if (rawStatus === "reserved") return "Reserved";
+    if (rawStatus === "vacant" || unitRecord?.isVacant !== false) return "Vacant";
+    if (rawStatus === "occupied") return "Occupied";
+    if (rawStatus === "under_maintenance") return "Under Maintenance";
+    if (rawStatus === "off_market" || rawStatus === "archived") return "Off Market";
+    return rawStatus ? rawStatus.replace(/[_-]+/g, " ") : "Unknown";
+  }, [formData.unit, selectedUnitRecord, takeOnPreselection?.snapshot?.status, units]);
+
+  const preselectedUnitBanner = useMemo(() => {
+    if (!takeOnPreselection) return null;
+    const propertyName =
+      selectedPropertyRecord?.propertyName ||
+      selectedPropertyRecord?.name ||
+      takeOnPreselection?.snapshot?.propertyName ||
+      "Selected Property";
+    const unitNumber =
+      selectedUnitRecord?.unitNumber ||
+      selectedUnitRecord?.unitName ||
+      takeOnPreselection?.snapshot?.unitNumber ||
+      "Selected Unit";
+    return {
+      propertyName,
+      unitNumber,
+      statusLabel: takeOnPreselection?.snapshot?.statusLabel || selectedPrimaryUnitStatus,
+      rentLabel:
+        selectedUnitRecord?.rent !== undefined && selectedUnitRecord?.rent !== null
+          ? `Ksh ${Number(selectedUnitRecord.rent || 0).toLocaleString("en-KE")}`
+          : null,
+    };
+  }, [selectedPrimaryUnitStatus, selectedPropertyRecord, selectedUnitRecord, takeOnPreselection]);
 
   useEffect(() => {
     if (isEditMode) return;
@@ -999,6 +1102,27 @@ useEffect(() => {
       return;
     }
 
+    const selectedUnitForSubmission =
+      selectedUnitRecord ||
+      (Array.isArray(units)
+        ? units.find((unit) => normalizeId(unit?._id || unit?.id || unit) === normalizeId(formData.unit))
+        : null);
+
+    if (!isEditMode) {
+      const currentUnitStatus = String(selectedUnitForSubmission?.status || "").toLowerCase();
+      const isUnitAssignable =
+        (currentUnitStatus === "vacant" && selectedUnitForSubmission?.isVacant !== false) ||
+        currentUnitStatus === "reserved";
+
+      if (!selectedUnitForSubmission || !isUnitAssignable) {
+        const availabilityMessage = "The selected unit is no longer available for tenant take-on. Refresh the Availability Status page and choose another unit.";
+        setGeneralError(availabilityMessage);
+        setFieldErrors((prev) => ({ ...prev, unit: availabilityMessage }));
+        toast.error(availabilityMessage);
+        return;
+      }
+    }
+
     try {
       const payload = {
         ...formData,
@@ -1299,6 +1423,65 @@ for (const request of invoiceRequests) {
                   <h3 className="text-lg font-bold text-slate-900 mb-4 border-b-2 border-green-500 pb-2">
                     🏢 Property & Unit
                   </h3>
+
+                  {preselectedUnitBanner && !isEditMode && (
+                    <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Availability Status handoff</p>
+                          <p className="mt-1 text-sm font-bold text-slate-900">
+                            {preselectedUnitBanner.propertyName} • {preselectedUnitBanner.unitNumber}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            Status: <span className="font-semibold text-slate-800">{preselectedUnitBanner.statusLabel}</span>
+                            {preselectedUnitBanner.rentLabel ? ` • Rent: ${preselectedUnitBanner.rentLabel}` : ""}
+                          </p>
+                          <p className="mt-2 text-xs text-slate-500">
+                            This unit was opened directly from Availability Status.
+                            {takeOnSelectionLocked
+                              ? " Property and unit are locked to avoid assigning the wrong space."
+                              : " You can now change the property or unit selection manually."}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {takeOnSelectionLocked ? (
+                            <button
+                              type="button"
+                              onClick={() => setTakeOnSelectionLocked(false)}
+                              className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-800 shadow-sm transition-colors hover:bg-emerald-100"
+                            >
+                              Change Selection
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTakeOnSelectionLocked(true);
+                                if (takeOnPreselection?.propertyId && takeOnPreselection?.unitId) {
+                                  lastPropertyRef.current = takeOnPreselection.propertyId;
+                                  setShowAdditionalUnits(false);
+                                  setAdditionalUtilities([]);
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    property: takeOnPreselection.propertyId,
+                                    unit: takeOnPreselection.unitId,
+                                    additionalUnits: [],
+                                    rent: "",
+                                    depositAmount: "",
+                                    utilities: [],
+                                  }));
+                                }
+                              }}
+                              className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-800 shadow-sm transition-colors hover:bg-emerald-100"
+                            >
+                              Re-lock Selected Unit
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <MilikSelect
                       label="Property"
@@ -1315,6 +1498,7 @@ for (const request of invoiceRequests) {
                       getLabel={(p) => p.propertyName || p.name || "Unknown"}
                       getValue={(p) => p._id || p.id}
                       error={fieldErrors.property}
+                      disabled={Boolean(takeOnPreselection && takeOnSelectionLocked)}
                     />
 
                     <MilikSelect
@@ -1332,7 +1516,7 @@ for (const request of invoiceRequests) {
                       getLabel={(u) => `${u.unitNumber} - Ksh ${(u.rent || 0).toLocaleString()}`}
                       getValue={(u) => u._id || u.id}
                       error={fieldErrors.unit}
-                      disabled={!formData.property}
+                      disabled={!formData.property || Boolean(takeOnPreselection && takeOnSelectionLocked)}
                     />
                   </div>
 
@@ -1342,6 +1526,7 @@ for (const request of invoiceRequests) {
                         <input
                           type="checkbox"
                           checked={showAdditionalUnits}
+                          disabled={Boolean(takeOnPreselection && takeOnSelectionLocked)}
                           onChange={(e) => {
                             const enabled = e.target.checked;
                             setShowAdditionalUnits(enabled);
@@ -1352,7 +1537,7 @@ for (const request of invoiceRequests) {
                               setFieldErrors((prev) => ({ ...prev, additionalUnits: "" }));
                             }
                           }}
-                          className="rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                          className="rounded border-slate-300 text-orange-600 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                         Assign additional units to this tenant
                       </label>

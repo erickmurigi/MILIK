@@ -436,13 +436,15 @@ function App() {
 
         <Route path="/moduleDashboard" element={<ProtectedRoute><ModulesDashboard /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/system-setup" element={<SuperAdminRoute><Navigate to="/system-setup/companies" replace /></SuperAdminRoute>} />
+        <Route path="/system-setup" element={<SuperAdminRoute><Navigate to="/system-setup/overview" replace /></SuperAdminRoute>} />
+        <Route path="/system-setup/overview" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
         <Route path="/system-setup/companies" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
         <Route path="/system-setup/users" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
-        <Route path="/system-setup/rights" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
-        <Route path="/system-setup/database" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
-        <Route path="/system-setup/sessions" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
+        <Route path="/system-setup/trials" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
         <Route path="/system-setup/audit" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
+        <Route path="/system-setup/rights" element={<SuperAdminRoute><Navigate to="/system-setup/users" replace /></SuperAdminRoute>} />
+        <Route path="/system-setup/database" element={<SuperAdminRoute><Navigate to="/system-setup/overview" replace /></SuperAdminRoute>} />
+        <Route path="/system-setup/sessions" element={<SuperAdminRoute><Navigate to="/system-setup/trials" replace /></SuperAdminRoute>} />
         <Route path="/landlords" element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlords" moduleKey="propertyManagement"><Landlords /></PermissionRoute></CompanyModeRoute>} />
         <Route path="/landlords/new" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><AddLandlord /></ProtectedRoute></CompanyModeRoute>} />
         <Route path="/landlord-payments" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordPayments /></ProtectedRoute></CompanyModeRoute>} />
@@ -499,6 +501,7 @@ function App() {
         <Route path="/properties/commission-settings" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><PropertyCommissionSettings /></ProtectedRoute></CompanyModeRoute>} />
         <Route path="/properties/commissions-list" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><CommissionsList /></ProtectedRoute></CompanyModeRoute>} />
         <Route path="/add-user" element={<SuperAdminRoute><AddUserPage /></SuperAdminRoute>} />
+        <Route path="/add-user/:id" element={<SuperAdminRoute><AddUserPage /></SuperAdminRoute>} />
         <Route path="/company-setup" element={<PermissionRoute resource="companySettings" action="update"><CompanySetupPage /></PermissionRoute>} />
         <Route path="/settings" element={<PermissionRoute resource="companySettings" action="view"><CompanySettings /></PermissionRoute>} />
         <Route path="/reports/rental-collection" element={<ProtectedRoute><RentalCollectionReport /></ProtectedRoute>} />
