@@ -75,7 +75,7 @@ const getPageTitle = (pathname) => {
     '/reports/tax-reports': 'Tax Reports',
     '/meter-readings': 'Meter Readings',
     '/invoices/late-penalties': 'Late Penalties',
-    '/settings': 'Settings',
+    '/settings': 'Operational Settings',
   };
 
   if (routeNames[pathname]) return routeNames[pathname];

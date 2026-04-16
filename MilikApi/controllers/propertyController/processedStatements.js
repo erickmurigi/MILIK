@@ -190,6 +190,17 @@ const windowsOverlap = (left = null, right = null) => {
 };
 
 
+const getStatementCursor = (statement = {}) => {
+  const cutoffAt = statement?.cutoffAt ? new Date(statement.cutoffAt) : null;
+  if (cutoffAt && !Number.isNaN(cutoffAt.getTime())) return cutoffAt;
+
+  const closedAt = statement?.closedAt ? new Date(statement.closedAt) : null;
+  if (closedAt && !Number.isNaN(closedAt.getTime())) return closedAt;
+
+  return endOfDay(statement?.periodEnd);
+};
+
+
 const resolveCommissionIncomeAccount = async (businessId) => {
   await ensureSystemChartOfAccounts(businessId);
 
@@ -431,6 +442,44 @@ const hasActiveDownstreamPayments = async (statement) => {
       hasRecoveryActivity,
     count: paymentVoucherCount + paymentHistoryCount + recoveryHistoryCount + recoveryEntryCount,
     hasRecoveryActivity,
+  };
+};
+
+const hasLaterProcessedStatements = async (statement) => {
+  if (!statement?._id) {
+    return { blocked: false, count: 0, latestStatement: null };
+  }
+
+  const statementCursor = getStatementCursor(statement) || endOfDay(statement?.periodEnd) || endOfDay(statement?.closedAt);
+  if (!statementCursor) {
+    return { blocked: false, count: 0, latestStatement: null };
+  }
+
+  const candidates = await ProcessedStatement.find({
+    business: statement.business,
+    property: statement.property,
+    landlord: statement.landlord,
+    _id: { $ne: statement._id },
+    status: { $ne: "reversed" },
+    $or: [
+      { cutoffAt: { $gt: statementCursor } },
+      { cutoffAt: null, closedAt: { $gt: statementCursor } },
+      { cutoffAt: null, closedAt: null, periodEnd: { $gt: statementCursor } },
+    ],
+  })
+    .select("_id periodStart periodEnd cutoffAt closedAt status sourceStatement sourceStatementNumber")
+    .sort({ cutoffAt: -1, closedAt: -1, periodEnd: -1 })
+    .lean();
+
+  const laterStatements = candidates.filter((candidate) => {
+    const candidateCursor = getStatementCursor(candidate) || endOfDay(candidate?.periodEnd) || endOfDay(candidate?.closedAt);
+    return candidateCursor && candidateCursor.getTime() > statementCursor.getTime();
+  });
+
+  return {
+    blocked: laterStatements.length > 0,
+    count: laterStatements.length,
+    latestStatement: laterStatements[0] || null,
   };
 };
 
@@ -984,6 +1033,16 @@ export const reverseStatement = async (req, res) => {
       });
     }
 
+    const laterProcessedContext = await hasLaterProcessedStatements(statement);
+    if (laterProcessedContext.blocked) {
+      const laterStatement = laterProcessedContext.latestStatement;
+      return res.status(400).json({
+        message: laterStatement
+          ? `A newer processed statement already exists for this property/landlord window (${laterStatement.sourceStatementNumber || laterStatement._id}). Reverse the newer processed statement first to keep settlement cut-offs consistent.`
+          : "A newer processed statement already exists for this property/landlord window. Reverse the newer processed statement first to keep settlement cut-offs consistent.",
+      });
+    }
+
     const actorUserId = await resolveActorUserId(req, String(statement.business || ""));
     const reversals = await reverseProcessedStatementLedgerEntries({
       statement,
@@ -1018,6 +1077,15 @@ export const reverseStatement = async (req, res) => {
       message: "Processed statement reversed successfully",
       statement,
       reversedLedgerEntries: reversals.map((row) => row?.reversalEntry?._id).filter(Boolean),
+      reopenDraftContext: {
+        propertyId: statement?.property?._id || statement?.property || null,
+        landlordId: statement?.landlord?._id || statement?.landlord || null,
+        statementType: statement?.statementType || "provisional",
+        periodStart: statement?.periodStart || null,
+        periodEnd: statement?.periodEnd || statement?.cutoffAt || statement?.closedAt || null,
+        sourceStatementId:
+          statement?.reversedSourceStatement?._id || statement?.reversedSourceStatement || null,
+      },
     });
   } catch (error) {
     console.error("Reverse statement error:", error);

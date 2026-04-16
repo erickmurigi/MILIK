@@ -1,6 +1,7 @@
 import LandlordStatement from "../../models/LandlordStatement.js";
 import LandlordStatementLine from "../../models/LandlordStatementLine.js";
 import Property from "../../models/Property.js";
+import ProcessedStatement from "../../models/ProcessedStatement.js";
 import mongoose from "mongoose";
 import {
   createDraftStatement,
@@ -67,6 +68,45 @@ const endOfDay = (value) => {
   if (Number.isNaN(date.getTime())) return null;
   date.setHours(23, 59, 59, 999);
   return date;
+};
+
+const canSupersedeReversedApprovedStatement = async ({ businessId, statementId }) => {
+  if (!statementId || !businessId) return false;
+
+  const hasActiveProcessedSnapshot = await ProcessedStatement.exists({
+    business: businessId,
+    sourceStatement: statementId,
+    status: { $ne: "reversed" },
+  });
+
+  if (hasActiveProcessedSnapshot) return false;
+
+  const hasReversedProcessedSnapshot = await ProcessedStatement.exists({
+    business: businessId,
+    status: "reversed",
+    $or: [
+      { reversedSourceStatement: statementId },
+      { sourceStatement: statementId },
+    ],
+  });
+
+  return Boolean(hasReversedProcessedSnapshot);
+};
+
+const markSupersededApprovedStatementRevised = async ({ statementId, replacementStatementId }) => {
+  if (!statementId || !replacementStatementId) return;
+
+  await LandlordStatement.collection.updateOne(
+    { _id: new mongoose.Types.ObjectId(String(statementId)) },
+    {
+      $set: {
+        status: "revised",
+        supersededByStatementId: new mongoose.Types.ObjectId(String(replacementStatementId)),
+        revisionReason: "Superseded after reversing the processed statement for the same period.",
+        updatedAt: new Date(),
+      },
+    }
+  );
 };
 
 /**
@@ -247,7 +287,9 @@ export const approve = async (req, res, next) => {
       });
     }
 
-    // Safeguard: Prevent multiple approved statements for the same period
+    // Safeguard: Prevent multiple approved statements for the same period.
+    // Exception: if the older approved snapshot only exists because its processed statement was later reversed,
+    // allow a fresh approval for the regenerated replacement statement.
     const existingApproved = await LandlordStatement.findOne({
       business: businessId,
       property: statement.property,
@@ -259,13 +301,25 @@ export const approve = async (req, res, next) => {
     });
 
     if (existingApproved) {
-      return res.status(400).json({
-        success: false,
-        message: `An approved statement already exists for this period (${existingApproved.statementNumber}). Please create a revision instead.`,
-        data: {
-          existingStatementId: existingApproved._id,
-          existingStatementNumber: existingApproved.statementNumber,
-        },
+      const canSupersede = await canSupersedeReversedApprovedStatement({
+        businessId,
+        statementId: existingApproved._id,
+      });
+
+      if (!canSupersede) {
+        return res.status(400).json({
+          success: false,
+          message: `An approved statement already exists for this period (${existingApproved.statementNumber}). Please create a revision instead.`,
+          data: {
+            existingStatementId: existingApproved._id,
+            existingStatementNumber: existingApproved.statementNumber,
+          },
+        });
+      }
+
+      await markSupersededApprovedStatementRevised({
+        statementId: existingApproved._id,
+        replacementStatementId: statementId,
       });
     }
 

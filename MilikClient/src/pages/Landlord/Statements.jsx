@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { FaCheckCircle, FaDownload, FaFileAlt, FaPrint, FaSyncAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -165,6 +165,31 @@ const getPropertyLabel = (property) => {
   return `${code}${property?.propertyName || property?.name || "Unnamed Property"}`;
 };
 
+const normalizeReopenDraftContext = (value = null) => {
+  if (!value || typeof value !== "object") return null;
+
+  const propertyId = normalizeId(value?.propertyId || value?.property || "");
+  const landlordId = normalizeId(value?.landlordId || value?.landlord || "");
+  const rawPeriodStart = value?.periodStart || value?.statementStartAt || value?.startAt || "";
+  const rawPeriodEnd =
+    value?.periodEnd ||
+    value?.statementEndAt ||
+    value?.cutoffAt ||
+    value?.closedAt ||
+    "";
+  const periodStart = rawPeriodStart ? toIsoDate(rawPeriodStart) : "";
+  const periodEnd = rawPeriodEnd ? toIsoDate(rawPeriodEnd) : "";
+
+  if (!propertyId || !periodStart || !periodEnd) return null;
+
+  return {
+    propertyId,
+    landlordId,
+    statementType: String(value?.statementType || "provisional").toLowerCase(),
+    periodStart,
+    periodEnd,
+  };
+};
 
 const resolveStatementType = (statement = null, fallback = "provisional") =>
   String(
@@ -284,6 +309,7 @@ const getPreparedUtilityValue = (row = {}, key = "", phase = "invoiced") =>
 const Statements = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const properties = useSelector((state) => state.property?.properties || []);
@@ -310,6 +336,7 @@ const Statements = () => {
   const autoDraftTimerRef = useRef(null);
   const lastAutoLoadedSelectionRef = useRef("");
   const inFlightSelectionRef = useRef("");
+  const pendingReopenContextRef = useRef(null);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -390,6 +417,32 @@ const Statements = () => {
   );
 
   useEffect(() => {
+    const reopenDraftContext = normalizeReopenDraftContext(location.state?.reopenDraftContext);
+    if (!reopenDraftContext) return;
+
+    const reopenStartDate = new Date(`${reopenDraftContext.periodStart}T00:00:00`);
+    const nextMonth = !Number.isNaN(reopenStartDate.getTime())
+      ? String(reopenStartDate.getMonth() + 1)
+      : month;
+    const nextYear = !Number.isNaN(reopenStartDate.getTime())
+      ? String(reopenStartDate.getFullYear())
+      : year;
+
+    pendingReopenContextRef.current = reopenDraftContext;
+    lastAutoLoadedSelectionRef.current = "";
+    inFlightSelectionRef.current = "";
+    setDraftStatement(null);
+    setStatementType(reopenDraftContext.statementType || "provisional");
+    setSelectedPropertyId(reopenDraftContext.propertyId);
+    setMonth(nextMonth);
+    setYear(nextYear);
+    setPeriodStart(reopenDraftContext.periodStart);
+    setPeriodEnd(reopenDraftContext.periodEnd);
+
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, month, navigate, year]);
+
+  useEffect(() => {
     if (!currentCompany?._id || !selectedPropertyId) {
       setProcessedStatements([]);
       setProcessedContextLoaded(false);
@@ -427,6 +480,21 @@ const Statements = () => {
   }, [currentCompany?._id, selectedPropertyId, landlordId]);
 
   useEffect(() => {
+    const pendingReopenContext = pendingReopenContextRef.current;
+    if (pendingReopenContext) {
+      const matchesPendingSelection =
+        normalizeId(selectedPropertyId) === normalizeId(pendingReopenContext.propertyId) &&
+        resolveDayKey(periodStart) === resolveDayKey(pendingReopenContext.periodStart) &&
+        resolveDayKey(periodEnd) === resolveDayKey(pendingReopenContext.periodEnd);
+
+      if (!processedContextLoaded || matchesPendingSelection) {
+        setDraftStatement(null);
+        return;
+      }
+
+      pendingReopenContextRef.current = null;
+    }
+
     if (!selectedPropertyId) {
       const nextPeriod = buildPeriod(month, year);
       setPeriodStart(nextPeriod.periodStart);
@@ -452,7 +520,7 @@ const Statements = () => {
     );
     setPeriodEnd(todayIso);
     setDraftStatement(null);
-  }, [month, year, selectedPropertyId, processedContextLoaded, latestProcessedCutoffAt, selectedProperty?.dateAcquired, todayIso]);
+  }, [month, year, selectedPropertyId, processedContextLoaded, latestProcessedCutoffAt, selectedProperty?.dateAcquired, todayIso, periodStart, periodEnd]);
 
   const workspace = draftStatement?.metadata?.workspace || null;
   const summary = workspace?.summary || {};
@@ -735,9 +803,11 @@ const Statements = () => {
         setPeriodEnd(nextPeriodEnd);
       }
 
+      pendingReopenContextRef.current = null;
       setDraftStatement(nextStatement);
     } catch (error) {
       lastAutoLoadedSelectionRef.current = requestedSelectionKey;
+      pendingReopenContextRef.current = null;
       toast.error(error?.response?.data?.message || "Failed to load landlord statement workspace");
       setDraftStatement(null);
     } finally {

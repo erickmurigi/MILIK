@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
@@ -30,6 +30,7 @@ import {
   FaPaperPlane,
   FaServer,
   FaPlug,
+  FaArrowRight,
 } from "react-icons/fa";
 import { getChartOfAccounts, getCompany, updateCompany } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
@@ -41,15 +42,12 @@ const SMS_DRAFT_ID = "__new_sms_profile__";
 const validSmsSections = new Set(["configuration", "templates"]);
 
 const tabs = [
-  { key: "details", label: "COMPANY DETAILS", icon: <FaBuilding /> },
-  { key: "structure", label: "COMPANY STRUCTURE", icon: <FaSitemap /> },
-  { key: "payments", label: "PAYMENT CONFIG DETAILS", icon: <FaMoneyCheckAlt /> },
-  { key: "email", label: "EMAIL CONFIG DETAILS", icon: <FaEnvelope /> },
+  { key: "details", label: "COMPANY PROFILE", icon: <FaBuilding /> },
+  { key: "structure", label: "OPERATING MODEL", icon: <FaSitemap /> },
+  { key: "modules", label: "MODULES", icon: <FaThLarge /> },
+  { key: "payments", label: "PAYMENTS", icon: <FaMoneyCheckAlt /> },
+  { key: "email", label: "EMAIL", icon: <FaEnvelope /> },
   { key: "sms", label: "SMS", icon: <FaSms /> },
-  { key: "users", label: "USERS", icon: <FaUsers /> },
-  { key: "modules", label: "MODULES CONFIGURATION", icon: <FaThLarge /> },
-  { key: "sessions", label: "USER SESSIONS", icon: <FaUserClock /> },
-  { key: "activities", label: "USER ACTIVITIES", icon: <FaHistory /> },
 ];
 
 const validTabKeys = new Set(tabs.map((tab) => tab.key));
@@ -719,6 +717,7 @@ const normalizeSmsEditor = (config = {}) => {
 export default function CompanySetupPage() {
 
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { currentCompany } = useSelector((state) => state.company || {});
   const [searchParams, setSearchParams] = useSearchParams();
   const [savingDetails, setSavingDetails] = useState(false);
@@ -1277,6 +1276,33 @@ export default function CompanySetupPage() {
     const automatedTemplates = smsTemplates.filter((template) => template.enabled && template.sendMode === "automatic").length;
     return { total, active, configured, defaults, automatedTemplates };
   }, [smsProfiles, smsTemplates]);
+
+  const taxSetupSummary = useMemo(() => {
+    const taxableCategoryCount = Object.values(taxConfig?.taxSettings?.invoiceTaxabilityByCategory || {}).filter(Boolean).length;
+    const defaultCode = (taxConfig?.taxCodes || []).find((code) => code.key === taxConfig?.taxSettings?.defaultTaxCodeKey) ||
+      (taxConfig?.taxCodes || []).find((code) => code.isDefault) ||
+      null;
+
+    return {
+      enabled: Boolean(taxConfig?.taxSettings?.enabled),
+      defaultMode: taxConfig?.taxSettings?.defaultTaxMode === "inclusive" ? "Inclusive" : "Exclusive",
+      defaultCodeLabel: defaultCode?.name || "Not set",
+      taxableCategoryCount,
+    };
+  }, [taxConfig]);
+
+  const handleRefreshSetup = async () => {
+    if (!currentCompany?._id) return;
+
+    try {
+      await dispatch(getCompany(currentCompany._id));
+      const response = await adminRequests.get(`/company-settings/${currentCompany._id}`);
+      setTaxConfig(normalizeTaxConfiguration(response?.data || {}));
+      toast.success("Company setup refreshed");
+    } catch (error) {
+      toast.error("Failed to refresh company setup");
+    }
+  };
 
   const beginCreateEmailProfile = () => {
     setSelectedEmailProfileId(EMAIL_DRAFT_ID);
@@ -1899,110 +1925,41 @@ export default function CompanySetupPage() {
           </div>
         </Card>
 
-        <Card title="Tax Configuration" subtitle="Company-wide VAT / tax foundation for invoices, penalties and commission logic. Management commission VAT is further refined inside Property Commission Settings.">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ToggleRow
-              checked={taxConfig.taxSettings.enabled}
-              onChange={(e) => handleTaxSettingChange("enabled", e.target.checked)}
-              title="Enable tax engine"
-              description="Turn on structured VAT / tax handling for this company. Core accounting remains isolated from communication and non-financial modules."
-            />
-            <ToggleRow
-              checked={taxConfig.taxSettings.invoiceTaxableByDefault}
-              onChange={(e) => handleTaxSettingChange("invoiceTaxableByDefault", e.target.checked)}
-              title="Invoices taxable by default"
-              description="Used as the fallback taxability rule when no stricter category toggle is set."
-            />
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default Tax Mode</label>
-              <Select value={taxConfig.taxSettings.defaultTaxMode} onChange={(e) => handleTaxSettingChange("defaultTaxMode", e.target.value)}>
-                <option value="exclusive">Exclusive</option>
-                <option value="inclusive">Inclusive</option>
-              </Select>
+        <Card title="Operational Defaults & Tax" subtitle="Reusable tax, accounting and future-facing billing defaults now live in Operational Settings so Company Setup stays focused on identity, integrations and communications.">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tax engine</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.enabled ? "Enabled" : "Disabled"}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Company-wide VAT handling, invoice taxability and default tax code behaviour.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default VAT Rate (%)</label>
-              <Input type="number" min="0" step="0.01" value={taxConfig.taxSettings.defaultVatRate} onChange={(e) => handleTaxSettingChange("defaultVatRate", Number(e.target.value || 0))} />
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default mode</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultMode}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Use Operational Settings for default tax mode, code and output VAT account maintenance.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default Tax Code</label>
-              <Select value={taxConfig.taxSettings.defaultTaxCodeKey} onChange={(e) => handleTaxSettingChange("defaultTaxCodeKey", e.target.value)}>
-                {taxConfig.taxCodes.map((code) => (
-                  <option key={code._id || code.key} value={code.key}>{code.name}</option>
-                ))}
-              </Select>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default tax code</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultCodeLabel}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Keep one active default code for invoice and commission tax posting consistency.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Output VAT / Tax Payable Account Code</label>
-              <Input value={taxConfig.taxSettings.outputVatAccountCode} onChange={(e) => handleTaxSettingChange("outputVatAccountCode", e.target.value)} placeholder="2140" />
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Taxable categories</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.taxableCategoryCount}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Rent, utilities, penalties and deposits are maintained with future-facing defaults.</div>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.rent} onChange={(e) => handleTaxCategoryToggle("rent", e.target.checked)} title="Rent charge taxable" description="Default rent-charge taxability rule for tenant invoices." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.utility} onChange={(e) => handleTaxCategoryToggle("utility", e.target.checked)} title="Utility recharge taxable" description="Keeps utility treatment configurable instead of assumed." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.penalty} onChange={(e) => handleTaxCategoryToggle("penalty", e.target.checked)} title="Penalty invoice taxable" description="Phase 1 supports penalty tax treatment separately from normal invoices." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.deposit} onChange={(e) => handleTaxCategoryToggle("deposit", e.target.checked)} title="Deposit charge taxable" description="Recommended off for standard deposit liabilities unless your policy explicitly requires otherwise." />
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Use Operational Settings for tax configuration, utilities, billing periods, expense items and accounting defaults. Company Setup should stay focused on who the company is and how it communicates and collects.
           </div>
 
-          <div className="mt-6 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-extrabold text-slate-900">Tax Codes</div>
-              <div className="mt-1 text-xs text-slate-500">Maintain reusable tax codes for invoices and commission settings. Keep one default code active.</div>
-            </div>
-            <button onClick={handleAddTaxCode} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
-              <FaPlus /> Add Tax Code
-            </button>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {taxConfig.taxCodes.map((code, index) => (
-              <div key={code._id || `${code.key}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Key</label>
-                    <Input value={code.key} onChange={(e) => handleTaxCodeChange(index, "key", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Name</label>
-                    <Input value={code.name} onChange={(e) => handleTaxCodeChange(index, "name", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Type</label>
-                    <Select value={code.type} onChange={(e) => handleTaxCodeChange(index, "type", e.target.value)}>
-                      <option value="vat">VAT</option>
-                      <option value="zero_rated">Zero Rated</option>
-                      <option value="exempt">Exempt</option>
-                      <option value="none">No Tax</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Rate (%)</label>
-                    <Input type="number" min="0" step="0.01" value={code.rate} onChange={(e) => handleTaxCodeChange(index, "rate", e.target.value)} />
-                  </div>
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                    <input type="checkbox" checked={Boolean(code.isDefault)} onChange={(e) => handleTaxCodeChange(index, "isDefault", e.target.checked)} /> Default
-                  </label>
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                    <input type="checkbox" checked={Boolean(code.isActive)} onChange={(e) => handleTaxCodeChange(index, "isActive", e.target.checked)} /> Active
-                  </label>
-                </div>
-                <div className="mt-3 flex items-end gap-3">
-                  <div className="flex-1">
-                    <label className="text-xs font-bold text-slate-700">Description</label>
-                    <Input value={code.description || ""} onChange={(e) => handleTaxCodeChange(index, "description", e.target.value)} />
-                  </div>
-                  <button onClick={() => handleRemoveTaxCode(index)} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100">
-                    <FaTrashAlt /> Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 flex justify-end">
-            <button disabled={savingTaxConfig} onClick={handleSaveTaxConfiguration} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#0B3B2E] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
-              <FaSave /> {savingTaxConfig ? "Saving..." : "Save Tax Configuration"}
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/settings")}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Open Operational Settings <FaArrowRight />
             </button>
           </div>
         </Card>
@@ -2534,110 +2491,41 @@ export default function CompanySetupPage() {
           </div>
         </Card>
 
-        <Card title="Tax Configuration" subtitle="Company-wide VAT / tax foundation for invoices, penalties and commission logic. Management commission VAT is further refined inside Property Commission Settings.">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ToggleRow
-              checked={taxConfig.taxSettings.enabled}
-              onChange={(e) => handleTaxSettingChange("enabled", e.target.checked)}
-              title="Enable tax engine"
-              description="Turn on structured VAT / tax handling for this company. Core accounting remains isolated from communication and non-financial modules."
-            />
-            <ToggleRow
-              checked={taxConfig.taxSettings.invoiceTaxableByDefault}
-              onChange={(e) => handleTaxSettingChange("invoiceTaxableByDefault", e.target.checked)}
-              title="Invoices taxable by default"
-              description="Used as the fallback taxability rule when no stricter category toggle is set."
-            />
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default Tax Mode</label>
-              <Select value={taxConfig.taxSettings.defaultTaxMode} onChange={(e) => handleTaxSettingChange("defaultTaxMode", e.target.value)}>
-                <option value="exclusive">Exclusive</option>
-                <option value="inclusive">Inclusive</option>
-              </Select>
+        <Card title="Operational Defaults & Tax" subtitle="Reusable tax, accounting and future-facing billing defaults now live in Operational Settings so Company Setup stays focused on identity, integrations and communications.">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tax engine</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.enabled ? "Enabled" : "Disabled"}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Company-wide VAT handling, invoice taxability and default tax code behaviour.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default VAT Rate (%)</label>
-              <Input type="number" min="0" step="0.01" value={taxConfig.taxSettings.defaultVatRate} onChange={(e) => handleTaxSettingChange("defaultVatRate", Number(e.target.value || 0))} />
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default mode</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultMode}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Use Operational Settings for default tax mode, code and output VAT account maintenance.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default Tax Code</label>
-              <Select value={taxConfig.taxSettings.defaultTaxCodeKey} onChange={(e) => handleTaxSettingChange("defaultTaxCodeKey", e.target.value)}>
-                {taxConfig.taxCodes.map((code) => (
-                  <option key={code._id || code.key} value={code.key}>{code.name}</option>
-                ))}
-              </Select>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default tax code</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultCodeLabel}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Keep one active default code for invoice and commission tax posting consistency.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Output VAT / Tax Payable Account Code</label>
-              <Input value={taxConfig.taxSettings.outputVatAccountCode} onChange={(e) => handleTaxSettingChange("outputVatAccountCode", e.target.value)} placeholder="2140" />
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Taxable categories</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.taxableCategoryCount}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Rent, utilities, penalties and deposits are maintained with future-facing defaults.</div>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.rent} onChange={(e) => handleTaxCategoryToggle("rent", e.target.checked)} title="Rent charge taxable" description="Default rent-charge taxability rule for tenant invoices." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.utility} onChange={(e) => handleTaxCategoryToggle("utility", e.target.checked)} title="Utility recharge taxable" description="Keeps utility treatment configurable instead of assumed." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.penalty} onChange={(e) => handleTaxCategoryToggle("penalty", e.target.checked)} title="Penalty invoice taxable" description="Phase 1 supports penalty tax treatment separately from normal invoices." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.deposit} onChange={(e) => handleTaxCategoryToggle("deposit", e.target.checked)} title="Deposit charge taxable" description="Recommended off for standard deposit liabilities unless your policy explicitly requires otherwise." />
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Use Operational Settings for tax configuration, utilities, billing periods, expense items and accounting defaults. Company Setup should stay focused on who the company is and how it communicates and collects.
           </div>
 
-          <div className="mt-6 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-extrabold text-slate-900">Tax Codes</div>
-              <div className="mt-1 text-xs text-slate-500">Maintain reusable tax codes for invoices and commission settings. Keep one default code active.</div>
-            </div>
-            <button onClick={handleAddTaxCode} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
-              <FaPlus /> Add Tax Code
-            </button>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {taxConfig.taxCodes.map((code, index) => (
-              <div key={code._id || `${code.key}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Key</label>
-                    <Input value={code.key} onChange={(e) => handleTaxCodeChange(index, "key", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Name</label>
-                    <Input value={code.name} onChange={(e) => handleTaxCodeChange(index, "name", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Type</label>
-                    <Select value={code.type} onChange={(e) => handleTaxCodeChange(index, "type", e.target.value)}>
-                      <option value="vat">VAT</option>
-                      <option value="zero_rated">Zero Rated</option>
-                      <option value="exempt">Exempt</option>
-                      <option value="none">No Tax</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Rate (%)</label>
-                    <Input type="number" min="0" step="0.01" value={code.rate} onChange={(e) => handleTaxCodeChange(index, "rate", e.target.value)} />
-                  </div>
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                    <input type="checkbox" checked={Boolean(code.isDefault)} onChange={(e) => handleTaxCodeChange(index, "isDefault", e.target.checked)} /> Default
-                  </label>
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                    <input type="checkbox" checked={Boolean(code.isActive)} onChange={(e) => handleTaxCodeChange(index, "isActive", e.target.checked)} /> Active
-                  </label>
-                </div>
-                <div className="mt-3 flex items-end gap-3">
-                  <div className="flex-1">
-                    <label className="text-xs font-bold text-slate-700">Description</label>
-                    <Input value={code.description || ""} onChange={(e) => handleTaxCodeChange(index, "description", e.target.value)} />
-                  </div>
-                  <button onClick={() => handleRemoveTaxCode(index)} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100">
-                    <FaTrashAlt /> Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 flex justify-end">
-            <button disabled={savingTaxConfig} onClick={handleSaveTaxConfiguration} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#0B3B2E] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
-              <FaSave /> {savingTaxConfig ? "Saving..." : "Save Tax Configuration"}
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/settings")}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Open Operational Settings <FaArrowRight />
             </button>
           </div>
         </Card>
@@ -2940,110 +2828,41 @@ export default function CompanySetupPage() {
           </div>
         </Card>
 
-        <Card title="Tax Configuration" subtitle="Company-wide VAT / tax foundation for invoices, penalties and commission logic. Management commission VAT is further refined inside Property Commission Settings.">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ToggleRow
-              checked={taxConfig.taxSettings.enabled}
-              onChange={(e) => handleTaxSettingChange("enabled", e.target.checked)}
-              title="Enable tax engine"
-              description="Turn on structured VAT / tax handling for this company. Core accounting remains isolated from communication and non-financial modules."
-            />
-            <ToggleRow
-              checked={taxConfig.taxSettings.invoiceTaxableByDefault}
-              onChange={(e) => handleTaxSettingChange("invoiceTaxableByDefault", e.target.checked)}
-              title="Invoices taxable by default"
-              description="Used as the fallback taxability rule when no stricter category toggle is set."
-            />
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default Tax Mode</label>
-              <Select value={taxConfig.taxSettings.defaultTaxMode} onChange={(e) => handleTaxSettingChange("defaultTaxMode", e.target.value)}>
-                <option value="exclusive">Exclusive</option>
-                <option value="inclusive">Inclusive</option>
-              </Select>
+        <Card title="Operational Defaults & Tax" subtitle="Reusable tax, accounting and future-facing billing defaults now live in Operational Settings so Company Setup stays focused on identity, integrations and communications.">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tax engine</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.enabled ? "Enabled" : "Disabled"}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Company-wide VAT handling, invoice taxability and default tax code behaviour.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default VAT Rate (%)</label>
-              <Input type="number" min="0" step="0.01" value={taxConfig.taxSettings.defaultVatRate} onChange={(e) => handleTaxSettingChange("defaultVatRate", Number(e.target.value || 0))} />
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default mode</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultMode}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Use Operational Settings for default tax mode, code and output VAT account maintenance.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default Tax Code</label>
-              <Select value={taxConfig.taxSettings.defaultTaxCodeKey} onChange={(e) => handleTaxSettingChange("defaultTaxCodeKey", e.target.value)}>
-                {taxConfig.taxCodes.map((code) => (
-                  <option key={code._id || code.key} value={code.key}>{code.name}</option>
-                ))}
-              </Select>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default tax code</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultCodeLabel}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Keep one active default code for invoice and commission tax posting consistency.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Output VAT / Tax Payable Account Code</label>
-              <Input value={taxConfig.taxSettings.outputVatAccountCode} onChange={(e) => handleTaxSettingChange("outputVatAccountCode", e.target.value)} placeholder="2140" />
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Taxable categories</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.taxableCategoryCount}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Rent, utilities, penalties and deposits are maintained with future-facing defaults.</div>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.rent} onChange={(e) => handleTaxCategoryToggle("rent", e.target.checked)} title="Rent charge taxable" description="Default rent-charge taxability rule for tenant invoices." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.utility} onChange={(e) => handleTaxCategoryToggle("utility", e.target.checked)} title="Utility recharge taxable" description="Keeps utility treatment configurable instead of assumed." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.penalty} onChange={(e) => handleTaxCategoryToggle("penalty", e.target.checked)} title="Penalty invoice taxable" description="Phase 1 supports penalty tax treatment separately from normal invoices." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.deposit} onChange={(e) => handleTaxCategoryToggle("deposit", e.target.checked)} title="Deposit charge taxable" description="Recommended off for standard deposit liabilities unless your policy explicitly requires otherwise." />
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Use Operational Settings for tax configuration, utilities, billing periods, expense items and accounting defaults. Company Setup should stay focused on who the company is and how it communicates and collects.
           </div>
 
-          <div className="mt-6 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-extrabold text-slate-900">Tax Codes</div>
-              <div className="mt-1 text-xs text-slate-500">Maintain reusable tax codes for invoices and commission settings. Keep one default code active.</div>
-            </div>
-            <button onClick={handleAddTaxCode} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
-              <FaPlus /> Add Tax Code
-            </button>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {taxConfig.taxCodes.map((code, index) => (
-              <div key={code._id || `${code.key}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Key</label>
-                    <Input value={code.key} onChange={(e) => handleTaxCodeChange(index, "key", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Name</label>
-                    <Input value={code.name} onChange={(e) => handleTaxCodeChange(index, "name", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Type</label>
-                    <Select value={code.type} onChange={(e) => handleTaxCodeChange(index, "type", e.target.value)}>
-                      <option value="vat">VAT</option>
-                      <option value="zero_rated">Zero Rated</option>
-                      <option value="exempt">Exempt</option>
-                      <option value="none">No Tax</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Rate (%)</label>
-                    <Input type="number" min="0" step="0.01" value={code.rate} onChange={(e) => handleTaxCodeChange(index, "rate", e.target.value)} />
-                  </div>
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                    <input type="checkbox" checked={Boolean(code.isDefault)} onChange={(e) => handleTaxCodeChange(index, "isDefault", e.target.checked)} /> Default
-                  </label>
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                    <input type="checkbox" checked={Boolean(code.isActive)} onChange={(e) => handleTaxCodeChange(index, "isActive", e.target.checked)} /> Active
-                  </label>
-                </div>
-                <div className="mt-3 flex items-end gap-3">
-                  <div className="flex-1">
-                    <label className="text-xs font-bold text-slate-700">Description</label>
-                    <Input value={code.description || ""} onChange={(e) => handleTaxCodeChange(index, "description", e.target.value)} />
-                  </div>
-                  <button onClick={() => handleRemoveTaxCode(index)} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100">
-                    <FaTrashAlt /> Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 flex justify-end">
-            <button disabled={savingTaxConfig} onClick={handleSaveTaxConfiguration} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#0B3B2E] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
-              <FaSave /> {savingTaxConfig ? "Saving..." : "Save Tax Configuration"}
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/settings")}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Open Operational Settings <FaArrowRight />
             </button>
           </div>
         </Card>
@@ -3163,110 +2982,41 @@ export default function CompanySetupPage() {
           </div>
         </Card>
 
-        <Card title="Tax Configuration" subtitle="Company-wide VAT / tax foundation for invoices, penalties and commission logic. Management commission VAT is further refined inside Property Commission Settings.">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ToggleRow
-              checked={taxConfig.taxSettings.enabled}
-              onChange={(e) => handleTaxSettingChange("enabled", e.target.checked)}
-              title="Enable tax engine"
-              description="Turn on structured VAT / tax handling for this company. Core accounting remains isolated from communication and non-financial modules."
-            />
-            <ToggleRow
-              checked={taxConfig.taxSettings.invoiceTaxableByDefault}
-              onChange={(e) => handleTaxSettingChange("invoiceTaxableByDefault", e.target.checked)}
-              title="Invoices taxable by default"
-              description="Used as the fallback taxability rule when no stricter category toggle is set."
-            />
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default Tax Mode</label>
-              <Select value={taxConfig.taxSettings.defaultTaxMode} onChange={(e) => handleTaxSettingChange("defaultTaxMode", e.target.value)}>
-                <option value="exclusive">Exclusive</option>
-                <option value="inclusive">Inclusive</option>
-              </Select>
+        <Card title="Operational Defaults & Tax" subtitle="Reusable tax, accounting and future-facing billing defaults now live in Operational Settings so Company Setup stays focused on identity, integrations and communications.">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tax engine</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.enabled ? "Enabled" : "Disabled"}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Company-wide VAT handling, invoice taxability and default tax code behaviour.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default VAT Rate (%)</label>
-              <Input type="number" min="0" step="0.01" value={taxConfig.taxSettings.defaultVatRate} onChange={(e) => handleTaxSettingChange("defaultVatRate", Number(e.target.value || 0))} />
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default mode</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultMode}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Use Operational Settings for default tax mode, code and output VAT account maintenance.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default Tax Code</label>
-              <Select value={taxConfig.taxSettings.defaultTaxCodeKey} onChange={(e) => handleTaxSettingChange("defaultTaxCodeKey", e.target.value)}>
-                {taxConfig.taxCodes.map((code) => (
-                  <option key={code._id || code.key} value={code.key}>{code.name}</option>
-                ))}
-              </Select>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default tax code</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultCodeLabel}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Keep one active default code for invoice and commission tax posting consistency.</div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700">Output VAT / Tax Payable Account Code</label>
-              <Input value={taxConfig.taxSettings.outputVatAccountCode} onChange={(e) => handleTaxSettingChange("outputVatAccountCode", e.target.value)} placeholder="2140" />
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Taxable categories</div>
+              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.taxableCategoryCount}</div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Rent, utilities, penalties and deposits are maintained with future-facing defaults.</div>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.rent} onChange={(e) => handleTaxCategoryToggle("rent", e.target.checked)} title="Rent charge taxable" description="Default rent-charge taxability rule for tenant invoices." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.utility} onChange={(e) => handleTaxCategoryToggle("utility", e.target.checked)} title="Utility recharge taxable" description="Keeps utility treatment configurable instead of assumed." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.penalty} onChange={(e) => handleTaxCategoryToggle("penalty", e.target.checked)} title="Penalty invoice taxable" description="Phase 1 supports penalty tax treatment separately from normal invoices." />
-            <ToggleRow checked={taxConfig.taxSettings.invoiceTaxabilityByCategory.deposit} onChange={(e) => handleTaxCategoryToggle("deposit", e.target.checked)} title="Deposit charge taxable" description="Recommended off for standard deposit liabilities unless your policy explicitly requires otherwise." />
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Use Operational Settings for tax configuration, utilities, billing periods, expense items and accounting defaults. Company Setup should stay focused on who the company is and how it communicates and collects.
           </div>
 
-          <div className="mt-6 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-extrabold text-slate-900">Tax Codes</div>
-              <div className="mt-1 text-xs text-slate-500">Maintain reusable tax codes for invoices and commission settings. Keep one default code active.</div>
-            </div>
-            <button onClick={handleAddTaxCode} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
-              <FaPlus /> Add Tax Code
-            </button>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {taxConfig.taxCodes.map((code, index) => (
-              <div key={code._id || `${code.key}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Key</label>
-                    <Input value={code.key} onChange={(e) => handleTaxCodeChange(index, "key", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Name</label>
-                    <Input value={code.name} onChange={(e) => handleTaxCodeChange(index, "name", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Type</label>
-                    <Select value={code.type} onChange={(e) => handleTaxCodeChange(index, "type", e.target.value)}>
-                      <option value="vat">VAT</option>
-                      <option value="zero_rated">Zero Rated</option>
-                      <option value="exempt">Exempt</option>
-                      <option value="none">No Tax</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Rate (%)</label>
-                    <Input type="number" min="0" step="0.01" value={code.rate} onChange={(e) => handleTaxCodeChange(index, "rate", e.target.value)} />
-                  </div>
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                    <input type="checkbox" checked={Boolean(code.isDefault)} onChange={(e) => handleTaxCodeChange(index, "isDefault", e.target.checked)} /> Default
-                  </label>
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                    <input type="checkbox" checked={Boolean(code.isActive)} onChange={(e) => handleTaxCodeChange(index, "isActive", e.target.checked)} /> Active
-                  </label>
-                </div>
-                <div className="mt-3 flex items-end gap-3">
-                  <div className="flex-1">
-                    <label className="text-xs font-bold text-slate-700">Description</label>
-                    <Input value={code.description || ""} onChange={(e) => handleTaxCodeChange(index, "description", e.target.value)} />
-                  </div>
-                  <button onClick={() => handleRemoveTaxCode(index)} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100">
-                    <FaTrashAlt /> Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 flex justify-end">
-            <button disabled={savingTaxConfig} onClick={handleSaveTaxConfiguration} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#0B3B2E] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
-              <FaSave /> {savingTaxConfig ? "Saving..." : "Save Tax Configuration"}
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/settings")}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Open Operational Settings <FaArrowRight />
             </button>
           </div>
         </Card>
@@ -3417,13 +3167,58 @@ export default function CompanySetupPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-xl font-extrabold text-slate-900">Company Setup</div>
-            <div className="text-sm text-slate-600">Configure the active company and navigate setup sections using the tabs above. The selected tab now stays reflected in the page URL.</div>
+            <div className="max-w-3xl text-sm leading-6 text-slate-600">Use this workspace for company identity, operating mode, enabled modules, payment integrations and communication channels. Future-facing tax, billing and accounting defaults live in Operational Settings.</div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50">Export Settings</button>
-            <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95">View Audit Log</button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRefreshSetup}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50"
+            >
+              <FaSyncAlt /> Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/settings')}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+            >
+              Operational Settings <FaArrowRight />
+            </button>
           </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <button onClick={() => switchTab('details')} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Company Profile</div>
+            <div className="mt-2 text-base font-extrabold text-slate-900">Identity, statutory details and fiscal basics</div>
+            <div className="mt-1 text-sm leading-6 text-slate-600">Maintain the company name, logo, contacts, statutory identifiers and base operating profile used across the workspace.</div>
+          </button>
+          <button onClick={() => switchTab('structure')} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Operating Model</div>
+            <div className="mt-2 text-base font-extrabold text-slate-900">{normalizeCompanyOperatingMode(company.companyMode) === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD ? 'Self-Managing Landlord' : 'Property Manager'}</div>
+            <div className="mt-1 text-sm leading-6 text-slate-600">Set company posture, workspace wording and future-facing defaults without touching posted operational history.</div>
+          </button>
+          <button onClick={() => switchTab('modules')} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Modules</div>
+            <div className="mt-2 text-base font-extrabold text-slate-900">{Object.values(applyCompanyModeBaseModules(company.modules || {}, company.companyMode)).filter(Boolean).length} enabled</div>
+            <div className="mt-1 text-sm leading-6 text-slate-600">Keep the workspace lean by showing only the modules this company truly uses while preserving data safely.</div>
+          </button>
+          <button onClick={() => switchTab('payments')} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Payments</div>
+            <div className="mt-2 text-base font-extrabold text-slate-900">{paymentSummary.active} active / {paymentSummary.total} total</div>
+            <div className="mt-1 text-sm leading-6 text-slate-600">Manage M-Pesa Paybill credentials, posting behaviour and default collection cashbook mapping for the active company.</div>
+          </button>
+          <button onClick={() => switchTab('email')} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Email</div>
+            <div className="mt-2 text-base font-extrabold text-slate-900">{emailSummary.active} active / {emailSummary.total} total</div>
+            <div className="mt-1 text-sm leading-6 text-slate-600">Configure SMTP sender identities and operational email profiles for invoices, receipts, statements and alerts.</div>
+          </button>
+          <button onClick={() => navigate('/settings')} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-left shadow-sm transition hover:border-amber-300 hover:bg-amber-100/70">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-amber-700">Operational Settings</div>
+            <div className="mt-2 text-base font-extrabold text-slate-900">Tax {taxSetupSummary.enabled ? 'enabled' : 'disabled'} • {taxSetupSummary.defaultCodeLabel}</div>
+            <div className="mt-1 text-sm leading-6 text-slate-700">Utilities, billing periods, expense items, tax configuration and accounting defaults are maintained in their own workspace.</div>
+          </button>
         </div>
 
         <div className="mt-5 rounded-2xl border border-white/40 bg-white/50 p-2 backdrop-blur-xl">

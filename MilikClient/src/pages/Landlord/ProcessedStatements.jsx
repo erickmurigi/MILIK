@@ -253,13 +253,30 @@ const ProcessedStatements = () => {
     if (reasonInput === null) return;
 
     const reason = reasonInput.trim() || defaultReason;
+    const reopenDraftContext = {
+      propertyId: statement?.property?._id || statement?.property || "",
+      landlordId: statement?.landlord?._id || statement?.landlord || "",
+      statementType: statement?.statementType || "provisional",
+      periodStart: statement?.periodStart || "",
+      periodEnd: statement?.periodEnd || statement?.cutoffAt || statement?.closedAt || "",
+      sourceStatementId:
+        statement?.sourceStatement?._id ||
+        statement?.sourceStatement ||
+        statement?.reversedSourceStatement?._id ||
+        statement?.reversedSourceStatement ||
+        "",
+    };
 
     try {
       await dispatch(reverseStatement({ statementId: statement._id, reason })).unwrap();
-      toast.success("Processed statement reversed successfully. Linked processed-statement ledger entries were reversed too.");
-      if (expandedRow === statement._id) {
-        setExpandedRow(statement._id);
-      }
+      toast.success(
+        "Processed statement reversed successfully. Reopening the statement workspace with the same period so you can regenerate a fresh draft."
+      );
+      navigate("/landlord/statements", {
+        state: {
+          reopenDraftContext,
+        },
+      });
     } catch (error) {
       toast.error(error || "Failed to reverse statement");
     }
