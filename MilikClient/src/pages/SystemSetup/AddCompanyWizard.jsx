@@ -190,7 +190,7 @@ const AddCompanyWizard = () => {
   const pageTitle = isEditMode ? "Company Details" : "New Company";
   const pageSubtitle = isEditMode
     ? "Review and update the selected company without losing the current setup."
-    : "Create a new company with a polished MILIK onboarding flow and company-aware module selection.";
+    : "Create a new company quickly, then continue configuration inside Company Setup using the active company context.";
 
   const selectedModulesCount = useMemo(
     () => MODULE_OPTIONS.filter((option) => formData.modules?.[option.key]).length,
@@ -326,9 +326,23 @@ const validateForm = () => {
 
       if (!isEditMode && savedCompany?._id) {
         localStorage.setItem("milik_active_company_id", savedCompany._id);
+        await dispatch(getCompany(savedCompany._id));
       }
 
       toast.success(isEditMode ? "Company updated successfully" : "Company created successfully");
+
+      if (!isEditMode && savedCompany?._id) {
+        navigate("/company-setup", {
+          replace: true,
+          state: {
+            tabTitle: "Company Setup",
+            fromAddCompany: true,
+            createdCompanyId: savedCompany._id,
+          },
+        });
+        return;
+      }
+
       navigate("/system-setup/companies", {
         replace: true,
         state: { tabTitle: "Companies" },
@@ -616,7 +630,7 @@ const validateForm = () => {
                   className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0A400C] px-5 py-3 text-sm font-black text-white transition hover:bg-[#0d5611] disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {saving ? <FaSpinner className="animate-spin" /> : <FaSave />}
-                  {saving ? "Saving..." : isEditMode ? "Save changes" : "Create company"}
+                  {saving ? "Saving..." : isEditMode ? "Save changes" : "Create company & continue"}
                 </button>
               </div>
             </div>

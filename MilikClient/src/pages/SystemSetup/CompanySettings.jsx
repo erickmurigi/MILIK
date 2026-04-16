@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
@@ -344,13 +344,15 @@ const Modal = ({ open, title, subtitle, children, onClose, footer }) => {
 
 const CompanySettings = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentCompany } = useSelector((state) => state.company || {});
 
   const [settings, setSettings] = useState(null);
   const [taxConfig, setTaxConfig] = useState(normalizeTaxConfiguration());
   const [accountingDefaults, setAccountingDefaults] = useState(normalizeAccountingDefaults());
   const [chartAccounts, setChartAccounts] = useState([]);
-  const [activeTab, setActiveTab] = useState("utilities");
+  const [loadedChartAccountCompanyId, setLoadedChartAccountCompanyId] = useState("");
+  const activeTab = Object.prototype.hasOwnProperty.call(TAB_CONFIG, searchParams.get("tab")) ? searchParams.get("tab") : "utilities";
   const [showInactive, setShowInactive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
@@ -361,6 +363,21 @@ const CompanySettings = () => {
   const [modalTab, setModalTab] = useState("utilities");
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState(emptyForms.utilities);
+
+  useEffect(() => {
+    if (!Object.prototype.hasOwnProperty.call(TAB_CONFIG, searchParams.get("tab"))) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("tab", "utilities");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const switchTab = (tabKey) => {
+    if (!Object.prototype.hasOwnProperty.call(TAB_CONFIG, tabKey)) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("tab", tabKey);
+    setSearchParams(nextParams);
+  };
 
   const loadSettings = async ({ silent = false } = {}) => {
     if (!currentCompany?._id) {
@@ -386,6 +403,12 @@ const CompanySettings = () => {
   const loadChartAccounts = async () => {
     if (!currentCompany?._id) {
       setChartAccounts([]);
+      setLoadedChartAccountCompanyId("");
+      return;
+    }
+
+    const companyId = String(currentCompany._id);
+    if (loadedChartAccountCompanyId === companyId) {
       return;
     }
 
@@ -395,8 +418,10 @@ const CompanySettings = () => {
       const response = await adminRequests.get(`/chart-of-accounts?${query}`);
       const rows = Array.isArray(response?.data) ? response.data : [];
       setChartAccounts(rows.filter((account) => account?.isPosting !== false && account?.isHeader !== true));
+      setLoadedChartAccountCompanyId(companyId);
     } catch (error) {
       setChartAccounts([]);
+      setLoadedChartAccountCompanyId("");
       toast.error(extractErrorMessage(error));
     } finally {
       setLoadingAccounts(false);
@@ -408,8 +433,9 @@ const CompanySettings = () => {
   }, [currentCompany?._id]);
 
   useEffect(() => {
+    if (activeTab !== "accounting") return;
     loadChartAccounts();
-  }, [currentCompany?._id]);
+  }, [activeTab, currentCompany?._id, loadedChartAccountCompanyId]);
 
   const activeCounts = useMemo(
     () => ({
@@ -1151,7 +1177,7 @@ const CompanySettings = () => {
               return (
                 <button
                   key={key}
-                  onClick={() => setActiveTab(key)}
+                  onClick={() => switchTab(key)}
                   className={`flex items-center gap-2 whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-extrabold transition ${
                     isActive
                       ? "border-transparent bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white"

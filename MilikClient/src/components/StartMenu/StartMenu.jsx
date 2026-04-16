@@ -23,6 +23,7 @@ import {
   FaChartLine,
   FaBriefcase,
   FaLock,
+  FaCog,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -180,6 +181,7 @@ const StartMenu = ({ darkMode = false }) => {
   );
 
   const openSwitchCompany = async ({ forceRefresh = false } = {}) => {
+    setSearch("");
     setShowSwitchModal(true);
 
     const cacheIsFresh = companies.length > 0 && Date.now() - companiesLoadedAt < 60 * 1000;
@@ -212,6 +214,14 @@ const StartMenu = ({ darkMode = false }) => {
           navigate("/company-setup");
         },
       },
+      {
+        label: "Operational Settings",
+        icon: <FaCog />,
+        onClick: () => {
+          setOpen(false);
+          navigate("/settings");
+        },
+      },
     ];
 
     if (isSystemAdmin) {
@@ -238,9 +248,18 @@ const StartMenu = ({ darkMode = false }) => {
   }, [isSystemAdmin, navigate]);
 
   const filteredCompanies = useMemo(() => {
-    const visibleCompanies = isDemoUser
+    const activeCompanyId = String(currentCompany?._id || currentUser?.company?._id || "");
+    const visibleCompanies = (isDemoUser
       ? companies
-      : companies.filter((company) => !company?.isDemoWorkspace);
+      : companies.filter((company) => !company?.isDemoWorkspace)
+    ).slice();
+
+    visibleCompanies.sort((a, b) => {
+      const aActive = String(a?._id || "") === activeCompanyId ? 1 : 0;
+      const bActive = String(b?._id || "") === activeCompanyId ? 1 : 0;
+      if (aActive !== bActive) return bActive - aActive;
+      return String(a?.companyName || "").localeCompare(String(b?.companyName || ""));
+    });
 
     const term = search.trim().toLowerCase();
     if (!term) return visibleCompanies;
@@ -250,7 +269,7 @@ const StartMenu = ({ darkMode = false }) => {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term))
     );
-  }, [companies, isDemoUser, search]);
+  }, [companies, currentCompany?._id, currentUser?.company?._id, isDemoUser, search]);
 
   const onSignOut = () => {
     clearClientSessionStorage();
@@ -504,20 +523,25 @@ const StartMenu = ({ darkMode = false }) => {
                         key={company._id}
                         onClick={() => handleSwitchCompany(company)}
                         disabled={isBusySwitching}
-                        className="w-full border-b border-slate-200 px-4 py-4 text-left transition last:border-b-0 hover:bg-emerald-50 disabled:opacity-60"
+                        className={`w-full border-b border-slate-200 px-4 py-4 text-left transition last:border-b-0 disabled:opacity-60 ${
+                          active ? "bg-emerald-50/70" : "hover:bg-slate-50"
+                        }`}
                       >
                         <div className="flex items-center justify-between gap-4">
                           <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] font-bold text-white">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                               {company?.logo ? (
                                 <img src={company.logo} alt={company.companyName} className="h-full w-full object-contain p-1.5" />
                               ) : (
-                                initialsFromName(company?.companyName)
+                                <span className="font-bold text-slate-700">{initialsFromName(company?.companyName)}</span>
                               )}
                             </div>
                             <div className="min-w-0">
                               <div className="truncate font-bold text-slate-900">{company?.companyName}</div>
                               <div className="truncate text-xs text-slate-500">{[company?.companyCode, company?.town, company?.country].filter(Boolean).join(" • ") || "Company workspace"}</div>
+                              <div className="mt-1 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">
+                                {getCompanyOperatingModeLabel(company?.companyMode)}
+                              </div>
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-3">

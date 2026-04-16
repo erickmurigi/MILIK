@@ -311,30 +311,99 @@ function App() {
     if (!token || !storedUser) return;
 
     dispatch(initializeAuth({ user: storedUser, token }));
-
-    if (storedUser?.company?._id) {
-      dispatch(setCurrentCompany(storedUser.company));
-      localStorage.setItem("milik_active_company_id", storedUser.company._id);
-    }
   }, [currentUser, dispatch]);
 
   useEffect(() => {
-    if (isCompanySwitching) return;
+    let cancelled = false;
 
-    const resolvedUser = getResolvedAuthUser(currentUser, getStoredAuthSession());
-    const userCompanyId = resolvedUser?.company?._id;
-    const activeCompanyId = currentCompany?._id;
+    const syncActiveCompany = async () => {
+      if (isCompanySwitching) return;
 
-    if (userCompanyId && userCompanyId !== activeCompanyId) {
-      dispatch(setCurrentCompany(resolvedUser.company));
-      localStorage.setItem("milik_active_company_id", userCompanyId);
-      return;
-    }
+      const resolvedUser = getResolvedAuthUser(currentUser, getStoredAuthSession());
+      if (!resolvedUser) return;
 
-    if (!resolvedUser?.isSystemAdmin && !resolvedUser?.superAdminAccess && !userCompanyId && activeCompanyId) {
-      dispatch(clearCurrentCompany());
-      localStorage.removeItem("milik_active_company_id");
-    }
+      const isSystemAdmin = Boolean(resolvedUser?.isSystemAdmin || resolvedUser?.superAdminAccess);
+      const currentCompanyId = String(currentCompany?._id || "");
+      const userCompany = resolvedUser?.company?._id ? resolvedUser.company : null;
+      const userCompanyId = String(userCompany?._id || "");
+      const preferredCompanyId = String(
+        (
+          resolvedUser?.isDemoUser
+            ? localStorage.getItem("milik_demo_company_id") || localStorage.getItem("milik_active_company_id")
+            : localStorage.getItem("milik_active_company_id")
+        ) || ""
+      );
+
+      const applyCompany = (company) => {
+        if (!company?._id || cancelled) return;
+        dispatch(setCurrentCompany(company));
+        dispatch(getCompanySuccess(company));
+        localStorage.setItem("milik_active_company_id", company._id);
+
+        if (resolvedUser?.isDemoUser) {
+          localStorage.setItem("milik_demo_mode", "true");
+          localStorage.setItem("milik_demo_company_id", company._id);
+        }
+      };
+
+      if (!isSystemAdmin && userCompanyId && (!preferredCompanyId || preferredCompanyId === userCompanyId)) {
+        if (currentCompanyId !== userCompanyId) {
+          applyCompany(userCompany);
+        } else {
+          localStorage.setItem("milik_active_company_id", userCompanyId);
+        }
+        return;
+      }
+
+      if (!isSystemAdmin && !preferredCompanyId && !userCompanyId) {
+        if (currentCompanyId) {
+          dispatch(clearCurrentCompany());
+          localStorage.removeItem("milik_active_company_id");
+        }
+        return;
+      }
+
+      if (preferredCompanyId && currentCompanyId === preferredCompanyId) {
+        localStorage.setItem("milik_active_company_id", preferredCompanyId);
+        return;
+      }
+
+      try {
+        const companies = await getAccessibleCompanies();
+        if (cancelled) return;
+
+        const availableCompanies = Array.isArray(companies) ? companies : [];
+        const resolvedCompany =
+          availableCompanies.find((company) => String(company?._id || "") === preferredCompanyId) ||
+          availableCompanies.find((company) => String(company?._id || "") === userCompanyId) ||
+          userCompany ||
+          availableCompanies[0] ||
+          null;
+
+        if (resolvedCompany?._id) {
+          applyCompany(resolvedCompany);
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to rehydrate active company context:", error);
+      }
+
+      if (userCompanyId) {
+        applyCompany(userCompany);
+        return;
+      }
+
+      if (currentCompanyId) {
+        dispatch(clearCurrentCompany());
+        localStorage.removeItem("milik_active_company_id");
+      }
+    };
+
+    syncActiveCompany();
+
+    return () => {
+      cancelled = true;
+    };
   }, [currentUser, currentCompany?._id, dispatch, isCompanySwitching]);
 
   useEffect(() => {
@@ -353,44 +422,6 @@ function App() {
     localStorage.removeItem("milik_demo_company_id");
   }, [currentCompany, currentUser]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const initializeSystemAdminCompany = async () => {
-      const resolvedUser = getResolvedAuthUser(currentUser, getStoredAuthSession());
-      if (!resolvedUser?.isSystemAdmin && !resolvedUser?.superAdminAccess) return;
-      if (isCompanySwitching) return;
-      if (currentCompany?._id) {
-        localStorage.setItem("milik_active_company_id", currentCompany._id);
-        return;
-      }
-
-      try {
-        const companies = await getAccessibleCompanies();
-        const availableCompanies = Array.isArray(companies) ? companies : [];
-
-        if (cancelled || availableCompanies.length === 0) return;
-
-        const preferredCompanyId = localStorage.getItem("milik_active_company_id");
-        const preferredCompany =
-          availableCompanies.find((company) => String(company._id) === String(preferredCompanyId)) ||
-          availableCompanies[0];
-
-        if (preferredCompany?._id) {
-          dispatch(setCurrentCompany(preferredCompany));
-          dispatch(getCompanySuccess(preferredCompany));
-          localStorage.setItem("milik_active_company_id", preferredCompany._id);
-        }
-      } catch (error) {
-        console.error("Failed to initialize active company for system admin:", error);
-      }
-    };
-
-    initializeSystemAdminCompany();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentUser, currentCompany?._id, dispatch, isCompanySwitching]);
 
   return (
     <BrowserRouter>

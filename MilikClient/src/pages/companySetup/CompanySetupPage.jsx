@@ -45,7 +45,7 @@ const tabs = [
   { key: "details", label: "COMPANY PROFILE", icon: <FaBuilding /> },
   { key: "structure", label: "OPERATING MODEL", icon: <FaSitemap /> },
   { key: "modules", label: "MODULES", icon: <FaThLarge /> },
-  { key: "payments", label: "PAYMENTS", icon: <FaMoneyCheckAlt /> },
+  { key: "payments", label: "PAYMENTS & COLLECTIONS", icon: <FaMoneyCheckAlt /> },
   { key: "email", label: "EMAIL", icon: <FaEnvelope /> },
   { key: "sms", label: "SMS", icon: <FaSms /> },
 ];
@@ -725,7 +725,6 @@ export default function CompanySetupPage() {
   const [savingEmails, setSavingEmails] = useState(false);
   const [savingSmsProfiles, setSavingSmsProfiles] = useState(false);
   const [savingSmsTemplates, setSavingSmsTemplates] = useState(false);
-  const [savingTaxConfig, setSavingTaxConfig] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
   const [loadingCashbooks, setLoadingCashbooks] = useState(false);
   const [cashbookOptions, setCashbookOptions] = useState([]);
@@ -1002,92 +1001,6 @@ export default function CompanySetupPage() {
     }
   };
 
-
-  const handleTaxSettingChange = (key, value) => {
-    setTaxConfig((prev) => ({
-      ...prev,
-      taxSettings: {
-        ...prev.taxSettings,
-        [key]: value,
-      },
-    }));
-  };
-
-  const handleTaxCategoryToggle = (key, checked) => {
-    setTaxConfig((prev) => ({
-      ...prev,
-      taxSettings: {
-        ...prev.taxSettings,
-        invoiceTaxabilityByCategory: {
-          ...prev.taxSettings.invoiceTaxabilityByCategory,
-          [key]: checked,
-        },
-      },
-    }));
-  };
-
-  const handleTaxCodeChange = (index, key, value) => {
-    setTaxConfig((prev) => ({
-      ...prev,
-      taxCodes: prev.taxCodes.map((code, codeIndex) =>
-        codeIndex === index
-          ? {
-              ...code,
-              [key]: key === "rate" ? Number(value || 0) : key === "isDefault" || key === "isActive" ? value : value,
-            }
-          : key === "isDefault" && value === true
-          ? { ...code, isDefault: false }
-          : code
-      ),
-    }));
-  };
-
-  const handleAddTaxCode = () => {
-    setTaxConfig((prev) => ({
-      ...prev,
-      taxCodes: [
-        ...prev.taxCodes,
-        {
-          _id: `tax-code-${Date.now()}`,
-          key: `tax_code_${prev.taxCodes.length + 1}`,
-          name: `Tax Code ${prev.taxCodes.length + 1}`,
-          type: "vat",
-          rate: Number(prev.taxSettings.defaultVatRate || 16),
-          isDefault: false,
-          isActive: true,
-          description: "",
-        },
-      ],
-    }));
-  };
-
-  const handleRemoveTaxCode = (index) => {
-    setTaxConfig((prev) => ({
-      ...prev,
-      taxCodes: prev.taxCodes.filter((_, codeIndex) => codeIndex !== index),
-    }));
-  };
-
-  const handleSaveTaxConfiguration = async () => {
-    if (!currentCompany?._id) {
-      toast.error("No active company selected");
-      return;
-    }
-
-    const payload = buildTaxSavePayload(taxConfig);
-
-    setSavingTaxConfig(true);
-    try {
-      const response = await adminRequests.put(`/company-settings/${currentCompany._id}/tax-configuration`, payload);
-      const refreshedSettings = response?.data?.settings || response?.data || {};
-      setTaxConfig(normalizeTaxConfiguration(refreshedSettings));
-      toast.success("Tax configuration saved successfully");
-    } catch (error) {
-      toast.error(error?.response?.data?.message || error?.message || "Failed to save tax configuration");
-    } finally {
-      setSavingTaxConfig(false);
-    }
-  };
 
   const handleSaveDetails = async () => {
     if (!currentCompany?._id) {
@@ -1925,45 +1838,6 @@ export default function CompanySetupPage() {
           </div>
         </Card>
 
-        <Card title="Operational Defaults & Tax" subtitle="Reusable tax, accounting and future-facing billing defaults now live in Operational Settings so Company Setup stays focused on identity, integrations and communications.">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tax engine</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.enabled ? "Enabled" : "Disabled"}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Company-wide VAT handling, invoice taxability and default tax code behaviour.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default mode</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultMode}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Use Operational Settings for default tax mode, code and output VAT account maintenance.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default tax code</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultCodeLabel}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Keep one active default code for invoice and commission tax posting consistency.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Taxable categories</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.taxableCategoryCount}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Rent, utilities, penalties and deposits are maintained with future-facing defaults.</div>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Use Operational Settings for tax configuration, utilities, billing periods, expense items and accounting defaults. Company Setup should stay focused on who the company is and how it communicates and collects.
-          </div>
-
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => navigate("/settings")}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Open Operational Settings <FaArrowRight />
-            </button>
-          </div>
-        </Card>
-
       </div>
     </div>
   );
@@ -2491,45 +2365,6 @@ export default function CompanySetupPage() {
           </div>
         </Card>
 
-        <Card title="Operational Defaults & Tax" subtitle="Reusable tax, accounting and future-facing billing defaults now live in Operational Settings so Company Setup stays focused on identity, integrations and communications.">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tax engine</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.enabled ? "Enabled" : "Disabled"}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Company-wide VAT handling, invoice taxability and default tax code behaviour.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default mode</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultMode}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Use Operational Settings for default tax mode, code and output VAT account maintenance.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default tax code</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultCodeLabel}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Keep one active default code for invoice and commission tax posting consistency.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Taxable categories</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.taxableCategoryCount}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Rent, utilities, penalties and deposits are maintained with future-facing defaults.</div>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Use Operational Settings for tax configuration, utilities, billing periods, expense items and accounting defaults. Company Setup should stay focused on who the company is and how it communicates and collects.
-          </div>
-
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => navigate("/settings")}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Open Operational Settings <FaArrowRight />
-            </button>
-          </div>
-        </Card>
-
       </div>
     </div>
   );
@@ -2828,45 +2663,6 @@ export default function CompanySetupPage() {
           </div>
         </Card>
 
-        <Card title="Operational Defaults & Tax" subtitle="Reusable tax, accounting and future-facing billing defaults now live in Operational Settings so Company Setup stays focused on identity, integrations and communications.">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tax engine</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.enabled ? "Enabled" : "Disabled"}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Company-wide VAT handling, invoice taxability and default tax code behaviour.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default mode</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultMode}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Use Operational Settings for default tax mode, code and output VAT account maintenance.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default tax code</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultCodeLabel}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Keep one active default code for invoice and commission tax posting consistency.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Taxable categories</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.taxableCategoryCount}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Rent, utilities, penalties and deposits are maintained with future-facing defaults.</div>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Use Operational Settings for tax configuration, utilities, billing periods, expense items and accounting defaults. Company Setup should stay focused on who the company is and how it communicates and collects.
-          </div>
-
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => navigate("/settings")}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Open Operational Settings <FaArrowRight />
-            </button>
-          </div>
-        </Card>
-
       </div>
     </div>
   );
@@ -2979,45 +2775,6 @@ export default function CompanySetupPage() {
                 );
               })
             )}
-          </div>
-        </Card>
-
-        <Card title="Operational Defaults & Tax" subtitle="Reusable tax, accounting and future-facing billing defaults now live in Operational Settings so Company Setup stays focused on identity, integrations and communications.">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tax engine</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.enabled ? "Enabled" : "Disabled"}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Company-wide VAT handling, invoice taxability and default tax code behaviour.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default mode</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultMode}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Use Operational Settings for default tax mode, code and output VAT account maintenance.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Default tax code</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.defaultCodeLabel}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Keep one active default code for invoice and commission tax posting consistency.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Taxable categories</div>
-              <div className="mt-2 text-base font-extrabold text-slate-900">{taxSetupSummary.taxableCategoryCount}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-600">Rent, utilities, penalties and deposits are maintained with future-facing defaults.</div>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Use Operational Settings for tax configuration, utilities, billing periods, expense items and accounting defaults. Company Setup should stay focused on who the company is and how it communicates and collects.
-          </div>
-
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => navigate("/settings")}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Open Operational Settings <FaArrowRight />
-            </button>
           </div>
         </Card>
 
@@ -3205,7 +2962,7 @@ export default function CompanySetupPage() {
             <div className="mt-1 text-sm leading-6 text-slate-600">Keep the workspace lean by showing only the modules this company truly uses while preserving data safely.</div>
           </button>
           <button onClick={() => switchTab('payments')} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Payments</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Payments & Collections</div>
             <div className="mt-2 text-base font-extrabold text-slate-900">{paymentSummary.active} active / {paymentSummary.total} total</div>
             <div className="mt-1 text-sm leading-6 text-slate-600">Manage M-Pesa Paybill credentials, posting behaviour and default collection cashbook mapping for the active company.</div>
           </button>

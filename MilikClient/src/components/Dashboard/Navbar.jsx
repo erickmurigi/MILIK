@@ -12,7 +12,10 @@ import { clearAuth } from "../../redux/authSlice";
 import { logoutUser } from "../../redux/apiCalls";
 import { clearCompanyState } from "../../redux/companiesRedux";
 import { clearClientSessionStorage } from "../../utils/sessionCleanup";
-import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import {
+  getCompanyOperatingModeLabel,
+  isSelfManagingLandlordCompany,
+} from "../../utils/companyModules";
 
 const POST_LOGOUT_LANDING_KEY = "milik_post_logout_landing";
 
@@ -25,7 +28,7 @@ const initialsFromName = (value = "") =>
     .toUpperCase()
     .slice(0, 2) || "CO";
 
-const CompanyAvatar = ({ logo, name, darkMode, size = "h-10 w-10" }) => {
+const CompanyAvatar = ({ logo, name, darkMode, size = "h-11 w-11" }) => {
   if (logo) {
     return (
       <div
@@ -33,7 +36,7 @@ const CompanyAvatar = ({ logo, name, darkMode, size = "h-10 w-10" }) => {
           darkMode ? "border-gray-700 bg-gray-800" : "border-[#d9e6df] bg-white"
         }`}
       >
-        <img src={logo} alt={name} className="h-full w-full object-contain p-0.5" />
+        <img src={logo} alt={name} className="h-full w-full object-contain p-1.5" />
       </div>
     );
   }
@@ -64,7 +67,9 @@ const Navbar = ({ setSidebarOpen, darkMode, setDarkMode }) => {
     currentUser?.company?.companyName ||
     (isSystemAdmin ? "Select company" : "No active company");
   const companyLogo = currentCompany?.logo || currentUser?.company?.logo || "";
-  const operatingModeLabel = getCompanyOperatingModeLabel(currentCompany?.companyMode || currentUser?.company?.companyMode);
+  const operatingModeLabel = getCompanyOperatingModeLabel(
+    currentCompany?.companyMode || currentUser?.company?.companyMode
+  );
   const isLandlordMode = isSelfManagingLandlordCompany(currentCompany || currentUser?.company);
 
   const userName = currentUser
@@ -92,51 +97,70 @@ const Navbar = ({ setSidebarOpen, darkMode, setDarkMode }) => {
 
   return (
     <nav
-      className={`sticky top-0 z-20 ${
-        darkMode ? "bg-gray-900" : "bg-[#dfebed]"
-      } border-b ${
-        darkMode ? "border-gray-700" : "border-[#c5d9d3]"
-      } shadow-sm`}
+      className={`sticky top-0 z-20 border-b shadow-sm ${
+        darkMode ? "border-gray-700 bg-gray-900" : "border-[#dbe7e1] bg-white"
+      }`}
     >
       <div className="px-3 py-2 sm:px-5">
         <div className="flex items-center justify-between gap-3 sm:gap-4">
-          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <button
               onClick={() => setSidebarOpen?.(true)}
-              className={`lg:hidden p-2 rounded-lg transition-colors ${
+              className={`lg:hidden rounded-xl p-2 transition-colors ${
                 darkMode
-                  ? "hover:bg-gray-700 text-gray-300"
-                  : "hover:bg-[#c5d9d3] text-gray-700"
+                  ? "text-gray-300 hover:bg-gray-700"
+                  : "text-gray-700 hover:bg-[#eef5f1]"
               }`}
             >
               <FaBars />
             </button>
 
-            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-              <CompanyAvatar logo={companyLogo} name={companyName} darkMode={darkMode} size="h-9 w-9 sm:h-10 sm:w-10" />
+            <div className="flex min-w-0 items-center gap-3">
+              <CompanyAvatar
+                logo={companyLogo}
+                name={companyName}
+                darkMode={darkMode}
+                size="h-11 w-11 sm:h-12 sm:w-12"
+              />
               <div className="min-w-0">
                 <h1
-                  className={`text-base sm:text-lg font-bold tracking-tight truncate ${
-                    darkMode ? "text-white" : "text-[#1f4a35]"
+                  className={`truncate text-base font-bold tracking-tight sm:text-lg ${
+                    darkMode ? "text-white" : "text-[#183a2d]"
                   }`}
                   title={companyName}
                 >
                   {companyName}
                 </h1>
-                <div className={`mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] ${darkMode ? "bg-gray-800 text-gray-200" : isLandlordMode ? "bg-orange-100 text-orange-700" : "bg-emerald-100 text-emerald-700"}`}>
-                  {operatingModeLabel}
-                </div>
+                <p
+                  className={`truncate text-xs font-medium ${
+                    darkMode ? "text-gray-300" : "text-[#5b6f67]"
+                  }`}
+                >
+                  {operatingModeLabel} • Active company
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <div
+              className={`hidden rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] lg:inline-flex ${
+                darkMode
+                  ? "bg-gray-800 text-gray-200"
+                  : isLandlordMode
+                  ? "bg-orange-50 text-orange-700 ring-1 ring-orange-100"
+                  : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
+              }`}
+            >
+              {operatingModeLabel}
+            </div>
+
             <button
               onClick={() => setDarkMode?.(!darkMode)}
-              className={`p-2 rounded-lg transition-colors duration-200 ${
+              className={`rounded-xl p-2 transition-colors duration-200 ${
                 darkMode
-                  ? "bg-gray-800 hover:bg-gray-700 text-yellow-400"
-                  : "bg-[#c5d9d3] hover:bg-[#b3d1c7] text-[#1f4a35]"
+                  ? "bg-gray-800 text-yellow-400 hover:bg-gray-700"
+                  : "bg-[#f4f8f6] text-[#1f4a35] hover:bg-[#e7f0eb]"
               }`}
               aria-label="Toggle theme"
             >
@@ -144,23 +168,23 @@ const Navbar = ({ setSidebarOpen, darkMode, setDarkMode }) => {
             </button>
 
             <button
-              className={`relative hidden sm:inline-flex p-2 rounded-lg transition-colors duration-200 ${
+              className={`relative hidden rounded-xl p-2 transition-colors duration-200 sm:inline-flex ${
                 darkMode
-                  ? "hover:bg-gray-800 text-gray-400"
-                  : "hover:bg-[#c5d9d3] text-[#4a6b5e]"
+                  ? "text-gray-400 hover:bg-gray-800"
+                  : "text-[#597167] hover:bg-[#f4f8f6]"
               }`}
             >
               <FaBell className="text-lg" />
-              <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full animate-pulse"></span>
+              <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-red-500" />
             </button>
 
             <div
-              className={`flex items-center space-x-2 sm:space-x-3 pl-2 sm:pl-4 border-l ${
-                darkMode ? "border-gray-700" : "border-[#c5d9d3]"
+              className={`flex items-center gap-2 border-l pl-2 sm:gap-3 sm:pl-4 ${
+                darkMode ? "border-gray-700" : "border-[#e3ece7]"
               }`}
             >
-              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#31694E] to-[#1f4a35] flex items-center justify-center shadow-sm">
-                <span className="text-white text-xs font-semibold">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#31694E] to-[#1f4a35] shadow-sm">
+                <span className="text-xs font-semibold text-white">
                   {userName
                     .split(" ")
                     .filter(Boolean)
@@ -170,28 +194,18 @@ const Navbar = ({ setSidebarOpen, darkMode, setDarkMode }) => {
                     .substring(0, 2)}
                 </span>
               </div>
-              <div className="hidden lg:block text-right">
-                <p
-                  className={`font-medium text-sm ${
-                    darkMode ? "text-white" : "text-[#1f4a35]"
-                  }`}
-                >
+              <div className="hidden text-right lg:block">
+                <p className={`text-sm font-medium ${darkMode ? "text-white" : "text-[#1f4a35]"}`}>
                   {userName}
                 </p>
-                <p
-                  className={`text-xs ${
-                    darkMode ? "text-gray-400" : "text-[#4a6b5e]"
-                  }`}
-                >
-                  {profile}
-                </p>
+                <p className={`text-xs ${darkMode ? "text-gray-400" : "text-[#6d7f77]"}`}>{profile}</p>
               </div>
               <button
                 onClick={handleLogout}
-                className={`p-2 rounded-lg transition-colors duration-200 ${
+                className={`rounded-xl p-2 transition-colors duration-200 ${
                   darkMode
-                    ? "hover:bg-gray-800 text-gray-400 hover:text-red-400"
-                    : "hover:bg-red-100 text-[#4a6b5e] hover:text-red-600"
+                    ? "text-gray-400 hover:bg-gray-800 hover:text-red-400"
+                    : "text-[#597167] hover:bg-red-50 hover:text-red-600"
                 }`}
                 title="Logout"
               >

@@ -51,7 +51,12 @@ export const getWorkspaceFromRoute = (pathname = '') => {
     return WORKSPACE_IDS.SYSTEM_ADMIN;
   }
 
-  if (pathname === '/company-setup' || pathname.startsWith('/company-setup/')) {
+  if (
+    pathname === '/company-setup' ||
+    pathname.startsWith('/company-setup/') ||
+    pathname === '/settings' ||
+    pathname.startsWith('/settings/')
+  ) {
     return WORKSPACE_IDS.COMPANY_SETUP;
   }
 

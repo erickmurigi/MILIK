@@ -369,7 +369,7 @@ const TopToolbar = ({
           icon: FaBuilding,
           submenu: [
             { id: "company-setup-home", label: "Company Setup", icon: FaBuilding },
-            { id: "settings", label: "Operational Settings", icon: FaCog },
+            { id: "settings", label: "Settings", icon: FaCog },
           ],
         },
         {
@@ -474,7 +474,7 @@ const TopToolbar = ({
         label: "Tools",
         icon: FaToolbox,
         submenu: [
-          { id: "settings", label: "Operational Settings", icon: FaCog },
+          { id: "settings", label: "Settings", icon: FaCog },
           { id: "users", label: "Users", icon: FaUsers },
           { type: "separator" },
           { id: "meter-readings", label: "Meter Readings", icon: FaCog },
@@ -881,7 +881,7 @@ const TopToolbar = ({
           <img
             src="/logo (2).png"
             alt="Milik Logo"
-            className="h-8 w-20 object-contain border border-white/20"
+            className="h-12 w-20 object-contain border border-white/20"
           />
         </div>
 
@@ -955,7 +955,7 @@ const TopToolbar = ({
           <button
             onClick={() => navigate("/settings")}
             className={`p-2 rounded ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
-            title="Operational Settings"
+            title="Settings"
           >
             ⚙
           </button>
