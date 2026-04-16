@@ -95,12 +95,36 @@ const taxSettingsSchema = new mongoose.Schema(
 
 const accountingDefaultsSchema = new mongoose.Schema(
   {
-    tenantReceivableAccountCode: { type: String, default: "1200", trim: true },
-    rentIncomeAccountCode: { type: String, default: "4100", trim: true },
-    utilityRechargeIncomeAccountCode: { type: String, default: "4102", trim: true },
-    penaltyIncomeAccountCode: { type: String, default: "", trim: true },
-    depositLiabilityAccountCode: { type: String, default: "2100", trim: true },
-    managementCommissionIncomeAccountCode: { type: String, default: "4210", trim: true },
+    tenantReceivableAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    rentIncomeAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    utilityRechargeIncomeAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    penaltyIncomeAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    depositLiabilityAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    managementCommissionIncomeAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
   },
   { _id: false }
 );

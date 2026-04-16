@@ -1243,6 +1243,7 @@ const visibleInvoiceKeys = useMemo(
       taxSnapshot?.netAmount ?? taxSnapshot?.enteredAmount ?? sourceInvoice?.amount ?? invoice?.amount ?? 0
     );
     const taxAmount = Number(taxSnapshot?.taxAmount || 0);
+    const hasTaxClassification = Boolean(taxSnapshot?.isTaxable || (taxSnapshot?.taxCodeKey && taxSnapshot.taxCodeKey !== "no_tax"));
     const totalAmount = Number(
       taxSnapshot?.grossAmount ?? sourceInvoice?.amount ?? invoice?.amount ?? 0
     );
@@ -1367,7 +1368,7 @@ const visibleInvoiceKeys = useMemo(
         <h3>Invoice Summary</h3>
         <div class="small">
           ${escapeHtml(invoice?.invoiceDescription || deriveInvoiceDescription(sourceInvoice) || `${chargeTypeLabel} charge`)}<br/>
-          ${taxAmount > 0 ? `Tax code: ${escapeHtml(taxSnapshot?.taxCodeName || "Tax")} (${Number(taxSnapshot?.taxRate || 0)}%)` : "No tax applied to this invoice."}
+          ${hasTaxClassification ? `Tax code: ${escapeHtml(taxSnapshot?.taxCodeName || "Tax")} (${Number(taxSnapshot?.taxRate || 0)}%)` : "No tax applied to this invoice."}
         </div>
       </div>
     </div>

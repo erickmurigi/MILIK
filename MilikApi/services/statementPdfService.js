@@ -464,9 +464,11 @@ export const generateStatementPdf = async (statementId, businessId) => {
     invoicedRent: rows.reduce((sum, row) => sum + Number(row.invoicedRent || 0), 0),
     invoicedGarbage: Number(utilityTotalsMap.garbage?.invoiced || 0),
     invoicedWater: Number(utilityTotalsMap.water?.invoiced || 0),
+    invoicedTax: rows.reduce((sum, row) => sum + Number(row.invoicedTax || 0), 0),
     paidRent: rows.reduce((sum, row) => sum + Number(row.paidRent || 0), 0),
     paidGarbage: Number(utilityTotalsMap.garbage?.paid || 0),
     paidWater: Number(utilityTotalsMap.water?.paid || 0),
+    paidTax: rows.reduce((sum, row) => sum + Number(row.paidTax || 0), 0),
     utilityInvoiced: utilityColumns.reduce(
       (sum, row) => sum + Number(row.invoiced || 0),
       0
@@ -511,11 +513,27 @@ export const generateStatementPdf = async (statementId, businessId) => {
   const utilityPassThroughLabel =
     summary.utilityPassThroughLabel || "Utilities (added as billed)";
   const utilityPassThroughAmount = Number(summary.utilityPassThroughAmount ?? 0);
+  const invoiceVatPassThroughLabel =
+    summary.invoiceVatPassThroughLabel || "Invoice VAT (pass-through)";
+  const invoiceVatPassThroughAmount = Number(
+    summary.invoiceVatPassThroughAmount ?? summary.totalInvoiceVatInvoiced ?? 0
+  );
   const commissionAmount = Number(summary.commissionAmount || 0);
+  const commissionTaxAmount = Number(summary.commissionTaxAmount || 0);
+  const commissionGrossAmount = Number(
+    summary.commissionGrossAmount ?? commissionAmount + commissionTaxAmount
+  );
+  const totalInvoiceVatReceived = Number(
+    summary.totalInvoiceVatReceived ?? totals.paidTax ?? 0
+  );
+  const hasInvoiceVatColumn =
+    Number(summary.totalInvoiceVatInvoiced || 0) > 0 ||
+    totalInvoiceVatReceived > 0 ||
+    rows.some((row) => Number(row?.invoicedTax || 0) > 0 || Number(row?.paidTax || 0) > 0);
   const nonCommissionDeductions = Number(
     summary.nonCommissionDeductions ??
       summary.totalExpenses ??
-      Math.max(printableDeductionsTotal - commissionAmount, 0)
+      Math.max(printableDeductionsTotal - commissionGrossAmount, 0)
   );
   const directToLandlordAmount = Number(
     summary.directToLandlordCollections ??
@@ -590,18 +608,18 @@ export const generateStatementPdf = async (statementId, businessId) => {
           min-width: 0;
         }
         .brand-logo-wrap {
-          width: 64px;
-          height: 64px;
-          flex: 0 0 64px;
+          width: 78px;
+          height: 78px;
+          flex: 0 0 78px;
         }
         .brand-logo,
         .brand-fallback {
-          width: 64px;
-          height: 64px;
-          border-radius: 14px;
+          width: 78px;
+          height: 78px;
+          border-radius: 16px;
           background: rgba(255,255,255,0.08);
           border: 1px solid rgba(255,255,255,0.25);
-          object-fit: cover;
+          object-fit: contain;
         }
         .brand-fallback {
           display: flex;
@@ -834,16 +852,18 @@ export const generateStatementPdf = async (statementId, businessId) => {
                 <th rowspan="2">Tenant / Resident</th>
                 <th rowspan="2" class="num">Per Month</th>
                 <th rowspan="2" class="num">Balance B/F</th>
-                <th colspan="${1 + utilityColumns.length}" class="center">Amount Invoiced</th>
-                <th colspan="${1 + utilityColumns.length}" class="center">Amount Paid</th>
+                <th colspan="${(hasInvoiceVatColumn ? 2 : 1) + utilityColumns.length}" class="center">Amount Invoiced</th>
+                <th colspan="${(hasInvoiceVatColumn ? 2 : 1) + utilityColumns.length}" class="center">Amount Paid</th>
                 <th rowspan="2" class="num">Balance C/F</th>
               </tr>
               <tr>
                 <th class="num">Rent</th>
+                ${hasInvoiceVatColumn ? `<th class="num">VAT</th>` : ""}
                 ${utilityColumns
                   .map((column) => `<th class="num">${esc(column.label)}</th>`)
                   .join("")}
                 <th class="num">Rent</th>
+                ${hasInvoiceVatColumn ? `<th class="num">VAT</th>` : ""}
                 ${utilityColumns
                   .map((column) => `<th class="num">${esc(column.label)}</th>`)
                   .join("")}
@@ -858,6 +878,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
                   <td class="num">${formatCurrency(row.perMonth || 0)}</td>
                   <td class="num">${formatCurrency(row.openingBalance ?? row.balanceBF ?? 0)}</td>
                   <td class="num">${formatCurrency(row.invoicedRent || 0)}</td>
+                  ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(row.invoicedTax || 0)}</td>` : ""}
                   ${utilityColumns
                     .map(
                       (column) =>
@@ -867,6 +888,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
                     )
                     .join("")}
                   <td class="num">${formatCurrency(row.paidRent || row.rentPaid || 0)}</td>
+                  ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(row.paidTax || 0)}</td>` : ""}
                   ${utilityColumns
                     .map(
                       (column) =>
@@ -885,6 +907,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
                 <td class="num">${formatCurrency(totals.perMonth)}</td>
                 <td class="num">${formatCurrency(totals.openingBalance)}</td>
                 <td class="num">${formatCurrency(totals.invoicedRent)}</td>
+                ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.invoicedTax || summary.totalInvoiceVatInvoiced || 0)}</td>` : ""}
                 ${utilityColumns
                   .map(
                     (column) =>
@@ -898,6 +921,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
                   )
                   .join("")}
                 <td class="num">${formatCurrency(totals.paidRent)}</td>
+                ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.paidTax || totalInvoiceVatReceived || 0)}</td>` : ""}
                 ${utilityColumns
                   .map(
                     (column) =>
@@ -946,7 +970,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
             <tfoot>
               <tr>
                 <td colspan="2" class="num">Total</td>
-                <td class="num">${formatCurrency(nonCommissionDeductions + commissionAmount)}</td>
+                <td class="num">${formatCurrency(nonCommissionDeductions + commissionGrossAmount)}</td>
               </tr>
             </tfoot>
           </table>
@@ -1019,10 +1043,20 @@ export const generateStatementPdf = async (statementId, businessId) => {
               ? `<tr><td>${esc(utilityPassThroughLabel)}</td><td class="num">${formatCurrency(utilityPassThroughAmount)}</td></tr>`
               : ""
           }
+          ${
+            invoiceVatPassThroughAmount > 0
+              ? `<tr><td>${esc(invoiceVatPassThroughLabel)}</td><td class="num">${formatCurrency(invoiceVatPassThroughAmount)}</td></tr>`
+              : ""
+          }
           <tr><td>Additions</td><td class="num">${formatCurrency(additionsAmount)}</td></tr>
           <tr><td>Expenses & other deductions</td><td class="num">${formatCurrency(nonCommissionDeductions)}</td></tr>
           <tr><td>${esc(commissionBaseLabel)}</td><td class="num">${formatCurrency(commissionBaseAmount)}</td></tr>
           <tr><td>Commission</td><td class="num">${formatCurrency(commissionAmount)}</td></tr>
+          ${
+            commissionTaxAmount > 0
+              ? `<tr><td>VAT on commission</td><td class="num">${formatCurrency(commissionTaxAmount)}</td></tr>`
+              : ""
+          }
           <tr><td>Direct to landlord collections (memo)</td><td class="num">${formatCurrency(directToLandlordAmount)}</td></tr>
           <tr><td>${esc(settlement.label)}</td><td class="num">${formatCurrency(settlement.amount)}</td></tr>
         </table>

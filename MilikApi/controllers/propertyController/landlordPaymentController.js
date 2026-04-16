@@ -6,9 +6,9 @@ import { createError } from "../../utils/error.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
+import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../services/taxCalculationService.js";
 import { ensurePropertyControlAccount, resolveLandlordRemittancePayableAccount } from "../../services/propertyAccountingService.js";
-import { getCompanyAccountingDefaults, resolveConfiguredChartAccount } from "../../services/companyAccountingDefaultsService.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -120,25 +120,45 @@ const resolveCashbookAccount = async ({ businessId, cashbook, paymentMethod }) =
 
 const resolveCommissionIncomeAccount = async (businessId) => {
   await ensureSystemChartOfAccounts(businessId);
-  const accountingDefaults = await getCompanyAccountingDefaults(businessId);
 
-  const account = await resolveConfiguredChartAccount({
+  const configured = await resolveConfiguredAccountingDefaultAccount({
     businessId,
-    configuredValue: accountingDefaults?.managementCommissionIncomeAccountCode,
-    type: "income",
-    fallbackCode: "4210",
-    fallbackCandidates: [
-      { nameRegex: "^commission income$", type: "income" },
-      { nameRegex: "management fee income", type: "income" },
-      { nameRegex: "commission income", type: "income" },
-    ],
+    field: "managementCommissionIncomeAccount",
   });
+  if (configured) return configured;
 
-  if (!account) {
+  const exact = await findSystemAccountByCode(businessId, "4210");
+  if (exact) return exact;
+
+  const fallback = await ChartOfAccount.findOne({
+    business: businessId,
+    isPosting: { $ne: false },
+    $or: [
+      { type: "income" },
+      { type: "Income" },
+      { accountType: "income" },
+      { accountType: "Income" },
+      { nature: "income" },
+      { nature: "Income" },
+      { accountNature: "income" },
+      { accountNature: "Income" },
+    ],
+    $and: [
+      {
+        $or: [
+          { name: { $regex: "^commission income$", $options: "i" } },
+          { name: { $regex: "management fee income", $options: "i" } },
+          { accountName: { $regex: "commission income", $options: "i" } },
+        ],
+      },
+    ],
+  }).lean();
+
+  if (!fallback) {
     throw new Error("Commission Income account was not found for this business.");
   }
 
-  return account;
+  return fallback;
 };
 
 

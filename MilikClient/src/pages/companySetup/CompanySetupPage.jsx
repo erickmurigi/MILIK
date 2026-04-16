@@ -238,6 +238,19 @@ const normalizeForm = (company = {}) => {
 };
 
 
+const toClientTaxCodeId = (value, fallback) => {
+  if (!value) return fallback;
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value?.toString) return value.toString();
+  return fallback;
+};
+
+const sanitizeTaxKey = (value, fallback = "") =>
+  String(value || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_");
+
 const normalizeTaxConfiguration = (settings = {}) => ({
   taxSettings: {
     enabled: Boolean(settings?.taxSettings?.enabled),
@@ -256,8 +269,8 @@ const normalizeTaxConfiguration = (settings = {}) => ({
   },
   taxCodes: Array.isArray(settings?.taxCodes) && settings.taxCodes.length > 0
     ? settings.taxCodes.map((code, index) => ({
-        _id: code?._id || `tax-code-${index + 1}`,
-        key: code?.key || `tax_code_${index + 1}`,
+        _id: toClientTaxCodeId(code?._id, `tax-code-${index + 1}`),
+        key: sanitizeTaxKey(code?.key || code?.name, `tax_code_${index + 1}`),
         name: code?.name || `Tax Code ${index + 1}`,
         type: code?.type || "vat",
         rate: Number(code?.rate || 0),
@@ -269,6 +282,42 @@ const normalizeTaxConfiguration = (settings = {}) => ({
         { _id: "tax-no-tax", key: "no_tax", name: "No Tax", type: "none", rate: 0, isDefault: false, isActive: true, description: "Non-taxable item" },
         { _id: "tax-vat-standard", key: "vat_standard", name: "VAT Standard", type: "vat", rate: 16, isDefault: true, isActive: true, description: "Standard output VAT" },
       ],
+});
+
+const buildTaxSavePayload = (taxConfig = {}) => ({
+  taxSettings: {
+    enabled: Boolean(taxConfig?.taxSettings?.enabled),
+    defaultTaxMode: String(taxConfig?.taxSettings?.defaultTaxMode || "exclusive").toLowerCase() === "inclusive" ? "inclusive" : "exclusive",
+    defaultTaxCodeKey: sanitizeTaxKey(taxConfig?.taxSettings?.defaultTaxCodeKey, "vat_standard"),
+    defaultVatRate: Number(taxConfig?.taxSettings?.defaultVatRate || 0),
+    roundingPrecision: Number(taxConfig?.taxSettings?.roundingPrecision ?? 2),
+    outputVatAccountCode: String(taxConfig?.taxSettings?.outputVatAccountCode || "").trim(),
+    invoiceTaxableByDefault: Boolean(taxConfig?.taxSettings?.invoiceTaxableByDefault),
+    invoiceTaxabilityByCategory: {
+      rent: Boolean(taxConfig?.taxSettings?.invoiceTaxabilityByCategory?.rent),
+      utility: Boolean(taxConfig?.taxSettings?.invoiceTaxabilityByCategory?.utility),
+      penalty: Boolean(taxConfig?.taxSettings?.invoiceTaxabilityByCategory?.penalty),
+      deposit: Boolean(taxConfig?.taxSettings?.invoiceTaxabilityByCategory?.deposit),
+    },
+  },
+  taxCodes: (Array.isArray(taxConfig?.taxCodes) ? taxConfig.taxCodes : []).map((code, index) => {
+    const rawId = toClientTaxCodeId(code?._id, "");
+    const payload = {
+      key: sanitizeTaxKey(code?.key || code?.name, `tax_code_${index + 1}`),
+      name: String(code?.name || `Tax Code ${index + 1}`).trim(),
+      type: String(code?.type || "vat").trim().toLowerCase(),
+      rate: Number(code?.rate || 0),
+      isDefault: Boolean(code?.isDefault),
+      isActive: code?.isActive !== false,
+      description: String(code?.description || "").trim(),
+    };
+
+    if (/^[a-f\d]{24}$/i.test(rawId)) {
+      payload._id = rawId;
+    }
+
+    return payload;
+  }),
 });
 
 const normalizePaymentConfigs = (company = {}) => {
@@ -1026,12 +1075,14 @@ export default function CompanySetupPage() {
       return;
     }
 
+    const payload = buildTaxSavePayload(taxConfig);
+
     setSavingTaxConfig(true);
     try {
-      await adminRequests.put(`/company-settings/${currentCompany._id}/tax-configuration`, taxConfig);
+      const response = await adminRequests.put(`/company-settings/${currentCompany._id}/tax-configuration`, payload);
+      const refreshedSettings = response?.data?.settings || response?.data || {};
+      setTaxConfig(normalizeTaxConfiguration(refreshedSettings));
       toast.success("Tax configuration saved successfully");
-      const refreshed = await adminRequests.get(`/company-settings/${currentCompany._id}`);
-      setTaxConfig(normalizeTaxConfiguration(refreshed?.data || {}));
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to save tax configuration");
     } finally {

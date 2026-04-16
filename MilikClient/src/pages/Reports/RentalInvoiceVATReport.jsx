@@ -37,8 +37,11 @@ const RentalInvoiceVATReport = () => {
         : [];
       const taxable = (Array.isArray(invoiceRows) ? invoiceRows : []).filter((invoice) => {
         const category = String(invoice?.category || "");
-        const taxAmount = Number(invoice?.taxSnapshot?.taxAmount || 0);
-        return ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"].includes(category) && taxAmount > 0;
+        const taxSnapshot = invoice?.taxSnapshot || {};
+        return (
+          ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"].includes(category) &&
+          (Boolean(taxSnapshot?.isTaxable) || Number(taxSnapshot?.taxAmount || 0) > 0)
+        );
       });
       setProperties(normalizedProps);
       setRows(taxable);

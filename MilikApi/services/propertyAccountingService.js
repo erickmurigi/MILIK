@@ -6,7 +6,7 @@ import {
   ensureSystemChartOfAccounts,
   findSystemAccountByCode,
 } from "./chartOfAccountsService.js";
-import { getCompanyAccountingDefaults, resolveConfiguredChartAccount } from "./companyAccountingDefaultsService.js";
+import { resolveConfiguredAccountingDefaultAccount } from "./companyAccountingDefaultsService.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -160,25 +160,31 @@ export const ensurePropertyControlAccount = async ({
 export const resolveTenantDepositPayableAccount = async (businessId) => {
   await ensureSystemChartOfAccounts(businessId);
 
-  const accountingDefaults = await getCompanyAccountingDefaults(businessId);
-  const configured = await resolveConfiguredChartAccount({
+  const configured = await resolveConfiguredAccountingDefaultAccount({
     businessId,
-    configuredValue: accountingDefaults?.depositLiabilityAccountCode,
+    field: "depositLiabilityAccount",
+  });
+  if (configured) return configured;
+
+  const exact = await findSystemAccountByCode(businessId, "2100");
+  if (exact) return exact;
+
+  const fallback = await ChartOfAccount.findOne({
+    business: businessId,
     type: "liability",
-    fallbackCode: "2100",
-    fallbackCandidates: [
-      { nameRegex: "^tenant deposit payable$", type: "liability" },
-      { nameRegex: "^security deposits payable$", type: "liability" },
-      { nameRegex: "tenant deposit", type: "liability" },
-      { nameRegex: "security deposit", type: "liability" },
+    $or: [
+      { name: { $regex: "^tenant deposit payable$", $options: "i" } },
+      { name: { $regex: "^security deposits payable$", $options: "i" } },
+      { name: { $regex: "tenant deposit", $options: "i" } },
+      { name: { $regex: "security deposit", $options: "i" } },
     ],
   });
 
-  if (!configured) {
+  if (!fallback) {
     throw new Error("Tenant Deposit Payable account was not found for this business.");
   }
 
-  return configured;
+  return fallback;
 };
 
 export const resolveLandlordRemittancePayableAccount = async (businessId) => {

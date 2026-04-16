@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import CompanySettings from "../models/CompanySettings.js";
 import ChartOfAccount from "../models/ChartOfAccount.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "./chartOfAccountsService.js";
@@ -32,21 +33,41 @@ export const DEFAULT_TAX_SETTINGS = {
 
 const normalizeCodeKey = (value, fallback = "no_tax") => String(value || fallback).trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_");
 
+const normalizeEmbeddedTaxCodeId = (value) => {
+  if (!value) return null;
+  if (value instanceof mongoose.Types.ObjectId) return value;
+  const raw = String(value).trim();
+  return mongoose.Types.ObjectId.isValid(raw) ? new mongoose.Types.ObjectId(raw) : null;
+};
+
+const toPlainValue = (value) => {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map((item) => toPlainValue(item));
+  if (value?.toObject) return value.toObject();
+  if (value?._doc && typeof value._doc === "object") return { ...value._doc };
+  return value;
+};
+
+
 export const normalizeCompanyTaxConfiguration = (settings = null) => {
-  const rawSettings = settings?.taxSettings || {};
+  const rawSettings = toPlainValue(settings?.taxSettings) || {};
+  const rawInvoiceTaxability = toPlainValue(rawSettings?.invoiceTaxabilityByCategory) || {};
   const normalizedSettings = {
     ...DEFAULT_TAX_SETTINGS,
     ...rawSettings,
     invoiceTaxabilityByCategory: {
       ...DEFAULT_TAX_SETTINGS.invoiceTaxabilityByCategory,
-      ...(rawSettings?.invoiceTaxabilityByCategory || {}),
+      ...rawInvoiceTaxability,
     },
   };
 
-  const sourceCodes = Array.isArray(settings?.taxCodes) && settings.taxCodes.length > 0 ? settings.taxCodes : DEFAULT_TAX_CODES;
+  const sourceCodes = Array.isArray(settings?.taxCodes) && settings.taxCodes.length > 0
+    ? settings.taxCodes.map((code) => toPlainValue(code) || {})
+    : DEFAULT_TAX_CODES;
 
   const taxCodes = sourceCodes
     .map((code) => ({
+      _id: normalizeEmbeddedTaxCodeId(code?._id),
       key: normalizeCodeKey(code?.key || code?.name),
       name: String(code?.name || code?.key || "Tax Code").trim(),
       type: String(code?.type || "vat").trim().toLowerCase(),
@@ -160,8 +181,8 @@ export const calculateTaxBreakdown = ({ amount, taxRate = 0, taxMode = "exclusiv
 
 const resolveInvoiceTaxability = ({ category, taxSettings, overrides = {} }) => {
   const normalizedCategory = String(category || "").toUpperCase();
-  if (normalizedCategory === "DEPOSIT_CHARGE") return Boolean(taxSettings.invoiceTaxabilityByCategory?.deposit ?? false);
   if (typeof overrides?.isTaxable === "boolean") return overrides.isTaxable;
+  if (normalizedCategory === "DEPOSIT_CHARGE") return Boolean(taxSettings.invoiceTaxabilityByCategory?.deposit ?? false);
 
   if (normalizedCategory === "RENT_CHARGE") return Boolean(taxSettings.invoiceTaxabilityByCategory?.rent ?? taxSettings.invoiceTaxableByDefault);
   if (normalizedCategory === "UTILITY_CHARGE") return Boolean(taxSettings.invoiceTaxabilityByCategory?.utility ?? taxSettings.invoiceTaxableByDefault);
@@ -175,21 +196,50 @@ export const buildInvoiceTaxSnapshot = ({ amount, category, companyTaxConfig, re
   const taxCodes = config.taxCodes || DEFAULT_TAX_CODES;
   const precision = Number(taxSettings.roundingPrecision ?? 2);
   const categoryTaxable = resolveInvoiceTaxability({ category, taxSettings, overrides });
-  const isTaxable = Boolean(taxSettings.enabled && categoryTaxable);
-  const requestedCodeKey = overrides?.taxCodeKey || requestedTaxCodeKey || (isTaxable ? taxSettings.defaultTaxCodeKey : "no_tax");
-  const taxCode = resolveTaxCode({ taxCodes, requestedKey: requestedCodeKey, defaultKey: taxSettings.defaultTaxCodeKey, fallbackRate: taxSettings.defaultVatRate });
-  const finalTaxable = Boolean(isTaxable && taxCode.key !== "no_tax" && taxCode.type !== "exempt");
-  const taxMode = String(overrides?.taxMode || requestedTaxMode || taxSettings.defaultTaxMode || "exclusive").toLowerCase() === "inclusive" ? "inclusive" : "exclusive";
-  const taxRate = overrides?.rateOverride !== undefined && overrides?.rateOverride !== null ? Number(overrides.rateOverride) : Number(taxCode.rate || 0);
-  const breakdown = calculateTaxBreakdown({ amount, taxRate, taxMode, precision, isTaxable: finalTaxable });
+  const taxEngineActive = Boolean(taxSettings.enabled && categoryTaxable);
+  const requestedCodeKey =
+    overrides?.taxCodeKey || requestedTaxCodeKey || (taxEngineActive ? taxSettings.defaultTaxCodeKey : "no_tax");
+  const requestedTaxCode = resolveTaxCode({
+    taxCodes,
+    requestedKey: requestedCodeKey,
+    defaultKey: taxSettings.defaultTaxCodeKey,
+    fallbackRate: taxSettings.defaultVatRate,
+  });
+  const retainsTaxClassification = Boolean(taxEngineActive && requestedTaxCode.key !== "no_tax");
+  const effectiveTaxCode = retainsTaxClassification
+    ? requestedTaxCode
+    : resolveTaxCode({
+        taxCodes,
+        requestedKey: "no_tax",
+        defaultKey: "no_tax",
+        fallbackRate: 0,
+      });
+  const taxMode =
+    String(overrides?.taxMode || requestedTaxMode || taxSettings.defaultTaxMode || "exclusive").toLowerCase() ===
+    "inclusive"
+      ? "inclusive"
+      : "exclusive";
+  const requestedRate =
+    overrides?.rateOverride !== undefined && overrides?.rateOverride !== null
+      ? Number(overrides.rateOverride)
+      : Number(effectiveTaxCode.rate || 0);
+  const effectiveTaxRate =
+    retainsTaxClassification && effectiveTaxCode.type !== "exempt" ? Math.max(requestedRate, 0) : 0;
+  const breakdown = calculateTaxBreakdown({
+    amount,
+    taxRate: effectiveTaxRate,
+    taxMode,
+    precision,
+    isTaxable: retainsTaxClassification,
+  });
 
   return {
-    isTaxable: finalTaxable,
-    taxCodeKey: taxCode.key,
-    taxCodeName: taxCode.name,
-    taxType: taxCode.type,
+    isTaxable: retainsTaxClassification,
+    taxCodeKey: effectiveTaxCode.key,
+    taxCodeName: effectiveTaxCode.name,
+    taxType: effectiveTaxCode.type,
     taxMode: breakdown.taxMode,
-    taxRate: finalTaxable ? taxRate : 0,
+    taxRate: effectiveTaxRate,
     enteredAmount: breakdown.enteredAmount,
     netAmount: breakdown.netAmount,
     taxAmount: breakdown.taxAmount,
@@ -203,10 +253,23 @@ export const buildCommissionTaxSnapshot = ({ commissionAmount, propertyTaxSettin
   const taxSettings = config.taxSettings || DEFAULT_TAX_SETTINGS;
   const taxCodes = config.taxCodes || DEFAULT_TAX_CODES;
   const precision = Number(taxSettings.roundingPrecision ?? 2);
-  const enabled = Boolean(taxSettings.enabled && propertyTaxSettings?.enabled);
+  const taxEngineActive = Boolean(taxSettings.enabled && propertyTaxSettings?.enabled);
   const requestedKey = propertyTaxSettings?.taxCodeKey || taxSettings.defaultTaxCodeKey || "vat_standard";
-  const taxCode = resolveTaxCode({ taxCodes, requestedKey, defaultKey: taxSettings.defaultTaxCodeKey, fallbackRate: taxSettings.defaultVatRate });
-  const finalTaxable = Boolean(enabled && taxCode.key !== "no_tax" && taxCode.type !== "exempt");
+  const requestedTaxCode = resolveTaxCode({
+    taxCodes,
+    requestedKey,
+    defaultKey: taxSettings.defaultTaxCodeKey,
+    fallbackRate: taxSettings.defaultVatRate,
+  });
+  const retainsTaxClassification = Boolean(taxEngineActive && requestedTaxCode.key !== "no_tax");
+  const effectiveTaxCode = retainsTaxClassification
+    ? requestedTaxCode
+    : resolveTaxCode({
+        taxCodes,
+        requestedKey: "no_tax",
+        defaultKey: "no_tax",
+        fallbackRate: 0,
+      });
   const taxMode = String(propertyTaxSettings?.taxMode || "company_default").toLowerCase() === "inclusive"
     ? "inclusive"
     : String(propertyTaxSettings?.taxMode || "company_default").toLowerCase() === "exclusive"
@@ -214,18 +277,27 @@ export const buildCommissionTaxSnapshot = ({ commissionAmount, propertyTaxSettin
     : String(taxSettings.defaultTaxMode || "exclusive").toLowerCase() === "inclusive"
     ? "inclusive"
     : "exclusive";
-  const taxRate = propertyTaxSettings?.rateOverride !== undefined && propertyTaxSettings?.rateOverride !== null
-    ? Number(propertyTaxSettings.rateOverride)
-    : Number(taxCode.rate || 0);
-  const breakdown = calculateTaxBreakdown({ amount: commissionAmount, taxRate, taxMode, precision, isTaxable: finalTaxable });
+  const requestedRate =
+    propertyTaxSettings?.rateOverride !== undefined && propertyTaxSettings?.rateOverride !== null
+      ? Number(propertyTaxSettings.rateOverride)
+      : Number(effectiveTaxCode.rate || 0);
+  const effectiveTaxRate =
+    retainsTaxClassification && effectiveTaxCode.type !== "exempt" ? Math.max(requestedRate, 0) : 0;
+  const breakdown = calculateTaxBreakdown({
+    amount: commissionAmount,
+    taxRate: effectiveTaxRate,
+    taxMode,
+    precision,
+    isTaxable: retainsTaxClassification,
+  });
 
   return {
-    enabled: finalTaxable,
-    taxCodeKey: taxCode.key,
-    taxCodeName: taxCode.name,
-    taxType: taxCode.type,
+    enabled: retainsTaxClassification,
+    taxCodeKey: effectiveTaxCode.key,
+    taxCodeName: effectiveTaxCode.name,
+    taxType: effectiveTaxCode.type,
     taxMode: breakdown.taxMode,
-    taxRate: finalTaxable ? taxRate : 0,
+    taxRate: effectiveTaxRate,
     netAmount: breakdown.netAmount,
     taxAmount: breakdown.taxAmount,
     grossAmount: breakdown.grossAmount,

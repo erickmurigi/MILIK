@@ -15,7 +15,7 @@ import {
 } from "./tenantInvoices.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { resolveLandlordRemittancePayableAccount } from "../../services/propertyAccountingService.js";
-import { getCompanyAccountingDefaults, resolveConfiguredChartAccount } from "../../services/companyAccountingDefaultsService.js";
+import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
@@ -490,22 +490,21 @@ const resolveCashbookAccount = async (businessId, payment) => {
 };
 
 const resolveCreditAccount = async (businessId, payment) => {
-  const accountingDefaults = await getCompanyAccountingDefaults(businessId);
-
   switch (payment?.paymentType) {
     case "rent":
     case "utility": {
-      const account = await resolveConfiguredChartAccount({
+      const configuredReceivable = await resolveConfiguredAccountingDefaultAccount({
         businessId,
-        configuredValue: accountingDefaults?.tenantReceivableAccountCode,
-        type: "asset",
-        fallbackCode: "1200",
-        fallbackCandidates: [
-          { nameRegex: "^tenant receivable", type: "asset" },
-          { nameRegex: "accounts receivable", type: "asset" },
-          { nameRegex: "receivable", type: "asset" },
-        ],
+        field: "tenantReceivableAccount",
       });
+      if (configuredReceivable) return configuredReceivable;
+
+      const account = await findFirstAccount(businessId, [
+        { code: "1200", type: "asset" },
+        { nameRegex: "^tenant receivable", type: "asset" },
+        { nameRegex: "accounts receivable", type: "asset" },
+        { nameRegex: "receivable", type: "asset" },
+      ]);
 
       if (!account) {
         throw new Error("Tenant receivable account not found. Receipt cannot reduce receivables correctly.");
@@ -514,17 +513,17 @@ const resolveCreditAccount = async (businessId, payment) => {
     }
 
     case "deposit": {
-      const account = await resolveConfiguredChartAccount({
+      const configuredDepositLiability = await resolveConfiguredAccountingDefaultAccount({
         businessId,
-        configuredValue: accountingDefaults?.depositLiabilityAccountCode,
-        type: "liability",
-        fallbackCode: "2100",
-        fallbackCandidates: [
-          { nameRegex: "deposit liability", type: "liability" },
-          { nameRegex: "tenant deposit", type: "liability" },
-          { nameRegex: "security deposit", type: "liability" },
-        ],
+        field: "depositLiabilityAccount",
       });
+      if (configuredDepositLiability) return configuredDepositLiability;
+
+      const account = await findFirstAccount(businessId, [
+        { nameRegex: "deposit liability", type: "liability" },
+        { nameRegex: "tenant deposit", type: "liability" },
+        { nameRegex: "security deposit", type: "liability" },
+      ]);
 
       if (!account) {
         throw new Error("Tenant deposit liability account not found. Deposit receipt cannot be posted correctly.");
@@ -535,6 +534,12 @@ const resolveCreditAccount = async (businessId, payment) => {
     case "late_fee":
     case "other":
     default: {
+      const configuredPenaltyIncome = await resolveConfiguredAccountingDefaultAccount({
+        businessId,
+        field: "penaltyIncomeAccount",
+      });
+      if (configuredPenaltyIncome) return configuredPenaltyIncome;
+
       const account = await findFirstAccount(businessId, [
         { nameRegex: "other income", type: "income" },
         { nameRegex: "late fee", type: "income" },

@@ -17,8 +17,8 @@ import {
   resolvePropertyAccountingContext,
   resolveTenantDepositPayableAccount,
 } from "../../services/propertyAccountingService.js";
+import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { buildInvoiceTaxSnapshot, getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../services/taxCalculationService.js";
-import { getCompanyAccountingDefaults, resolveConfiguredChartAccount } from "../../services/companyAccountingDefaultsService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { COMPANY_OPERATING_MODES, normalizeCompanyOperatingMode } from "../../utils/companyModules.js";
 import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
@@ -298,18 +298,18 @@ const findFirstAccount = async (businessId, candidates = []) => {
 };
 
 const resolveTenantReceivableAccount = async (businessId) => {
-  const accountingDefaults = await getCompanyAccountingDefaults(businessId);
-  const account = await resolveConfiguredChartAccount({
+  const configured = await resolveConfiguredAccountingDefaultAccount({
     businessId,
-    configuredValue: accountingDefaults?.tenantReceivableAccountCode,
-    type: "asset",
-    fallbackCode: "1200",
-    fallbackCandidates: [
-      { nameRegex: "^tenant receivable", type: "asset" },
-      { nameRegex: "accounts receivable", type: "asset" },
-      { nameRegex: "receivable", type: "asset" },
-    ],
+    field: "tenantReceivableAccount",
   });
+  if (configured) return configured;
+
+  const account = await findFirstAccount(businessId, [
+    { code: "1200", type: "asset" },
+    { nameRegex: "^tenant receivable", type: "asset" },
+    { nameRegex: "accounts receivable", type: "asset" },
+    { nameRegex: "receivable", type: "asset" },
+  ]);
 
   if (!account) {
     throw new Error(
@@ -458,23 +458,26 @@ const mapInvoiceCategoryToLedgerCategory = (invoiceCategory) => {
 
 const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountValue }) => {
   const normalizedCategory = String(category || "").toUpperCase();
-  const accountingDefaults = await getCompanyAccountingDefaults(businessId);
 
   if (normalizedCategory === "DEPOSIT_CHARGE") {
     return resolveTenantDepositPayableAccount(businessId);
   }
 
   if (normalizedCategory === "LATE_PENALTY_CHARGE") {
-    const account = await findAnyChartAccount(
-      businessId,
-      chartAccountValue || accountingDefaults?.penaltyIncomeAccountCode,
-      [
-        { nameRegex: "late penalty", type: "income" },
-        { nameRegex: "late fee", type: "income" },
-        { nameRegex: "penalty income", type: "income" },
-        { nameRegex: "other income", type: "income" },
-      ]
-    );
+    if (!String(chartAccountValue || "").trim()) {
+      const configuredPenaltyIncome = await resolveConfiguredAccountingDefaultAccount({
+        businessId,
+        field: "penaltyIncomeAccount",
+      });
+      if (configuredPenaltyIncome?._id) return configuredPenaltyIncome;
+    }
+
+    const account = await findAnyChartAccount(businessId, chartAccountValue, [
+      { nameRegex: "late penalty", type: "income" },
+      { nameRegex: "late fee", type: "income" },
+      { nameRegex: "penalty income", type: "income" },
+      { nameRegex: "other income", type: "income" },
+    ]);
 
     if (!account?._id) {
       throw new Error(
@@ -485,15 +488,7 @@ const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountV
     return account;
   }
 
-  const configuredValue =
-    chartAccountValue ||
-    (normalizedCategory === "UTILITY_CHARGE"
-      ? accountingDefaults?.utilityRechargeIncomeAccountCode
-      : accountingDefaults?.rentIncomeAccountCode);
-
-  const account = await findAnyChartAccount(
-    businessId,
-    configuredValue,
+  const candidates =
     normalizedCategory === "UTILITY_CHARGE"
       ? [
           { code: "4102", type: "income" },
@@ -506,8 +501,17 @@ const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountV
           { nameRegex: "^rent income$", type: "income" },
           { nameRegex: "^rental income$", type: "income" },
           { nameRegex: "rent", type: "income" },
-        ]
-  );
+        ];
+
+  if (!String(chartAccountValue || "").trim()) {
+    const configuredIncomeAccount = await resolveConfiguredAccountingDefaultAccount({
+      businessId,
+      field: normalizedCategory === "UTILITY_CHARGE" ? "utilityRechargeIncomeAccount" : "rentIncomeAccount",
+    });
+    if (configuredIncomeAccount?._id) return configuredIncomeAccount;
+  }
+
+  const account = await findAnyChartAccount(businessId, chartAccountValue, candidates);
 
   if (!account?._id) {
     throw new Error(

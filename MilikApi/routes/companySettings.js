@@ -13,8 +13,8 @@ import {
   addExpenseItem,
   updateExpenseItem,
   deleteExpenseItem,
-  updateTaxConfiguration,
   updateAccountingDefaults,
+  updateTaxConfiguration,
 } from "../controllers/propertyController/companySettings.js";
 import { verifyUser } from "../controllers/verifyToken.js";
 

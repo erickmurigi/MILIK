@@ -174,11 +174,13 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
           perMonth: Number(row.perMonth || 0),
           balanceBF: Number(row.balanceBF ?? row.openingBalance ?? 0),
           invoicedRent: Number(row.invoicedRent || 0),
+          invoicedTax: Number(row.invoicedTax || 0),
           paidRent: Number(row.paidRent || 0),
+          paidTax: Number(row.paidTax || 0),
           utilities,
           totalUtilityInvoiced,
           totalUtilityPaid,
-          totalPaid: Number(row.totalPaid ?? Number(row.paidRent || 0) + totalUtilityPaid),
+          totalPaid: Number(row.totalPaid ?? Number(row.paidRent || 0) + Number(row.paidTax || 0) + totalUtilityPaid),
           balanceCF: Number(row.balanceCF ?? row.closingBalance ?? row.balance ?? 0),
         };
       });
@@ -258,16 +260,20 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
       const balanceCF =
         row.balanceBF +
         row.invoicedRent +
+        Number(row.invoicedTax || 0) +
         totalUtilityInvoiced -
         row.paidRent -
+        Number(row.paidTax || 0) -
         totalUtilityPaid;
 
       return {
         ...row,
+        invoicedTax: Number(row.invoicedTax || 0),
+        paidTax: Number(row.paidTax || 0),
         utilities,
         totalUtilityInvoiced,
         totalUtilityPaid,
-        totalPaid: row.paidRent + totalUtilityPaid,
+        totalPaid: row.paidRent + Number(row.paidTax || 0) + totalUtilityPaid,
         balanceCF,
       };
     });
@@ -279,7 +285,7 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
   );
 
   const totalInvoiced = tenantRows.reduce(
-    (sum, r) => sum + r.invoicedRent + r.totalUtilityInvoiced,
+    (sum, r) => sum + r.invoicedRent + Number(r.invoicedTax || 0) + r.totalUtilityInvoiced,
     0
   );
   const totalPaid = tenantRows.reduce((sum, r) => sum + r.totalPaid, 0);
@@ -389,6 +395,18 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
   const utilityPassThroughLabel =
     workspaceSummary.utilityPassThroughLabel || "Utilities (added as billed)";
   const utilityPassThroughAmount = Number(workspaceSummary.utilityPassThroughAmount ?? 0);
+  const invoiceVatPassThroughLabel =
+    workspaceSummary.invoiceVatPassThroughLabel || "Invoice VAT (pass-through)";
+  const invoiceVatPassThroughAmount = Number(
+    workspaceSummary.invoiceVatPassThroughAmount ?? workspaceSummary.totalInvoiceVatInvoiced ?? 0
+  );
+  const totalInvoiceVatReceived = Number(
+    workspaceSummary.totalInvoiceVatReceived ?? workspace?.totals?.paidTax ?? 0
+  );
+  const hasInvoiceVatColumn =
+    Number(workspaceSummary.totalInvoiceVatInvoiced || 0) > 0 ||
+    totalInvoiceVatReceived > 0 ||
+    tenantRows.some((row) => Number(row?.invoicedTax || 0) > 0 || Number(row?.paidTax || 0) > 0);
   const settlement = resolveSettlementDisplay(workspaceSummary);
 
   const occupiedUnits = tenantRows.filter((row) => row.tenantName !== "VACANT").length;
@@ -432,19 +450,19 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
         }
 
         .brand-logo-wrap {
-          width: 72px;
-          height: 72px;
-          flex: 0 0 72px;
+          width: 82px;
+          height: 82px;
+          flex: 0 0 82px;
         }
 
         .brand-logo,
         .brand-fallback {
-          width: 72px;
-          height: 72px;
-          border-radius: 16px;
+          width: 82px;
+          height: 82px;
+          border-radius: 18px;
           border: 1px solid #d1d5db;
           background: #f8fafc;
-          object-fit: cover;
+          object-fit: contain;
         }
 
         .brand-fallback {
@@ -719,16 +737,18 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
             <th rowSpan="2">Tenant/Resident</th>
             <th rowSpan="2" className="text-right">Per Month</th>
             <th rowSpan="2" className="text-right">Balance B/F</th>
-            <th colSpan={1 + utilityColumns.length} className="text-right">Amount Invoiced</th>
-            <th colSpan={1 + utilityColumns.length} className="text-right">Amount Received</th>
+            <th colSpan={(hasInvoiceVatColumn ? 2 : 1) + utilityColumns.length} className="text-right">Amount Invoiced</th>
+            <th colSpan={(hasInvoiceVatColumn ? 2 : 1) + utilityColumns.length} className="text-right">Amount Received</th>
             <th rowSpan="2" className="text-right">Balance C/F</th>
           </tr>
           <tr>
             <th className="text-right">Rent</th>
+            {hasInvoiceVatColumn ? <th className="text-right">VAT</th> : null}
             {utilityColumns.map((column) => (
               <th key={`inv-${column.key}`} className="text-right">{column.label}</th>
             ))}
             <th className="text-right">Rent</th>
+            {hasInvoiceVatColumn ? <th className="text-right">VAT</th> : null}
             {utilityColumns.map((column) => (
               <th key={`paid-${column.key}`} className="text-right">{column.label}</th>
             ))}
@@ -742,12 +762,14 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
               <td className="text-right">{formatCurrency(row.perMonth)}</td>
               <td className="text-right">{formatCurrency(row.balanceBF)}</td>
               <td className="text-right">{formatCurrency(row.invoicedRent)}</td>
+              {hasInvoiceVatColumn ? <td className="text-right">{formatCurrency(row.invoicedTax || 0)}</td> : null}
               {utilityColumns.map((column) => (
                 <td key={`${row.tenantId}-${column.key}-inv`} className="text-right">
                   {formatCurrency(getUtilityValue(row, column.key, "invoiced"))}
                 </td>
               ))}
               <td className="text-right">{formatCurrency(row.paidRent)}</td>
+              {hasInvoiceVatColumn ? <td className="text-right">{formatCurrency(row.paidTax || 0)}</td> : null}
               {utilityColumns.map((column) => (
                 <td key={`${row.tenantId}-${column.key}-paid`} className="text-right">
                   {formatCurrency(getUtilityValue(row, column.key, "paid"))}
@@ -767,6 +789,11 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
             <td className="text-right">
               <strong>{formatCurrency(tenantRows.reduce((sum, r) => sum + r.invoicedRent, 0))}</strong>
             </td>
+            {hasInvoiceVatColumn ? (
+              <td className="text-right">
+                <strong>{formatCurrency(tenantRows.reduce((sum, row) => sum + Number(row.invoicedTax || 0), 0))}</strong>
+              </td>
+            ) : null}
             {utilityColumns.map((column) => (
               <td key={`total-${column.key}-inv`} className="text-right">
                 <strong>{formatCurrency(tenantRows.reduce((sum, row) => sum + getUtilityValue(row, column.key, "invoiced"), 0))}</strong>
@@ -775,6 +802,11 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
             <td className="text-right">
               <strong>{formatCurrency(tenantRows.reduce((sum, r) => sum + r.paidRent, 0))}</strong>
             </td>
+            {hasInvoiceVatColumn ? (
+              <td className="text-right">
+                <strong>{formatCurrency(tenantRows.reduce((sum, row) => sum + Number(row.paidTax || 0), 0))}</strong>
+              </td>
+            ) : null}
             {utilityColumns.map((column) => (
               <td key={`total-${column.key}-paid`} className="text-right">
                 <strong>{formatCurrency(tenantRows.reduce((sum, row) => sum + getUtilityValue(row, column.key, "paid"), 0))}</strong>
@@ -803,6 +835,12 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
               <tr>
                 <td>{utilityPassThroughLabel.toUpperCase()}</td>
                 <td>{formatCurrency(utilityPassThroughAmount)}</td>
+              </tr>
+            )}
+            {invoiceVatPassThroughAmount > 0 && (
+              <tr>
+                <td>{invoiceVatPassThroughLabel.toUpperCase()}</td>
+                <td>{formatCurrency(invoiceVatPassThroughAmount)}</td>
               </tr>
             )}
             <tr>
@@ -843,6 +881,7 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
         <p>This is a computer-generated statement and does not require a signature.</p>
         <p>Generated by {companyName} Property Management System | Powered by Milik</p>
         <p>Total invoiced: KES {formatCurrency(totalInvoiced)} | Total received: KES {formatCurrency(totalPaid)}</p>
+        {hasInvoiceVatColumn ? <p>Invoice VAT received: KES {formatCurrency(totalInvoiceVatReceived)}</p> : null}
       </div>
     </div>
   );

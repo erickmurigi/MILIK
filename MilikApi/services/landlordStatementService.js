@@ -441,16 +441,77 @@ const getCombinedUtilityBreakdown = (metadata = {}) => {
     .filter((item) => item.amount > 0);
 };
 
-const getCombinedInvoiceStatementSplit = ({ amount = 0, metadata = {}, row = null } = {}) => {
+const getInvoiceTaxSplit = ({ amount = 0, taxSnapshot = {} } = {}) => {
+  const grossAmount = round2(Math.max(0, Number(amount || 0)));
+  if (grossAmount <= 0) {
+    return {
+      grossAmount: 0,
+      netAmount: 0,
+      taxAmount: 0,
+      isTaxed: false,
+    };
+  }
+
+  const snapshotTaxAmount = round2(Math.max(0, Number(taxSnapshot?.taxAmount || 0)));
+  const derivedNetAmount = round2(
+    snapshotTaxAmount > 0
+      ? Math.max(0, Number(taxSnapshot?.netAmount ?? grossAmount - snapshotTaxAmount))
+      : grossAmount
+  );
+  const boundedNetAmount = round2(Math.min(grossAmount, Math.max(0, derivedNetAmount)));
+  const boundedTaxAmount = round2(Math.max(0, Math.min(grossAmount - boundedNetAmount, snapshotTaxAmount || grossAmount - boundedNetAmount)));
+  const finalNetAmount = round2(Math.max(0, grossAmount - boundedTaxAmount));
+
+  return {
+    grossAmount,
+    netAmount: finalNetAmount,
+    taxAmount: boundedTaxAmount,
+    isTaxed: boundedTaxAmount > 0,
+  };
+};
+
+const splitAppliedAmountBetweenBaseAndTax = ({ appliedAmount = 0, grossAmount = 0, taxAmount = 0 } = {}) => {
+  const applied = round2(Math.max(0, Number(appliedAmount || 0)));
+  const gross = round2(Math.max(0, Number(grossAmount || 0)));
+  const tax = round2(Math.max(0, Math.min(gross, Number(taxAmount || 0))));
+  if (applied <= 0 || gross <= 0) {
+    return {
+      grossApplied: 0,
+      baseApplied: 0,
+      taxApplied: 0,
+    };
+  }
+
+  const taxRatio = tax > 0 ? Math.min(1, tax / gross) : 0;
+  const rawTaxApplied = round2(applied * taxRatio);
+  const taxApplied = round2(Math.max(0, Math.min(applied, rawTaxApplied)));
+  const baseApplied = round2(Math.max(0, applied - taxApplied));
+
+  return {
+    grossApplied: applied,
+    baseApplied,
+    taxApplied,
+  };
+};
+
+const getCombinedInvoiceStatementSplit = ({ amount = 0, metadata = {}, taxSnapshot = {}, row = null } = {}) => {
   const breakdown = getCombinedUtilityBreakdown(metadata);
   if (breakdown.length === 0) return null;
 
-  const totalAmount = round2(Math.max(0, Number(amount || 0)));
-  if (totalAmount <= 0) {
-    return { rentAmount: 0, utilityAmount: 0, utilities: [] };
+  const amountSplit = getInvoiceTaxSplit({ amount, taxSnapshot });
+  const totalNetAmount = round2(amountSplit.netAmount || 0);
+  if (totalNetAmount <= 0) {
+    return {
+      grossAmount: amountSplit.grossAmount || 0,
+      netAmount: 0,
+      taxAmount: amountSplit.taxAmount || 0,
+      rentAmount: 0,
+      utilityAmount: 0,
+      utilities: [],
+    };
   }
 
-  let remaining = totalAmount;
+  let remaining = totalNetAmount;
   const utilities = breakdown.map((item, index) => {
     const rawAmount = round2(Number(item.amount || 0));
     const appliedAmount = index === breakdown.length - 1
@@ -472,9 +533,12 @@ const getCombinedInvoiceStatementSplit = ({ amount = 0, metadata = {}, row = nul
   }).filter((item) => item.amount > 0);
 
   const utilityAmount = round2(utilities.reduce((sum, item) => sum + Number(item.amount || 0), 0));
-  const rentAmount = round2(Math.max(0, totalAmount - utilityAmount));
+  const rentAmount = round2(Math.max(0, totalNetAmount - utilityAmount));
 
   return {
+    grossAmount: amountSplit.grossAmount,
+    netAmount: totalNetAmount,
+    taxAmount: amountSplit.taxAmount,
     rentAmount,
     utilityAmount,
     utilities,
@@ -484,18 +548,31 @@ const getCombinedInvoiceStatementSplit = ({ amount = 0, metadata = {}, row = nul
 const getCombinedReceiptAllocationSplit = ({ allocationRow = {}, sourceInvoice = null, row = null } = {}) => {
   if (!sourceInvoice) return null;
 
-  const invoiceAmount = round2(Math.max(0, Number(sourceInvoice?.amount || 0)));
-  const appliedAmount = round2(Math.max(0, Number(allocationRow?.appliedAmount || 0)));
-  if (invoiceAmount <= 0 || appliedAmount <= 0) return null;
-
   const invoiceSplit = getCombinedInvoiceStatementSplit({
-    amount: invoiceAmount,
+    amount: sourceInvoice?.amount || 0,
     metadata: sourceInvoice?.metadata || {},
+    taxSnapshot: sourceInvoice?.taxSnapshot || {},
     row,
   });
-  if (!invoiceSplit || invoiceSplit.utilityAmount <= 0) return null;
+  const appliedAmount = round2(Math.max(0, Number(allocationRow?.appliedAmount || 0)));
+  if (!invoiceSplit || invoiceSplit.utilityAmount <= 0 || appliedAmount <= 0) return null;
 
-  const ratio = Math.min(1, appliedAmount / invoiceAmount);
+  const appliedSplit = splitAppliedAmountBetweenBaseAndTax({
+    appliedAmount,
+    grossAmount: invoiceSplit.grossAmount || sourceInvoice?.amount || 0,
+    taxAmount: invoiceSplit.taxAmount || 0,
+  });
+  const baseApplied = round2(appliedSplit.baseApplied || 0);
+  if (baseApplied <= 0) {
+    return {
+      rentAmount: 0,
+      utilityAmount: 0,
+      utilities: [],
+      taxAmount: round2(appliedSplit.taxApplied || 0),
+    };
+  }
+
+  const ratio = invoiceSplit.netAmount > 0 ? Math.min(1, baseApplied / invoiceSplit.netAmount) : 0;
   let remainingUtilityApplied = round2(invoiceSplit.utilityAmount * ratio);
   const utilities = (invoiceSplit.utilities || []).map((item, index, arr) => {
     const rawAmount = round2(Number(item.amount || 0) * ratio);
@@ -510,12 +587,13 @@ const getCombinedReceiptAllocationSplit = ({ allocationRow = {}, sourceInvoice =
   }).filter((item) => item.amount > 0);
 
   const utilityAmount = round2(utilities.reduce((sum, item) => sum + Number(item.amount || 0), 0));
-  const rentAmount = round2(Math.max(0, appliedAmount - utilityAmount));
+  const rentAmount = round2(Math.max(0, baseApplied - utilityAmount));
 
   return {
     rentAmount,
     utilityAmount,
     utilities,
+    taxAmount: round2(appliedSplit.taxApplied || 0),
   };
 };
 
@@ -652,9 +730,9 @@ const resolveVoucherStatementDate = (voucher = {}) => {
   return null;
 };
 
-const isLandlordDepositAllocationRow = (row = {}) => {
+const resolveExplicitDepositHolderFromAllocationRow = (row = {}) => {
   const priorityGroup = safeName(row?.priorityGroup || "");
-  if (priorityGroup !== "deposit") return false;
+  if (priorityGroup !== "deposit") return "";
 
   const depositHolder =
     normalizeDepositHolderValue(row?.depositHeldBy) ||
@@ -670,8 +748,13 @@ const isLandlordDepositAllocationRow = (row = {}) => {
       ""
   );
 
-  return depositHolder === "landlord" || ledgerMode === "off_ledger";
+  if (depositHolder) return depositHolder;
+  if (ledgerMode === "off_ledger") return "landlord";
+  return "";
 };
+
+const isLandlordDepositAllocationRow = (row = {}) =>
+  resolveExplicitDepositHolderFromAllocationRow(row) === "landlord";
 
 const getReceiptDepositAllocationBreakdown = (receipt = {}, fallbackHolderResolver = null) => {
   const allocationRows = getReceiptAllocationRows(receipt).filter(
@@ -683,7 +766,13 @@ const getReceiptDepositAllocationBreakdown = (receipt = {}, fallbackHolderResolv
       (acc, row) => {
         const amount = round2(Math.abs(Number(row?.appliedAmount || 0)));
         if (amount === 0) return acc;
-        if (isLandlordDepositAllocationRow(row)) acc.landlord = round2(acc.landlord + amount);
+
+        const explicitHolder = resolveExplicitDepositHolderFromAllocationRow(row);
+        const fallbackHolder =
+          typeof fallbackHolderResolver === "function" ? fallbackHolderResolver(receipt, row) : "manager";
+        const resolvedHolder = explicitHolder || fallbackHolder || "manager";
+
+        if (resolvedHolder === "landlord") acc.landlord = round2(acc.landlord + amount);
         else acc.manager = round2(acc.manager + amount);
         acc.total = round2(acc.total + amount);
         return acc;
@@ -873,7 +962,7 @@ export const generateLandlordStatement = async ({
       status: { $nin: ["cancelled", "reversed"] },
     })
       .select(
-        "_id tenant unit category amount description invoiceDate invoiceNumber landlord metadata depositHeldBy"
+        "_id tenant unit category amount description invoiceDate invoiceNumber landlord metadata depositHeldBy taxSnapshot"
       )
       .lean(),
 
@@ -884,7 +973,7 @@ export const generateLandlordStatement = async ({
       status: { $nin: ["cancelled", "reversed"] },
     })
       .select(
-        "_id tenant unit category amount description invoiceDate invoiceNumber landlord metadata depositHeldBy"
+        "_id tenant unit category amount description invoiceDate invoiceNumber landlord metadata depositHeldBy taxSnapshot"
       )
       .lean(),
 
@@ -898,7 +987,7 @@ export const generateLandlordStatement = async ({
       .select(
         "_id tenant unit category amount description noteDate noteNumber noteType metadata sourceInvoice"
       )
-      .populate("sourceInvoice", "_id invoiceNumber category description metadata")
+      .populate("sourceInvoice", "_id invoiceNumber category description metadata taxSnapshot depositHeldBy")
       .lean(),
 
     TenantInvoiceNote.find({
@@ -911,7 +1000,7 @@ export const generateLandlordStatement = async ({
       .select(
         "_id tenant unit category amount description noteDate noteNumber noteType metadata sourceInvoice"
       )
-      .populate("sourceInvoice", "_id invoiceNumber category description metadata")
+      .populate("sourceInvoice", "_id invoiceNumber category description metadata taxSnapshot depositHeldBy")
       .lean(),
 
     RentPayment.find({
@@ -1061,6 +1150,8 @@ export const generateLandlordStatement = async ({
         paidRent: 0,
         paidGarbage: 0,
         paidWater: 0,
+        invoicedTax: 0,
+        paidTax: 0,
         unappliedCredits: 0,
         utilities: {},
         balanceCF: 0,
@@ -1149,20 +1240,16 @@ export const generateLandlordStatement = async ({
       : amount;
   };
 
-  const resolveDepositHolderForRecord = (record = {}) => {
+  const resolveDepositHolderForRecord = (record = {}, allocationRow = null) => {
     const tenantId = getEntityId(record?.tenant);
     const tenant = tenantId ? tenantMap.get(tenantId) || {} : {};
 
     const allocationRows = Array.isArray(record?.allocations) ? record.allocations : [];
-    const allocationHolder = allocationRows.reduce((resolved, row) => {
-      return (
-        resolved ||
-        normalizeDepositHolderValue(row?.depositHeldBy) ||
-        normalizeDepositHolderValue(row?.metadata?.depositHeldBy) ||
-        normalizeDepositHolderValue(row?.sourceInvoice?.depositHeldBy) ||
-        normalizeDepositHolderValue(row?.sourceInvoice?.metadata?.depositHeldBy)
-      );
-    }, "");
+    const allocationHolder =
+      resolveExplicitDepositHolderFromAllocationRow(allocationRow || {}) ||
+      allocationRows.reduce((resolved, row) => {
+        return resolved || resolveExplicitDepositHolderFromAllocationRow(row);
+      }, "");
 
     const tenantHolder = normalizeDepositHolderValue(tenant?.depositHeldBy);
     const recordHolder =
@@ -1170,14 +1257,15 @@ export const generateLandlordStatement = async ({
       normalizeDepositHolderValue(record?.metadata?.depositHeldBy);
     const propertyHolder = normalizeDepositHolderValue(property?.depositHeldBy);
     const normalizedPaymentType = safeName(record?.paymentType || "");
+    const hasDepositAllocation = allocationRows.some(
+      (row) => safeName(row?.priorityGroup || "") === "deposit"
+    );
 
-    if (allocationHolder) return allocationHolder;
-
-    if (normalizedPaymentType === "deposit") {
-      return tenantHolder || recordHolder || propertyHolder || "manager";
+    if (normalizedPaymentType === "deposit" || hasDepositAllocation) {
+      return tenantHolder || allocationHolder || recordHolder || propertyHolder || "manager";
     }
 
-    return recordHolder || tenantHolder || propertyHolder || "manager";
+    return allocationHolder || recordHolder || tenantHolder || propertyHolder || "manager";
   };
 
   const allDepositReceiptsBefore = mergeUniqueReceiptsById(
@@ -1342,12 +1430,20 @@ export const generateLandlordStatement = async ({
 
     const row = ensureRow(invoice.tenant, invoice.unit);
     const amount = Number(invoice.amount || 0);
+    const taxSplit = getInvoiceTaxSplit({ amount, taxSnapshot: invoice?.taxSnapshot || {} });
     const combinedSplit =
       String(invoice?.category || "").toUpperCase() === "RENT_CHARGE"
-        ? getCombinedInvoiceStatementSplit({ amount, metadata: invoice.metadata || {}, row })
+        ? getCombinedInvoiceStatementSplit({
+            amount,
+            metadata: invoice.metadata || {},
+            taxSnapshot: invoice?.taxSnapshot || {},
+            row,
+          })
         : null;
 
     if (invoice.category === "RENT_CHARGE") {
+      row.invoicedTax += Number(taxSplit.taxAmount || 0);
+
       if (combinedSplit) {
         row.invoicedRent += Number(combinedSplit.rentAmount || 0);
         (combinedSplit.utilities || []).forEach((item) => {
@@ -1364,13 +1460,14 @@ export const generateLandlordStatement = async ({
           );
         });
       } else {
-        row.invoicedRent += amount;
+        row.invoicedRent += Number(taxSplit.netAmount || 0);
       }
     } else if (invoice.category === "UTILITY_CHARGE") {
+      row.invoicedTax += Number(taxSplit.taxAmount || 0);
       applyUtility(
         row,
         "invoice",
-        amount,
+        Number(taxSplit.netAmount || 0),
         invoice.description || invoice.invoiceNumber || "",
         invoice.metadata || {}
       );
@@ -1403,6 +1500,9 @@ export const generateLandlordStatement = async ({
         tenantName: row.tenantName,
         unit: row.unit,
         tenantCode: row.accountNo,
+        taxSnapshot: invoice?.taxSnapshot || {},
+        statementNetAmount: Number(taxSplit.netAmount || 0),
+        statementTaxAmount: Number(taxSplit.taxAmount || 0),
         ...(invoiceUtilityIdentity
           ? {
               utilityType: invoiceUtilityIdentity.label,
@@ -1476,6 +1576,8 @@ export const generateLandlordStatement = async ({
   let totalRentReceivedLandlord = 0;
   let totalUtilityReceivedManager = 0;
   let totalUtilityReceivedLandlord = 0;
+  let totalInvoiceTaxReceivedManager = 0;
+  let totalInvoiceTaxReceivedLandlord = 0;
   let directToLandlordOffset = 0;
   const additionRows = [];
   const extraDeductionRows = [];
@@ -1496,6 +1598,7 @@ export const generateLandlordStatement = async ({
     const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
     let rentAllocated = 0;
     let utilityAllocated = 0;
+    let taxAllocated = 0;
 
     if (allocationRows.length > 0) {
       allocationRows.forEach((allocationRow) => {
@@ -1506,6 +1609,7 @@ export const generateLandlordStatement = async ({
         if (combinedSplit) {
           rentAllocated = round2(rentAllocated + Number(combinedSplit.rentAmount || 0));
           utilityAllocated = round2(utilityAllocated + Number(combinedSplit.utilityAmount || 0));
+          taxAllocated = round2(taxAllocated + Number(combinedSplit.taxAmount || 0));
           (combinedSplit.utilities || []).forEach((item) => {
             applyUtility(
               row,
@@ -1522,13 +1626,32 @@ export const generateLandlordStatement = async ({
           return;
         }
 
+        const appliedAmount = Number(allocationRow?.appliedAmount || 0);
+        const sourceTaxSplit = sourceInvoice
+          ? getInvoiceTaxSplit({
+              amount: sourceInvoice?.amount || 0,
+              taxSnapshot: sourceInvoice?.taxSnapshot || {},
+            })
+          : { grossAmount: Math.abs(appliedAmount), netAmount: Math.abs(appliedAmount), taxAmount: 0 };
+        const appliedTaxSplit = splitAppliedAmountBetweenBaseAndTax({
+          appliedAmount: Math.abs(appliedAmount),
+          grossAmount: sourceTaxSplit.grossAmount || Math.abs(appliedAmount),
+          taxAmount: sourceTaxSplit.taxAmount || 0,
+        });
+        const signedBaseApplied = Math.sign(appliedAmount || 1) * Number(appliedTaxSplit.baseApplied || 0);
+        const signedTaxApplied = Math.sign(appliedAmount || 1) * Number(appliedTaxSplit.taxApplied || 0);
+
+        if (signedTaxApplied !== 0) {
+          taxAllocated = round2(taxAllocated + signedTaxApplied);
+        }
+
         if (priorityGroup === "rent") {
-          rentAllocated = round2(rentAllocated + Number(allocationRow?.appliedAmount || 0));
+          rentAllocated = round2(rentAllocated + signedBaseApplied);
           return;
         }
 
         if (priorityGroup === "utility") {
-          const utilityAmount = Number(allocationRow?.appliedAmount || 0);
+          const utilityAmount = signedBaseApplied;
           utilityAllocated = round2(utilityAllocated + utilityAmount);
           applyUtility(
             row,
@@ -1578,6 +1701,15 @@ export const generateLandlordStatement = async ({
         totalUtilityReceivedLandlord += utilityAllocated;
       } else {
         totalUtilityReceivedManager += utilityAllocated;
+      }
+    }
+
+    if (taxAllocated !== 0) {
+      row.paidTax += taxAllocated;
+      if (receipt.paidDirectToLandlord) {
+        totalInvoiceTaxReceivedLandlord += taxAllocated;
+      } else {
+        totalInvoiceTaxReceivedManager += taxAllocated;
       }
     }
 
@@ -1652,6 +1784,7 @@ export const generateLandlordStatement = async ({
         unit: row.unit,
         tenantCode: row.accountNo,
         paidDirectToLandlord: !!receipt.paidDirectToLandlord,
+        statementTaxAmount: taxAllocated,
         ...(receiptUtilityIdentity
           ? {
               utilityType: receiptUtilityIdentity.label,
@@ -1680,6 +1813,7 @@ export const generateLandlordStatement = async ({
           tenantName: row.tenantName,
           unit: row.unit,
           tenantCode: row.accountNo,
+          statementTaxAmount: taxAllocated,
         },
       });
     }
@@ -1952,9 +2086,11 @@ export const generateLandlordStatement = async ({
       row.invoicedRent = round2(row.invoicedRent);
       row.invoicedGarbage = round2(row.invoicedGarbage);
       row.invoicedWater = round2(row.invoicedWater);
+      row.invoicedTax = round2(row.invoicedTax);
       row.paidRent = round2(row.paidRent);
       row.paidGarbage = round2(row.paidGarbage);
       row.paidWater = round2(row.paidWater);
+      row.paidTax = round2(row.paidTax);
       row.unappliedCredits = round2(row.unappliedCredits);
       row.utilities = Object.fromEntries(
         Object.entries(row.utilities || {}).map(([key, item]) => [
@@ -1975,9 +2111,11 @@ export const generateLandlordStatement = async ({
       row.balanceCF = round2(
         row.balanceBF +
           row.invoicedRent +
-          row.totalUtilityInvoiced -
+          row.totalUtilityInvoiced +
+          row.invoicedTax -
           row.paidRent -
-          row.totalUtilityPaid
+          row.totalUtilityPaid -
+          row.paidTax
       );
       row.referenceNumbers = Array.from(
         new Set((row.referenceNumbers || []).filter(Boolean))
@@ -2005,6 +2143,12 @@ export const generateLandlordStatement = async ({
   );
   const totalRentReceived = round2(
     tenantRows.reduce((sum, row) => sum + row.paidRent, 0)
+  );
+  const totalInvoiceVatInvoiced = round2(
+    tenantRows.reduce((sum, row) => sum + Number(row.invoicedTax || 0), 0)
+  );
+  const totalInvoiceVatReceived = round2(
+    tenantRows.reduce((sum, row) => sum + Number(row.paidTax || 0), 0)
   );
   const totalGarbageReceived = round2(
     Number(utilityTotalsMap.garbage?.paid || 0)
@@ -2122,16 +2266,16 @@ export const generateLandlordStatement = async ({
   }
 
   const managerCollections = round2(
-    totalRentReceivedManager + totalUtilityReceivedManager
+    totalRentReceivedManager + totalUtilityReceivedManager + totalInvoiceTaxReceivedManager
   );
   const directToLandlordCollections = round2(
-    totalRentReceivedLandlord + totalUtilityReceivedLandlord
+    totalRentReceivedLandlord + totalUtilityReceivedLandlord + totalInvoiceTaxReceivedLandlord
   );
   const totalCollections = round2(
     managerCollections + directToLandlordCollections
   );
   const expectedCollections = round2(
-    totalRentInvoiced + totalUtilityInvoiced
+    totalRentInvoiced + totalUtilityInvoiced + totalInvoiceVatInvoiced
   );
 
   const usesExpectedRentSettlement = recognitionBasis === "invoiced";
@@ -2140,18 +2284,25 @@ export const generateLandlordStatement = async ({
   );
   const settlementBasisLabel = usesExpectedRentSettlement
     ? "Rent expected (Invoiced/Accrual)"
-    : "Manager-held collections";
+    : "Manager-held collections"
+  ;
   const utilityPassThroughAmount = round2(
     usesExpectedRentSettlement ? totalUtilityInvoiced : 0
   );
   const utilityPassThroughLabel = usesExpectedRentSettlement
     ? "Utilities (added as billed)"
     : "";
+  const invoiceVatPassThroughAmount = round2(
+    usesExpectedRentSettlement ? totalInvoiceVatInvoiced : 0
+  );
+  const invoiceVatPassThroughLabel = usesExpectedRentSettlement
+    ? "Invoice VAT (pass-through)"
+    : "";
   const settlementCollections = round2(
-    settlementBasisAmount + utilityPassThroughAmount
+    settlementBasisAmount + utilityPassThroughAmount + invoiceVatPassThroughAmount
   );
   const settlementCollectionsLabel = usesExpectedRentSettlement
-    ? "Expected rent + utilities"
+    ? "Expected rent + utilities + VAT"
     : "Manager-held collections";
   const basisCollections = settlementBasisAmount;
   const basisCollectionsLabel = settlementBasisLabel;
@@ -2267,7 +2418,7 @@ export const generateLandlordStatement = async ({
       unitNumber: row.unit,
       openingBalance: row.balanceBF,
       closingBalance: row.balanceCF,
-      totalPaid: round2(row.paidRent + row.totalUtilityPaid),
+      totalPaid: round2(row.paidRent + row.totalUtilityPaid + Number(row.paidTax || 0)),
       unappliedCredits: round2(row.unappliedCredits || 0),
       balance: row.balanceCF,
     })),
@@ -2277,15 +2428,17 @@ export const generateLandlordStatement = async ({
       invoicedRent: totalRentInvoiced,
       invoicedGarbage: totalGarbageInvoiced,
       invoicedWater: totalWaterInvoiced,
+      invoicedTax: totalInvoiceVatInvoiced,
       paidRent: totalRentReceived,
       rentPaid: totalRentReceived,
       paidGarbage: totalGarbageReceived,
       paidWater: totalWaterReceived,
+      paidTax: totalInvoiceVatReceived,
       utilities: utilityColumns,
       utilityPaid: totalUtilityCollected,
       utilityInvoiced: totalUtilityInvoiced,
       expenses: nonCommissionDeductions,
-      totalPaid: round2(totalRentReceived + totalUtilityCollected),
+      totalPaid: round2(totalRentReceived + totalUtilityCollected + totalInvoiceVatReceived),
       closingBalance: totalBalanceCF,
     },
     expenseRows,
@@ -2312,6 +2465,7 @@ export const generateLandlordStatement = async ({
       totalRentInvoiced: totalRentInvoiced,
       utilityInvoiced: totalUtilityInvoiced,
       totalUtilityInvoiced: totalUtilityInvoiced,
+      totalInvoiceVatInvoiced,
       expectedCollections,
       basisCollections,
       basisCollectionsLabel,
@@ -2321,11 +2475,16 @@ export const generateLandlordStatement = async ({
       settlementBasisLabel,
       utilityPassThroughAmount,
       utilityPassThroughLabel,
+      invoiceVatPassThroughAmount,
+      invoiceVatPassThroughLabel,
       managerCollections,
       totalCollections,
       totalRentReceived: totalRentReceived,
       totalRentReceivedManager: totalRentReceivedManager,
       totalRentReceivedLandlord: totalRentReceivedLandlord,
+      totalInvoiceVatReceived,
+      totalInvoiceVatReceivedManager: round2(totalInvoiceTaxReceivedManager),
+      totalInvoiceVatReceivedLandlord: round2(totalInvoiceTaxReceivedLandlord),
       totalUtilityCollected,
       unappliedPayments: round2(tenantRows.reduce((sum, row) => sum + Number(row.unappliedCredits || 0), 0)),
       directToLandlordCollections,

@@ -148,45 +148,40 @@ export const buildTaxPreviewForCategory = ({ amount, category, companyTaxConfig 
   const precision = Number(taxSettings.roundingPrecision ?? 2);
   const normalizedCategory = String(category || "").toUpperCase();
 
-  if (normalizedCategory === "DEPOSIT_CHARGE") {
-    return {
-      isTaxable: false,
-      taxCodeKey: "no_tax",
-      taxCodeName: "No Tax",
-      taxRate: 0,
-      taxMode: "exclusive",
-      netAmount: roundTo(amount, precision),
-      taxAmount: 0,
-      grossAmount: roundTo(amount, precision),
-    };
-  }
-
   const companyTaxEnabled = Boolean(taxSettings.enabled);
   const companyDefaultTaxable = resolveCategoryTaxability({ category: normalizedCategory, taxSettings });
   const useManualTax = handling !== "company_default";
   const manuallyTaxable = handling === "taxable";
-  const shouldApplyTax = companyTaxEnabled && (useManualTax ? manuallyTaxable : companyDefaultTaxable);
-  const requestedCodeKey = handling === "non_taxable"
-    ? "no_tax"
-    : selection?.taxCodeKey || taxSettings.defaultTaxCodeKey || "vat_standard";
-  const taxCode = resolveTaxCode({ companyTaxConfig: config, requestedKey: requestedCodeKey });
-  const finalTaxable = Boolean(shouldApplyTax && taxCode.key !== "no_tax" && taxCode.type !== "exempt");
-  const taxMode = String(selection?.taxMode || "company_default").toLowerCase() === "company_default"
-    ? String(taxSettings.defaultTaxMode || "exclusive").toLowerCase()
-    : String(selection?.taxMode || taxSettings.defaultTaxMode || "exclusive").toLowerCase();
+  const shouldRetainTaxClassification = companyTaxEnabled && (useManualTax ? manuallyTaxable : companyDefaultTaxable);
+  const requestedCodeKey =
+    handling === "non_taxable"
+      ? "no_tax"
+      : selection?.taxCodeKey || taxSettings.defaultTaxCodeKey || "vat_standard";
+  const requestedTaxCode = resolveTaxCode({ companyTaxConfig: config, requestedKey: requestedCodeKey });
+  const effectiveTaxCode = shouldRetainTaxClassification && requestedTaxCode.key !== "no_tax"
+    ? requestedTaxCode
+    : DEFAULT_TAX_CODES[0];
+  const taxMode =
+    String(selection?.taxMode || "company_default").toLowerCase() === "company_default"
+      ? String(taxSettings.defaultTaxMode || "exclusive").toLowerCase()
+      : String(selection?.taxMode || taxSettings.defaultTaxMode || "exclusive").toLowerCase();
+  const effectiveTaxRate =
+    effectiveTaxCode.key !== "no_tax" && effectiveTaxCode.type !== "exempt"
+      ? Number(effectiveTaxCode.rate || 0)
+      : 0;
   const breakdown = calculateBreakdown({
     amount,
-    taxRate: finalTaxable ? Number(taxCode.rate || 0) : 0,
+    taxRate: effectiveTaxRate,
     taxMode,
     precision,
-    isTaxable: finalTaxable,
+    isTaxable: effectiveTaxCode.key !== "no_tax",
   });
 
   return {
-    isTaxable: finalTaxable,
-    taxCodeKey: finalTaxable ? taxCode.key : "no_tax",
-    taxCodeName: finalTaxable ? taxCode.name : "No Tax",
-    taxRate: finalTaxable ? Number(taxCode.rate || 0) : 0,
+    isTaxable: effectiveTaxCode.key !== "no_tax",
+    taxCodeKey: effectiveTaxCode.key,
+    taxCodeName: effectiveTaxCode.name,
+    taxRate: effectiveTaxRate,
     taxMode: breakdown.taxMode,
     netAmount: breakdown.netAmount,
     taxAmount: breakdown.taxAmount,

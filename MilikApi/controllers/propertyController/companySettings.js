@@ -1,14 +1,13 @@
 import CompanySettings from "../../models/CompanySettings.js";
 import mongoose from "mongoose";
 import {
+  validateAccountingDefaultAccount,
+} from "../../services/companyAccountingDefaultsService.js";
+import {
   DEFAULT_TAX_CODES,
   DEFAULT_TAX_SETTINGS,
   normalizeCompanyTaxConfiguration,
 } from "../../services/taxCalculationService.js";
-import {
-  DEFAULT_ACCOUNTING_DEFAULTS,
-  normalizeAccountingDefaults,
-} from "../../services/companyAccountingDefaultsService.js";
 
 const normalizeText = (value = "") => String(value ?? "").trim();
 const normalizeLower = (value = "") => normalizeText(value).toLowerCase();
@@ -16,6 +15,88 @@ const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
+
+const normalizeTaxCodeKey = (value = "") =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_");
+
+const resolveEmbeddedTaxCodeId = (value) => {
+  if (!value) return null;
+  if (value instanceof mongoose.Types.ObjectId) return value;
+  const raw = String(value).trim();
+  return mongoose.Types.ObjectId.isValid(raw) ? new mongoose.Types.ObjectId(raw) : null;
+};
+
+const validateNormalizedTaxConfiguration = ({ taxSettings = {}, taxCodes = [] } = {}) => {
+  const seenKeys = new Set();
+  let activeCount = 0;
+  let activeDefaultCount = 0;
+
+  for (const code of Array.isArray(taxCodes) ? taxCodes : []) {
+    const normalizedKey = normalizeTaxCodeKey(code?.key);
+    if (!normalizedKey) {
+      const error = new Error("Every tax code must have a valid key.");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (seenKeys.has(normalizedKey)) {
+      const error = new Error(`Duplicate tax code key detected: ${normalizedKey}.`);
+      error.statusCode = 400;
+      throw error;
+    }
+    seenKeys.add(normalizedKey);
+
+    if (!String(code?.name || "").trim()) {
+      const error = new Error(`Tax code ${normalizedKey} must have a name.`);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const rate = Number(code?.rate ?? 0);
+    if (!Number.isFinite(rate) || rate < 0) {
+      const error = new Error(`Tax code ${normalizedKey} has an invalid rate.`);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (code?.isActive !== false) {
+      activeCount += 1;
+      if (code?.isDefault) activeDefaultCount += 1;
+    }
+  }
+
+  if (activeCount <= 0) {
+    const error = new Error("At least one active tax code is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (activeDefaultCount !== 1) {
+    const error = new Error("Exactly one active default tax code is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (taxSettings?.enabled && !String(taxSettings.outputVatAccountCode || "").trim()) {
+    const error = new Error("Output VAT / Tax Payable account code is required when tax is enabled.");
+    error.statusCode = 400;
+    throw error;
+  }
+};
+
+const mapTaxCodeForStorage = (code) => ({
+  _id: resolveEmbeddedTaxCodeId(code?._id) || new mongoose.Types.ObjectId(),
+  key: code.key,
+  name: code.name,
+  type: code.type,
+  rate: Number(code.rate || 0),
+  isDefault: Boolean(code.isDefault),
+  isActive: code.isActive !== false,
+  description: code.description || "",
+});
+
 
 const resolveAuthorizedBusinessId = (req) => {
   const requested = req.params?.businessId || req.body?.business || req.query?.business || null;
@@ -53,48 +134,39 @@ const buildDefaultTaxConfiguration = () => ({
   })),
 });
 
-const buildDefaultAccountingConfiguration = () => ({
-  accountingDefaults: {
-    ...DEFAULT_ACCOUNTING_DEFAULTS,
-  },
-});
-
 const ensureSettingsTaxConfiguration = (settings) => {
   if (!settings) return settings;
 
   const normalized = normalizeCompanyTaxConfiguration(settings);
-  settings.taxSettings = normalized.taxSettings;
-  settings.taxCodes = normalized.taxCodes.map((code) => ({
-    _id: code._id || new mongoose.Types.ObjectId(),
-    key: code.key,
-    name: code.name,
-    type: code.type,
-    rate: Number(code.rate || 0),
-    isDefault: Boolean(code.isDefault),
-    isActive: code.isActive !== false,
-    description: code.description || "",
-  }));
+  const storedCodes = normalized.taxCodes.map(mapTaxCodeForStorage);
+
+  if (typeof settings.set === "function") {
+    settings.set("taxSettings", normalized.taxSettings);
+    settings.set("taxCodes", storedCodes);
+    settings.markModified("taxSettings");
+    settings.markModified("taxCodes");
+  } else {
+    settings.taxSettings = normalized.taxSettings;
+    settings.taxCodes = storedCodes;
+  }
 
   return settings;
 };
 
-const ensureSettingsAccountingConfiguration = (settings) => {
-  if (!settings) return settings;
-  settings.accountingDefaults = normalizeAccountingDefaults(
-    settings.accountingDefaults?.toObject?.() || settings.accountingDefaults || {}
-  );
-  return settings;
-};
+const ACCOUNTING_DEFAULT_FIELDS = [
+  "tenantReceivableAccount",
+  "rentIncomeAccount",
+  "utilityRechargeIncomeAccount",
+  "penaltyIncomeAccount",
+  "depositLiabilityAccount",
+  "managementCommissionIncomeAccount",
+];
 
 const ensureSettingsDocument = async (businessId) => {
   let settings = await findCompanySettings(businessId);
   if (!settings) {
     settings = new CompanySettings({ company: businessId });
     ensureSettingsTaxConfiguration(settings);
-    ensureSettingsAccountingConfiguration(settings);
-  } else {
-    ensureSettingsTaxConfiguration(settings);
-    ensureSettingsAccountingConfiguration(settings);
   }
   return settings;
 };
@@ -147,7 +219,6 @@ export const getCompanySettings = async (req, res, next) => {
 
     if (!settings) {
       const defaults = buildDefaultTaxConfiguration();
-      const accountingDefaults = buildDefaultAccountingConfiguration();
       settings = new CompanySettings({
         company: businessId,
         utilityTypes: [
@@ -170,13 +241,11 @@ export const getCompanySettings = async (req, res, next) => {
         ],
         taxSettings: defaults.taxSettings,
         taxCodes: defaults.taxCodes,
-        accountingDefaults: accountingDefaults.accountingDefaults,
       });
 
       await settings.save();
     } else {
       ensureSettingsTaxConfiguration(settings);
-      ensureSettingsAccountingConfiguration(settings);
       if (settings.isModified()) {
         await settings.save();
       }
@@ -561,6 +630,41 @@ export const deleteExpenseItem = async (req, res, next) => {
   }
 };
 
+export const updateAccountingDefaults = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    let settings = await findCompanySettings(businessId);
+    if (!settings) {
+      settings = new CompanySettings({ company: businessId });
+      ensureSettingsTaxConfiguration(settings);
+    }
+
+    const incomingDefaults = req.body?.accountingDefaults || {};
+    const nextDefaults = { ...(settings.accountingDefaults?.toObject?.() || settings.accountingDefaults || {}) };
+
+    for (const field of ACCOUNTING_DEFAULT_FIELDS) {
+      if (!(field in incomingDefaults)) continue;
+      const account = await validateAccountingDefaultAccount({
+        businessId,
+        field,
+        rawValue: incomingDefaults[field],
+      });
+      nextDefaults[field] = account?._id || null;
+    }
+
+    settings.accountingDefaults = nextDefaults;
+    await settings.save();
+
+    return res.status(200).json({
+      message: "Accounting defaults updated successfully",
+      accountingDefaults: settings.accountingDefaults,
+      settings,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const updateTaxConfiguration = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
@@ -570,7 +674,6 @@ export const updateTaxConfiguration = async (req, res, next) => {
     }
 
     ensureSettingsTaxConfiguration(settings);
-    ensureSettingsAccountingConfiguration(settings);
 
     const incomingSettings = req.body?.taxSettings || {};
     const incomingCodes = Array.isArray(req.body?.taxCodes) ? req.body.taxCodes : settings.taxCodes;
@@ -580,51 +683,22 @@ export const updateTaxConfiguration = async (req, res, next) => {
       taxCodes: incomingCodes,
     });
 
-    settings.taxSettings = normalized.taxSettings;
-    settings.taxCodes = normalized.taxCodes.map((code) => ({
-      _id: code._id || new mongoose.Types.ObjectId(),
-      key: code.key,
-      name: code.name,
-      type: code.type,
-      rate: Number(code.rate || 0),
-      isDefault: Boolean(code.isDefault),
-      isActive: code.isActive !== false,
-      description: code.description || "",
-    }));
+    validateNormalizedTaxConfiguration(normalized);
+
+    const storedCodes = normalized.taxCodes.map(mapTaxCodeForStorage);
+
+    settings.set("taxSettings", normalized.taxSettings);
+    settings.set("taxCodes", storedCodes);
+    settings.markModified("taxSettings");
+    settings.markModified("taxCodes");
 
     await settings.save();
+    await settings.populate?.("accountingDefaults.tenantReceivableAccount accountingDefaults.rentIncomeAccount accountingDefaults.utilityRechargeIncomeAccount accountingDefaults.penaltyIncomeAccount accountingDefaults.depositLiabilityAccount accountingDefaults.managementCommissionIncomeAccount");
 
     res.status(200).json({
       message: "Tax configuration updated successfully",
       taxSettings: settings.taxSettings,
       taxCodes: settings.taxCodes,
-      settings,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-
-export const updateAccountingDefaults = async (req, res, next) => {
-  try {
-    const businessId = resolveAuthorizedBusinessId(req);
-    let settings = await findCompanySettings(businessId);
-    if (!settings) {
-      settings = new CompanySettings({ company: businessId });
-    }
-
-    ensureSettingsTaxConfiguration(settings);
-    ensureSettingsAccountingConfiguration(settings);
-
-    const incomingDefaults = normalizeAccountingDefaults(req.body?.accountingDefaults || req.body || {});
-    settings.accountingDefaults = incomingDefaults;
-
-    await settings.save();
-
-    res.status(200).json({
-      message: "Accounting defaults updated successfully",
-      accountingDefaults: settings.accountingDefaults,
       settings,
     });
   } catch (err) {

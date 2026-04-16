@@ -478,6 +478,13 @@ const Statements = () => {
     summary?.additions ?? summary?.totalAdditions ?? sumSectionAmounts(additionRows)
   );
   const commissionAmount = Number(summary?.commissionAmount || 0);
+  const commissionTaxAmount = Number(summary?.commissionTaxAmount || 0);
+  const invoiceVatPassThroughLabel =
+    summary?.invoiceVatPassThroughLabel || "Invoice VAT (pass-through)";
+  const invoiceVatPassThroughAmount = Number(
+    summary?.invoiceVatPassThroughAmount ?? summary?.totalInvoiceVatInvoiced ?? 0
+  );
+  const totalInvoiceVatReceived = Number(summary?.totalInvoiceVatReceived ?? totals?.paidTax ?? 0);
   const nonCommissionDeductions = Number(
     summary?.nonCommissionDeductions ??
       summary?.totalExpenses ??
@@ -571,7 +578,9 @@ const Statements = () => {
         "openingBalance",
         "balanceBF",
         "invoicedRent",
+        "invoicedTax",
         "paidRent",
+        "paidTax",
         "totalPaid",
         "closingBalance",
         "balanceCF",
@@ -639,7 +648,16 @@ const Statements = () => {
     directToLandlordRows.length > 0 ||
     depositSettlementRows.length > 0 ||
     depositMemoRows.length > 0;
-  const statementColSpan = 7 + utilityColumns.length * 2;
+  const hasInvoiceVatColumn = useMemo(
+    () =>
+      Number(summary?.totalInvoiceVatInvoiced || 0) > 0 ||
+      Number(summary?.totalInvoiceVatReceived || 0) > 0 ||
+      preparedRows.some(
+        (row) => Number(row?.invoicedTax || 0) > 0 || Number(row?.paidTax || 0) > 0
+      ),
+    [preparedRows, summary]
+  );
+  const statementColSpan = 7 + utilityColumns.length * 2 + (hasInvoiceVatColumn ? 2 : 0);
   const hasFuturePeriodDate =
     isFutureIsoDate(periodStart, todayIso) || isFutureIsoDate(periodEnd, todayIso);
   const hasValidPeriodSelection =
@@ -1223,6 +1241,18 @@ const Statements = () => {
                             <td className="px-4 py-3 font-semibold text-slate-700">{basisCollectionsLabel}</td>
                             <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(basisCollectionsAmount)}</td>
                           </tr>
+                          {Number(summary?.utilityPassThroughAmount || 0) > 0 && (
+                            <tr>
+                              <td className="px-4 py-3 font-semibold text-slate-700">{summary?.utilityPassThroughLabel || "Utilities (added as billed)"}</td>
+                              <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(summary?.utilityPassThroughAmount || 0)}</td>
+                            </tr>
+                          )}
+                          {invoiceVatPassThroughAmount > 0 && (
+                            <tr>
+                              <td className="px-4 py-3 font-semibold text-slate-700">{invoiceVatPassThroughLabel}</td>
+                              <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(invoiceVatPassThroughAmount)}</td>
+                            </tr>
+                          )}
                           <tr>
                             <td className="px-4 py-3 font-semibold text-slate-700">Additions</td>
                             <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(additionsAmount)}</td>
@@ -1235,6 +1265,12 @@ const Statements = () => {
                             <td className="px-4 py-3 font-semibold text-slate-700">Commission</td>
                             <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(commissionAmount)}</td>
                           </tr>
+                          {commissionTaxAmount > 0 && (
+                            <tr>
+                              <td className="px-4 py-3 font-semibold text-slate-700">VAT on commission</td>
+                              <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(commissionTaxAmount)}</td>
+                            </tr>
+                          )}
                           <tr>
                             <td className="px-4 py-3 font-semibold text-slate-700">Direct to landlord collections</td>
                             <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(directToLandlordAmount)}</td>
@@ -1262,7 +1298,13 @@ const Statements = () => {
                           <th className="sticky left-[120px] z-20 bg-[#0B3B2E] px-4 py-3 text-left font-semibold text-white">Tenant</th>
                           <th className="px-4 py-3 text-right font-semibold text-white">Balance B/F</th>
                           <th className="px-4 py-3 text-right font-semibold text-white">Rent Invoiced</th>
+                          {hasInvoiceVatColumn && (
+                            <th className="px-4 py-3 text-right font-semibold text-white">VAT Invoiced</th>
+                          )}
                           <th className="px-4 py-3 text-right font-semibold text-white">Rent Paid</th>
+                          {hasInvoiceVatColumn && (
+                            <th className="px-4 py-3 text-right font-semibold text-white">VAT Paid</th>
+                          )}
                           {utilityColumns.map((column) => (
                             <React.Fragment key={`head-${column.key}`}>
                               <th className="px-4 py-3 text-right font-semibold text-white">
@@ -1303,7 +1345,13 @@ const Statements = () => {
                               </td>
                               <td className="px-4 py-3 text-right text-slate-700">{currency(row.openingBalance ?? row.balanceBF ?? 0)}</td>
                               <td className="px-4 py-3 text-right text-slate-700">{currency(row.invoicedRent)}</td>
+                              {hasInvoiceVatColumn ? (
+                                <td className="px-4 py-3 text-right text-slate-700">{currency(row.invoicedTax ?? 0)}</td>
+                              ) : null}
                               <td className="px-4 py-3 text-right text-slate-700">{currency(row.paidRent)}</td>
+                              {hasInvoiceVatColumn ? (
+                                <td className="px-4 py-3 text-right text-slate-700">{currency(row.paidTax ?? 0)}</td>
+                              ) : null}
                               {utilityColumns.map((column) => (
                                 <React.Fragment key={`${row.unitId || row.unitNumber || "row"}-${column.key}`}>
                                   <td className="px-4 py-3 text-right text-slate-700">
@@ -1324,7 +1372,13 @@ const Statements = () => {
                             <td colSpan={2} className="px-4 py-3 font-semibold text-slate-700">Total</td>
                             <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
                             <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
+                            {hasInvoiceVatColumn ? (
+                              <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.invoicedTax ?? summary.totalInvoiceVatInvoiced ?? 0)}</td>
+                            ) : null}
                             <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
+                            {hasInvoiceVatColumn ? (
+                              <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>
+                            ) : null}
                             {utilityColumns.map((column) => (
                               <React.Fragment key={`foot-${column.key}`}>
                                 <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(Number(column?.invoiced || 0))}</td>
@@ -1496,6 +1550,9 @@ const Statements = () => {
                       <div className="rounded-xl bg-slate-50 p-4">
                         <p className="text-sm text-slate-500">Utilities Paid</p>
                         <p className="mt-2 text-lg font-semibold text-slate-900">{currency(totals.utilityPaid)}</p>
+                        {hasInvoiceVatColumn ? (
+                          <p className="mt-1 text-xs text-slate-500">Invoice VAT received: {currency(totalInvoiceVatReceived)}</p>
+                        ) : null}
                       </div>
                       <div className="rounded-xl bg-slate-50 p-4">
                         <p className="text-sm text-slate-500">Expenses</p>

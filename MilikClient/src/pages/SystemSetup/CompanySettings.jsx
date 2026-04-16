@@ -6,7 +6,6 @@ import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import {
   FaArchive,
-  FaBook,
   FaCheck,
   FaClock,
   FaCog,
@@ -59,13 +58,13 @@ const TAB_CONFIG = {
     subtitle:
       "Maintain reusable deduction and expense labels for future voucher and operational workflows.",
   },
-  accounting: {
-    label: "Accounting Defaults",
-    icon: FaBook,
-  },
   tax: {
     label: "Tax Configuration",
     icon: FaCog,
+  },
+  accounting: {
+    label: "Accounting Defaults",
+    icon: FaCheck,
   },
 };
 
@@ -75,6 +74,19 @@ const emptyForms = {
   commissions: { name: "", percentage: "", applicableTo: "rent", description: "", isActive: true },
   expenses: { name: "", description: "", code: "", category: "other", defaultAmount: 0, isActive: true },
 };
+
+const toClientTaxCodeId = (value, fallback) => {
+  if (!value) return fallback;
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value?.toString) return value.toString();
+  return fallback;
+};
+
+const sanitizeTaxKey = (value, fallback = "") =>
+  String(value || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_");
 
 const normalizeTaxConfiguration = (settings = {}) => ({
   taxSettings: {
@@ -95,8 +107,8 @@ const normalizeTaxConfiguration = (settings = {}) => ({
   taxCodes:
     Array.isArray(settings?.taxCodes) && settings.taxCodes.length > 0
       ? settings.taxCodes.map((code, index) => ({
-          _id: code?._id || `tax-code-${index + 1}`,
-          key: code?.key || `tax_code_${index + 1}`,
+          _id: toClientTaxCodeId(code?._id, `tax-code-${index + 1}`),
+          key: sanitizeTaxKey(code?.key || code?.name, `tax_code_${index + 1}`),
           name: code?.name || `Tax Code ${index + 1}`,
           type: code?.type || "vat",
           rate: Number(code?.rate || 0),
@@ -128,14 +140,90 @@ const normalizeTaxConfiguration = (settings = {}) => ({
         ],
 });
 
-const normalizeAccountingDefaults = (settings = {}) => ({
-  tenantReceivableAccountCode: settings?.accountingDefaults?.tenantReceivableAccountCode || "1200",
-  rentIncomeAccountCode: settings?.accountingDefaults?.rentIncomeAccountCode || "4100",
-  utilityRechargeIncomeAccountCode: settings?.accountingDefaults?.utilityRechargeIncomeAccountCode || "4102",
-  penaltyIncomeAccountCode: settings?.accountingDefaults?.penaltyIncomeAccountCode || "",
-  depositLiabilityAccountCode: settings?.accountingDefaults?.depositLiabilityAccountCode || "2100",
-  managementCommissionIncomeAccountCode: settings?.accountingDefaults?.managementCommissionIncomeAccountCode || "4210",
+const buildTaxSavePayload = (taxConfig = {}) => ({
+  taxSettings: {
+    enabled: Boolean(taxConfig?.taxSettings?.enabled),
+    defaultTaxMode: String(taxConfig?.taxSettings?.defaultTaxMode || "exclusive").toLowerCase() === "inclusive" ? "inclusive" : "exclusive",
+    defaultTaxCodeKey: sanitizeTaxKey(taxConfig?.taxSettings?.defaultTaxCodeKey, "vat_standard"),
+    defaultVatRate: Number(taxConfig?.taxSettings?.defaultVatRate || 0),
+    roundingPrecision: Number(taxConfig?.taxSettings?.roundingPrecision ?? 2),
+    outputVatAccountCode: String(taxConfig?.taxSettings?.outputVatAccountCode || "").trim(),
+    invoiceTaxableByDefault: Boolean(taxConfig?.taxSettings?.invoiceTaxableByDefault),
+    invoiceTaxabilityByCategory: {
+      rent: Boolean(taxConfig?.taxSettings?.invoiceTaxabilityByCategory?.rent),
+      utility: Boolean(taxConfig?.taxSettings?.invoiceTaxabilityByCategory?.utility),
+      penalty: Boolean(taxConfig?.taxSettings?.invoiceTaxabilityByCategory?.penalty),
+      deposit: Boolean(taxConfig?.taxSettings?.invoiceTaxabilityByCategory?.deposit),
+    },
+  },
+  taxCodes: (Array.isArray(taxConfig?.taxCodes) ? taxConfig.taxCodes : []).map((code, index) => {
+    const rawId = toClientTaxCodeId(code?._id, "");
+    const payload = {
+      key: sanitizeTaxKey(code?.key || code?.name, `tax_code_${index + 1}`),
+      name: String(code?.name || `Tax Code ${index + 1}`).trim(),
+      type: String(code?.type || "vat").trim().toLowerCase(),
+      rate: Number(code?.rate || 0),
+      isDefault: Boolean(code?.isDefault),
+      isActive: code?.isActive !== false,
+      description: String(code?.description || "").trim(),
+    };
+
+    if (/^[a-f\d]{24}$/i.test(rawId)) {
+      payload._id = rawId;
+    }
+
+    return payload;
+  }),
 });
+
+const normalizeAccountingDefaults = (settings = {}) => ({
+  tenantReceivableAccount: settings?.accountingDefaults?.tenantReceivableAccount || "",
+  rentIncomeAccount: settings?.accountingDefaults?.rentIncomeAccount || "",
+  utilityRechargeIncomeAccount: settings?.accountingDefaults?.utilityRechargeIncomeAccount || "",
+  penaltyIncomeAccount: settings?.accountingDefaults?.penaltyIncomeAccount || "",
+  depositLiabilityAccount: settings?.accountingDefaults?.depositLiabilityAccount || "",
+  managementCommissionIncomeAccount:
+    settings?.accountingDefaults?.managementCommissionIncomeAccount || "",
+});
+
+const ACCOUNTING_DEFAULT_FIELDS = [
+  {
+    key: "tenantReceivableAccount",
+    label: "Tenant Receivable Account",
+    description: "Default receivable account for future tenant invoices and receipt clearing.",
+    type: "asset",
+  },
+  {
+    key: "rentIncomeAccount",
+    label: "Rent Income Account",
+    description: "Default income account for future rent charge invoicing when no more specific account is supplied.",
+    type: "income",
+  },
+  {
+    key: "utilityRechargeIncomeAccount",
+    label: "Utility Recharge Income Account",
+    description: "Default income account for future utility recharge invoicing.",
+    type: "income",
+  },
+  {
+    key: "penaltyIncomeAccount",
+    label: "Penalty Income Account",
+    description: "Default income account for future late-penalty or similar charge posting.",
+    type: "income",
+  },
+  {
+    key: "depositLiabilityAccount",
+    label: "Deposit Liability Account",
+    description: "Default liability account used for manager-held tenant deposit charging and receipt allocation.",
+    type: "liability",
+  },
+  {
+    key: "managementCommissionIncomeAccount",
+    label: "Management Commission Income Account",
+    description: "Default commission income account used when processed statements or landlord payments post commission entries.",
+    type: "income",
+  },
+];
 
 const extractErrorMessage = (error) =>
   error?.response?.data?.message || error?.message || "Failed to process company settings request";
@@ -261,9 +349,11 @@ const CompanySettings = () => {
   const [settings, setSettings] = useState(null);
   const [taxConfig, setTaxConfig] = useState(normalizeTaxConfiguration());
   const [accountingDefaults, setAccountingDefaults] = useState(normalizeAccountingDefaults());
+  const [chartAccounts, setChartAccounts] = useState([]);
   const [activeTab, setActiveTab] = useState("utilities");
   const [showInactive, setShowInactive] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingTax, setSavingTax] = useState(false);
   const [savingAccounting, setSavingAccounting] = useState(false);
@@ -293,8 +383,32 @@ const CompanySettings = () => {
     }
   };
 
+  const loadChartAccounts = async () => {
+    if (!currentCompany?._id) {
+      setChartAccounts([]);
+      return;
+    }
+
+    setLoadingAccounts(true);
+    try {
+      const query = new URLSearchParams({ business: currentCompany._id }).toString();
+      const response = await adminRequests.get(`/chart-of-accounts?${query}`);
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      setChartAccounts(rows.filter((account) => account?.isPosting !== false && account?.isHeader !== true));
+    } catch (error) {
+      setChartAccounts([]);
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setLoadingAccounts(false);
+    }
+  };
+
   useEffect(() => {
     loadSettings();
+  }, [currentCompany?._id]);
+
+  useEffect(() => {
+    loadChartAccounts();
   }, [currentCompany?._id]);
 
   const activeCounts = useMemo(
@@ -306,6 +420,23 @@ const CompanySettings = () => {
     }),
     [settings]
   );
+
+  const chartAccountOptionsByType = useMemo(() => {
+    return chartAccounts.reduce((acc, account) => {
+      const type = String(account?.type || "").trim().toLowerCase();
+      if (!type) return acc;
+      if (!acc[type]) acc[type] = [];
+      acc[type].push(account);
+      return acc;
+    }, {});
+  }, [chartAccounts]);
+
+  const setAccountingDefaultField = (field, value) => {
+    setAccountingDefaults((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
 
   const openCreateModal = (tabKey) => {
     setModalTab(tabKey);
@@ -497,24 +628,24 @@ const CompanySettings = () => {
   const saveTaxConfiguration = async () => {
     if (!currentCompany?._id) return;
 
+    const payload = buildTaxSavePayload(taxConfig);
+
     setSavingTax(true);
     try {
-      await adminRequests.put(`/company-settings/${currentCompany._id}/tax-configuration`, taxConfig);
+      const response = await adminRequests.put(`/company-settings/${currentCompany._id}/tax-configuration`, payload);
+      const refreshedSettings = response?.data?.settings || response?.data || null;
+      if (refreshedSettings) {
+        setSettings(refreshedSettings);
+        setTaxConfig(normalizeTaxConfiguration(refreshedSettings));
+      } else {
+        await loadSettings({ silent: true });
+      }
       toast.success("Tax configuration saved successfully. New rules apply going forward only.");
-      await loadSettings({ silent: true });
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
       setSavingTax(false);
     }
-  };
-
-
-  const handleAccountingDefaultChange = (key, value) => {
-    setAccountingDefaults((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
   };
 
   const saveAccountingDefaults = async () => {
@@ -525,7 +656,7 @@ const CompanySettings = () => {
       await adminRequests.put(`/company-settings/${currentCompany._id}/accounting-defaults`, {
         accountingDefaults,
       });
-      toast.success("Accounting defaults saved successfully. Future posting flows will prefer these mappings.");
+      toast.success("Accounting defaults saved successfully. New posting flows will use these defaults going forward.");
       await loadSettings({ silent: true });
     } catch (error) {
       toast.error(extractErrorMessage(error));
@@ -634,75 +765,6 @@ const CompanySettings = () => {
       </div>
     );
   };
-
-  const renderAccountingTab = () => (
-    <div className="space-y-4">
-      <Card
-        title="Accounting Defaults"
-        subtitle="These defaults help future posting flows resolve the correct chart accounts without relying only on broad name matching. Historical entries remain untouched."
-        action={
-          <ActionButton variant="primary" onClick={saveAccountingDefaults} disabled={savingAccounting}>
-            {savingAccounting ? <FaSpinner className="animate-spin" /> : <FaSave />} Save Accounting Defaults
-          </ActionButton>
-        }
-      >
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
-          Enter a chart code or exact chart account name. Future invoice, receipt and commission posting flows will prefer these defaults before falling back to MILIK's standard account search.
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Tenant Receivable Account</label>
-            <Input
-              value={accountingDefaults.tenantReceivableAccountCode}
-              onChange={(e) => handleAccountingDefaultChange("tenantReceivableAccountCode", e.target.value)}
-              placeholder="1200"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Rent Income Account</label>
-            <Input
-              value={accountingDefaults.rentIncomeAccountCode}
-              onChange={(e) => handleAccountingDefaultChange("rentIncomeAccountCode", e.target.value)}
-              placeholder="4100"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Utility Recharge Income Account</label>
-            <Input
-              value={accountingDefaults.utilityRechargeIncomeAccountCode}
-              onChange={(e) => handleAccountingDefaultChange("utilityRechargeIncomeAccountCode", e.target.value)}
-              placeholder="4102"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Penalty Income Account</label>
-            <Input
-              value={accountingDefaults.penaltyIncomeAccountCode}
-              onChange={(e) => handleAccountingDefaultChange("penaltyIncomeAccountCode", e.target.value)}
-              placeholder="Penalty Income"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Deposit Liability Account</label>
-            <Input
-              value={accountingDefaults.depositLiabilityAccountCode}
-              onChange={(e) => handleAccountingDefaultChange("depositLiabilityAccountCode", e.target.value)}
-              placeholder="2100"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Management Commission Income Account</label>
-            <Input
-              value={accountingDefaults.managementCommissionIncomeAccountCode}
-              onChange={(e) => handleAccountingDefaultChange("managementCommissionIncomeAccountCode", e.target.value)}
-              placeholder="4210"
-            />
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
 
   const renderTaxTab = () => (
     <div className="space-y-4">
@@ -875,6 +937,70 @@ const CompanySettings = () => {
     </div>
   );
 
+  const renderAccountingTab = () => (
+    <div className="space-y-4">
+      <Card
+        title="Accounting Defaults"
+        subtitle="Select company-level default posting accounts for future operational flows. Leaving a field blank keeps the built-in MILIK fallback behavior. Historical entries remain untouched."
+        action={
+          <ActionButton variant="primary" onClick={saveAccountingDefaults} disabled={savingAccounting || loadingAccounts}>
+            {savingAccounting ? <FaSpinner className="animate-spin" /> : <FaSave />} Save Accounting Defaults
+          </ActionButton>
+        }
+      >
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+          Choose real Chart of Accounts rows instead of typing free-form codes. These defaults only guide future posting where no more specific account has been selected.
+        </div>
+
+        {loadingAccounts ? (
+          <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
+            <FaSpinner className="animate-spin" /> Loading Chart of Accounts...
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {ACCOUNTING_DEFAULT_FIELDS.map((field) => {
+              const options = chartAccountOptionsByType[field.type] || [];
+              const selectedAccount = options.find((account) => String(account?._id || "") === String(accountingDefaults[field.key] || ""));
+
+              return (
+                <div key={field.key} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="text-sm font-extrabold text-slate-900">{field.label}</div>
+                  <div className="mt-1 text-xs leading-5 text-slate-600">{field.description}</div>
+
+                  <div className="mt-3">
+                    <Select
+                      value={accountingDefaults[field.key] || ""}
+                      onChange={(e) => setAccountingDefaultField(field.key, e.target.value)}
+                    >
+                      <option value="">Use automatic fallback</option>
+                      {options.map((account) => (
+                        <option key={account._id} value={account._id}>
+                          {account.code ? `${account.code} — ` : ""}
+                          {account.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Allowed type: {field.type}</div>
+                    <ActionButton variant="subtle" onClick={() => setAccountingDefaultField(field.key, "")}>Clear</ActionButton>
+                  </div>
+
+                  <div className="mt-2 text-xs leading-5 text-slate-600">
+                    {selectedAccount
+                      ? `Selected: ${selectedAccount.code ? `${selectedAccount.code} • ` : ""}${selectedAccount.name}`
+                      : "No explicit company default selected."}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+
   const renderModalBody = () => {
     const tabKey = modalTab;
 
@@ -1011,7 +1137,7 @@ const CompanySettings = () => {
             <div>
               <div className="font-extrabold">Future-facing defaults only</div>
               <div className="mt-1 text-xs leading-5 text-amber-800">
-                Disabling or archiving an item keeps historical invoices, receipts, statements and ledgers intact. Use Company Setup for company identity, integrations, modules and structural configuration, then maintain tax and account-mapping defaults here for future posting behavior.
+                Disabling or archiving an item keeps historical invoices, receipts, statements and ledgers intact. Use Company Setup for company identity, integrations, modules and structural configuration.
               </div>
             </div>
           </div>
@@ -1034,7 +1160,7 @@ const CompanySettings = () => {
                 >
                   <Icon className="text-sm" />
                   {tab.label}
-                  {!["tax", "accounting"].includes(key) ? (
+                  {!(["tax", "accounting"].includes(key)) ? (
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${isActive ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"}`}>
                       {activeCounts[key] ?? 0}
                     </span>
@@ -1052,10 +1178,10 @@ const CompanySettings = () => {
                 <FaSpinner className="animate-spin" /> Loading...
               </div>
             </Card>
-          ) : activeTab === "tax" ? (
-            renderTaxTab()
           ) : activeTab === "accounting" ? (
             renderAccountingTab()
+          ) : activeTab === "tax" ? (
+            renderTaxTab()
           ) : (
             renderCollectionTab(activeTab)
           )}

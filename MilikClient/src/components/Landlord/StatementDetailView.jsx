@@ -251,6 +251,17 @@ const StatementDetailView = ({
   const utilityPassThroughLabel =
     summary.utilityPassThroughLabel || "Utilities (added as billed)";
   const utilityPassThroughAmount = Number(summary.utilityPassThroughAmount ?? 0);
+  const invoiceVatPassThroughLabel =
+    summary.invoiceVatPassThroughLabel || "Invoice VAT (pass-through)";
+  const invoiceVatPassThroughAmount = Number(
+    summary.invoiceVatPassThroughAmount ?? summary.totalInvoiceVatInvoiced ?? 0
+  );
+  const totalInvoiceVatReceived = Number(summary.totalInvoiceVatReceived ?? totals.paidTax ?? 0);
+  const commissionTaxAmount = Number(summary.commissionTaxAmount || 0);
+  const hasInvoiceVatColumn =
+    Number(summary.totalInvoiceVatInvoiced || 0) > 0 ||
+    totalInvoiceVatReceived > 0 ||
+    tenantRows.some((row) => Number(row?.invoicedTax || 0) > 0 || Number(row?.paidTax || 0) > 0);
   const totalUtilityCollected = Number(summary.totalUtilityCollected ?? 0);
   const totalExpenses = Number(summary.totalExpenses ?? summary.nonCommissionDeductions ?? 0);
   const totalAdditions = Number(summary.totalAdditions ?? summary.additions ?? 0);
@@ -435,8 +446,10 @@ const StatementDetailView = ({
                 <th className="px-4 py-3 text-left font-semibold text-white">Unit</th>
                 <th className="px-4 py-3 text-right font-semibold text-white">Rent</th>
                 <th className="px-4 py-3 text-right font-semibold text-white">Invoiced Rent</th>
+                {hasInvoiceVatColumn ? <th className="px-4 py-3 text-right font-semibold text-white">Invoiced VAT</th> : null}
                 <th className="px-4 py-3 text-right font-semibold text-white">Utility / Other Charges</th>
                 <th className="px-4 py-3 text-right font-semibold text-white">Paid Rent</th>
+                {hasInvoiceVatColumn ? <th className="px-4 py-3 text-right font-semibold text-white">Paid VAT</th> : null}
                 <th className="px-4 py-3 text-right font-semibold text-white">Paid Utility</th>
                 <th className="px-4 py-3 text-right font-semibold text-white">Balance Forward</th>
                 <th className="px-4 py-3 text-right font-semibold text-white">Balance</th>
@@ -446,7 +459,7 @@ const StatementDetailView = ({
             <tbody>
               {tenantRows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-gray-500" colSpan={10}>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={hasInvoiceVatColumn ? 12 : 10}>
                     No tenant-level rows found for this statement snapshot.
                   </td>
                 </tr>
@@ -457,8 +470,10 @@ const StatementDetailView = ({
                   <td className="px-4 py-3 text-gray-700">{row.unit}</td>
                   <td className="px-4 py-3 text-right font-mono">{formatCurrency(row.rent)}</td>
                   <td className="px-4 py-3 text-right font-mono">{formatCurrency(row.invoicedRent)}</td>
+                  {hasInvoiceVatColumn ? <td className="px-4 py-3 text-right font-mono">{formatCurrency(row.invoicedTax || 0)}</td> : null}
                   <td className="px-4 py-3 text-right font-mono">{formatCurrency(row.utilityCharges)}</td>
                   <td className="px-4 py-3 text-right font-mono">{formatCurrency(row.paidRent)}</td>
+                  {hasInvoiceVatColumn ? <td className="px-4 py-3 text-right font-mono">{formatCurrency(row.paidTax || 0)}</td> : null}
                   <td className="px-4 py-3 text-right font-mono">{formatCurrency(row.paidUtility)}</td>
                   <td className="px-4 py-3 text-right font-mono">{formatCurrency(row.balanceForward)}</td>
                   <td className="px-4 py-3 text-right font-semibold font-mono">{formatCurrency(row.balance)}</td>
@@ -559,6 +574,12 @@ const StatementDetailView = ({
                   {formatCurrency(utilityPassThroughAmount > 0 ? utilityPassThroughAmount : totalUtilityCollected)}
                 </td>
               </tr>
+              {invoiceVatPassThroughAmount > 0 && (
+                <tr className="border-b border-gray-200">
+                  <td className="py-3 text-gray-700 font-semibold">{invoiceVatPassThroughLabel}</td>
+                  <td className="py-3 text-right font-mono text-gray-900">{formatCurrency(invoiceVatPassThroughAmount)}</td>
+                </tr>
+              )}
               <tr className="border-b border-gray-200">
                 <td className="py-3 text-gray-700 font-semibold">Total Expenses</td>
                 <td className="py-3 text-right font-mono text-red-700">({formatCurrency(totalExpenses)})</td>

@@ -33,7 +33,7 @@ const CompanyAvatar = ({ logo, name, darkMode, size = "h-10 w-10" }) => {
           darkMode ? "border-gray-700 bg-gray-800" : "border-[#d9e6df] bg-white"
         }`}
       >
-        <img src={logo} alt={name} className="h-full w-full object-contain p-1.5" />
+        <img src={logo} alt={name} className="h-full w-full object-contain p-0.5" />
       </div>
     );
   }

@@ -100,7 +100,6 @@ export const updateTaxConfiguration = async (dispatch, businessId, payload) =>
     adminRequests.put(`/company-settings/${businessId}/tax-configuration`, payload)
   );
 
-
 export const updateAccountingDefaults = async (dispatch, businessId, payload) =>
   runMutation(dispatch, businessId, () =>
     adminRequests.put(`/company-settings/${businessId}/accounting-defaults`, payload)
