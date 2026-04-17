@@ -32,7 +32,7 @@ const JOURNAL_TYPES = [
   {
     value: "general_manual_journal",
     label: "General Manual Journal",
-    description: "Use for controlled manual adjustments between two same-company ledger accounts.",
+    description: "Use for controlled same-company adjustments. Leave it off the landlord statement unless one side is Landlord Remittance Payable.",
   },
   {
     value: "internal_account_transfer",
@@ -42,17 +42,17 @@ const JOURNAL_TYPES = [
   {
     value: "landlord_credit_adjustment",
     label: "Landlord Credit Adjustment",
-    description: "Raises a landlord-facing addition while preserving a balanced manual journal.",
+    description: "Credits Landlord Remittance Payable to raise a landlord-facing addition with a balanced journal.",
   },
   {
     value: "landlord_debit_adjustment",
     label: "Landlord Debit Adjustment",
-    description: "Posts a landlord-facing deduction while preserving a balanced manual journal.",
+    description: "Debits Landlord Remittance Payable to post a landlord-facing deduction with a balanced journal.",
   },
   {
     value: "property_expense_accrual",
-    label: "Property Expense Accrual",
-    description: "Accrues a property expense in a draft journal before posting to the ledger.",
+    label: "Property Expense / Landlord Deduction",
+    description: "Use only when you need a manual landlord-facing property deduction. Debit Landlord Remittance Payable and credit the balancing account.",
   },
 ];
 
@@ -60,6 +60,15 @@ const STATUS_STYLES = {
   draft: "bg-slate-100 text-slate-700 border-slate-200",
   posted: "bg-green-100 text-green-700 border-green-200",
   reversed: "bg-amber-100 text-amber-700 border-amber-200",
+};
+
+const isLandlordPayableAccountRecord = (account = {}) => {
+  const code = String(account?.code || account?.accountCode || "").trim().toUpperCase();
+  const name = String(account?.name || account?.accountName || account?.title || "").trim().toLowerCase();
+  return (
+    code === "2110" ||
+    /landlord remittance payable|landlord payable|owner payable|owner remittance payable/.test(name)
+  );
 };
 
 const buildInitialForm = () => ({
@@ -218,6 +227,16 @@ const JournalEntries = () => {
     [accounts]
   );
 
+  const selectedDebitAccountRecord = useMemo(
+    () => accounts.find((account) => String(account?._id || "") === String(form.debitAccount || "")) || null,
+    [accounts, form.debitAccount]
+  );
+
+  const selectedCreditAccountRecord = useMemo(
+    () => accounts.find((account) => String(account?._id || "") === String(form.creditAccount || "")) || null,
+    [accounts, form.creditAccount]
+  );
+
   const getJournalTypePresentation = (journalType) => {
     const match = JOURNAL_TYPES.find((type) => type.value === journalType) || JOURNAL_TYPES[0];
     if (!isLandlordWorkspace) return match;
@@ -250,11 +269,40 @@ const JournalEntries = () => {
     form.journalType === "landlord_credit_adjustment" ||
     form.journalType === "landlord_debit_adjustment";
   const isInternalTransferJournal = form.journalType === "internal_account_transfer";
+  const isForcedLandlordStatementJournal =
+    form.journalType === "landlord_credit_adjustment" ||
+    form.journalType === "landlord_debit_adjustment" ||
+    form.journalType === "property_expense_accrual";
+  const debitTouchesLandlordPayable = isLandlordPayableAccountRecord(selectedDebitAccountRecord);
+  const creditTouchesLandlordPayable = isLandlordPayableAccountRecord(selectedCreditAccountRecord);
+  const statementVisibilityLocked = isInternalTransferJournal || isForcedLandlordStatementJournal;
+  const journalStructureHint = useMemo(() => {
+    if (form.journalType === "landlord_credit_adjustment") {
+      return "Credit Landlord Remittance Payable and debit the balancing account. This creates one clean landlord statement addition.";
+    }
+    if (form.journalType === "landlord_debit_adjustment") {
+      return "Debit Landlord Remittance Payable and credit the balancing account. This creates one clean landlord statement deduction.";
+    }
+    if (form.journalType === "property_expense_accrual") {
+      return "Use this only for a manual landlord-facing property deduction. Debit Landlord Remittance Payable and credit the accrual or offset account.";
+    }
+    if (form.journalType === "internal_account_transfer") {
+      return "Internal transfers stay inside the same company only and must not use Landlord Remittance Payable or appear on the landlord statement.";
+    }
+    if (form.includeInLandlordStatement) {
+      return "Statement-visible general journals must touch Landlord Remittance Payable on exactly one side. Debit = deduction. Credit = addition.";
+    }
+    return "General manual journals stay internal unless you deliberately expose one payable-side leg to the landlord statement.";
+  }, [
+    form.includeInLandlordStatement,
+    form.journalType,
+  ]);
 
   const applyJournalTypeDefaults = (journalType) => {
     const landlordStatementJournal =
       journalType === "landlord_credit_adjustment" ||
-      journalType === "landlord_debit_adjustment";
+      journalType === "landlord_debit_adjustment" ||
+      journalType === "property_expense_accrual";
 
     setForm((prev) => ({
       ...prev,
@@ -372,6 +420,34 @@ const JournalEntries = () => {
       return;
     }
 
+    if (isInternalTransferJournal && (debitTouchesLandlordPayable || creditTouchesLandlordPayable)) {
+      toast.warning("Internal ledger transfers cannot use Landlord Remittance Payable.");
+      return;
+    }
+
+    if (form.journalType === "landlord_credit_adjustment" && (!creditTouchesLandlordPayable || debitTouchesLandlordPayable)) {
+      toast.warning("Landlord Credit Adjustment must credit Landlord Remittance Payable.");
+      return;
+    }
+
+    if (["landlord_debit_adjustment", "property_expense_accrual"].includes(form.journalType) && (!debitTouchesLandlordPayable || creditTouchesLandlordPayable)) {
+      toast.warning(
+        form.journalType === "property_expense_accrual"
+          ? "Property Expense / Landlord Deduction must debit Landlord Remittance Payable."
+          : "Landlord Debit Adjustment must debit Landlord Remittance Payable."
+      );
+      return;
+    }
+
+    if (
+      form.journalType === "general_manual_journal" &&
+      form.includeInLandlordStatement &&
+      debitTouchesLandlordPayable === creditTouchesLandlordPayable
+    ) {
+      toast.warning("Statement-visible general journals must touch Landlord Remittance Payable on exactly one side.");
+      return;
+    }
+
     const payload = {
       business: currentCompany._id,
       company: currentCompany._id,
@@ -386,6 +462,8 @@ const JournalEntries = () => {
       narration: form.narration,
       includeInLandlordStatement: isInternalTransferJournal
         ? false
+        : isForcedLandlordStatementJournal
+        ? true
         : Boolean(form.includeInLandlordStatement),
     };
 
@@ -873,8 +951,8 @@ const JournalEntries = () => {
                 <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
                   <input
                     type="checkbox"
-                    checked={isInternalTransferJournal ? false : form.includeInLandlordStatement}
-                    disabled={isInternalTransferJournal}
+                    checked={isInternalTransferJournal ? false : isForcedLandlordStatementJournal ? true : form.includeInLandlordStatement}
+                    disabled={statementVisibilityLocked}
                     onChange={(e) =>
                       setForm((prev) => ({
                         ...prev,
@@ -886,15 +964,20 @@ const JournalEntries = () => {
                   <span>
                     {isLandlordWorkspace ? "Include in owner adjustment metadata" : "Include in landlord statement metadata"}
                     <span className="mt-1 block text-xs text-slate-500">
-                      Disabled for internal ledger transfers because those remain same-company ledger movements only.
+                      {isInternalTransferJournal
+                        ? "Disabled for internal ledger transfers because those remain same-company movements only."
+                        : isForcedLandlordStatementJournal
+                        ? "Locked on for landlord-facing journal types because they are designed to create one clean landlord addition or deduction."
+                        : "Turn this on only when exactly one side is Landlord Remittance Payable. Debit = deduction. Credit = addition."}
                     </span>
                   </span>
                 </label>
 
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                   <p className="font-black">Control note</p>
-                  <p className="mt-1 leading-6">
-                    Internal Ledger Transfer posts only within the current company. Property remains required because the current immutable ledger architecture stores each posting with property and landlord scope. No cross-company movement tool was added because the current journal architecture is company-scoped and cross-company transfer automation would need separate due-to / due-from controls.
+                  <p className="mt-1 leading-6">{journalStructureHint}</p>
+                  <p className="mt-2 text-xs font-semibold text-amber-800">
+                    Current selection: debit {debitTouchesLandlordPayable ? "touches" : "does not touch"} Landlord Remittance Payable · credit {creditTouchesLandlordPayable ? "touches" : "does not touch"} Landlord Remittance Payable.
                   </p>
                 </div>
               </div>

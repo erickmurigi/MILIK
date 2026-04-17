@@ -1,9 +1,11 @@
 import mongoose from "mongoose";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import LandlordAdvancement from "../../models/LandlordAdvancement.js";
+import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import ProcessedStatement from "../../models/ProcessedStatement.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
-import { postEntry } from "../../services/ledgerPostingService.js";
+import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
+import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import { resolveLandlordRemittancePayableAccount, resolvePropertyAccountingContext } from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import {
@@ -181,6 +183,39 @@ const statementCursorFor = (statement) => {
   return cursor ? normalizeToEndOfDay(cursor) : null;
 };
 
+const getRecoveryPeriodKey = (item, frequency) =>
+  String(item?.periodKey || getPeriodKey(item?.dueDate || item?.processedAt, frequency) || "").trim();
+
+const getActiveRecoveryHistory = (row) =>
+  (Array.isArray(row?.recoveryHistory) ? row.recoveryHistory : []).filter((item) => !item?.cancelledAt);
+
+const getCancelledRecoveryHistory = (row) =>
+  (Array.isArray(row?.recoveryHistory) ? row.recoveryHistory : []).filter((item) => item?.cancelledAt);
+
+const recalculateRecoveryBalances = (row) => {
+  const activeHistory = getActiveRecoveryHistory(row);
+  const recoveredPrincipal = round2(
+    activeHistory.reduce((sum, item) => sum + Number(item?.principalAmount || item?.amount || 0), 0)
+  );
+  const recoveredInterest = round2(
+    activeHistory.reduce((sum, item) => sum + Number(item?.interestAmount || 0), 0)
+  );
+
+  row.recoveredAmount = recoveredPrincipal;
+  row.interestRecoveredAmount = recoveredInterest;
+  row.balanceOutstanding = round2(
+    Number(row.totalRecoverableAmount || row.amount || 0) -
+      Number(row.recoveredAmount || 0) -
+      Number(row.interestRecoveredAmount || 0)
+  );
+
+  if (row.balanceOutstanding <= 0) {
+    row.status = "completed";
+  } else if (String(row.status || "") === "completed") {
+    row.status = "active";
+  }
+};
+
 const isPeriodClosedByProcessedStatement = async ({ businessId, propertyId, landlordId, periodStart, periodEnd }) => {
   if (!isValidObjectId(businessId) || !isValidObjectId(propertyId) || !isValidObjectId(landlordId)) return false;
 
@@ -222,8 +257,8 @@ const computeSchedule = (row) => {
   });
 
   const processedKeys = new Set(
-    (Array.isArray(row.recoveryHistory) ? row.recoveryHistory : [])
-      .map((item) => String(item?.periodKey || getPeriodKey(item?.dueDate || item?.processedAt, row.frequency) || ""))
+    getActiveRecoveryHistory(row)
+      .map((item) => getRecoveryPeriodKey(item, row.frequency))
       .filter(Boolean)
   );
 
@@ -235,7 +270,7 @@ const computeSchedule = (row) => {
     const isLast = index === schedule.length - 1;
     const amount = isLast ? round2(Number(row.amount || 0) - scheduledTotal) : baseInstallment;
     scheduledTotal = round2(scheduledTotal + amount);
-    const processedEntry = (Array.isArray(row.recoveryHistory) ? row.recoveryHistory : []).find(
+    const processedEntry = getActiveRecoveryHistory(row).find(
       (history) => String(history?.periodKey || "") === item.periodKey
     );
 
@@ -261,9 +296,11 @@ const serializeAdvancement = (row) => {
     gracePeriodMonths: plain.gracePeriodMonths,
   });
   const schedule = computeSchedule(plain);
+  const activeHistory = getActiveRecoveryHistory(plain);
+  const cancelledHistory = getCancelledRecoveryHistory(plain);
   const eligiblePeriods = filterEligibleSchedule({
     schedule,
-    runHistory: plain.recoveryHistory,
+    runHistory: activeHistory,
     now: new Date(),
     frequency: plain.frequency,
   }).map((item) => ({
@@ -273,19 +310,37 @@ const serializeAdvancement = (row) => {
     periodStart: item.periodStart,
     periodEnd: item.periodEnd,
     scheduledAmount: item.scheduledAmount,
+    scheduledPrincipalAmount: item.scheduledPrincipalAmount,
+    scheduledInterestAmount: item.scheduledInterestAmount,
   }));
 
-  const processedPeriods = (Array.isArray(plain.recoveryHistory) ? plain.recoveryHistory : [])
+  const processedPeriods = activeHistory
     .map((run) => ({
-      periodKey: String(run?.periodKey || getPeriodKey(run?.dueDate || run?.processedAt, plain.frequency) || ""),
+      recoveryId: String(run?._id || ""),
+      periodKey: getRecoveryPeriodKey(run, plain.frequency),
       periodLabel: String(run?.periodLabel || "").trim() || null,
       processedAt: run?.processedAt || null,
       dueDate: run?.dueDate || null,
       periodStart: run?.periodStart || null,
       periodEnd: run?.periodEnd || null,
       amount: round2(run?.amount || 0),
+      principalAmount: round2(run?.principalAmount || run?.amount || 0),
+      interestAmount: round2(run?.interestAmount || 0),
       referenceNo: run?.referenceNo || "",
       note: run?.note || "",
+    }))
+    .filter((item) => item.periodKey)
+    .sort(comparePeriodOrder);
+
+  const cancelledPeriods = cancelledHistory
+    .map((run) => ({
+      recoveryId: String(run?._id || ""),
+      periodKey: getRecoveryPeriodKey(run, plain.frequency),
+      periodLabel: String(run?.periodLabel || "").trim() || null,
+      processedAt: run?.processedAt || null,
+      amount: round2(run?.amount || 0),
+      cancelledAt: run?.cancelledAt || null,
+      cancellationReason: run?.cancellationReason || "",
     }))
     .filter((item) => item.periodKey)
     .sort(comparePeriodOrder);
@@ -297,7 +352,9 @@ const serializeAdvancement = (row) => {
     amortizationSchedule: schedule,
     eligibleRecoveryPeriods: eligiblePeriods,
     processedPeriods,
+    cancelledPeriods,
     processedPeriodsCount: processedPeriods.length,
+    cancelledPeriodsCount: cancelledPeriods.length,
     unprocessedPeriodsCount: Math.max(schedule.length - processedPeriods.length, 0),
     nextEligibleRecoveryPeriod: eligiblePeriods[0] || null,
   };
@@ -674,7 +731,7 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "No eligible recovery period is available. Future and already processed periods are blocked." });
     }
 
-    const alreadyProcessed = (Array.isArray(row.recoveryHistory) ? row.recoveryHistory : []).some(
+    const alreadyProcessed = getActiveRecoveryHistory(row).some(
       (item) => String(item?.periodKey || getPeriodKey(item?.dueDate || item?.processedAt, row.frequency)) === selectedPeriod.periodKey
     );
     if (alreadyProcessed) {
@@ -788,20 +845,105 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
       periodKey: selectedPeriod.periodKey,
       periodLabel: selectedPeriod.periodLabel,
       amount: round2(amount),
+      principalAmount: round2(amount),
+      interestAmount: 0,
       note: notes,
       referenceNo: `${row.referenceNo}-${selectedPeriod.periodKey}`,
       processedBy: actorUserId,
       journalGroupId,
       visibleStatementEntryId: visibleEntry._id,
       offsetEntryId: offsetEntry._id,
+      cancelledAt: null,
+      cancelledBy: null,
+      cancellationReason: "",
     });
-    row.recoveredAmount = round2(Number(row.recoveredAmount || 0) + round2(amount));
-    row.balanceOutstanding = round2(Number(row.amount || 0) - Number(row.recoveredAmount || 0));
+    recalculateRecoveryBalances(row);
     row.updatedBy = actorUserId;
-    if (row.balanceOutstanding <= 0) row.status = "completed";
     if (row.status === "draft") row.status = "active";
 
     await row.save();
+    const populated = await populateQuery(LandlordAdvancement.findById(row._id));
+    res.status(200).json(serializeAdvancement(await populated));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const cancelLandlordAdvancementRecovery = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+
+    const actorUserId = await resolveActorUserId(req, businessId);
+    const row = await LandlordAdvancement.findOne({ _id: req.params.id, business: businessId });
+    if (!row) return res.status(404).json({ success: false, message: "Landlord advancement not found" });
+
+    const recoveryId = String(req.params.recoveryId || req.body?.recoveryId || "").trim();
+    const periodKey = String(req.body?.periodKey || "").trim();
+    const recoveryRow = recoveryId
+      ? row.recoveryHistory.id(recoveryId)
+      : row.recoveryHistory.find((item) => getRecoveryPeriodKey(item, row.frequency) === periodKey);
+
+    if (!recoveryRow) {
+      return res.status(404).json({ success: false, message: "Processed recovery period not found on this advancement." });
+    }
+
+    if (recoveryRow.cancelledAt) {
+      return res.status(400).json({ success: false, message: "This recovery period has already been cancelled." });
+    }
+
+    const closedPeriod = await isPeriodClosedByProcessedStatement({
+      businessId,
+      propertyId: row.property,
+      landlordId: row.landlord,
+      periodStart: recoveryRow.periodStart || recoveryRow.dueDate || row.startDate,
+      periodEnd: recoveryRow.periodEnd || recoveryRow.dueDate || row.startDate,
+    });
+
+    if (closedPeriod) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This recovery period already belongs to a processed landlord statement. Reverse or reopen the affected processed statement first.",
+      });
+    }
+
+    const reason =
+      String(req.body?.reason || "").trim() ||
+      `Advancement recovery ${recoveryRow.periodLabel || recoveryRow.periodKey || "period"} cancelled`;
+
+    const touchedAccountIds = new Set();
+    const reverseOne = async (entryId) => {
+      if (!entryId || !isValidObjectId(entryId)) return null;
+      const originalEntry = await FinancialLedgerEntry.findOne({
+        _id: entryId,
+        business: businessId,
+        reversalOf: null,
+        status: "approved",
+      }).select("_id accountId");
+      if (!originalEntry) return null;
+      if (originalEntry?.accountId) touchedAccountIds.add(String(originalEntry.accountId));
+      const reversal = await postReversal({ entryId: originalEntry._id, reason, userId: actorUserId });
+      if (reversal?.reversalEntry?.accountId) {
+        touchedAccountIds.add(String(reversal.reversalEntry.accountId));
+      }
+      return reversal;
+    };
+
+    await reverseOne(recoveryRow.visibleStatementEntryId);
+    await reverseOne(recoveryRow.offsetEntryId);
+
+    if (touchedAccountIds.size > 0) {
+      await aggregateChartOfAccountBalances(String(row.business), Array.from(touchedAccountIds));
+    }
+
+    recoveryRow.cancelledAt = new Date();
+    recoveryRow.cancelledBy = actorUserId;
+    recoveryRow.cancellationReason = reason;
+    row.updatedBy = actorUserId;
+    recalculateRecoveryBalances(row);
+    await row.save();
+
     const populated = await populateQuery(LandlordAdvancement.findById(row._id));
     res.status(200).json(serializeAdvancement(await populated));
   } catch (error) {

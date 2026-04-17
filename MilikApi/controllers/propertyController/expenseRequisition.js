@@ -469,7 +469,11 @@ export const deleteExpenseRequisition = async (req, res, next) => {
     ensureNoLinkedVoucher(row, "This requisition is linked to a payment voucher and cannot be deleted.");
 
     await ExpenseRequisition.deleteOne({ _id: row._id, business: businessId });
-    res.status(200).json({ success: true, message: "Expense requisition deleted" });
+    res.status(200).json({
+      success: true,
+      message: "Expense requisition deleted",
+      deletedId: String(row._id),
+    });
   } catch (error) {
     next(error);
   }

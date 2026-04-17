@@ -33,6 +33,20 @@ const recoveryHistorySchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    cancellationReason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
   },
   { _id: true, timestamps: true }
 );

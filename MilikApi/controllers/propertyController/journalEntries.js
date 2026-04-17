@@ -13,6 +13,14 @@ import {
 } from "../../services/propertyAccountingService.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
+const sameId = (left, right) => String(left || "") === String(right || "");
+const LANDLORD_FACING_JOURNAL_TYPES = new Set([
+  "landlord_credit_adjustment",
+  "landlord_debit_adjustment",
+  "property_expense_accrual",
+]);
+const isLandlordFacingJournalType = (value) =>
+  LANDLORD_FACING_JOURNAL_TYPES.has(String(value || "").trim().toLowerCase());
 
 const normalizeDate = (value, fallback = new Date()) => {
   const date = value ? new Date(value) : new Date(fallback);
@@ -131,14 +139,22 @@ const validateJournalPayload = async ({ businessId, payload = {} }) => {
     throw new Error("Amount must be greater than zero.");
   }
 
-  const resolvedLandlordId = await resolveJournalLandlordId({ businessId, payload });
+  const journalType = String(payload?.journalType || "general_manual_journal").trim().toLowerCase();
+  const normalizedIncludeInStatement =
+    journalType === "internal_account_transfer"
+      ? false
+      : isLandlordFacingJournalType(journalType)
+      ? true
+      : Boolean(payload?.includeInLandlordStatement);
 
-  if (
-    ["landlord_credit_adjustment", "landlord_debit_adjustment"].includes(payload.journalType) &&
-    !resolvedLandlordId
-  ) {
-    throw new Error("A linked property owner/landlord could not be resolved for this journal type.");
-  }
+  const resolvedLandlordId = await resolveJournalLandlordId({
+    businessId,
+    payload: {
+      ...payload,
+      journalType,
+      includeInLandlordStatement: normalizedIncludeInStatement,
+    },
+  });
 
   const [debitAccount, creditAccount] = await Promise.all([
     ensurePostingAccount({
@@ -153,15 +169,57 @@ const validateJournalPayload = async ({ businessId, payload = {} }) => {
     }),
   ]);
 
-  const landlordPayable = await resolveLandlordRemittancePayableAccount(businessId).catch(() => null);
+  const landlordPayableAccount = await resolveLandlordRemittancePayableAccount(businessId).catch(() => null);
+  const debitTouchesLandlordPayable = landlordPayableAccount?._id
+    ? sameId(payload.debitAccount, landlordPayableAccount._id)
+    : false;
+  const creditTouchesLandlordPayable = landlordPayableAccount?._id
+    ? sameId(payload.creditAccount, landlordPayableAccount._id)
+    : false;
+  const touchesLandlordPayable = debitTouchesLandlordPayable || creditTouchesLandlordPayable;
 
-  if (landlordPayable?._id) {
-    const touchesLandlordPayable =
-      String(payload.debitAccount) === String(landlordPayable._id) ||
-      String(payload.creditAccount) === String(landlordPayable._id);
+  if ((isLandlordFacingJournalType(journalType) || normalizedIncludeInStatement || touchesLandlordPayable) && !resolvedLandlordId) {
+    throw new Error("A linked property owner/landlord could not be resolved for this journal.");
+  }
 
-    if (touchesLandlordPayable && !resolvedLandlordId) {
-      throw new Error("A linked property owner/landlord is required when journal touches Landlord Payable.");
+  if (debitTouchesLandlordPayable && creditTouchesLandlordPayable) {
+    throw new Error("Landlord Remittance Payable can only appear on one side of a journal.");
+  }
+
+  if (journalType === "internal_account_transfer" && touchesLandlordPayable) {
+    throw new Error("Internal ledger transfers cannot use Landlord Remittance Payable.");
+  }
+
+  if (journalType === "landlord_credit_adjustment") {
+    if (!landlordPayableAccount?._id) {
+      throw new Error("Landlord Remittance Payable account was not found for this business.");
+    }
+    if (!creditTouchesLandlordPayable || debitTouchesLandlordPayable) {
+      throw new Error("Landlord Credit Adjustment must credit Landlord Remittance Payable and debit the balancing account.");
+    }
+  }
+
+  if (["landlord_debit_adjustment", "property_expense_accrual"].includes(journalType)) {
+    if (!landlordPayableAccount?._id) {
+      throw new Error("Landlord Remittance Payable account was not found for this business.");
+    }
+    if (!debitTouchesLandlordPayable || creditTouchesLandlordPayable) {
+      const label =
+        journalType === "property_expense_accrual"
+          ? "Property Expense Accrual"
+          : "Landlord Debit Adjustment";
+      throw new Error(`${label} must debit Landlord Remittance Payable and credit the balancing account.`);
+    }
+  }
+
+  if (journalType === "general_manual_journal" && normalizedIncludeInStatement) {
+    if (!landlordPayableAccount?._id) {
+      throw new Error("Landlord Remittance Payable account was not found for this business.");
+    }
+    if (debitTouchesLandlordPayable === creditTouchesLandlordPayable) {
+      throw new Error(
+        "Statement-visible general journals must touch Landlord Remittance Payable on exactly one side so they read as one clean landlord addition or deduction."
+      );
     }
   }
 
@@ -170,6 +228,8 @@ const validateJournalPayload = async ({ businessId, payload = {} }) => {
     creditAccount,
     amount,
     resolvedLandlordId,
+    landlordPayableAccount,
+    normalizedIncludeInStatement,
   };
 };
 
@@ -185,24 +245,38 @@ const populateJournalQuery = (query) =>
 
 const normalizeJournalPayload = (payload = {}) => {
   const journalType = String(payload?.journalType || "").trim().toLowerCase();
+  const includeInLandlordStatement =
+    journalType === "internal_account_transfer"
+      ? false
+      : isLandlordFacingJournalType(journalType)
+      ? true
+      : Boolean(payload?.includeInLandlordStatement);
 
   if (journalType !== "internal_account_transfer") {
     return {
       ...payload,
+      journalType,
       landlord: payload?.landlord || null,
-      includeInLandlordStatement: Boolean(payload?.includeInLandlordStatement),
+      includeInLandlordStatement,
     };
   }
 
   return {
     ...payload,
+    journalType,
     landlord: null,
     includeInLandlordStatement: false,
   };
 };
 
-const resolveStatementPostingConfig = (journal = {}) => {
+const resolveStatementPostingConfig = ({ journal = {}, landlordPayableAccountId = null }) => {
   const journalType = String(journal?.journalType || "").trim().toLowerCase();
+  const debitTouchesLandlordPayable = landlordPayableAccountId
+    ? sameId(journal?.debitAccount?._id || journal?.debitAccount, landlordPayableAccountId)
+    : false;
+  const creditTouchesLandlordPayable = landlordPayableAccountId
+    ? sameId(journal?.creditAccount?._id || journal?.creditAccount, landlordPayableAccountId)
+    : false;
 
   if (journalType === "landlord_credit_adjustment") {
     return {
@@ -219,15 +293,24 @@ const resolveStatementPostingConfig = (journal = {}) => {
   }
 
   if (journalType === "general_manual_journal" && journal.includeInLandlordStatement) {
-    return {
-      debitLeg: { includeInLandlordStatement: true },
-      creditLeg: { includeInLandlordStatement: true },
-    };
+    if (debitTouchesLandlordPayable && !creditTouchesLandlordPayable) {
+      return {
+        debitLeg: { includeInLandlordStatement: true, statementBucket: "deduction" },
+        creditLeg: { includeInLandlordStatement: false },
+      };
+    }
+
+    if (creditTouchesLandlordPayable && !debitTouchesLandlordPayable) {
+      return {
+        debitLeg: { includeInLandlordStatement: false },
+        creditLeg: { includeInLandlordStatement: true, statementBucket: "addition" },
+      };
+    }
   }
 
   return {
-    debitLeg: { includeInLandlordStatement: Boolean(journal.includeInLandlordStatement) },
-    creditLeg: { includeInLandlordStatement: Boolean(journal.includeInLandlordStatement) },
+    debitLeg: { includeInLandlordStatement: false },
+    creditLeg: { includeInLandlordStatement: false },
   };
 };
 
@@ -294,7 +377,11 @@ const postJournalToLedger = async ({ journal, actorUserId }) => {
   const journalGroupId = new mongoose.Types.ObjectId();
   const narration = String(journal.narration || journal.reference || `Journal ${journal.journalNo}`).trim();
 
-  const statementPostingConfig = resolveStatementPostingConfig(journal);
+  const landlordPayableAccount = await resolveLandlordRemittancePayableAccount(journal.business).catch(() => null);
+  const statementPostingConfig = resolveStatementPostingConfig({
+    journal,
+    landlordPayableAccountId: landlordPayableAccount?._id || null,
+  });
 
   const commonPayload = {
     business: accountingContext.businessId,
@@ -380,7 +467,7 @@ export const createJournalEntry = async (req, res, next) => {
 
     const normalizedPayload = normalizeJournalPayload(req.body || {});
 
-    const { resolvedLandlordId } = await validateJournalPayload({
+    const { resolvedLandlordId, normalizedIncludeInStatement } = await validateJournalPayload({
       businessId,
       payload: normalizedPayload,
     });
@@ -398,7 +485,7 @@ export const createJournalEntry = async (req, res, next) => {
       amount: Number(normalizedPayload.amount || 0),
       reference: normalizedPayload.reference || "",
       narration: normalizedPayload.narration || "",
-      includeInLandlordStatement: Boolean(normalizedPayload.includeInLandlordStatement),
+      includeInLandlordStatement: Boolean(normalizedIncludeInStatement),
       status: req.body.status === "posted" ? "draft" : "draft",
       createdBy: actorUserId,
       business: businessId,
@@ -499,7 +586,7 @@ export const updateJournalEntry = async (req, res, next) => {
       ...(req.body || {}),
     });
 
-    const { resolvedLandlordId } = await validateJournalPayload({
+    const { resolvedLandlordId, normalizedIncludeInStatement } = await validateJournalPayload({
       businessId,
       payload: normalizedPayload,
     });
@@ -513,7 +600,7 @@ export const updateJournalEntry = async (req, res, next) => {
     existing.amount = Number(normalizedPayload.amount || existing.amount || 0);
     existing.reference = normalizedPayload.reference || "";
     existing.narration = normalizedPayload.narration || "";
-    existing.includeInLandlordStatement = Boolean(normalizedPayload.includeInLandlordStatement);
+    existing.includeInLandlordStatement = Boolean(normalizedIncludeInStatement);
 
     await existing.save();
 

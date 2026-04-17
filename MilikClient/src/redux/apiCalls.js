@@ -1533,6 +1533,11 @@ export const processLandlordAdvancementRecovery = async (id, payload) => {
   return res.data;
 };
 
+export const cancelLandlordAdvancementRecovery = async (id, recoveryId, payload = {}) => {
+  const res = await adminRequests.post(`/landlord-advancements/${id}/recoveries/${recoveryId}/cancel`, payload);
+  return res.data;
+};
+
 export const deleteLandlordAdvancement = async (id, context = {}) => {
   const params = new URLSearchParams();
   if (context.business) params.append("business", context.business);

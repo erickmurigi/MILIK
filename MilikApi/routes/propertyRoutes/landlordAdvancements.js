@@ -1,6 +1,7 @@
 import express from "express";
 import { verifyUser } from "../../controllers/verifyToken.js";
 import {
+  cancelLandlordAdvancementRecovery,
   createLandlordAdvancement,
   deleteLandlordAdvancement,
   getLandlordAdvancements,
@@ -16,6 +17,7 @@ router.post("/", verifyUser, createLandlordAdvancement);
 router.put("/:id", verifyUser, updateLandlordAdvancement);
 router.put("/:id/status", verifyUser, updateLandlordAdvancementStatus);
 router.post("/:id/recover", verifyUser, processLandlordAdvancementRecovery);
+router.post("/:id/recoveries/:recoveryId/cancel", verifyUser, cancelLandlordAdvancementRecovery);
 router.delete("/:id", verifyUser, deleteLandlordAdvancement);
 
 export default router;

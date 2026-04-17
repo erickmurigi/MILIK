@@ -12,11 +12,13 @@ import {
   FaSearch,
   FaTimes,
   FaTrash,
+  FaUndo,
 } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
+  cancelLandlordAdvancementRecovery,
   createLandlordAdvancement,
   deleteLandlordAdvancement,
   getLandlordAdvancements,
@@ -298,6 +300,35 @@ const LandlordAdvancements = () => {
     }
   };
 
+  const handleCancelRecovery = async (row, period) => {
+    if (!row?._id || !period?.recoveryId) return;
+    const periodLabel = period?.periodLabel || period?.periodKey || "this recovery period";
+    if (!window.confirm(`Cancel processed recovery for ${periodLabel}?`)) return;
+
+    const reason = window.prompt(
+      "Cancellation reason (required for audit trail)",
+      `Cancelled recovery for ${periodLabel}`
+    );
+    if (reason === null) return;
+    if (!String(reason || "").trim()) {
+      toast.warning("Cancellation reason is required.");
+      return;
+    }
+
+    try {
+      const saved = await cancelLandlordAdvancementRecovery(row._id, period.recoveryId, {
+        business: currentCompany?._id,
+        company: currentCompany?._id,
+        periodKey: period.periodKey,
+        reason,
+      });
+      setRows((prev) => prev.map((item) => (item._id === row._id ? saved : item)));
+      toast.success(`Recovery for ${periodLabel} cancelled successfully`);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to cancel advancement recovery");
+    }
+  };
+
   const printableRows = useMemo(() => {
     if (filters.landlordId === "all") return rows;
     return rows.filter((row) => String(row.landlord?._id || row.landlord || "") === String(filters.landlordId));
@@ -502,7 +533,7 @@ const LandlordAdvancements = () => {
                           </td>
                           <td className="px-4 py-3 text-slate-700">
                             <div className="font-semibold capitalize">{String(row.frequency || "monthly").replace(/_/g, " ")}</div>
-                            <div className="text-xs text-slate-500">Processed {row.processedPeriodsCount || 0} • Pending {row.unprocessedPeriodsCount || 0}</div>
+                            <div className="text-xs text-slate-500">Processed {row.processedPeriodsCount || 0} • Pending {row.unprocessedPeriodsCount || 0} • Cancelled {row.cancelledPeriodsCount || 0}</div>
                             <div className="text-xs text-slate-500">Next eligible recovery: {row.nextEligibleRecoveryPeriod?.periodLabel || "No open period"}</div>
                           </td>
                           <td className="px-4 py-3 text-right">
@@ -524,23 +555,69 @@ const LandlordAdvancements = () => {
                         {expanded && (
                           <tr className="border-t border-slate-100 bg-slate-50">
                             <td colSpan={6} className="px-4 py-4">
-                              <div className="grid gap-4 lg:grid-cols-2">
+                              <div className="grid gap-4 xl:grid-cols-3">
                                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
                                   <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Eligible recovery periods</p>
                                   <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
                                     {(row.eligibleRecoveryPeriods || []).length === 0 && <p className="text-sm text-slate-500">No eligible recovery periods. Future and already processed periods are blocked.</p>}
                                     {(row.eligibleRecoveryPeriods || []).map((item) => (
                                       <div key={item.periodKey} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                                        <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-start justify-between gap-3">
                                           <div>
                                             <div className="font-bold text-slate-800">{item.periodLabel}</div>
                                             <div className="text-xs text-slate-500">{formatDate(item.periodStart)} - {formatDate(item.periodEnd)}</div>
+                                            <div className="mt-1 text-[11px] text-slate-500">Principal {money(item.scheduledPrincipalAmount)} • Interest {money(item.scheduledInterestAmount)}</div>
                                           </div>
                                           <div className="font-black text-slate-900">{money(item.scheduledAmount)}</div>
-                                          <div className="text-[11px] text-slate-500">Principal {money(item.scheduledPrincipalAmount)} • Interest {money(item.scheduledInterestAmount)}</div>
                                         </div>
                                       </div>
                                     ))}
+                                  </div>
+                                </div>
+                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Processed recovery history</p>
+                                    <span className="text-[11px] font-bold text-slate-500">{(row.processedPeriods || []).length} active • {(row.cancelledPeriods || []).length} cancelled</span>
+                                  </div>
+                                  <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+                                    {(row.processedPeriods || []).length === 0 && <p className="text-sm text-slate-500">No processed recovery periods yet.</p>}
+                                    {(row.processedPeriods || []).map((item) => (
+                                      <div key={item.recoveryId || item.periodKey} className="rounded-xl border border-slate-200 px-3 py-3 text-sm">
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div>
+                                            <div className="font-bold text-slate-800">{item.periodLabel || item.periodKey}</div>
+                                            <div className="text-xs text-slate-500">Processed {formatDate(item.processedAt)}</div>
+                                            <div className="mt-1 text-[11px] text-slate-500">{item.note || item.referenceNo || "No note"}</div>
+                                          </div>
+                                          <div className="text-right">
+                                            <div className="font-black text-slate-900">{money(item.amount)}</div>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleCancelRecovery(row, item)}
+                                              className="mt-2 inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-black text-amber-700"
+                                            >
+                                              <FaUndo /> Cancel period
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                    {(row.cancelledPeriods || []).length > 0 && (
+                                      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3">
+                                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Cancelled recovery audit</p>
+                                        <div className="mt-2 space-y-2">
+                                          {(row.cancelledPeriods || []).map((item) => (
+                                            <div key={`cancelled-${item.recoveryId || item.periodKey}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">
+                                              <div className="flex items-center justify-between gap-2">
+                                                <span className="font-bold text-slate-800">{item.periodLabel || item.periodKey}</span>
+                                                <span>{money(item.amount)}</span>
+                                              </div>
+                                              <div className="mt-1">Cancelled {formatDate(item.cancelledAt)}{item.cancellationReason ? ` • ${item.cancellationReason}` : ""}</div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="rounded-2xl border border-slate-200 bg-white p-4">

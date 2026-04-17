@@ -154,7 +154,7 @@ const ChartOfAccounts = () => {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showControlAccounts, setShowControlAccounts] = useState(true);
+  const [showControlAccounts, setShowControlAccounts] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState([]);
   const [showForm, setShowForm] = useState(false);

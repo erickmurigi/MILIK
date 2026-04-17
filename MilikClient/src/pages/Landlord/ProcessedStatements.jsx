@@ -126,7 +126,7 @@ const ProcessedStatements = () => {
         return !isReversed && !isNegative && statement.status === "paid";
       }
 
-      return isReversed;
+      return false;
     });
 
     if (searchText) {
@@ -510,7 +510,7 @@ const ProcessedStatements = () => {
             <div className="flex flex-shrink-0 items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">Processed Statements</h1>
-                <p className="mt-2 text-gray-600">View processed statements, payouts, recoveries, and reversals</p>
+                <p className="mt-2 text-gray-600">View processed statements, payouts, and recoveries</p>
               </div>
               <button
                 onClick={() => navigate(-1)}
@@ -574,16 +574,6 @@ const ProcessedStatements = () => {
                   }`}
                 >
                   <FaCheckCircle className="mr-2 inline" /> Paid ({stats.totalPaid})
-                </button>
-                <button
-                  onClick={() => setActiveTab("reversed")}
-                  className={`border-b-2 px-4 py-2 font-semibold transition ${
-                    activeTab === "reversed"
-                      ? `${MILIK_GREEN} border-orange-500 text-white`
-                      : "border-transparent text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <FaUndo className="mr-2 inline" /> Reversed ({stats.totalReversed})
                 </button>
               </div>
 

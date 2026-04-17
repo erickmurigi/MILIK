@@ -213,10 +213,15 @@ const ExpenseRequisition = () => {
   const handleDelete = async (row) => {
     if (!window.confirm(`Delete requisition ${row.requisitionNo}?`)) return;
     try {
-      await deleteExpenseRequisition(row._id, { business: currentCompany?._id, company: currentCompany?._id });
-      setRows((prev) => prev.filter((item) => item._id !== row._id));
-      setSelectedIds((prev) => prev.filter((id) => id !== row._id));
-      toast.success("Expense requisition deleted");
+      const response = await deleteExpenseRequisition(row._id, {
+        business: currentCompany?._id,
+        company: currentCompany?._id,
+      });
+      const deletedId = String(response?.deletedId || row._id || "");
+      setRows((prev) => prev.filter((item) => String(item?._id || "") !== deletedId));
+      setSelectedIds((prev) => prev.filter((id) => String(id || "") !== deletedId));
+      await loadRows();
+      toast.success(response?.message || "Expense requisition deleted");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to delete expense requisition");
     }

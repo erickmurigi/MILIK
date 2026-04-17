@@ -1,36 +1,118 @@
 import mongoose from "mongoose";
 import LandlordStatement from "../models/LandlordStatement.js";
 import LandlordStatementLine from "../models/LandlordStatementLine.js";
+import SequenceCounter from "../models/SequenceCounter.js";
 import { generateLandlordStatement } from "./landlordStatementService.js";
 
+const STATEMENT_NUMBER_PADDING = 5;
+const STATEMENT_NUMBER_ATTEMPTS = 5;
+
+const escapeRegExp = (value = "") => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /**
- * Helper: Generate unique statement number
+ * Helper: Reserve a unique statement number
  * Format: STMT-YYYYMM-XXXXX
  */
-const generateStatementNumber = async (businessId, periodStart) => {
+const reserveStatementNumber = async (businessId, periodStart) => {
   const date = new Date(periodStart);
-  const yearMonth = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}`;
-  const prefix = `STMT-${yearMonth}`;
-
-  // Find highest sequence number for this period
-  const lastStatement = await LandlordStatement.findOne(
-    {
-      business: businessId,
-      statementNumber: { $regex: `^${prefix}-` },
-    },
-    { statementNumber: 1 }
-  ).sort({ createdAt: -1 });
-
-  let sequence = 1;
-  if (lastStatement?.statementNumber) {
-    const match = lastStatement.statementNumber.match(/-(\d+)$/);
-    if (match) {
-      sequence = parseInt(match[1], 10) + 1;
-    }
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("A valid period start date is required to reserve a statement number.");
   }
 
-  return `${prefix}-${String(sequence).padStart(5, "0")}`;
+  const businessObjectId = mongoose.Types.ObjectId.isValid(String(businessId || ""))
+    ? new mongoose.Types.ObjectId(String(businessId))
+    : null;
+
+  if (!businessObjectId) {
+    throw new Error("A valid business id is required to reserve a statement number.");
+  }
+
+  const yearMonth = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}`;
+  const prefix = `STMT-${yearMonth}`;
+  const counterKey = `landlord_statement_number:${yearMonth}`;
+
+  const syncCounterFromExistingStatements = async (currentSequence = 0) => {
+    const latestStatement = await LandlordStatement.findOne(
+      {
+        business: businessObjectId,
+        statementNumber: { $regex: `^${escapeRegExp(prefix)}-\\d+$`, $options: "i" },
+      },
+      { statementNumber: 1 }
+    )
+      .sort({ createdAt: -1, _id: -1 })
+      .lean();
+
+    const latestMatch = String(latestStatement?.statementNumber || "").match(/-(\d+)$/);
+    const latestSequence = latestMatch ? Number(latestMatch[1]) : 0;
+
+    if (latestSequence > Number(currentSequence || 0)) {
+      await SequenceCounter.updateOne(
+        {
+          business: businessObjectId,
+          key: counterKey,
+          sequence: { $lt: latestSequence },
+        },
+        {
+          $set: { sequence: latestSequence },
+        }
+      );
+      return latestSequence;
+    }
+
+    return Number(currentSequence || 0);
+  };
+
+  for (let attempt = 0; attempt < STATEMENT_NUMBER_ATTEMPTS; attempt += 1) {
+    const counter = await SequenceCounter.findOneAndUpdate(
+      { business: businessObjectId, key: counterKey },
+      {
+        $setOnInsert: { business: businessObjectId, key: counterKey },
+        $inc: { sequence: 1 },
+      },
+      {
+        new: true,
+        upsert: true,
+        setDefaultsOnInsert: true,
+      }
+    ).lean();
+
+    const candidateSequence = Number(counter?.sequence || 0);
+    const candidate = `${prefix}-${String(candidateSequence).padStart(STATEMENT_NUMBER_PADDING, "0")}`;
+
+    const existingStatement = await LandlordStatement.exists({
+      business: businessObjectId,
+      statementNumber: { $regex: `^${escapeRegExp(candidate)}$`, $options: "i" },
+    });
+
+    if (!existingStatement) {
+      return candidate;
+    }
+
+    await syncCounterFromExistingStatements(candidateSequence);
+  }
+
+  throw new Error("Could not reserve a unique statement number. Please retry.");
 };
+
+const isDuplicateKeyError = (error) =>
+  Boolean(error) &&
+  (error?.code === 11000 || error?.name === "MongoServerError" || /E11000 duplicate key/i.test(String(error?.message || "")));
+
+const findExistingDraftStatement = async ({
+  businessId,
+  propertyId,
+  landlordId,
+  periodStart,
+  periodEnd,
+}) =>
+  LandlordStatement.findOne({
+    business: businessId,
+    property: propertyId,
+    landlord: landlordId,
+    periodStart,
+    periodEnd,
+    status: "draft",
+  }).sort({ createdAt: -1, _id: -1 });
 
 /**
  * Create a draft statement from ledger data.
@@ -69,17 +151,13 @@ export const createDraftStatement = async ({
     statementPeriodEnd,
   });
 
-  // Step 2: Generate statement number
-  const statementNumber = await generateStatementNumber(businessId, statementPeriodStart);
-
-  // Step 3: Check for existing draft for same period/landlord
-  const existingDraft = await LandlordStatement.findOne({
-    business: businessId,
-    property: propertyId,
-    landlord: landlordId,
+  // Step 2: Reuse an already-open draft for the same logical period before reserving a new statement number.
+  const existingDraft = await findExistingDraftStatement({
+    businessId,
+    propertyId,
+    landlordId,
     periodStart: statementData.periodStart,
     periodEnd: statementData.periodEnd,
-    status: "draft",
   });
 
   if (existingDraft) {
@@ -90,8 +168,7 @@ export const createDraftStatement = async ({
     };
   }
 
-  // Step 4: Create statement header
-  const statement = await LandlordStatement.create({
+  const buildStatementPayload = (statementNumber) => ({
     business: businessId,
     property: propertyId,
     landlord: landlordId,
@@ -121,6 +198,45 @@ export const createDraftStatement = async ({
       },
     },
   });
+
+  let statement = null;
+  let lastDuplicateError = null;
+
+  for (let attempt = 0; attempt < STATEMENT_NUMBER_ATTEMPTS; attempt += 1) {
+    const statementNumber = await reserveStatementNumber(businessId, statementData.periodStart);
+
+    try {
+      statement = await LandlordStatement.create(buildStatementPayload(statementNumber));
+      lastDuplicateError = null;
+      break;
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+
+      lastDuplicateError = error;
+
+      const concurrentDraft = await findExistingDraftStatement({
+        businessId,
+        propertyId,
+        landlordId,
+        periodStart: statementData.periodStart,
+        periodEnd: statementData.periodEnd,
+      });
+
+      if (concurrentDraft) {
+        return {
+          statement: concurrentDraft,
+          lineCount: Number(concurrentDraft.lineCount || 0),
+          isExisting: true,
+        };
+      }
+    }
+  }
+
+  if (!statement) {
+    throw lastDuplicateError || new Error("Could not create a unique landlord statement draft. Please retry.");
+  }
 
   // Step 5: Create statement lines (not yet frozen, can be regenerated)
   // Lines are only frozen when statement is approved

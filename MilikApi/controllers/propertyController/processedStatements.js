@@ -61,6 +61,32 @@ const findScopedProcessedStatementById = async (req, statementId, populate = nul
   return statementQuery;
 };
 
+const isDuplicateKeyError = (error) =>
+  Boolean(error) &&
+  (error?.code === 11000 || error?.name === "MongoServerError" || /E11000 duplicate key/i.test(String(error?.message || "")));
+
+const processedStatementPopulate = [
+  { path: "landlord", select: "landlordName firstName lastName email contact" },
+  { path: "property", select: "propertyCode propertyName name commissionPaymentMode commissionFixedAmount commissionPercentage commissionRecognitionBasis" },
+  { path: "business", select: "companyName name" },
+  { path: "closedBy", select: "username email surname otherNames" },
+  { path: "sourceStatement", select: "statementNumber status periodStart periodEnd approvedAt" },
+  { path: "reversedSourceStatement", select: "statementNumber status periodStart periodEnd approvedAt" },
+];
+
+const hydrateProcessedStatementForResponse = async (statementOrId) => {
+  const statementId =
+    typeof statementOrId === "string" || statementOrId instanceof mongoose.Types.ObjectId
+      ? String(statementOrId)
+      : statementOrId?._id
+      ? String(statementOrId._id)
+      : null;
+
+  if (!statementId) return null;
+
+  return ProcessedStatement.findById(statementId).populate(processedStatementPopulate);
+};
+
 const resolveActorUserId = async (req, businessId) =>
   resolveAuditActorUserId({
     req,
@@ -714,9 +740,14 @@ export const closeStatement = async (req, res) => {
       });
 
       if (duplicateBySource) {
-        return res.status(400).json({
-          message: "This approved statement has already been processed",
-          statement: duplicateBySource,
+        const hydratedExistingStatement =
+          (await hydrateProcessedStatementForResponse(duplicateBySource)) || duplicateBySource;
+
+        return res.status(200).json({
+          success: true,
+          message: "This approved statement had already been processed. Returning the existing processed record.",
+          statement: hydratedExistingStatement,
+          duplicate: true,
         });
       }
     }
@@ -850,7 +881,33 @@ export const closeStatement = async (req, res) => {
       closedAt: now,
     });
 
-    const savedStatement = await newStatement.save();
+    let savedStatement = null;
+
+    try {
+      savedStatement = await newStatement.save();
+    } catch (error) {
+      if (approvedStatement?._id && isDuplicateKeyError(error)) {
+        const existingProcessedStatement = await ProcessedStatement.findOne({
+          business,
+          sourceStatement: approvedStatement._id,
+          status: { $ne: "reversed" },
+        });
+
+        if (existingProcessedStatement) {
+          const hydratedExistingStatement =
+            (await hydrateProcessedStatementForResponse(existingProcessedStatement)) || existingProcessedStatement;
+
+          return res.status(200).json({
+            success: true,
+            message: "This approved statement had already been processed. Returning the existing processed record.",
+            statement: hydratedExistingStatement,
+            duplicate: true,
+          });
+        }
+      }
+
+      throw error;
+    }
 
     if (approvedStatement?._id && numberOrZero(snapshotData.commissionAmount) > 0) {
       await postCommissionAccrualForProcessedStatement({
@@ -860,14 +917,7 @@ export const closeStatement = async (req, res) => {
       });
     }
 
-    await savedStatement.populate([
-      { path: "landlord", select: "landlordName firstName lastName email contact" },
-      { path: "property", select: "propertyCode propertyName name commissionPaymentMode commissionFixedAmount commissionPercentage commissionRecognitionBasis" },
-      { path: "business", select: "companyName name" },
-      { path: "closedBy", select: "username email surname otherNames" },
-      { path: "sourceStatement", select: "statementNumber status periodStart periodEnd approvedAt" },
-      { path: "reversedSourceStatement", select: "statementNumber status periodStart periodEnd approvedAt" },
-    ]);
+    savedStatement = (await hydrateProcessedStatementForResponse(savedStatement)) || savedStatement;
 
     res.status(201).json({
       success: true,
