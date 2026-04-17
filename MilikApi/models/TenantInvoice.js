@@ -78,6 +78,13 @@ const TenantInvoiceSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    bookingDate: {
+      type: Date,
+      default() {
+        return this.invoiceDate || new Date();
+      },
+      index: true,
+    },
     dueDate: {
       type: Date,
       required: true,
@@ -155,7 +162,9 @@ const TenantInvoiceSchema = new mongoose.Schema(
 );
 
 TenantInvoiceSchema.index({ business: 1, tenant: 1, invoiceDate: -1 });
+TenantInvoiceSchema.index({ business: 1, tenant: 1, bookingDate: -1 });
 TenantInvoiceSchema.index({ business: 1, property: 1, landlord: 1, invoiceDate: -1 });
+TenantInvoiceSchema.index({ business: 1, property: 1, landlord: 1, bookingDate: -1 });
 TenantInvoiceSchema.index({ business: 1, invoiceNumber: 1 }, { unique: true });
 
 // Performance index for tenant balance recomputation

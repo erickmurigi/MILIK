@@ -35,6 +35,7 @@ import {
   normalizeCompanyTaxConfig,
   resolveTaxSelectionPayload,
 } from "./invoiceTaxUtils";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -189,23 +190,52 @@ const clampBillingPeriod = (month, year) => {
   };
 };
 
-const buildCombinedInvoiceMetadata = ({ utilityAmount = 0, utilityLabel = "", periodLabel = "" } = {}) => {
-  const normalizedUtilityLabel = String(utilityLabel || "").trim() || "Utility";
+const normalizeBillingMode = (value = "combined") => {
+  const normalized = String(value || "combined").trim().toLowerCase();
+  if (normalized === "separate") return "combined";
+  if (["rent", "utility", "combined"].includes(normalized)) return normalized;
+  return "combined";
+};
+
+const getBillingModeLabel = (value = "combined") => {
+  const normalized = normalizeBillingMode(value);
+  if (normalized === "rent") return "Rent only";
+  if (normalized === "utility") return "Utility only";
+  return "Rent + Utility (creates separate invoices)";
+};
+
+const resolveBookingAmountsForMode = ({ rentAmount = 0, utilityAmount = 0, billingMode = "combined" } = {}) => {
+  const normalizedMode = normalizeBillingMode(billingMode);
+  const safeRentAmount = Number(rentAmount || 0);
+  const safeUtilityAmount = Number(utilityAmount || 0);
+
   return {
-    billItemKey: "rent_utility:combined",
-    billItemLabel: "Combined Rent + Utilities",
-    invoicePriorityCategory: "rent",
-    sourceTransactionType: "rental_invoice_combined",
-    utilityBreakdown:
-      Number(utilityAmount || 0) > 0
-        ? [
-            {
-              label: normalizedUtilityLabel,
-              amount: Number(utilityAmount || 0),
-              periodLabel,
-            },
-          ]
-        : [],
+    billingMode: normalizedMode,
+    rentAmount: normalizedMode === "utility" ? 0 : safeRentAmount,
+    utilityAmount: normalizedMode === "rent" ? 0 : safeUtilityAmount,
+    totalAmount:
+      (normalizedMode === "utility" ? 0 : safeRentAmount) +
+      (normalizedMode === "rent" ? 0 : safeUtilityAmount),
+  };
+};
+
+const createBookingGroupId = () => {
+  if (typeof globalThis !== "undefined" && globalThis.crypto?.randomUUID) {
+    return `booking_${globalThis.crypto.randomUUID()}`;
+  }
+
+  return `booking_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const buildBookingMetadata = ({ metadata = undefined, bookingGroupId = "", billingMode = "combined" } = {}) => {
+  const baseMetadata = metadata && typeof metadata === "object" ? metadata : {};
+  const normalizedMode = normalizeBillingMode(billingMode);
+
+  return {
+    ...baseMetadata,
+    bookingGroupId: bookingGroupId || baseMetadata?.bookingGroupId || "",
+    bookingMode: normalizedMode,
+    bookingSource: "rental_invoice_booking",
   };
 };
 
@@ -408,6 +438,9 @@ const getBookingTaxSelection = (form = {}) => ({
   taxMode: form?.taxMode || "company_default",
 });
 
+const resolveBookingDateOverride = (form = {}) =>
+  form?.bookWithInvoiceDate ? form?.invoiceDate || null : null;
+
 const resolveTenantPropertyName = (tenant, unitsFromStore = [], propertiesFromStore = []) => {
   const directPropertyName =
     tenant?.unit?.property?.propertyName ||
@@ -438,7 +471,7 @@ const resolveTenantPropertyName = (tenant, unitsFromStore = [], propertiesFromSt
 
 const buildJournalEntriesForInvoice = (invoice) => {
   const amount = Number(invoice?.amount || 0);
-  const chargeType = String(invoice?.chargeType || "combined").toLowerCase();
+  const chargeType = String(invoice?.chargeType || "rent").toLowerCase();
   const sourceInvoice = invoice?.originalInvoice || {};
   const fallbackAccount =
     chargeType === "deposit"
@@ -525,6 +558,10 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
 
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null );
+  const canCreateInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "create", "propertyManagement");
+  const canUpdateInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "update", "propertyManagement");
+  const canDeleteInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "delete", "propertyManagement");
+  const canExportInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "export", "propertyManagement");
   const rawTenantsFromStore = useSelector((state) => state.tenant?.tenants);
   const propertiesFromStore = useSelector((state) => state.property?.properties || []);
   const unitsFromStore = useSelector((state) => state.unit?.units || []);
@@ -870,11 +907,21 @@ const getTenantPropertyId = (tenant) => {
   const selectedSingleBookingPreview = useMemo(() => {
     if (!selectedSingleBookingTenant) return null;
     const pricing = getTenantPricing(selectedSingleBookingTenant);
+    const bookingAmounts = resolveBookingAmountsForMode({
+      rentAmount: pricing.rentAmount,
+      utilityAmount: pricing.utilityAmount,
+      billingMode: singleBookingForm.billingMode,
+    });
+
     return {
       periodLabel: formatPeriodLabel(Number(singleBookingForm.month), Number(singleBookingForm.year)),
       rentAmount: pricing.rentAmount,
       utilityAmount: pricing.utilityAmount,
       totalAmount: pricing.total,
+      selectedRentAmount: bookingAmounts.rentAmount,
+      selectedUtilityAmount: bookingAmounts.utilityAmount,
+      selectedTotalAmount: bookingAmounts.totalAmount,
+      normalizedBillingMode: bookingAmounts.billingMode,
       propertyName: resolveTenantPropertyName(
         selectedSingleBookingTenant,
         unitsFromStore,
@@ -883,6 +930,7 @@ const getTenantPropertyId = (tenant) => {
       unitName: getUnitDisplayName(selectedSingleBookingTenant),
     };
   }, [
+    singleBookingForm.billingMode,
     singleBookingForm.month,
     singleBookingForm.year,
     selectedSingleBookingTenant,
@@ -893,17 +941,14 @@ const getTenantPropertyId = (tenant) => {
   const selectedSingleBookingTaxPreview = useMemo(() => {
     if (!selectedSingleBookingPreview) return null;
 
-    const components =
-      singleBookingForm.billingMode === "combined"
-        ? [{ category: "RENT_CHARGE", amount: selectedSingleBookingPreview.totalAmount }]
-        : [
-            selectedSingleBookingPreview.rentAmount > 0
-              ? { category: "RENT_CHARGE", amount: selectedSingleBookingPreview.rentAmount }
-              : null,
-            selectedSingleBookingPreview.utilityAmount > 0
-              ? { category: "UTILITY_CHARGE", amount: selectedSingleBookingPreview.utilityAmount }
-              : null,
-          ].filter(Boolean);
+    const components = [
+      selectedSingleBookingPreview.selectedRentAmount > 0
+        ? { category: "RENT_CHARGE", amount: selectedSingleBookingPreview.selectedRentAmount }
+        : null,
+      selectedSingleBookingPreview.selectedUtilityAmount > 0
+        ? { category: "UTILITY_CHARGE", amount: selectedSingleBookingPreview.selectedUtilityAmount }
+        : null,
+    ].filter(Boolean);
 
     return buildTaxPreviewForComponents({
       components,
@@ -935,13 +980,15 @@ const getTenantPropertyId = (tenant) => {
   const batchBookingTaxPreview = useMemo(() => {
     const components = batchBookingScopeTenants.flatMap((tenant) => {
       const pricing = getTenantPricing(tenant);
-      if (batchBookingForm.billingMode === "combined") {
-        return pricing.total > 0 ? [{ category: "RENT_CHARGE", amount: pricing.total }] : [];
-      }
+      const bookingAmounts = resolveBookingAmountsForMode({
+        rentAmount: pricing.rentAmount,
+        utilityAmount: pricing.utilityAmount,
+        billingMode: batchBookingForm.billingMode,
+      });
 
       return [
-        pricing.rentAmount > 0 ? { category: "RENT_CHARGE", amount: pricing.rentAmount } : null,
-        pricing.utilityAmount > 0 ? { category: "UTILITY_CHARGE", amount: pricing.utilityAmount } : null,
+        bookingAmounts.rentAmount > 0 ? { category: "RENT_CHARGE", amount: bookingAmounts.rentAmount } : null,
+        bookingAmounts.utilityAmount > 0 ? { category: "UTILITY_CHARGE", amount: bookingAmounts.utilityAmount } : null,
       ].filter(Boolean);
     });
 
@@ -1043,7 +1090,8 @@ const getTenantPropertyId = (tenant) => {
           category: invoice?.category,
           metadata: invoice?.metadata || {},
         });
-        const invoiceDateValue = invoice?.invoiceDate || invoice?.createdAt || null;
+        const invoiceDocumentDateValue = invoice?.invoiceDate || invoice?.createdAt || null;
+        const invoiceDateValue = invoice?.bookingDate || invoiceDocumentDateValue || null;
         const dueDateValue = invoice?.dueDate || null;
 
         return {
@@ -1063,6 +1111,7 @@ const getTenantPropertyId = (tenant) => {
           status: derivedStatus,
           createdAt: invoice?.createdAt || invoice?.invoiceDate,
           createdDate: formatDateDisplay(invoice?.createdAt || invoice?.invoiceDate),
+          invoiceDocumentDateValue,
           invoiceDateValue,
           invoiceDateLabel: formatDateDisplay(invoiceDateValue),
           dueDateValue,
@@ -1345,7 +1394,7 @@ const visibleInvoiceKeys = useMemo(
         <h2>Invoice</h2>
         <div class="meta-grid">
           <div class="label">Invoice #</div><div class="value">${escapeHtml(invoice?.id)}</div>
-          <div class="label">Invoice Date</div><div class="value">${escapeHtml(invoiceDateLabel)}</div>
+          <div class="label">Booking / Invoice Date</div><div class="value">${escapeHtml(invoiceDateLabel)}</div>
           <div class="label">Due Date</div><div class="value">${escapeHtml(dueDateLabel)}</div>
           <div class="label">Inv Desc</div><div class="value">${escapeHtml(invoice?.invoiceDescription || deriveInvoiceDescription(sourceInvoice) || invoice?.period || "-")}</div>
           <div class="label">Bill Type</div><div class="value">${escapeHtml(chargeTypeLabel)}</div>
@@ -1483,7 +1532,7 @@ const visibleInvoiceKeys = useMemo(
         <th>Unit</th>
         <th>Inv Desc</th>
         <th>Type</th>
-        <th>Invoice Date</th>
+        <th>Booking / Invoice Date</th>
         <th>Due Date</th>
         <th style="text-align:right;">Amount</th>
         <th>Status</th>
@@ -1521,6 +1570,10 @@ const visibleInvoiceKeys = useMemo(
   };
 
   const handlePrintInvoice = (invoice) => {
+    if (!canExportInvoice) {
+      toast.warning("You do not have permission to print invoices");
+      return;
+    }
     if (!invoice) return;
     const printWindow = openHtmlDocument(`Invoice ${invoice.id}`, buildInvoiceHtml(invoice));
     if (!printWindow) return;
@@ -1532,6 +1585,10 @@ const visibleInvoiceKeys = useMemo(
   };
 
   const handleDownloadInvoice = (invoice) => {
+    if (!canExportInvoice) {
+      toast.warning("You do not have permission to download invoices");
+      return;
+    }
     if (!invoice) return;
     const html = buildInvoiceHtml(invoice);
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
@@ -1547,6 +1604,10 @@ const visibleInvoiceKeys = useMemo(
   };
 
   const handlePrintList = () => {
+    if (!canExportInvoice) {
+      toast.warning("You do not have permission to print invoice lists");
+      return;
+    }
     if (filteredInvoices.length === 0) {
       toast.warn("No invoices to print");
       return;
@@ -1596,6 +1657,9 @@ const visibleInvoiceKeys = useMemo(
     description,
     metadata,
     taxSelection = null,
+    bookingDateOverride = null,
+    bookingGroupId = "",
+    billingMode = "combined",
   }) => {
   const numericAmount = Number(amount || 0);
 
@@ -1672,6 +1736,12 @@ const visibleInvoiceKeys = useMemo(
     throw new Error("Missing createdBy user context.");
   }
 
+  const resolvedBillingPeriodDate =
+    targetTenant?.invoiceDateOverride || getStartOfPeriod(month, year);
+  const resolvedBookingDate =
+    bookingDateOverride ||
+    targetTenant?.bookingDateOverride ||
+    resolvedBillingPeriodDate;
   const invoicePayload = {
     business: businessId,
     property: propertyId,
@@ -1681,11 +1751,24 @@ const visibleInvoiceKeys = useMemo(
     category: categoryOverride || (paymentType === "utility" ? "UTILITY_CHARGE" : "RENT_CHARGE"),
     amount: numericAmount,
     description,
-    invoiceDate: targetTenant?.invoiceDateOverride || getStartOfPeriod(month, year),
+    invoiceDate: resolvedBillingPeriodDate,
+    bookingDate: resolvedBookingDate,
     dueDate: getDueDateForPeriod(month, year, dueDay),
     createdBy,
     chartAccountId: revenueAccountId,
-    metadata: metadata && typeof metadata === "object" ? metadata : undefined,
+    metadata: buildBookingMetadata({
+      metadata:
+        metadata && typeof metadata === "object"
+          ? {
+              ...metadata,
+              ...(bookingDateOverride ? { bookWithBookingDate: true } : {}),
+            }
+          : bookingDateOverride
+          ? { bookWithBookingDate: true }
+          : undefined,
+      bookingGroupId,
+      billingMode,
+    }),
     ...resolveTaxSelectionPayload(taxSelection, normalizedTaxConfig),
   };
 
@@ -1703,6 +1786,9 @@ const visibleInvoiceKeys = useMemo(
     description,
     metadata,
     taxSelection,
+    bookingDateOverride = null,
+    bookingGroupId = "",
+    billingMode = "combined",
   }) => {
   const invoicePayload = buildInvoicePayloadForTenant({
     targetTenant,
@@ -1715,6 +1801,9 @@ const visibleInvoiceKeys = useMemo(
     description,
     metadata,
     taxSelection,
+    bookingDateOverride,
+    bookingGroupId,
+    billingMode,
   });
 
   console.log("Creating invoice with payload:", invoicePayload);
@@ -1731,123 +1820,120 @@ const createInvoiceForTenant = async (
   dueDay = 5,
   billingMode = "combined",
   taxSelection = null,
-  invoiceDateOverride = null
+  bookingDateOverride = null,
+  bookingGroupId = ""
 ) => {
   if (!targetTenant?._id) {
     return { created: false, reason: "Invalid tenant" };
   }
 
+  const normalizedBillingMode = normalizeBillingMode(billingMode);
+  const effectiveBookingGroupId = bookingGroupId || createBookingGroupId();
   const periodLabel = formatPeriodLabel(month, year);
   const pricing = getTenantPricing(targetTenant);
   const unitContexts = pricing.unitContexts || [];
   const createdInvoiceIds = [];
+  let encounteredBlockingInvoice = false;
 
   if (!unitContexts.length) {
     return { created: false, reason: "No assigned unit was found for this tenant" };
   }
 
   for (const unitContext of unitContexts) {
+    const bookingAmounts = resolveBookingAmountsForMode({
+      rentAmount: unitContext.rentAmount,
+      utilityAmount: unitContext.utilityAmount,
+      billingMode: normalizedBillingMode,
+    });
+    const rentAmount = Number(bookingAmounts.rentAmount || 0);
+    const utilityAmount = Number(bookingAmounts.utilityAmount || 0);
     const utilityMetadata = buildUtilityInvoiceMetadata(unitContext.utilityLabel);
     const targetTenantForUnit = {
       ...targetTenant,
       invoiceUnit: unitContext.unit,
-      invoiceDateOverride: invoiceDateOverride || getStartOfPeriod(month, year),
+      bookingDateOverride: bookingDateOverride || getStartOfPeriod(month, year),
+      invoiceDateOverride: getStartOfPeriod(month, year),
     };
 
-    if (billingMode === "separate") {
-      const shouldCreateRent =
-        unitContext.rentAmount > 0 &&
-        !hasBlockingInvoiceForRequest({
-          invoices: tenantInvoicesFromApi,
-          tenantId: targetTenant._id,
-          unitId: unitContext.unitId,
-          month,
-          year,
-          category: "RENT_CHARGE",
-        });
+    if (rentAmount <= 0 && utilityAmount <= 0) {
+      continue;
+    }
 
-      const shouldCreateUtility =
-        unitContext.utilityAmount > 0 &&
-        !hasBlockingInvoiceForRequest({
-          invoices: tenantInvoicesFromApi,
-          tenantId: targetTenant._id,
-          unitId: unitContext.unitId,
-          month,
-          year,
-          category: "UTILITY_CHARGE",
-          metadata: utilityMetadata,
-        });
-
-      if (shouldCreateRent) {
-        const createdInvoice = await createBackendInvoiceEntry({
-          targetTenant: targetTenantForUnit,
-          amount: unitContext.rentAmount,
-          paymentType: "rent",
-          month,
-          year,
-          dueDay,
-          description: buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` }),
-          taxSelection,
-        });
-        createdInvoiceIds.push(createdInvoice?.invoiceNumber || "AUTO");
-      }
-
-      if (shouldCreateUtility) {
-        const createdInvoice = await createBackendInvoiceEntry({
-          targetTenant: targetTenantForUnit,
-          amount: unitContext.utilityAmount,
-          paymentType: "utility",
-          month,
-          year,
-          dueDay,
-          description: buildUtilityChargeDescription({ utilityLabel: unitContext.utilityLabel || `Utility - ${unitContext.unitName}`, month, year }),
-          metadata: utilityMetadata,
-          taxSelection,
-        });
-        createdInvoiceIds.push(createdInvoice?.invoiceNumber || "AUTO");
-      }
-    } else {
-      const combinedAmount = Number(unitContext.rentAmount || 0) + Number(unitContext.utilityAmount || 0);
-      const combinedMetadata = buildCombinedInvoiceMetadata({
-        utilityAmount: unitContext.utilityAmount,
-        utilityLabel: unitContext.utilityLabel,
-        periodLabel,
-      });
-      const hasCombinedBlocker = hasBlockingInvoiceForRequest({
+    const rentBlocked =
+      rentAmount > 0 &&
+      hasBlockingInvoiceForRequest({
         invoices: tenantInvoicesFromApi,
         tenantId: targetTenant._id,
         unitId: unitContext.unitId,
         month,
         year,
         category: "RENT_CHARGE",
-        metadata: combinedMetadata,
       });
 
-      if (combinedAmount > 0 && !hasCombinedBlocker) {
-        const createdInvoice = await createBackendInvoiceEntry({
-          targetTenant: targetTenantForUnit,
-          amount: combinedAmount,
-          paymentType: "rent",
-          categoryOverride: "RENT_CHARGE",
-          month,
-          year,
-          dueDay,
-          description:
-            unitContext.utilityAmount > 0
-              ? buildRecurringInvoiceDescription({ month, year, label: `Rent + ${unitContext.utilityLabel || "Utilities"} - ${unitContext.unitName}` })
-              : buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` }),
-          metadata: combinedMetadata,
-          taxSelection,
-        });
-        createdInvoiceIds.push(createdInvoice?.invoiceNumber || "AUTO");
-      }
+    const utilityBlocked =
+      utilityAmount > 0 &&
+      hasBlockingInvoiceForRequest({
+        invoices: tenantInvoicesFromApi,
+        tenantId: targetTenant._id,
+        unitId: unitContext.unitId,
+        month,
+        year,
+        category: "UTILITY_CHARGE",
+        metadata: utilityMetadata,
+      });
+
+    if (rentBlocked || utilityBlocked) {
+      encounteredBlockingInvoice = true;
     }
+
+    if (rentAmount > 0 && !rentBlocked) {
+      const createdInvoice = await createBackendInvoiceEntry({
+        targetTenant: targetTenantForUnit,
+        amount: rentAmount,
+        paymentType: "rent",
+        month,
+        year,
+        dueDay,
+        description: buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` }),
+        taxSelection,
+        bookingDateOverride,
+        bookingGroupId: effectiveBookingGroupId,
+        billingMode: normalizedBillingMode,
+      });
+      createdInvoiceIds.push(createdInvoice?.invoiceNumber || "AUTO");
+    }
+
+    if (utilityAmount > 0 && !utilityBlocked) {
+      const createdInvoice = await createBackendInvoiceEntry({
+        targetTenant: targetTenantForUnit,
+        amount: utilityAmount,
+        paymentType: "utility",
+        month,
+        year,
+        dueDay,
+        description: buildUtilityChargeDescription({ utilityLabel: unitContext.utilityLabel || `Utility - ${unitContext.unitName}`, month, year }),
+        metadata: utilityMetadata,
+        taxSelection,
+        bookingDateOverride,
+        bookingGroupId: effectiveBookingGroupId,
+        billingMode: normalizedBillingMode,
+      });
+      createdInvoiceIds.push(createdInvoice?.invoiceNumber || "AUTO");
+    }
+  }
+
+  if (createdInvoiceIds.length === 0 && encounteredBlockingInvoice) {
+    return { created: false, reason: "already_exists", periodLabel };
   }
 
   return { created: createdInvoiceIds.length > 0, invoiceIds: createdInvoiceIds, periodLabel, ledgerSynced: true };
 };
 
   const handleBookingActionChange = (value) => {
+    if (!canCreateInvoice) {
+      toast.warning("You do not have permission to create invoices");
+      return;
+    }
     setBookingAction(value);
 
     if (value === "single") {
@@ -1877,11 +1963,17 @@ const createInvoiceForTenant = async (
     }
 
     const pricing = getTenantPricing(selectedTenant);
-    if (pricing.total <= 0) {
-      toast.error("Selected tenant has no billable rent/utility amount");
+    const selectedAmounts = resolveBookingAmountsForMode({
+      rentAmount: pricing.rentAmount,
+      utilityAmount: pricing.utilityAmount,
+      billingMode: singleBookingForm.billingMode,
+    });
+    if (selectedAmounts.totalAmount <= 0) {
+      toast.error(`Selected tenant has no billable ${getBillingModeLabel(singleBookingForm.billingMode).toLowerCase()} amount`);
       return;
     }
 
+    const bookingGroupId = createBookingGroupId();
     setSubmittingSingleBooking(true);
     try {
       const result = await createInvoiceForTenant(
@@ -1891,7 +1983,8 @@ const createInvoiceForTenant = async (
         Number(singleBookingForm.dueDay || 5),
         singleBookingForm.billingMode,
         getBookingTaxSelection(singleBookingForm),
-        singleBookingForm.bookWithInvoiceDate ? singleBookingForm.invoiceDate : null
+        resolveBookingDateOverride(singleBookingForm),
+        bookingGroupId
       );
 
       if (!result.created && result.reason === "already_exists") {
@@ -1933,6 +2026,9 @@ const createInvoiceForTenant = async (
     const year = Number(batchBookingForm.year);
     const dueDay = Number(batchBookingForm.dueDay || 5);
     const selectedTaxSelection = getBookingTaxSelection(batchBookingForm);
+    const batchBookingDateOverride = resolveBookingDateOverride(batchBookingForm);
+    const normalizedBatchBillingMode = normalizeBillingMode(batchBookingForm.billingMode);
+    const batchBookingGroupId = createBookingGroupId();
 
     if (isFutureBillingPeriod(month, year)) {
       toast.error("Future invoicing is disabled. Select the current month or an earlier clean period.");
@@ -1984,8 +2080,10 @@ const createInvoiceForTenant = async (
             month,
             year,
             dueDay,
-            batchBookingForm.billingMode,
-            selectedTaxSelection
+            normalizedBatchBillingMode,
+            selectedTaxSelection,
+            batchBookingDateOverride,
+            batchBookingGroupId
           );
 
           if (result?.created) {
@@ -2028,58 +2126,41 @@ const createInvoiceForTenant = async (
 
     try {
       for (const tenant of eligibleTenants) {
-        const periodLabel = formatPeriodLabel(month, year);
-        const { rentAmount, utilityAmount, utilityLabel } = getTenantPricing(tenant);
-        const utilityMetadata = buildUtilityInvoiceMetadata(utilityLabel);
+        const pricing = getTenantPricing(tenant);
+        const unitContexts = pricing.unitContexts || [];
 
-        if (rentAmount <= 0 && utilityAmount <= 0) {
+        if (!unitContexts.length) {
           continue;
         }
 
         let tenantHasBatchItems = false;
 
-        if (batchBookingForm.billingMode === "combined") {
-          const combinedAmount = Number(rentAmount || 0) + Number(utilityAmount || 0);
-          const combinedMetadata = buildCombinedInvoiceMetadata({
-            utilityAmount,
-            utilityLabel,
-            periodLabel,
+        for (const unitContext of unitContexts) {
+          const bookingAmounts = resolveBookingAmountsForMode({
+            rentAmount: unitContext.rentAmount,
+            utilityAmount: unitContext.utilityAmount,
+            billingMode: normalizedBatchBillingMode,
           });
-          const hasCombinedBlocker = hasBlockingInvoiceForRequest({
-            invoices: tenantInvoicesFromApi,
-            tenantId: tenant._id,
-            month,
-            year,
-            category: "RENT_CHARGE",
-            metadata: combinedMetadata,
-          });
+          const rentAmount = Number(bookingAmounts.rentAmount || 0);
+          const utilityAmount = Number(bookingAmounts.utilityAmount || 0);
+          const utilityMetadata = buildUtilityInvoiceMetadata(unitContext.utilityLabel);
+          const targetTenantForUnit = {
+            ...tenant,
+            invoiceUnit: unitContext.unit,
+            bookingDateOverride: batchBookingDateOverride || getStartOfPeriod(month, year),
+            invoiceDateOverride: getStartOfPeriod(month, year),
+          };
 
-          if (combinedAmount > 0 && !hasCombinedBlocker) {
-            batchItems.push(
-              buildInvoicePayloadForTenant({
-                targetTenant: tenant,
-                amount: combinedAmount,
-                paymentType: "rent",
-                categoryOverride: "RENT_CHARGE",
-                month,
-                year,
-                dueDay,
-                description:
-                  utilityAmount > 0
-                    ? buildRecurringInvoiceDescription({ month, year, label: `Rent + ${utilityLabel || "Utilities"}` })
-                    : buildRecurringInvoiceDescription({ month, year, label: "Rent" }),
-                metadata: combinedMetadata,
-                taxSelection: selectedTaxSelection,
-              })
-            );
-            tenantHasBatchItems = true;
+          if (rentAmount <= 0 && utilityAmount <= 0) {
+            continue;
           }
-        } else {
+
           const shouldCreateRent =
             rentAmount > 0 &&
             !hasBlockingInvoiceForRequest({
               invoices: tenantInvoicesFromApi,
               tenantId: tenant._id,
+              unitId: unitContext.unitId,
               month,
               year,
               category: "RENT_CHARGE",
@@ -2090,6 +2171,7 @@ const createInvoiceForTenant = async (
             !hasBlockingInvoiceForRequest({
               invoices: tenantInvoicesFromApi,
               tenantId: tenant._id,
+              unitId: unitContext.unitId,
               month,
               year,
               category: "UTILITY_CHARGE",
@@ -2099,14 +2181,17 @@ const createInvoiceForTenant = async (
           if (shouldCreateRent) {
             batchItems.push(
               buildInvoicePayloadForTenant({
-                targetTenant: tenant,
+                targetTenant: targetTenantForUnit,
                 amount: rentAmount,
                 paymentType: "rent",
                 month,
                 year,
                 dueDay,
-                description: buildRecurringInvoiceDescription({ month, year, label: "Rent" }),
+                description: buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` }),
                 taxSelection: selectedTaxSelection,
+                bookingDateOverride: batchBookingDateOverride,
+                bookingGroupId: batchBookingGroupId,
+                billingMode: normalizedBatchBillingMode,
               })
             );
             tenantHasBatchItems = true;
@@ -2115,15 +2200,18 @@ const createInvoiceForTenant = async (
           if (shouldCreateUtility) {
             batchItems.push(
               buildInvoicePayloadForTenant({
-                targetTenant: tenant,
+                targetTenant: targetTenantForUnit,
                 amount: utilityAmount,
                 paymentType: "utility",
                 month,
                 year,
                 dueDay,
-                description: buildUtilityChargeDescription({ utilityLabel: utilityLabel || "Utility", month, year }),
+                description: buildUtilityChargeDescription({ utilityLabel: unitContext.utilityLabel || `Utility - ${unitContext.unitName}`, month, year }),
                 metadata: utilityMetadata,
                 taxSelection: selectedTaxSelection,
+                bookingDateOverride: batchBookingDateOverride,
+                bookingGroupId: batchBookingGroupId,
+                billingMode: normalizedBatchBillingMode,
               })
             );
             tenantHasBatchItems = true;
@@ -2260,6 +2348,10 @@ const createInvoiceForTenant = async (
   };
 
   const handleEditSelected = () => {
+    if (!canUpdateInvoice) {
+      toast.warning("You do not have permission to edit invoices");
+      return;
+    }
     if (!canEdit) {
       toast.warn("Select exactly one invoice to edit");
       return;
@@ -2273,6 +2365,10 @@ const createInvoiceForTenant = async (
   };
 
   const handleDeleteSelected = async () => {
+    if (!canDeleteInvoice) {
+      toast.warning("You do not have permission to delete invoices");
+      return;
+    }
     if (selectedInvoices.length === 0) {
       toast.warn("Select at least one invoice to delete");
       return;
@@ -2311,6 +2407,10 @@ const createInvoiceForTenant = async (
   };
 
   const handleDeleteSingle = async (invoice) => {
+    if (!canDeleteInvoice) {
+      toast.warning("You do not have permission to delete invoices");
+      return;
+    }
     if (["paid", "partially_paid"].includes(String(invoice?.status || "").toLowerCase())) {
       toast.warn("Paid invoices cannot be deleted from this screen.");
       return;
@@ -2498,7 +2598,7 @@ const createInvoiceForTenant = async (
 
                 <button
                   onClick={handleEditSelected}
-                  disabled={!canEdit}
+                  disabled={!canUpdateInvoice || !canEdit}
                   className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
                     canEdit ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"
                   }`}
@@ -2509,7 +2609,7 @@ const createInvoiceForTenant = async (
 
                 <button
                   onClick={handleDeleteSelected}
-                  disabled={selectedCount === 0}
+                  disabled={!canDeleteInvoice || selectedCount === 0}
                   className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
                     selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"
                   }`}
@@ -2520,7 +2620,7 @@ const createInvoiceForTenant = async (
 
                 <button
                   onClick={handlePrintList}
-                  disabled={filteredInvoices.length === 0}
+                  disabled={!canExportInvoice || filteredInvoices.length === 0}
                   className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
                     filteredInvoices.length > 0
                       ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
@@ -2535,7 +2635,8 @@ const createInvoiceForTenant = async (
                   <button
                     type="button"
                     onClick={() => navigate("/tenants/deposits")}
-                    className={`rounded-lg px-3 py-1 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                    disabled={!canCreateInvoice}
+                    className={`rounded-lg px-3 py-1 text-xs font-semibold text-white ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}
                   >
                     Book Deposit
                   </button>
@@ -2543,6 +2644,7 @@ const createInvoiceForTenant = async (
                     <FaPlus className="text-[10px] text-[#0B3B2E]" />
                     <select
                       value={bookingAction}
+                      disabled={!canCreateInvoice}
                       onChange={(e) => handleBookingActionChange(e.target.value)}
                       className="rounded-lg border border-[#0B3B2E] bg-[#E7F5EC] px-3 py-1 text-xs font-semibold text-[#0B3B2E] shadow-sm"
                     >
@@ -2568,7 +2670,7 @@ const createInvoiceForTenant = async (
                     <th className="px-3 py-2 text-left font-semibold">Unit</th>
                     <th className="px-3 py-2 text-left font-semibold">Inv Desc</th>
                     <th className="px-3 py-2 text-left font-semibold">Type</th>
-                    <th className="px-3 py-2 text-center font-semibold">Invoice Date</th>
+                    <th className="px-3 py-2 text-center font-semibold">Booking / Invoice Date</th>
                     <th className="px-3 py-2 text-center font-semibold">Due Date</th>
                     <th className="px-3 py-2 text-right font-semibold">Amount</th>
                     <th className="px-3 py-2 text-center font-semibold">Status</th>
@@ -2654,22 +2756,25 @@ const createInvoiceForTenant = async (
                             </button>
                             <button
                               onClick={() => handlePrintInvoice(invoice)}
-                              className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800"
-                              title="Print Invoice"
+                              disabled={!canExportInvoice}
+                              className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800 disabled:cursor-not-allowed disabled:opacity-40"
+                              title={canExportInvoice ? "Print Invoice" : "You do not have permission to print invoices"}
                             >
                               <FaPrint size={12} />
                             </button>
                             <button
                               onClick={() => handleDownloadInvoice(invoice)}
-                              className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800"
-                              title="Download Invoice"
+                              disabled={!canExportInvoice}
+                              className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800 disabled:cursor-not-allowed disabled:opacity-40"
+                              title={canExportInvoice ? "Download Invoice" : "You do not have permission to download invoices"}
                             >
                               <FaDownload size={12} />
                             </button>
                             <button
                               onClick={() => handleDeleteSingle(invoice)}
-                              className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800"
-                              title="Delete Invoice"
+                              disabled={!canDeleteInvoice}
+                              className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-40"
+                              title={canDeleteInvoice ? "Delete Invoice" : "You do not have permission to delete invoices"}
                             >
                               <FaTrash size={12} />
                             </button>
@@ -2740,9 +2845,9 @@ const createInvoiceForTenant = async (
       </div>
 
       {showSingleBooking && (
-        <div className="fixed inset-0 bg-black/45 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden">
-            <div className="px-5 py-3 bg-[#0B3B2E] text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4 sm:items-center sm:p-6">
+          <div className="flex w-full max-w-xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+            <div className="sticky top-0 z-20 flex items-center justify-between bg-[#0B3B2E] px-5 py-3 text-white">
               <h3 className="text-sm font-bold tracking-wide">Single Tenant Booking</h3>
               <button
                 onClick={() => {
@@ -2755,7 +2860,7 @@ const createInvoiceForTenant = async (
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-3">
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Tenant</label>
@@ -2819,7 +2924,7 @@ const createInvoiceForTenant = async (
 
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Invoice Date</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Booking Date</label>
                   <input
                     type="date"
                     value={singleBookingForm.invoiceDate ? new Date(singleBookingForm.invoiceDate).toISOString().slice(0, 10) : ""}
@@ -2840,7 +2945,7 @@ const createInvoiceForTenant = async (
                         }))
                       }
                     />
-                    Book with invoice date
+                    Book with booking date
                   </label>
                 </div>
 
@@ -2871,7 +2976,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Billing Mode</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Booking Option</label>
                   <select
                     value={singleBookingForm.billingMode}
                     onChange={(e) =>
@@ -2879,8 +2984,9 @@ const createInvoiceForTenant = async (
                     }
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
                   >
-                    <option value="combined">Combined (Rent + Utility)</option>
-                    <option value="separate">Separate (Rent and Utility)</option>
+                    <option value="combined">Rent + Utility</option>
+                    <option value="rent">Rent only</option>
+                    <option value="utility">Utility only</option>
                   </select>
                 </div>
 
@@ -2961,7 +3067,7 @@ const createInvoiceForTenant = async (
                       </p>
                     </div>
                     <div>
-                      <p className="text-slate-500">Invoice Date</p>
+                      <p className="text-slate-500">Booking Date</p>
                       <p className="font-semibold text-slate-900">
                         {formatDateDisplay(singleBookingForm.bookWithInvoiceDate ? singleBookingForm.invoiceDate : getStartOfPeriod(Number(singleBookingForm.month), Number(singleBookingForm.year)))}
                       </p>
@@ -2974,16 +3080,16 @@ const createInvoiceForTenant = async (
                     </div>
                   </div>
                   <p className="mt-2 text-sm font-bold text-[#0B3B2E]">
-                    Subtotal: KES {selectedSingleBookingPreview.totalAmount.toLocaleString()}
+                    Subtotal: KES {Number(selectedSingleBookingPreview.selectedTotalAmount || 0).toLocaleString()}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-emerald-900">
                     Estimated tax: KES {Number(selectedSingleBookingTaxPreview?.taxAmount || 0).toLocaleString()}
                   </p>
                   <p className="mt-1 text-sm font-bold text-[#0B3B2E]">
-                    Gross total: KES {Number(selectedSingleBookingTaxPreview?.grossAmount || selectedSingleBookingPreview.totalAmount || 0).toLocaleString()}
+                    Gross total: KES {Number(selectedSingleBookingTaxPreview?.grossAmount || selectedSingleBookingPreview.selectedTotalAmount || 0).toLocaleString()}
                   </p>
                   <p className="mt-1 text-[11px] text-emerald-800 font-semibold">
-                    Mode: {singleBookingForm.billingMode === "separate" ? "Separate invoices" : "Combined invoice"}
+                    Mode: {getBillingModeLabel(singleBookingForm.billingMode)}
                   </p>
                   <p className="mt-1 text-[11px] text-emerald-800 font-semibold">
                     Tax: {singleBookingForm.taxHandling === "company_default" ? "Company default" : singleBookingForm.taxHandling === "non_taxable" ? "Forced non-taxable" : `${getTaxCodeLabel(singleBookingForm.taxCodeKey, normalizedTaxConfig)} (${singleBookingForm.taxMode === "company_default" ? "Company mode" : singleBookingForm.taxMode})`}
@@ -3020,9 +3126,9 @@ const createInvoiceForTenant = async (
       )}
 
       {showBatchBooking && (
-        <div className="fixed inset-0 bg-black/45 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden">
-            <div className="px-5 py-3 bg-[#0B3B2E] text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4 sm:items-center sm:p-6">
+          <div className="flex w-full max-w-xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+            <div className="sticky top-0 z-20 flex items-center justify-between bg-[#0B3B2E] px-5 py-3 text-white">
               <h3 className="text-sm font-bold tracking-wide">Batch Booking</h3>
               <button
                 onClick={() => {
@@ -3035,7 +3141,7 @@ const createInvoiceForTenant = async (
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-3">
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -3100,7 +3206,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Invoice Date</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Booking Date</label>
                   <input
                     type="date"
                     value={batchBookingForm.invoiceDate ? new Date(batchBookingForm.invoiceDate).toISOString().slice(0, 10) : ""}
@@ -3121,7 +3227,7 @@ const createInvoiceForTenant = async (
                         }))
                       }
                     />
-                    Book with invoice date
+                    Book with booking date
                   </label>
                 </div>
 
@@ -3152,7 +3258,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Billing Mode</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Booking Option</label>
                   <select
                     value={batchBookingForm.billingMode}
                     onChange={(e) =>
@@ -3160,8 +3266,9 @@ const createInvoiceForTenant = async (
                     }
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
                   >
-                    <option value="combined">Combined (Rent + Utility)</option>
-                    <option value="separate">Separate (Rent and Utility)</option>
+                    <option value="combined">Rent + Utility</option>
+                    <option value="rent">Rent only</option>
+                    <option value="utility">Utility only</option>
                   </select>
                 </div>
 
@@ -3221,10 +3328,10 @@ const createInvoiceForTenant = async (
                   {formatPeriodLabel(Number(batchBookingForm.month), Number(batchBookingForm.year))}.
                 </p>
                 <p className="text-xs text-orange-800 font-semibold mt-1">
-                  Mode: {batchBookingForm.billingMode === "separate" ? "Separate invoices" : "Combined invoice"}
+                  Mode: {getBillingModeLabel(batchBookingForm.billingMode)}
                 </p>
                 <p className="text-xs text-orange-800 font-semibold mt-1">
-                  Invoice date: {formatDateDisplay(batchBookingForm.bookWithInvoiceDate ? batchBookingForm.invoiceDate : getStartOfPeriod(Number(batchBookingForm.month), Number(batchBookingForm.year)))} · Due date: {formatDateDisplay(getDueDateForPeriod(Number(batchBookingForm.month), Number(batchBookingForm.year), Number(batchBookingForm.dueDay || 5)))}
+                  Booking date: {formatDateDisplay(batchBookingForm.bookWithInvoiceDate ? batchBookingForm.invoiceDate : getStartOfPeriod(Number(batchBookingForm.month), Number(batchBookingForm.year)))} · Due date: {formatDateDisplay(getDueDateForPeriod(Number(batchBookingForm.month), Number(batchBookingForm.year), Number(batchBookingForm.dueDay || 5)))}
                 </p>
                 <p className="text-xs text-orange-800 font-semibold mt-1">
                   Estimated gross booking: KES {Number(batchBookingTaxPreview?.grossAmount || 0).toLocaleString()} (tax: KES {Number(batchBookingTaxPreview?.taxAmount || 0).toLocaleString()})

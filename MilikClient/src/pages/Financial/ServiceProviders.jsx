@@ -344,9 +344,9 @@ const ServiceProviders = () => {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/45 p-4">
-          <div className="w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
+        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/45 p-4 sm:items-center sm:p-6">
+          <div className="flex w-full max-w-4xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+            <div className="sticky top-0 z-20 flex shrink-0 items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">
                   Service Provider
@@ -416,7 +416,7 @@ const ServiceProviders = () => {
                 <span className="text-sm font-bold text-slate-700">Active provider</span>
               </label>
             </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+            <div className="sticky bottom-0 z-20 flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
               <button
                 onClick={closeModal}
                 className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700"

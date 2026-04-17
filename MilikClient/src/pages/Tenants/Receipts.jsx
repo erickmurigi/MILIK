@@ -38,6 +38,7 @@ import {
   getReceiptAllocationOptions,
   updateReceiptAllocations,
 } from "../../redux/apiCalls";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -283,6 +284,12 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
   const { currentCompany } = useSelector((state) => state.company || {});
   const { currentUser } = useSelector((state) => state.auth || {});
+  const canCreateReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement");
+  const canProcessReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "process", "propertyManagement");
+  const canReverseReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "reverse", "propertyManagement");
+  const canDeleteReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "delete", "propertyManagement");
+  const canExportReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "export", "propertyManagement");
+  const canUpdateReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "update", "propertyManagement");
   const isLandlordReceiptView = viewMode === "landlord";
   const isDefaultTenantView = !isLandlordReceiptView;
   const backPath = isLandlordReceiptView ? "/landlords" : "/tenants";
@@ -639,6 +646,10 @@ const visibleReceiptIds = useMemo(
   };
 
   const openCreateForm = () => {
+    if (!canCreateReceipt) {
+      toast.warning("You do not have permission to record receipts");
+      return;
+    }
     const params = new URLSearchParams();
     if (tenantId) params.set("tenant", tenantId);
     if (isLandlordReceiptView) params.set("mode", "landlord");
@@ -672,6 +683,14 @@ const visibleReceiptIds = useMemo(
   };
 
   const handleSave = async () => {
+    if (!(activeReceipt?._id ? canUpdateReceipt : canCreateReceipt)) {
+      toast.warning(activeReceipt?._id ? "You do not have permission to update receipts" : "You do not have permission to record receipts");
+      return;
+    }
+    if (!(activeReceipt?._id ? canUpdateReceipt : canCreateReceipt)) {
+      toast.warning(activeReceipt?._id ? "You do not have permission to update receipts" : "You do not have permission to record receipts");
+      return;
+    }
     if (!formData.tenantId) {
       toast.error("Tenant is required");
       return;
@@ -736,6 +755,10 @@ const visibleReceiptIds = useMemo(
   };
 
   const handleDeleteOne = async (receiptId) => {
+    if (!canDeleteReceipt) {
+      toast.warning("You do not have permission to delete receipts");
+      return;
+    }
     try {
       await deleteRentPayment(dispatch, receiptId);
       toast.success("Receipt deleted");
@@ -747,6 +770,10 @@ const visibleReceiptIds = useMemo(
   };
 
   const handleDeleteSelected = async () => {
+    if (!canDeleteReceipt) {
+      toast.warning("You do not have permission to delete receipts");
+      return;
+    }
     if (selectedIds.length === 0) {
       toast.warning("Select receipt(s) to delete");
       return;
@@ -765,6 +792,10 @@ const visibleReceiptIds = useMemo(
   };
 
   const handleReverseOne = async (receipt) => {
+    if (!canReverseReceipt) {
+      toast.warning("You do not have permission to reverse receipts");
+      return;
+    }
     if (!receipt?.isConfirmed) {
       toast.warning("Only confirmed receipts can be reversed");
       return;
@@ -788,6 +819,10 @@ const visibleReceiptIds = useMemo(
   };
 
   const handleReverseSelected = async () => {
+    if (!canReverseReceipt) {
+      toast.warning("You do not have permission to reverse receipts");
+      return;
+    }
     if (selectedIds.length === 0) {
       toast.warning("Select receipt(s) to reverse");
       return;
@@ -817,6 +852,14 @@ const visibleReceiptIds = useMemo(
   };
 
   const handleCancelReversalOne = async () => {
+    if (!canReverseReceipt) {
+      toast.warning("You do not have permission to cancel receipt reversals");
+      return;
+    }
+    if (!canReverseReceipt) {
+      toast.warning("You do not have permission to cancel receipt reversals");
+      return;
+    }
     toast.info("Cancellation of posted reversals is blocked. Create a correcting receipt instead.");
   };
 
@@ -864,6 +907,14 @@ const visibleReceiptIds = useMemo(
   };
 
   const handleConfirmOne = async (receipt) => {
+    if (!canProcessReceipt) {
+      toast.warning("You do not have permission to confirm receipts");
+      return;
+    }
+    if (!canProcessReceipt) {
+      toast.warning("You do not have permission to confirm receipts");
+      return;
+    }
     if (receipt.isConfirmed) {
       toast.info("Receipt already confirmed");
       return;
@@ -904,6 +955,14 @@ const visibleReceiptIds = useMemo(
   };
 
   const handleUnconfirmOne = async (receipt) => {
+    if (!canProcessReceipt) {
+      toast.warning("You do not have permission to unconfirm receipts");
+      return;
+    }
+    if (!canProcessReceipt) {
+      toast.warning("You do not have permission to unconfirm receipts");
+      return;
+    }
     if (!receipt.isConfirmed) {
       toast.info("Receipt is not confirmed. Cannot unconfirm an unconfirmed receipt.");
       return;
@@ -1377,6 +1436,14 @@ const visibleReceiptIds = useMemo(
   }, [allocationLines, allocationReason, allocationRules, allocationTarget, closeAllocationDrawer, dispatch, loadData, syncActiveReceipt]);
 
   const handlePrintList = () => {
+    if (!canExportReceipt) {
+      toast.warning("You do not have permission to print receipt lists");
+      return;
+    }
+    if (!canExportReceipt) {
+      toast.warning("You do not have permission to print receipt lists");
+      return;
+    }
     const companyName = currentCompany?.companyName || currentCompany?.name || "MILIK";
     const printedOn = new Date().toLocaleString();
 
@@ -1478,7 +1545,9 @@ const visibleReceiptIds = useMemo(
                 </button>
                 <button
                   onClick={openCreateForm}
-                  className={`px-3 py-1 text-xs text-white rounded-md font-semibold flex items-center gap-2 ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
+                  disabled={!canCreateReceipt}
+                  title={canCreateReceipt ? pageCreateLabel : "You do not have permission to record receipts"}
+                  className={`px-3 py-1 text-xs text-white rounded-md font-semibold flex items-center gap-2 ${canCreateReceipt ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}
                 >
                   <FaPlus /> {pageCreateLabel}
                 </button>
@@ -1637,25 +1706,33 @@ const visibleReceiptIds = useMemo(
               </button>
               <button
                 onClick={handleConfirmSelected}
-                className="px-3 py-1.5 text-xs rounded-md bg-green-600 hover:bg-green-700 text-white font-semibold flex items-center gap-2"
+                disabled={!canProcessReceipt}
+                title={canProcessReceipt ? "Confirm selected receipts" : "You do not have permission to confirm receipts"}
+                className="px-3 py-1.5 text-xs rounded-md bg-green-600 hover:bg-green-700 text-white font-semibold flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FaCheck /> Confirm Selected
               </button>
               <button
                 onClick={handleReverseSelected}
-                className="px-3 py-1.5 text-xs rounded-md bg-orange-600 hover:bg-orange-700 text-white font-semibold flex items-center gap-2"
+                disabled={!canReverseReceipt}
+                title={canReverseReceipt ? "Reverse selected receipts" : "You do not have permission to reverse receipts"}
+                className="px-3 py-1.5 text-xs rounded-md bg-orange-600 hover:bg-orange-700 text-white font-semibold flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FaUndo /> Reverse Selected
               </button>
               <button
                 onClick={handleDeleteSelected}
-                className="px-3 py-1.5 text-xs rounded-md bg-red-600 hover:bg-red-700 text-white font-semibold flex items-center gap-2"
+                disabled={!canDeleteReceipt}
+                title={canDeleteReceipt ? "Delete selected receipts" : "You do not have permission to delete receipts"}
+                className="px-3 py-1.5 text-xs rounded-md bg-red-600 hover:bg-red-700 text-white font-semibold flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FaTrash /> Delete Selected
               </button>
               <button
                 onClick={handlePrintList}
-                className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2"
+                disabled={!canExportReceipt}
+                title={canExportReceipt ? "Print receipt list" : "You do not have permission to print receipts"}
+                className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FaPrint /> Print List
               </button>

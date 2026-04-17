@@ -4,14 +4,39 @@ import { useSelector } from 'react-redux';
 import { adminRequests } from '../../utils/requestMethods';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
+const normalizeArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.items)) return value.items;
+  if (Array.isArray(value?.rentPayments)) return value.rentPayments;
+  return [];
+};
+
+const normalizeId = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return value?._id || value?.id || '';
+};
+
+const normalizeText = (value) => String(value || '').trim().toLowerCase();
+const parseDate = (value) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date : null;
+};
+const getInvoiceRecognitionDate = (invoice) => parseDate(invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt);
+const isOpenMaintenanceStatus = (status) => !['completed', 'cancelled', 'resolved', 'closed'].includes(normalizeText(status));
+const isOperationalTenant = (tenant) => !['inactive', 'terminated', 'evicted', 'moved_out'].includes(normalizeText(tenant?.status));
+
 const PropertiesOverview = ({ darkMode }) => {
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const properties = useSelector((state) => state.property?.properties || []);
-  const units = useSelector((state) => state.unit?.units || []);
-  const tenants = useSelector((state) => state.tenant?.tenants || []);
-  const rentPayments = useSelector((state) => state.rentPayment?.rentPayments || []);
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const properties = useSelector((state) => normalizeArray(state.property?.properties));
+  const units = useSelector((state) => normalizeArray(state.unit?.units));
+  const tenants = useSelector((state) => normalizeArray(state.tenant?.tenants));
+  const maintenances = useSelector((state) => normalizeArray(state.maintenance?.maintenances));
+  const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
+  const rentPayments = useMemo(() => normalizeArray(rawRentPayments), [rawRentPayments]);
   const propertiesLoading = useSelector((state) => state.property?.loading || state.property?.isFetching);
 
   const [invoices, setInvoices] = useState([]);
@@ -49,7 +74,7 @@ const PropertiesOverview = ({ darkMode }) => {
   }, [businessId]);
 
   const activeProperties = useMemo(
-    () => properties.filter((p) => !p?.status || String(p.status).toLowerCase() === 'active'),
+    () => properties.filter((p) => !p?.status || normalizeText(p.status) === 'active'),
     [properties]
   );
 
@@ -57,34 +82,39 @@ const PropertiesOverview = ({ darkMode }) => {
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
 
-  const getId = (value) => {
-    if (!value) return null;
-    if (typeof value === 'string') return value;
-    return value._id || null;
-  };
+  const unitMap = useMemo(() => new Map(units.map((unit) => [String(unit?._id || ''), unit])), [units]);
 
-  const parseDate = (value) => {
-    const date = value ? new Date(value) : null;
-    return date && !Number.isNaN(date.getTime()) ? date : null;
-  };
+  const tenantAssignmentsByUnit = useMemo(() => {
+    const byUnit = new Map();
+    tenants.forEach((tenant) => {
+      if (!isOperationalTenant(tenant)) return;
+      const unitIds = [normalizeId(tenant?.unit), ...(Array.isArray(tenant?.additionalUnits) ? tenant.additionalUnits.map(normalizeId) : [])].filter(Boolean);
+      unitIds.forEach((unitId) => {
+        if (!byUnit.has(unitId)) byUnit.set(unitId, []);
+        byUnit.get(unitId).push(tenant);
+      });
+    });
+    return byUnit;
+  }, [tenants]);
 
-  const isActiveInvoice = (invoice) => {
-    const status = String(invoice?.status || '').toLowerCase();
-    return !['cancelled', 'reversed'].includes(status);
-  };
+  const maintenanceAssignmentsByUnit = useMemo(() => {
+    const byUnit = new Map();
+    maintenances.forEach((item) => {
+      if (!isOpenMaintenanceStatus(item?.status)) return;
+      const unitId = normalizeId(item?.unit);
+      if (!unitId) return;
+      if (!byUnit.has(unitId)) byUnit.set(unitId, []);
+      byUnit.get(unitId).push(item);
+    });
+    return byUnit;
+  }, [maintenances]);
 
+  const isActiveInvoice = (invoice) => !['cancelled', 'reversed'].includes(normalizeText(invoice?.status));
   const isActivePayment = (payment) => {
-    const postingStatus = String(payment?.postingStatus || '').toLowerCase();
+    const postingStatus = normalizeText(payment?.postingStatus);
     return !payment?.reversalOf && !payment?.isReversed && !payment?.isCancelled && postingStatus !== 'reversed';
   };
-
-  const isOperationalTenant = (tenant) => {
-    const status = String(tenant?.status || '').toLowerCase();
-    return !['inactive', 'terminated', 'evicted', 'moved_out'].includes(status);
-  };
-
-  const amountFromInvoice = (invoice) =>
-    Number(invoice?.adjustedAmount ?? invoice?.netAmount ?? invoice?.amount ?? 0);
+  const amountFromInvoice = (invoice) => Number(invoice?.adjustedAmount ?? invoice?.netAmount ?? invoice?.amount ?? 0);
 
   const formatMoney = (value) => {
     const numeric = Number(value || 0);
@@ -93,31 +123,54 @@ const PropertiesOverview = ({ darkMode }) => {
     return `KSh ${Math.round(numeric).toLocaleString()}`;
   };
 
-  const unitMap = useMemo(() => {
-    return new Map(units.map((unit) => [String(unit?._id || ''), unit]));
-  }, [units]);
-
   const propertiesWithStats = useMemo(() => {
     const propertyStats = activeProperties.map((property) => {
       const propertyId = String(property._id || '');
-      const propertyUnits = units.filter((unit) => String(getId(unit.property) || '') === propertyId);
+      const propertyUnits = units.filter((unit) => String(normalizeId(unit.property) || '') === propertyId);
       const unitIds = new Set(propertyUnits.map((unit) => String(unit._id)));
-      const occupiedUnits = propertyUnits.filter((unit) => unit.status === 'occupied' || unit.isVacant === false).length;
-      const vacantUnits = Math.max(propertyUnits.length - occupiedUnits, 0);
+
+      const availability = propertyUnits.reduce(
+        (summary, unit) => {
+          const unitId = normalizeId(unit?._id);
+          const currentTenant = unit?.currentTenant || (tenantAssignmentsByUnit.get(unitId) || [])[0] || null;
+          const maintenanceItems = maintenanceAssignmentsByUnit.get(unitId) || [];
+          const rawStatus = normalizeText(unit?.status);
+          const moveOutDate = parseDate(currentTenant?.moveOutDate || currentTenant?.terminationDate || currentTenant?.noticeDate);
+          const hasFutureMoveOut = Boolean(moveOutDate && moveOutDate >= now);
+          const hasOccupant = Boolean(
+            currentTenant || rawStatus === 'occupied' || unit?.isVacant === false || normalizeText(unit?.tenantName) !== ''
+          );
+
+          let status = 'vacant';
+          if (['off_market', 'inactive', 'archived', 'disabled'].includes(rawStatus)) {
+            status = 'off_market';
+          } else if (['maintenance', 'under_maintenance'].includes(rawStatus) || maintenanceItems.length > 0) {
+            status = 'under_maintenance';
+          } else if (rawStatus === 'reserved') {
+            status = 'reserved';
+          } else if (hasFutureMoveOut) {
+            status = 'notice_given';
+          } else if (hasOccupant) {
+            status = 'occupied';
+          }
+
+          if (status === 'occupied' || status === 'notice_given') summary.occupied += 1;
+          if (status === 'vacant') summary.vacant += 1;
+          return summary;
+        },
+        { occupied: 0, vacant: 0 }
+      );
+
       const totalUnits = propertyUnits.length;
-      const occupancyRate = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
+      const occupancyRate = totalUnits > 0 ? (availability.occupied / totalUnits) * 100 : 0;
 
       const periodInvoices = invoices.filter((invoice) => {
         if (!isActiveInvoice(invoice)) return false;
         if (!['RENT_CHARGE', 'UTILITY_CHARGE'].includes(String(invoice?.category || '').toUpperCase())) return false;
-
-        const invoicePropertyId = String(getId(invoice?.property) || '');
+        const invoicePropertyId = String(normalizeId(invoice?.property) || '');
         if (invoicePropertyId !== propertyId) return false;
-
-        const invoiceDate = parseDate(invoice?.invoiceDate || invoice?.createdAt);
-        if (!invoiceDate) return false;
-
-        return invoiceDate.getMonth() === currentMonth && invoiceDate.getFullYear() === currentYear;
+        const recognitionDate = getInvoiceRecognitionDate(invoice);
+        return Boolean(recognitionDate && recognitionDate.getMonth() === currentMonth && recognitionDate.getFullYear() === currentYear);
       });
 
       const invoicedThisMonth = periodInvoices.reduce((sum, invoice) => sum + amountFromInvoice(invoice), 0);
@@ -128,9 +181,9 @@ const PropertiesOverview = ({ darkMode }) => {
       const expectedCollections = tenants
         .filter((tenant) => isOperationalTenant(tenant))
         .reduce((sum, tenant) => {
-          const primaryUnitId = String(getId(tenant?.unit) || '');
+          const primaryUnitId = String(normalizeId(tenant?.unit) || '');
           const additionalUnitIds = Array.isArray(tenant?.additionalUnits)
-            ? tenant.additionalUnits.map((item) => String(getId(item) || '')).filter(Boolean)
+            ? tenant.additionalUnits.map((item) => String(normalizeId(item) || '')).filter(Boolean)
             : [];
 
           if (primaryUnitId && unitIds.has(primaryUnitId)) {
@@ -149,7 +202,7 @@ const PropertiesOverview = ({ darkMode }) => {
         .filter((payment) => {
           const paymentDate = parseDate(payment?.paymentDate || payment?.createdAt);
           if (!paymentDate) return false;
-          const unitId = String(getId(payment?.unit) || '');
+          const unitId = String(normalizeId(payment?.unit) || '');
           return (
             unitId &&
             unitIds.has(unitId) &&
@@ -176,8 +229,8 @@ const PropertiesOverview = ({ darkMode }) => {
         name: property.propertyName || property.name || 'Unnamed Property',
         code: property.propertyCode || '---',
         totalUnits,
-        occupiedUnits,
-        vacantUnits,
+        occupiedUnits: availability.occupied,
+        vacantUnits: availability.vacant,
         occupancyRate,
         expectedRevenue: invoicedThisMonth,
         expectedCollections,
@@ -191,7 +244,7 @@ const PropertiesOverview = ({ darkMode }) => {
     });
 
     return propertyStats.sort((a, b) => b.occupancyRate - a.occupancyRate);
-  }, [activeProperties, invoices, units, tenants, rentPayments, currentMonth, currentYear, unitMap]);
+  }, [activeProperties, invoices, units, tenants, rentPayments, currentMonth, currentYear, unitMap, maintenances, tenantAssignmentsByUnit, maintenanceAssignmentsByUnit, now]);
 
   const portfolioOccupancy = useMemo(() => {
     const totalUnits = propertiesWithStats.reduce((sum, item) => sum + item.totalUnits, 0);
@@ -213,7 +266,7 @@ const PropertiesOverview = ({ darkMode }) => {
             Portfolio Overview
           </h2>
           <p className={`mt-1 text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-600'}`}>
-            Invoice-aware property billing and collection snapshot across your portfolio.
+            Booking-date aware property billing, occupancy and collection snapshot across your portfolio.
           </p>
         </div>
         <button
@@ -227,7 +280,7 @@ const PropertiesOverview = ({ darkMode }) => {
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
-          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>{isLandlordMode ? 'Portfolio occupancy' : 'Portfolio occupancy'}</div>
+          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Portfolio occupancy</div>
           <div className={`mt-1 text-lg font-extrabold ${darkMode ? 'text-gray-900' : 'text-slate-900'}`}>{portfolioOccupancy.toFixed(1)}%</div>
         </div>
         <div className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
@@ -260,76 +313,51 @@ const PropertiesOverview = ({ darkMode }) => {
                   <h4 className={`font-extrabold text-sm truncate ${darkMode ? 'text-gray-900' : 'text-slate-900'}`} title={property.name}>
                     {property.name}
                   </h4>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                      {property.code}
-                    </p>
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                      property.expectedRevenue > 0
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-amber-100 text-amber-800'
-                    }`}>
+                  <div className="mt-1 flex items-center gap-2 text-xs">
+                    <span className={`${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>{property.code}</span>
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-emerald-700">
                       {property.invoicedStatus}
                     </span>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
                   <div className={`text-lg font-extrabold ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>{property.occupancyRate.toFixed(0)}%</div>
-                  <div className={`text-[10px] font-bold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>occupied</div>
+                  <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Occupied</div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-3 mb-3">
-                <div className={`rounded-lg border px-2.5 py-2 ${darkMode ? 'border-gray-700 bg-white' : 'border-[#CFE4D8] bg-[#f8fbf9]'}`}>
-                  <div className={`text-[10px] font-extrabold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-[#31694E]'}`}>Units</div>
-                  <div className={`mt-1 text-sm font-extrabold ${darkMode ? 'text-gray-900' : 'text-slate-900'}`}>{property.occupiedUnits}/{property.totalUnits}</div>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="rounded-lg border border-[#dce9e1] bg-[#fbfdfc] p-2">
+                  <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#4a6b5e]">Units</div>
+                  <div className="mt-1 text-sm font-bold text-slate-900">{property.totalUnits}</div>
+                  <div className="mt-1 text-[11px] text-slate-500">Occupied {property.occupiedUnits}</div>
                 </div>
-                <div className={`rounded-lg border px-2.5 py-2 ${darkMode ? 'border-gray-700 bg-white' : 'border-[#F7C9AF] bg-[#fff8f4]'}`}>
-                  <div className={`text-[10px] font-extrabold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-[#c44b0b]'}`}>Vacant</div>
-                  <div className="mt-1 text-sm font-extrabold text-[#E85C0D]">{property.vacantUnits}</div>
+                <div className="rounded-lg border border-[#f7d3c1] bg-[#fff7f2] p-2">
+                  <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#c44b0b]">Vacant</div>
+                  <div className="mt-1 text-sm font-bold text-[#c44b0b]">{property.vacantUnits}</div>
+                  <div className="mt-1 text-[11px] text-slate-500">Availability ready</div>
                 </div>
               </div>
 
-              <div className="space-y-2.5">
+              <div className="mt-3 space-y-2">
                 <div>
-                  <div className="flex items-center justify-between text-[11px] mb-1">
-                    <span className={`${darkMode ? 'text-gray-500' : 'text-gray-600'} font-bold`}>Occupancy</span>
-                    <span className={`font-extrabold ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>{property.occupancyRate.toFixed(1)}%</span>
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1">
+                    <span>Collections this month</span>
+                    <span>{formatMoney(property.monthlyCollection)} / {formatMoney(property.expectedRevenue)}</span>
                   </div>
-                  <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-[#31694E] to-[#4a9976] rounded-full" style={{ width: `${Math.min(property.occupancyRate, 100)}%` }} />
+                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-[#E85C0D]" style={{ width: `${Math.min(property.collectionRate, 100)}%` }} />
                   </div>
                 </div>
-
                 <div>
-                  <div className="flex items-center justify-between text-[11px] mb-1">
-                    <span className={`${darkMode ? 'text-gray-500' : 'text-gray-600'} font-bold`}>Collections this month</span>
-                    <span className="font-extrabold text-[#E85C0D]">{formatMoney(property.monthlyCollection)} / {formatMoney(property.expectedRevenue)}</span>
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1">
+                    <span>Scheduled rent</span>
+                    <span>{formatMoney(property.expectedCollections)} / {formatMoney(property.bookedRentThisMonth)}</span>
                   </div>
-                  <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-[#E85C0D] to-[#ff8c42] rounded-full" style={{ width: `${Math.min(property.collectionRate, 100)}%` }} />
+                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-[#31694E]" style={{ width: `${Math.min(property.expectedBookingRate, 100)}%` }} />
                   </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between gap-2 text-[11px] mb-1">
-                    <span className={`${darkMode ? 'text-gray-500' : 'text-gray-600'} font-bold`}>Scheduled rent</span>
-                    <div className="flex items-center gap-2 text-right">
-                      <span className="font-extrabold text-[#1f4a35]">{formatMoney(property.bookedRentThisMonth)} / {formatMoney(property.expectedCollections)}</span>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.14em] ${
-                        property.expectedBookingStatus === 'Fully booked'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : property.expectedBookingStatus === 'Booking gap'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {property.expectedBookingStatus}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-[#0B3B2E] to-[#4a9976] rounded-full" style={{ width: `${Math.min(property.expectedBookingRate, 100)}%` }} />
-                  </div>
+                  <div className="mt-1 text-[11px] font-semibold text-[#31694E] uppercase tracking-[0.14em]">{property.expectedBookingStatus}</div>
                 </div>
               </div>
             </div>

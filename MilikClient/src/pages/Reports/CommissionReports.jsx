@@ -8,6 +8,7 @@ import {
   FaSearch,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
+import { hasCompanyPermission } from "../../utils/permissions";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
 
@@ -102,6 +103,8 @@ const getCommissionStructureLabel = (statement = {}) => {
 
 const CommissionReports = () => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
 
   const [loading, setLoading] = useState(false);
   const [statementRows, setStatementRows] = useState([]);
@@ -234,6 +237,10 @@ const CommissionReports = () => {
   };
 
   const handleExportCSV = () => {
+    if (!canExportReports) {
+      toast.warning("You do not have permission to export reports");
+      return;
+    }
     const lines = [
       [
         "Recognition Date",
@@ -322,14 +329,14 @@ const CommissionReports = () => {
               </button>
 
               <button
-                onClick={handleExportCSV}
+                onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"}
                 className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
               >
                 <FaFileDownload className="text-xs" /> Export
               </button>
 
               <button
-                onClick={() => window.print()}
+                onClick={() => { if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"}
                 className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
               >
                 <FaPrint className="text-xs" /> Print

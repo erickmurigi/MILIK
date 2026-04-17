@@ -39,6 +39,7 @@ import {
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
 import { getLeases, getRentPayments, getTenantInvoices, getTenantInvoiceNotes } from "../../redux/apiCalls";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -155,6 +156,7 @@ const Tenants = () => {
 
   // Redux state
   const { currentCompany } = useSelector((state) => state.company || {});
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
   const { tenants: tenantsData = [] } = useSelector(
     (state) => state.tenant || { tenants: [] }
   );
@@ -162,6 +164,11 @@ const Tenants = () => {
   const properties = useSelector((state) => state.property?.properties || []);
   const { rentPayments = [] } = useSelector((state) => state.rentPayment || {});
   const { leases = [] } = useSelector((state) => state.lease || {});
+
+  const canViewTenants = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "view", "propertyManagement");
+  const canCreateTenant = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement");
+  const canUpdateTenant = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "update", "propertyManagement");
+  const canDeleteTenant = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "delete", "propertyManagement");
 
   // ===== UI STATE =====
   const [currentPage, setCurrentPage] = useState(1);
@@ -540,6 +547,10 @@ const Tenants = () => {
 
   // ===== ACTION MENU HANDLERS =====
   const handleViewStatement = () => {
+    if (!canViewTenants) {
+      toast.warning("You do not have permission to view tenant statements");
+      return;
+    }
     if (selectedTenants.length === 0) {
       toast.warning("Please select at least one tenant");
       return;
@@ -558,6 +569,10 @@ const Tenants = () => {
   };
 
   const handleEditTenant = () => {
+    if (!canUpdateTenant) {
+      toast.warning("You do not have permission to edit tenants");
+      return;
+    }
     if (selectedTenants.length === 0) {
       toast.warning("Please select a tenant to edit");
       return;
@@ -571,6 +586,10 @@ const Tenants = () => {
   };
 
   const handleViewReceipts = () => {
+    if (!canViewTenants) {
+      toast.warning("You do not have permission to view tenant receipts");
+      return;
+    }
     if (selectedTenants.length === 0) {
       toast.warning("Please select at least one tenant");
       return;
@@ -580,6 +599,10 @@ const Tenants = () => {
   };
 
   const handleAddUtility = () => {
+    if (!canUpdateTenant) {
+      toast.warning("You do not have permission to update tenant utilities");
+      return;
+    }
     if (selectedTenants.length === 0) {
       toast.warning("Please select one tenant to add a utility for");
       return;
@@ -604,6 +627,10 @@ const Tenants = () => {
 
 
 const handleTransferUnit = () => {
+  if (!canUpdateTenant) {
+    toast.warning("You do not have permission to transfer tenant units");
+    return;
+  }
   if (selectedTenants.length === 0) {
     toast.warning("Please select one tenant to transfer");
     return;
@@ -624,6 +651,10 @@ const handleTransferUnit = () => {
 };
 
 const confirmTransferUnit = async () => {
+  if (!canUpdateTenant) {
+    toast.warning("You do not have permission to transfer tenant units");
+    return;
+  }
   if (!transferForm.tenantId || !transferForm.newUnit) {
     toast.error("Choose the destination unit before transferring");
     return;
@@ -650,6 +681,10 @@ const confirmTransferUnit = async () => {
 };
 
   const handleReviewRent = () => {
+    if (!canUpdateTenant) {
+      toast.warning("You do not have permission to review tenant rent");
+      return;
+    }
     if (selectedTenants.length === 0) {
       toast.warning("Please select one tenant to review rent for");
       return;
@@ -674,6 +709,10 @@ const confirmTransferUnit = async () => {
   };
 
   const handleOpenTerminateTenant = () => {
+    if (!canUpdateTenant) {
+      toast.warning("You do not have permission to terminate tenants");
+      return;
+    }
     if (selectedTenants.length === 0) {
       toast.warning("Please select one tenant to terminate");
       return;
@@ -693,6 +732,10 @@ const confirmTransferUnit = async () => {
   };
 
   const confirmTerminateTenant = async () => {
+    if (!canUpdateTenant) {
+      toast.warning("You do not have permission to terminate tenants");
+      return;
+    }
     if (!terminationForm.tenantId || !terminationForm.effectiveDate) {
       toast.error("Termination date is required");
       return;
@@ -745,6 +788,10 @@ const confirmTransferUnit = async () => {
 
   // ===== CRUD ACTIONS =====
   const handleDeleteSelectedTenants = async () => {
+    if (!canDeleteTenant) {
+      toast.warning("You do not have permission to delete tenants");
+      return;
+    }
     if (selectedTenants.length === 0) {
       toast.warning("Please select at least one tenant to delete");
       return;
@@ -753,6 +800,10 @@ const confirmTransferUnit = async () => {
   };
 
   const confirmDeleteTenants = async () => {
+    if (!canDeleteTenant) {
+      toast.warning("You do not have permission to delete tenants");
+      return;
+    }
     setIsDeleting(true);
     let successCount = 0;
     let failCount = 0;
@@ -998,8 +1049,8 @@ const confirmTransferUnit = async () => {
             <button
               onClick={handleEditTenant}
               className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs font-medium flex items-center gap-1 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Edit Selected Tenant"
-              disabled={selectedTenants.length !== 1}
+              title={canUpdateTenant ? "Edit Selected Tenant" : "You do not have permission to edit tenants"}
+              disabled={!canUpdateTenant || selectedTenants.length !== 1}
             >
               <FaEdit size={10} />
               <span>Edit</span>
@@ -1025,6 +1076,7 @@ const confirmTransferUnit = async () => {
                       <FaFileInvoiceDollar size={12} />
                       <span>View Tenant Statement</span>
                     </button>
+                    {canUpdateTenant && (
                     <button
                       onClick={handleEditTenant}
                       className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
@@ -1032,6 +1084,8 @@ const confirmTransferUnit = async () => {
                       <FaUserEdit size={12} />
                       <span>Edit Tenant Details</span>
                     </button>
+                    )}
+                    {canUpdateTenant && (
                     <button
                       onClick={handleTransferUnit}
                       className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
@@ -1039,6 +1093,7 @@ const confirmTransferUnit = async () => {
                       <FaExchangeAlt size={12} />
                       <span>Transfer Tenant Unit</span>
                     </button>
+                    )}
                     <button
                       onClick={handleViewReceipts}
                       className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
@@ -1046,6 +1101,7 @@ const confirmTransferUnit = async () => {
                       <FaMoneyBillWave size={12} />
                       <span>View Tenant Receipts</span>
                     </button>
+                    {canUpdateTenant && (
                     <button
                       onClick={handleAddUtility}
                       className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
@@ -1053,6 +1109,8 @@ const confirmTransferUnit = async () => {
                       <FaBolt size={12} />
                       <span>Add Utility to Selected Tenant</span>
                     </button>
+                    )}
+                    {canUpdateTenant && (
                     <button
                       onClick={handleReviewRent}
                       className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700 border-t border-gray-200"
@@ -1060,6 +1118,8 @@ const confirmTransferUnit = async () => {
                       <FaChartLine size={12} />
                       <span>Review Rent for Selected Tenant</span>
                     </button>
+                    )}
+                    {canUpdateTenant && (
                     <button
                       onClick={handleOpenTerminateTenant}
                       className="w-full text-left px-4 py-2 text-xs hover:bg-amber-50 flex items-center gap-2 text-amber-700 border-t border-gray-200"
@@ -1067,6 +1127,7 @@ const confirmTransferUnit = async () => {
                       <FaUserSlash size={12} />
                       <span>Terminate Tenant</span>
                     </button>
+                    )}
                     <button
                       onClick={() => {
                         setActionMenuOpen(false);
@@ -1077,6 +1138,7 @@ const confirmTransferUnit = async () => {
                       <FaSms size={12} />
                       <span>SMS Tenants</span>
                     </button>
+                    {canDeleteTenant && (
                     <button
                       onClick={handleDeleteSelectedTenants}
                       className="w-full text-left px-4 py-2 text-xs hover:bg-red-50 flex items-center gap-2 text-red-600 border-t border-gray-200 font-semibold"
@@ -1084,6 +1146,7 @@ const confirmTransferUnit = async () => {
                       <FaTrash size={12} />
                       <span>Delete Selected Tenant(s)</span>
                     </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -1091,7 +1154,9 @@ const confirmTransferUnit = async () => {
 
             <button
               onClick={() => navigate("/tenant/new")}
-              className={`px-3 py-1 text-xs ${MILIK_ORANGE} text-white rounded font-medium flex items-center gap-1 hover:bg-[#e67e00] transition-colors shadow-sm`}
+              disabled={!canCreateTenant}
+              title={canCreateTenant ? "Add tenant" : "You do not have permission to create tenants"}
+              className={`px-3 py-1 text-xs ${canCreateTenant ? `${MILIK_ORANGE} text-white hover:bg-[#e67e00]` : "bg-gray-400 text-white cursor-not-allowed"} rounded font-medium flex items-center gap-1 transition-colors shadow-sm`}
             >
               <FaPlus className="text-xs" />
               <span>Add</span>
@@ -1124,8 +1189,9 @@ const confirmTransferUnit = async () => {
 
             <button
               onClick={() => setShowImportModal(true)}
-              className={`px-3 py-1 text-xs ${MILIK_ORANGE} text-white rounded font-medium flex items-center gap-1 hover:bg-[#e67e00] transition-colors shadow-sm`}
-              title="Import tenants from Excel"
+              disabled={!canCreateTenant}
+              className={`px-3 py-1 text-xs ${canCreateTenant ? `${MILIK_ORANGE} text-white hover:bg-[#e67e00]` : "bg-gray-400 text-white cursor-not-allowed"} rounded font-medium flex items-center gap-1 transition-colors shadow-sm`}
+              title={canCreateTenant ? "Import tenants from Excel" : "You do not have permission to create tenants"}
             >
               <FaFileExport className="text-xs rotate-180" />
               <span>Import</span>
@@ -1421,6 +1487,7 @@ const confirmTransferUnit = async () => {
                                   >
                                     💳 View Statement
                                   </button>
+                                  {canDeleteTenant && (
                                   <button
                                   onClick={() => {
                                     setSelectedTenants([tenant.id]);
@@ -1431,6 +1498,7 @@ const confirmTransferUnit = async () => {
                                   >
                                     🗑️ Delete
                                   </button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1658,7 +1726,7 @@ const confirmTransferUnit = async () => {
               </button>
               <button
                 onClick={confirmTerminateTenant}
-                disabled={isTerminating}
+                disabled={!canUpdateTenant || isTerminating}
                 className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {isTerminating ? "Terminating..." : "Terminate Tenant"}
@@ -1718,7 +1786,7 @@ const confirmTransferUnit = async () => {
               </button>
               <button
                 onClick={confirmDeleteTenants}
-                disabled={isDeleting}
+                disabled={!canDeleteTenant || isDeleting}
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isDeleting ? (

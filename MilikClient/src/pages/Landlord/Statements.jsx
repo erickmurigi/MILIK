@@ -12,6 +12,7 @@ import {
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { adminRequests } from "../../utils/requestMethods";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const currency = (value) =>
   new Intl.NumberFormat("en-KE", {
@@ -312,8 +313,12 @@ const Statements = () => {
   const location = useLocation();
 
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
   const properties = useSelector((state) => state.property?.properties || []);
   const landlords = useSelector((state) => state.landlord?.landlords || []);
+  const canCreateStatement = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "create", "propertyManagement");
+  const canApproveStatement = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "approve", "propertyManagement");
+  const canExportStatement = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "export", "propertyManagement");
 
   const today = new Date();
   const todayIso = toIsoDate(today);
@@ -899,6 +904,10 @@ const Statements = () => {
   ]);
 
   const handleApprove = async () => {
+    if (!canApproveStatement) {
+      toast.warning("You do not have permission to approve landlord statements");
+      return;
+    }
     if (!draftStatement?._id) return;
     try {
       await dispatch(approveStatement(draftStatement._id, "Approved from landlord statement workspace"));
@@ -911,6 +920,10 @@ const Statements = () => {
   };
 
   const handleRegenerateDraft = async () => {
+    if (!canCreateStatement) {
+      toast.warning("You do not have permission to generate landlord statements");
+      return;
+    }
     if (!selectedPropertyId || !hasValidPeriodSelection) {
       toast.error("Select a valid statement period first");
       return;
@@ -924,6 +937,10 @@ const Statements = () => {
   };
 
   const handleDownload = async () => {
+    if (!canExportStatement) {
+      toast.warning("You do not have permission to download landlord statements");
+      return;
+    }
     if (!draftStatement?._id) return;
     try {
       const response = await adminRequests.get(`/statements/${draftStatement._id}/pdf`, {
@@ -944,6 +961,10 @@ const Statements = () => {
   };
 
   const handlePrint = async () => {
+    if (!canExportStatement) {
+      toast.warning("You do not have permission to print landlord statements");
+      return;
+    }
     if (!draftStatement?._id) return;
 
     try {
@@ -978,6 +999,10 @@ const Statements = () => {
   };
 
   const handleProcessStatement = async () => {
+    if (!canApproveStatement) {
+      toast.warning("You do not have permission to process landlord statements");
+      return;
+    }
     if (!draftStatement?._id || !selectedPropertyId) {
       toast.error("Generate a draft statement first");
       return;
@@ -1116,7 +1141,7 @@ const Statements = () => {
                 <button
                   type="button"
                   onClick={() => loadDraftWorkspace({ refresh: true })}
-                  disabled={!selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
+                  disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <FaSyncAlt className={loadingDraft ? "animate-spin" : ""} />
@@ -1174,7 +1199,7 @@ const Statements = () => {
                   <button
                     type="button"
                     onClick={handleRegenerateDraft}
-                    disabled={!selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
+                    disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
                     className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
                     <FaSyncAlt />
@@ -1184,7 +1209,7 @@ const Statements = () => {
                   <button
                     type="button"
                     onClick={handleApprove}
-                    disabled={!draftStatement?._id}
+                    disabled={!canApproveStatement || !draftStatement?._id}
                     className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                   >
                     <FaCheckCircle />
@@ -1194,7 +1219,7 @@ const Statements = () => {
                   <button
                     type="button"
                     onClick={handlePrint}
-                    disabled={!draftStatement?._id}
+                    disabled={!canExportStatement || !draftStatement?._id}
                     className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
                     <FaPrint />
@@ -1204,7 +1229,7 @@ const Statements = () => {
                   <button
                     type="button"
                     onClick={handleDownload}
-                    disabled={!draftStatement?._id}
+                    disabled={!canExportStatement || !draftStatement?._id}
                     className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
                     <FaDownload />
@@ -1214,7 +1239,7 @@ const Statements = () => {
                   <button
                     type="button"
                     onClick={handleProcessStatement}
-                    disabled={!draftStatement?._id || processing || !hasValidPeriodSelection}
+                    disabled={!canApproveStatement || !draftStatement?._id || processing || !hasValidPeriodSelection}
                     className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
                   >
                     <FaFileAlt />

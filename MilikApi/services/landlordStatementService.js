@@ -82,6 +82,30 @@ const normalizeCommissionRecognitionBasis = (value = "") => {
   return raw || "received";
 };
 
+
+const buildInvoiceRecognitionDateQuery = ({ periodStart, periodEnd = null }) => {
+  const fallbackRange = periodEnd
+    ? { $gte: periodStart, $lte: periodEnd }
+    : { $lt: periodStart };
+
+  return {
+    $or: [
+      periodEnd
+        ? { bookingDate: { $gte: periodStart, $lte: periodEnd } }
+        : { bookingDate: { $lt: periodStart } },
+      {
+        $or: [{ bookingDate: { $exists: false } }, { bookingDate: null }],
+        invoiceDate: fallbackRange,
+      },
+    ],
+  };
+};
+
+const getInvoiceRecognitionDate = (invoice = {}) =>
+  invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt || null;
+
+const getInvoiceStatementDate = (invoice = {}) => getInvoiceRecognitionDate(invoice);
+
 const capDateToNow = (value) => {
   const date = toDate(value);
   const now = new Date();
@@ -958,22 +982,22 @@ export const generateLandlordStatement = async ({
     TenantInvoice.find({
       property: propertyObjectId,
       business: businessObjectId,
-      invoiceDate: { $lt: periodStart },
+      ...buildInvoiceRecognitionDateQuery({ periodStart }),
       status: { $nin: ["cancelled", "reversed"] },
     })
       .select(
-        "_id tenant unit category amount description invoiceDate invoiceNumber landlord metadata depositHeldBy taxSnapshot"
+        "_id tenant unit category amount description invoiceDate bookingDate invoiceNumber landlord metadata depositHeldBy taxSnapshot"
       )
       .lean(),
 
     TenantInvoice.find({
       property: propertyObjectId,
       business: businessObjectId,
-      invoiceDate: { $gte: periodStart, $lte: periodEnd },
+      ...buildInvoiceRecognitionDateQuery({ periodStart, periodEnd }),
       status: { $nin: ["cancelled", "reversed"] },
     })
       .select(
-        "_id tenant unit category amount description invoiceDate invoiceNumber landlord metadata depositHeldBy taxSnapshot"
+        "_id tenant unit category amount description invoiceDate bookingDate invoiceNumber landlord metadata depositHeldBy taxSnapshot"
       )
       .lean(),
 
@@ -1489,7 +1513,7 @@ export const generateLandlordStatement = async ({
     pushEntry({
       tenantId: invoice.tenant,
       unitId: invoice.unit,
-      transactionDate: invoice.invoiceDate,
+      transactionDate: getInvoiceStatementDate(invoice),
       category: invoice.category,
       amount,
       direction: "credit",

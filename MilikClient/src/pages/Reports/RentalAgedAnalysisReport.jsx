@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { FaClock, FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
+import { hasCompanyPermission } from "../../utils/permissions";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenantInvoices } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
@@ -27,6 +28,8 @@ const bucketOutstanding = (dueDate, amount) => {
 
 const RentalAgedAnalysisReport = () => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
   const businessId = currentCompany?._id || "";
 
   const [loading, setLoading] = useState(false);
@@ -139,6 +142,10 @@ const RentalAgedAnalysisReport = () => {
   );
 
   const exportCsv = () => {
+    if (!canExportReports) {
+      toast.warning("You do not have permission to export reports");
+      return;
+    }
     const header = ["Tenant", "Property", "Unit", "Current", "1-30", "31-60", "61-90", "90+", "Total", "Oldest Due Date"];
     const body = filteredRows.map((row) => [
       row.tenantName,
@@ -176,8 +183,8 @@ const RentalAgedAnalysisReport = () => {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={exportCsv} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaFileDownload /> Export CSV</button>
-                  <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaPrint /> Print</button>
+                  <button onClick={exportCsv} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed"><FaFileDownload /> Export CSV</button>
+                  <button onClick={() => { if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed"><FaPrint /> Print</button>
                   <button onClick={loadData} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
                 </div>
               </div>

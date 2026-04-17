@@ -14,14 +14,47 @@ import {
 import { adminRequests } from '../../utils/requestMethods';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
+const normalizeArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.items)) return value.items;
+  return [];
+};
+
+const normalizeId = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return value?._id || value?.id || '';
+};
+
+const normalizeText = (value) => String(value || '').trim().toLowerCase();
+
+const parseDate = (value) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date : null;
+};
+
+const isOpenMaintenanceStatus = (status) => !['completed', 'cancelled', 'resolved', 'closed'].includes(normalizeText(status));
+const isOperationalTenant = (tenant) => !['inactive', 'terminated', 'evicted', 'moved_out'].includes(normalizeText(tenant?.status));
+const isOperationalLease = (lease) => !['inactive', 'terminated', 'expired', 'cancelled'].includes(normalizeText(lease?.status));
+const isOffMarketUnitStatus = (status) => ['off_market', 'inactive', 'archived', 'disabled'].includes(normalizeText(status));
+const isReservedUnitStatus = (status) => normalizeText(status) === 'reserved';
+const isMaintenanceUnitStatus = (status) => ['maintenance', 'under_maintenance'].includes(normalizeText(status));
+const hasFutureMoveOut = (tenant, today) => {
+  const moveOutDate = parseDate(tenant?.moveOutDate || tenant?.terminationDate || tenant?.noticeDate);
+  return Boolean(moveOutDate && moveOutDate >= today);
+};
+
 const QuickActions = ({ darkMode }) => {
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const units = useSelector((state) => state.unit?.units || []);
-  const leases = useSelector((state) => state.lease?.leases || []);
-  const maintenances = useSelector((state) => state.maintenance?.maintenances || []);
-  const rentPayments = useSelector((state) => state.rentPayment?.rentPayments || []);
+  const units = useSelector((state) => normalizeArray(state.unit?.units));
+  const tenants = useSelector((state) => normalizeArray(state.tenant?.tenants));
+  const leases = useSelector((state) => normalizeArray(state.lease?.leases));
+  const maintenances = useSelector((state) => normalizeArray(state.maintenance?.maintenances));
+  const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
+  const rentPayments = useMemo(() => normalizeArray(rawRentPayments), [rawRentPayments]);
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
@@ -80,32 +113,144 @@ const QuickActions = ({ darkMode }) => {
     };
   }, [businessId]);
 
-  const today = new Date();
-  const in30Days = new Date();
-  in30Days.setDate(in30Days.getDate() + 30);
+  const today = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return now;
+  }, []);
+  const in30Days = useMemo(() => {
+    const next = new Date(today);
+    next.setDate(next.getDate() + 30);
+    return next;
+  }, [today]);
 
-  const overdueInvoices = invoices.filter((invoice) => {
-    const dueDate = invoice?.dueDate ? new Date(invoice.dueDate) : null;
-    return dueDate && dueDate < today && ['pending', 'partially_paid'].includes(invoice?.status);
-  }).length;
+  const tenantAssignmentsByUnit = useMemo(() => {
+    const byUnit = new Map();
+    tenants.forEach((tenant) => {
+      if (!isOperationalTenant(tenant)) return;
+      const unitIds = [normalizeId(tenant?.unit), ...(Array.isArray(tenant?.additionalUnits) ? tenant.additionalUnits.map(normalizeId) : [])].filter(Boolean);
+      unitIds.forEach((unitId) => {
+        if (!byUnit.has(unitId)) byUnit.set(unitId, []);
+        byUnit.get(unitId).push(tenant);
+      });
+    });
+    return byUnit;
+  }, [tenants]);
 
-  const vacantUnits = units.filter((unit) => unit?.status === 'vacant').length;
+  const maintenanceAssignmentsByUnit = useMemo(() => {
+    const byUnit = new Map();
+    maintenances.forEach((item) => {
+      if (!isOpenMaintenanceStatus(item?.status)) return;
+      const unitId = normalizeId(item?.unit);
+      if (!unitId) return;
+      if (!byUnit.has(unitId)) byUnit.set(unitId, []);
+      byUnit.get(unitId).push(item);
+    });
+    return byUnit;
+  }, [maintenances]);
 
-  const leasesExpiringSoon = leases.filter((lease) => {
-    if (!lease?.endDate) return false;
-    const endDate = new Date(lease.endDate);
-    const isActive = !lease?.status || lease.status === 'active';
-    return isActive && endDate >= today && endDate <= in30Days;
-  }).length;
+  const availabilitySummary = useMemo(() => {
+    return units.reduce(
+      (summary, unit) => {
+        const unitId = normalizeId(unit?._id);
+        const currentTenant = unit?.currentTenant || (tenantAssignmentsByUnit.get(unitId) || [])[0] || null;
+        const maintenanceItems = maintenanceAssignmentsByUnit.get(unitId) || [];
+        const rawStatus = normalizeText(unit?.status);
 
-  const unpostedReceipts = rentPayments.filter(
-    (payment) => payment?.postingStatus === 'unposted' || payment?.isConfirmed !== true
-  ).length;
-  const pendingMaintenance = maintenances.filter((item) => item?.status === 'pending').length;
-  const pendingStatements = processedStatements.filter((item) =>
-    ['processed', 'unpaid', 'part_paid'].includes(item?.status)
-  ).length;
-  const pendingVoucherApprovals = paymentVouchers.filter((item) => item?.status === 'draft').length;
+        const isOffMarket = isOffMarketUnitStatus(rawStatus);
+        const isMaintenance = isMaintenanceUnitStatus(rawStatus) || maintenanceItems.length > 0;
+        const isReserved = isReservedUnitStatus(rawStatus);
+        const tenantNotice = hasFutureMoveOut(currentTenant, today);
+        const hasOccupant = Boolean(
+          currentTenant || rawStatus === 'occupied' || unit?.isVacant === false || normalizeText(unit?.tenantName) !== ''
+        );
+
+        let availabilityStatus = 'vacant';
+        if (isOffMarket) {
+          availabilityStatus = 'off_market';
+        } else if (isMaintenance) {
+          availabilityStatus = 'under_maintenance';
+        } else if (isReserved) {
+          availabilityStatus = 'reserved';
+        } else if (tenantNotice) {
+          availabilityStatus = 'notice_given';
+        } else if (hasOccupant) {
+          availabilityStatus = 'occupied';
+        }
+
+        summary.total += 1;
+        if (availabilityStatus === 'vacant') summary.vacant += 1;
+        if (availabilityStatus === 'occupied') summary.occupied += 1;
+        if (availabilityStatus === 'notice_given') summary.notice += 1;
+        if (availabilityStatus === 'reserved') summary.reserved += 1;
+        if (availabilityStatus === 'under_maintenance') summary.maintenance += 1;
+        if (availabilityStatus === 'off_market') summary.offMarket += 1;
+        return summary;
+      },
+      { total: 0, vacant: 0, occupied: 0, notice: 0, reserved: 0, maintenance: 0, offMarket: 0 }
+    );
+  }, [maintenanceAssignmentsByUnit, tenantAssignmentsByUnit, today, units]);
+
+  const overdueInvoices = useMemo(
+    () =>
+      invoices.filter((invoice) => {
+        const dueDate = parseDate(invoice?.dueDate);
+        const status = normalizeText(invoice?.status);
+        return dueDate && dueDate < today && ['pending', 'partially_paid', 'part_paid'].includes(status);
+      }).length,
+    [invoices, today]
+  );
+
+  const vacantUnits = availabilitySummary.vacant;
+
+  const leasesExpiringSoon = useMemo(() => {
+    const leaseDrivenCount = leases.filter((lease) => {
+      if (!isOperationalLease(lease)) return false;
+      const endDate = parseDate(lease?.endDate || lease?.leaseEndDate || lease?.expiryDate);
+      return Boolean(endDate && endDate >= today && endDate <= in30Days);
+    }).length;
+
+    if (leaseDrivenCount > 0) return leaseDrivenCount;
+
+    return tenants.filter((tenant) => {
+      if (!isOperationalTenant(tenant)) return false;
+      const moveOutDate = parseDate(tenant?.moveOutDate || tenant?.terminationDate || tenant?.noticeDate);
+      return Boolean(moveOutDate && moveOutDate >= today && moveOutDate <= in30Days);
+    }).length;
+  }, [in30Days, leases, tenants, today]);
+
+  const unpostedReceipts = useMemo(
+    () =>
+      rentPayments.filter(
+        (payment) =>
+          !payment?.reversalOf &&
+          !payment?.isReversed &&
+          !payment?.isCancelled &&
+          (normalizeText(payment?.postingStatus) === 'unposted' || payment?.isConfirmed !== true)
+      ).length,
+    [rentPayments]
+  );
+
+  const pendingMaintenance = useMemo(
+    () => maintenances.filter((item) => ['pending', 'open', 'in_progress'].includes(normalizeText(item?.status))).length,
+    [maintenances]
+  );
+
+  const pendingStatements = useMemo(
+    () =>
+      processedStatements.filter((item) => {
+        if (normalizeText(item?.status) === 'reversed') return false;
+        const positiveOutstanding = Math.max(Number(item?.balanceDue || 0), 0);
+        const negativeOutstanding = Math.max(Number(item?.recoveryBalance ?? 0), 0);
+        return ['processed', 'unpaid', 'part_paid'].includes(normalizeText(item?.status)) || positiveOutstanding > 0 || negativeOutstanding > 0;
+      }).length,
+    [processedStatements]
+  );
+
+  const pendingVoucherApprovals = useMemo(
+    () => paymentVouchers.filter((item) => normalizeText(item?.status) === 'draft').length,
+    [paymentVouchers]
+  );
 
   const items = useMemo(() => {
     const baseItems = [
@@ -180,27 +325,18 @@ const QuickActions = ({ darkMode }) => {
     if (!isLandlordMode) {
       baseItems.splice(5, 0, {
         id: 'pending-statements',
-        label: 'Landlord statements pending processing',
+        label: 'Landlord statements pending settlement',
         value: pendingStatements,
         icon: <FaClipboardList />,
         tone: 'purple',
-        helper: 'Open processed statements to review unsettled landlord statements.',
+        helper: 'Open processed statements to review unpaid landlord settlements and recovery balances.',
         route: '/landlord/processed-statements',
         tabTitle: 'Processed Statements',
       });
     }
 
     return baseItems;
-  }, [
-    isLandlordMode,
-    leasesExpiringSoon,
-    overdueInvoices,
-    pendingMaintenance,
-    pendingStatements,
-    pendingVoucherApprovals,
-    unpostedReceipts,
-    vacantUnits,
-  ]);
+  }, [isLandlordMode, leasesExpiringSoon, overdueInvoices, pendingMaintenance, pendingStatements, pendingVoucherApprovals, unpostedReceipts, vacantUnits]);
 
   const getToneClasses = (tone) => {
     const tones = {

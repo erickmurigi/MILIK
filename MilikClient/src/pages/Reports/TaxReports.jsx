@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { FaFileDownload, FaFilter, FaPrint, FaReceipt } from 'react-icons/fa';
 import toast from 'react-hot-toast';
+import { hasCompanyPermission } from '../../utils/permissions';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { getProperties } from '../../redux/propertyRedux';
 import { adminRequests } from '../../utils/requestMethods';
@@ -40,6 +41,8 @@ const withinRange = (value, startDate, endDate) => {
 const TaxReports = () => {
   const dispatch = useDispatch();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
   const propertyState = useSelector((state) => state.property || {});
   const properties = Array.isArray(propertyState?.properties?.data)
     ? propertyState.properties.data
@@ -170,6 +173,10 @@ const TaxReports = () => {
   );
 
   const handleExportCSV = () => {
+    if (!canExportReports) {
+      toast.error("You do not have permission to export reports");
+      return;
+    }
     const csv = [
       ['Date', 'Source', 'Reference', 'Property', 'Party', 'Tax Code', 'Tax Rate', 'Net Amount', 'Tax Amount', 'Gross Amount'].join(','),
       ...rows.map((row) => [
@@ -209,10 +216,10 @@ const TaxReports = () => {
               </p>
             </div>
             <div className="flex gap-3 print:hidden">
-              <button onClick={handleExportCSV} className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700">
+              <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700">
                 <FaFileDownload className="inline" /> Export CSV
               </button>
-              <button onClick={() => window.print()} className={`rounded-xl px-4 py-2 text-sm font-semibold text-white transition ${GREEN_BG} hover:bg-[#0A3127]`}>
+              <button onClick={() => { if (!canExportReports) { toast.error("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className={`rounded-xl px-4 py-2 text-sm font-semibold text-white transition ${GREEN_BG} hover:bg-[#0A3127]`}>
                 <FaPrint className="inline" /> Print
               </button>
             </div>

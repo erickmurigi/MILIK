@@ -5,6 +5,7 @@ import { getTenantPaidBalanceReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { FaBalanceScale, FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
+import { hasCompanyPermission } from '../../utils/permissions';
 
 const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
@@ -16,6 +17,7 @@ const PaidBalanceReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
   const properties = useSelector((state) => state.property?.properties || []);
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
@@ -129,6 +131,10 @@ const PaidBalanceReport = () => {
   const printGeneratedAt = useMemo(() => new Date().toLocaleString(), [report, filters]);
 
   const handleExportCSV = () => {
+    if (!canExportReports) {
+      toast.warning ? toast.warning("You do not have permission to export reports") : toast.error("You do not have permission to export reports");
+      return;
+    }
     const header = ['Tenant', 'Property', 'Unit', 'Invoiced', 'Paid Applied', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Balance', 'Utility Balance', 'Penalty Balance', 'Deposit Balance', 'Other Balance', 'Oldest Due', 'Last Payment', 'Status'];
     const rows = (report.rows || []).map((row) => [
       row.tenantName || '',
@@ -163,6 +169,10 @@ const PaidBalanceReport = () => {
   };
 
   const handlePrint = () => {
+    if (!canExportReports) {
+      toast.warning ? toast.warning("You do not have permission to print reports") : toast.error("You do not have permission to print reports");
+      return;
+    }
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         window.print();
@@ -310,8 +320,8 @@ const PaidBalanceReport = () => {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={handleExportCSV} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaFileDownload /> Export CSV</button>
-                  <button onClick={handlePrint} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaPrint /> Print</button>
+                  <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaFileDownload /> Export CSV</button>
+                  <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaPrint /> Print</button>
                   <button onClick={loadReport} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
                 </div>
               </div>

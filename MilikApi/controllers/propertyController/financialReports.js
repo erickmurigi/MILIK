@@ -750,7 +750,13 @@ export const getRentalCollectionReport = async (req, res, next) => {
       business: businessId,
       category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"] },
       status: { $nin: ["cancelled", "reversed"] },
-      invoiceDate: { $gte: startDate, $lte: endDate },
+      $or: [
+        { bookingDate: { $gte: startDate, $lte: endDate } },
+        {
+          $or: [{ bookingDate: { $exists: false } }, { bookingDate: null }],
+          invoiceDate: { $gte: startDate, $lte: endDate },
+        },
+      ],
     };
     if (req.query.propertyId) invoiceQuery.property = toObjectId(req.query.propertyId);
     if (req.query.tenantId) invoiceQuery.tenant = toObjectId(req.query.tenantId);

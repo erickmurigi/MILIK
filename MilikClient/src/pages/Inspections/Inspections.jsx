@@ -602,9 +602,9 @@ const Inspections = () => {
         </div>
 
         {isModalOpen ? (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
-            <div className="w-full max-w-4xl rounded-[28px] border border-slate-200 bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-950/55 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6">
+            <div className="w-full max-w-4xl max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain rounded-[28px] border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+              <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
                 <div>
                   <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#FF8C00]">Inspections</p>
                   <h2 className="mt-1 text-xl font-extrabold text-slate-950">
@@ -818,7 +818,7 @@ const Inspections = () => {
                   />
                 </label>
 
-                <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
+                <div className="sticky bottom-0 z-20 flex flex-col gap-3 border-t border-slate-200 bg-white/95 pt-4 backdrop-blur-sm sm:flex-row sm:justify-end">
                   <button
                     type="button"
                     onClick={closeModal}

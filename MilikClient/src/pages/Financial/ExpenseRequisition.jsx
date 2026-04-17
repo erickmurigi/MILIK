@@ -11,6 +11,7 @@ import {
   FaTrash,
   FaTimes,
   FaUndo,
+  FaRedoAlt,
 } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -64,7 +65,7 @@ const ExpenseRequisition = () => {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
-  const [filters, setFilters] = useState({ search: "", status: "all" });
+  const [filters, setFilters] = useState({ search: "", status: "all", propertyId: "all" });
   const [form, setForm] = useState(blankForm);
 
   useEffect(() => {
@@ -93,7 +94,17 @@ const ExpenseRequisition = () => {
     loadRows();
   }, [currentCompany?._id, filters.search, filters.status]);
 
-  const filteredRows = useMemo(() => rows, [rows]);
+  const filteredRows = useMemo(
+    () =>
+      rows.filter((row) => {
+        if (filters.propertyId !== "all") {
+          const propertyId = String(row?.property?._id || row?.property || "");
+          if (propertyId !== String(filters.propertyId || "")) return false;
+        }
+        return true;
+      }),
+    [rows, filters.propertyId]
+  );
 
   const stats = useMemo(
     () => ({
@@ -374,20 +385,20 @@ const ExpenseRequisition = () => {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 p-4">
-        <div className="mx-auto max-w-[96%] space-y-4">
+      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+        <div className="mx-auto flex w-full max-w-[96%] flex-col gap-4">
           <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Expenses Workflow</p>
                 <h1 className="mt-1 text-2xl font-black text-slate-900">Expense Requisition</h1>
                 <p className="mt-1 text-sm text-slate-500">
-                  Submit for approval first. Approval authorizes the spend. Accounting only happens when a payment voucher is created downstream.
+                  Tightened to the invoices-page pattern with sticky controls, cleaner filters, denser rows, and safer button alignment.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={handleBulkDelete} className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-black text-rose-700">Delete Selected</button>
-                <button onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white hover:bg-[#0A3127]"><FaPlus /> New Requisition</button>
+                <button onClick={handleBulkDelete} className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-2.5 text-sm font-black text-rose-700 shadow-sm transition hover:bg-rose-100">Delete Selected</button>
+                <button onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-[#0A3127]"><FaPlus /> New Requisition</button>
               </div>
             </div>
           </div>
@@ -399,22 +410,37 @@ const ExpenseRequisition = () => {
             <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-violet-600">Linked To Voucher</p><p className="mt-2 text-2xl font-black text-violet-700">{stats.converted}</p></div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="grid w-full max-w-4xl grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.4fr),200px] xl:grid-cols-[minmax(0,1.5fr),200px,160px]">
-                <div className="relative">
-                  <FaSearch className="absolute left-3 top-3 text-sm text-slate-400" />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[260px] flex-1">
+                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
                   <input
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                     placeholder="Search requisition no, title, description, category"
-                    className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
+
+                <select
+                  value={filters.propertyId}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
+                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                >
+                  <option value="all">All properties</option>
+                  {properties.map((property) => (
+                    <option key={property._id} value={property._id}>
+                      {property.propertyCode ? `[${property.propertyCode}] ` : ""}
+                      {property.propertyName || property.name}
+                    </option>
+                  ))}
+                </select>
+
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="all">All statuses</option>
                   <option value="draft">Draft</option>
@@ -424,31 +450,28 @@ const ExpenseRequisition = () => {
                   <option value="rejected">Rejected</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
-                <button
-                  onClick={loadRows}
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50"
-                >
-                  Refresh
-                </button>
-              </div>
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">
-                {selectedIds.length} selected
+
+                <button onClick={() => setFilters({ search: "", status: "all", propertyId: "all" })} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"><FaUndo /> Reset</button>
+                <button onClick={loadRows} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"><FaRedoAlt /> Refresh</button>
+
+                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm">
+                  Selected
+                  <span className="text-sm text-slate-900">{selectedIds.length}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-100 text-left text-xs font-black uppercase tracking-[0.18em] text-slate-600">
-                  <tr>
-                    <th className="px-4 py-3"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filteredRows.length && filteredRows.length > 0 ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></th>
-                    <th className="px-4 py-3">Requisition</th>
-                    <th className="px-4 py-3">Property / Provider</th>
-                    <th className="px-4 py-3">Needed By</th>
-                    <th className="px-4 py-3 text-right">Amount</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full min-w-[1120px] text-sm">
+                <thead>
+                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filteredRows.length && filteredRows.length > 0 ? <FaCheck className="text-white" /> : <FaSquare className="text-white/80" />}</button></th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Requisition</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Property / Provider</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Needed By</th>
+                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Amount</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Status</th>
+                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -456,26 +479,19 @@ const ExpenseRequisition = () => {
                     <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">Loading requisitions...</td></tr>
                   ) : filteredRows.length === 0 ? (
                     <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">No expense requisitions found.</td></tr>
-                  ) : filteredRows.map((row, index) => (
-                    <tr key={row._id} className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                      <td className="px-4 py-3"><button type="button" onClick={() => toggleSelect(row._id)}>{selectedIds.includes(row._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
-                      <td className="px-4 py-3">
-                        <div className="font-black text-slate-900">{row.requisitionNo}</div>
-                        <div className="text-xs text-slate-500">{row.title}</div>
-                        {row.linkedVoucher?.voucherNo ? <div className="mt-1 text-[11px] font-bold text-violet-600">Voucher: {row.linkedVoucher.voucherNo}</div> : null}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        <div>{row.property?.propertyName || row.property?.name || "No property"}</div>
-                        <div className="text-xs text-slate-500">{row.serviceProvider?.name || row.vendorName || "No provider"}</div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">{row.neededBy ? new Date(row.neededBy).toLocaleDateString() : "-"}</td>
-                      <td className="px-4 py-3 text-right font-black text-slate-900">KES {Number(row.amount || 0).toLocaleString()}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span>
-                      </td>
-                      <td className="px-4 py-3 text-right">{renderActions(row)}</td>
-                    </tr>
-                  ))}
+                  ) : (
+                    filteredRows.map((row, index) => (
+                      <tr key={row._id} className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/40"} hover:bg-slate-50`}>
+                        <td className="px-4 py-3"><button type="button" onClick={() => toggleSelect(row._id)}>{selectedIds.includes(row._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
+                        <td className="px-4 py-3"><div className="font-black text-slate-900">{row.requisitionNo}</div><div className="text-xs text-slate-500">{row.title}</div>{row.linkedVoucher?.voucherNo ? <div className="mt-1 text-[11px] font-bold text-violet-600">Voucher: {row.linkedVoucher.voucherNo}</div> : null}</td>
+                        <td className="px-4 py-3 text-slate-700"><div className="font-medium text-slate-900">{row.property?.propertyName || row.property?.name || "No property"}</div><div className="text-xs text-slate-500">{row.serviceProvider?.name || row.vendorName || "No provider"}</div></td>
+                        <td className="px-4 py-3 text-slate-700">{row.neededBy ? new Date(row.neededBy).toLocaleDateString() : "-"}</td>
+                        <td className="px-4 py-3 text-right font-black text-slate-900">KES {Number(row.amount || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span></td>
+                        <td className="px-4 py-3 text-right">{renderActions(row)}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -484,9 +500,9 @@ const ExpenseRequisition = () => {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/45 p-4">
-          <div className="w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
+        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/45 p-4 sm:items-center sm:p-6">
+          <div className="flex w-full max-w-5xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+            <div className="sticky top-0 z-20 flex shrink-0 items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Expense Requisition</p>
                 <h3 className="text-xl font-black">{editingId ? "Edit Draft Requisition" : "New Requisition"}</h3>
@@ -505,7 +521,7 @@ const ExpenseRequisition = () => {
               <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Description</span><textarea rows={3} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Internal Notes</span><textarea rows={2} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+            <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
               <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700">Cancel</button>
               <button onClick={() => handleSave("draft")} disabled={saving} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-700 disabled:opacity-60"><FaSave /> {saving ? "Saving..." : editingId ? "Update Draft" : "Save Draft"}</button>
               <button onClick={() => handleSave("submitted")} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60"><FaCheck /> {saving ? "Saving..." : editingId ? "Update & Submit" : "Save & Submit"}</button>

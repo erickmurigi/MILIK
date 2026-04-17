@@ -4,6 +4,7 @@ import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import { createError } from "../../utils/error.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
+import { syncProcessedStatementSettlementState } from "../../services/processedStatementSettlementService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
@@ -430,19 +431,6 @@ export const payLandlord = async (req, res, next) => {
     statement.paymentReference = referenceNumber || null;
     statement.notes = notes || statement.notes || null;
 
-    statement.paymentHistory = Array.isArray(statement.paymentHistory)
-      ? statement.paymentHistory
-      : [];
-
-    statement.paymentHistory.push({
-      amount: paymentAmount,
-      paymentDate: postingDate,
-      paymentMethod: normalizedPaymentMethod,
-      paymentReference: referenceNumber || null,
-      notes: notes || null,
-      createdBy: actorUserId,
-    });
-
     await statement.save();
 
     const PaymentVoucher = (await import("../../models/PaymentVoucher.js")).default;
@@ -576,11 +564,18 @@ export const payLandlord = async (req, res, next) => {
       String(cashbookAccount._id),
     ]);
 
+    const syncResult = await syncProcessedStatementSettlementState({
+      statementDocument: statement,
+      statementId: statement._id,
+      businessId: statement.business,
+    });
+    const syncedStatement = syncResult?.statement || statement;
+
     res.status(200).json({
       success: true,
       message: "Payment recorded successfully",
       data: {
-        statement,
+        statement: syncedStatement,
         voucher,
       },
     });
@@ -769,7 +764,13 @@ export const recordRecoveryFromLandlord = async (req, res, next) => {
     }
 
     await statement.save();
-    await statement.populate([
+    const syncResult = await syncProcessedStatementSettlementState({
+      statementDocument: statement,
+      statementId: statement._id,
+      businessId: statement.business,
+    });
+    const syncedStatement = syncResult?.statement || statement;
+    await syncedStatement.populate([
       { path: "landlord", select: "landlordName firstName lastName" },
       { path: "property", select: "propertyCode propertyName name" },
       { path: "business", select: "companyName name" },
@@ -786,7 +787,7 @@ export const recordRecoveryFromLandlord = async (req, res, next) => {
       success: true,
       message: "Recovery from landlord recorded successfully",
       data: {
-        statement,
+        statement: syncedStatement,
         ledgerEntries: [debitLeg, creditLeg],
       },
     });

@@ -162,6 +162,9 @@ const shouldForceMonthlyBillingDates = ({ category, metadata }) => {
   return sourceTransactionType !== "meter_reading";
 };
 
+const resolveRequestedBookingDate = (bookingDate, fallbackDate) =>
+  bookingDate ? normalizeDate(bookingDate, fallbackDate) : null;
+
 const buildStatementPeriod = (invoiceDate) => {
   const dt = normalizeDate(invoiceDate, new Date());
   const year = dt.getFullYear();
@@ -215,11 +218,14 @@ const releaseMeterReadingLinkedToInvoice = async (invoice, actorUserId = null, r
   return reading;
 };
 
+const isLegacyCombinedInvoiceMetadata = (metadata = {}) =>
+  safeLower(metadata?.billItemKey) === "rent_utility:combined";
+
 const getInvoiceDuplicateBucket = ({ category, metadata = {} } = {}) => {
   const normalizedCategory = String(category || "").toUpperCase();
 
   if (normalizedCategory === "RENT_CHARGE") {
-    return safeLower(metadata?.billItemKey) === "rent_utility:combined" ? "combined" : "rent";
+    return isLegacyCombinedInvoiceMetadata(metadata) ? "combined" : "rent";
   }
 
   if (normalizedCategory === "UTILITY_CHARGE") {
@@ -1212,8 +1218,9 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount }) => {
   const taxSnapshot = invoice?.taxSnapshot || {};
   const outputTaxAmount = Math.abs(Number(taxSnapshot.taxAmount || 0));
   const netAmount = outputTaxAmount > 0 ? Math.abs(Number(taxSnapshot.netAmount || amount)) : amount;
-  const { start, end } = buildStatementPeriod(invoice.invoiceDate);
-  const txDate = normalizeDate(invoice.invoiceDate);
+  const recognitionDate = normalizeDate(invoice.bookingDate || invoice.invoiceDate);
+  const { start, end } = buildStatementPeriod(recognitionDate);
+  const txDate = recognitionDate;
   const journalGroupId = new mongoose.Types.ObjectId();
   const ledgerCategory = mapInvoiceCategoryToLedgerCategory(invoice.category);
 
@@ -2186,6 +2193,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     amount,
     description,
     invoiceDate,
+    bookingDate,
     dueDate,
     createdBy,
     chartAccountId,
@@ -2213,10 +2221,12 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
   }
 
   const requestedInvoiceDate = normalizeDate(invoiceDate);
+  const requestedBookingDate = resolveRequestedBookingDate(bookingDate, requestedInvoiceDate);
   const shouldForceMonthlyDates = shouldForceMonthlyBillingDates({ category, metadata });
   const normalizedInvoiceDate = shouldForceMonthlyDates
     ? getMonthStart(requestedInvoiceDate)
     : requestedInvoiceDate;
+  const normalizedBookingDate = requestedBookingDate || normalizedInvoiceDate;
   let normalizedDueDate = shouldForceMonthlyDates
     ? resolveMonthlyBillingDueDate({ invoiceDate: normalizedInvoiceDate, dueDate })
     : normalizeDate(dueDate, normalizedInvoiceDate);
@@ -2225,7 +2235,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     normalizedDueDate = normalizedInvoiceDate;
   }
 
-  if (isFutureInvoiceDate(normalizedInvoiceDate)) {
+  if (isFutureInvoiceDate(normalizedInvoiceDate) || isFutureInvoiceDate(normalizedBookingDate)) {
     const error = new Error("Future invoicing is disabled. Use the current date or an earlier billing period.");
     error.statusCode = 400;
     throw error;
@@ -2236,6 +2246,16 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
   }
 
   const normalizedCategory = String(category).toUpperCase();
+  const normalizedMetadata = metadata && typeof metadata === "object" ? metadata : {};
+
+  if (normalizedCategory === "RENT_CHARGE" && isLegacyCombinedInvoiceMetadata(normalizedMetadata)) {
+    const error = new Error(
+      "Combined rent + utility storage is disabled. Create separate rent and utility invoices under the same booking group instead."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
   const normalizedInvoiceNumber = await resolveInvoiceNumber(businessId, invoiceNumber, normalizedCategory);
 
   const hasManualInvoiceNumber = Boolean(String(invoiceNumber || "").trim());
@@ -2410,7 +2430,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
   const conflictingMonthlyInvoice = findConflictingMonthlyInvoice({
     existingInvoices: activeMonthlyInvoices,
     category: normalizedCategory,
-    metadata: metadata && typeof metadata === "object" ? metadata : {},
+    metadata: normalizedMetadata,
   });
 
   if (conflictingMonthlyInvoice) {
@@ -2482,6 +2502,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     amount: taxSnapshot.grossAmount,
     description: description || "",
     invoiceDate: normalizedInvoiceDate,
+    bookingDate: normalizedBookingDate,
     dueDate: normalizedDueDate,
     status: "pending",
     createdBy: actorUserId,
@@ -2491,7 +2512,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     postingStatus: "unposted",
     postingError: null,
     ledgerEntries: [],
-    metadata: metadata && typeof metadata === "object" ? metadata : {},
+    metadata: normalizedMetadata,
     taxSnapshot,
   });
 
@@ -2849,6 +2870,7 @@ export const createTenantInvoice = async (req, res) => {
         amount: req.body.amount,
         description: req.body.description,
         invoiceDate: req.body.invoiceDate,
+        bookingDate: req.body.bookingDate,
         dueDate: req.body.dueDate,
         createdBy: req.body.createdBy,
         chartAccountId: req.body.chartAccountId || null,
@@ -2977,6 +2999,7 @@ export const createTenantInvoicesBatch = async (req, res) => {
                 amount: item.amount,
                 description: item.description,
                 invoiceDate: item.invoiceDate,
+                bookingDate: item.bookingDate,
                 dueDate: item.dueDate,
                 createdBy: item.createdBy,
                 chartAccountId: item.chartAccountId || null,

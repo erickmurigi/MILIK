@@ -26,6 +26,7 @@ import {
   reverseJournalEntry,
   updateJournalEntry,
 } from "../../redux/apiCalls";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const JOURNAL_TYPES = [
   {
@@ -80,6 +81,11 @@ const JournalEntries = () => {
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
   const properties = useSelector((state) => state.property?.properties || []);
   const landlords = useSelector((state) => state.landlord?.landlords || []);
+  const canCreateJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "create", "accounts");
+  const canUpdateJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "update", "accounts");
+  const canPostJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "process", "accounts");
+  const canReverseJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "reverse", "accounts");
+  const canDeleteJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "delete", "accounts");
   const isLandlordWorkspace = useMemo(
     () => isSelfManagingLandlordCompany(currentCompany || currentUser?.company || null),
     [currentCompany, currentUser?.company]
@@ -270,6 +276,10 @@ const JournalEntries = () => {
   };
 
   const openCreateModal = () => {
+    if (!canCreateJournal) {
+      toast.warning("You do not have permission to create journals");
+      return;
+    }
     setEditingJournalId("");
     setForm((prev) => ({
       ...buildInitialForm(),
@@ -279,6 +289,10 @@ const JournalEntries = () => {
   };
 
   const openEditModal = (journal) => {
+    if (!canUpdateJournal) {
+      toast.warning("You do not have permission to edit journals");
+      return;
+    }
     if (journal?.status !== "draft") {
       toast.info("Only draft journals can be edited directly. Reverse posted journals and recreate them if needed.");
       return;
@@ -319,6 +333,10 @@ const JournalEntries = () => {
   }, [derivedLandlordIdFromProperty, form.landlord, form.property, isLandlordWorkspace]);
 
   const handleSaveJournal = async () => {
+    if (!(editingJournalId ? canUpdateJournal : canCreateJournal)) {
+      toast.warning(editingJournalId ? "You do not have permission to update journals" : "You do not have permission to create journals");
+      return;
+    }
     if (!currentCompany?._id) {
       toast.warning("Please select a company first");
       return;
@@ -399,6 +417,10 @@ const JournalEntries = () => {
   };
 
   const handlePostJournal = async (journal) => {
+    if (!canPostJournal) {
+      toast.warning("You do not have permission to post journals");
+      return;
+    }
     setRowActionKey(`${journal._id}:post`);
     try {
       const updated = await postJournalEntry(journal._id, {
@@ -415,6 +437,10 @@ const JournalEntries = () => {
   };
 
   const handleReverseJournal = async (journal) => {
+    if (!canReverseJournal) {
+      toast.warning("You do not have permission to reverse journals");
+      return;
+    }
     const ok = window.confirm(`Reverse journal ${journal.journalNo}?`);
     if (!ok) return;
 
@@ -435,6 +461,10 @@ const JournalEntries = () => {
   };
 
   const handleDeleteJournal = async (journal) => {
+    if (!canDeleteJournal) {
+      toast.warning("You do not have permission to delete journals");
+      return;
+    }
     const ok = window.confirm(`Delete draft journal ${journal.journalNo}?`);
     if (!ok) return;
 
@@ -455,8 +485,8 @@ const JournalEntries = () => {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
-        <div className="mx-auto max-w-[96%] space-y-4">
+      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+        <div className="mx-auto flex w-full max-w-[96%] flex-col gap-4">
           <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
@@ -468,6 +498,7 @@ const JournalEntries = () => {
                   Review existing journals, post balanced drafts, and capture controlled same-company internal transfers from a popup form.
                 </p>
               </div>
+
               <div className="flex flex-wrap items-center gap-2 text-[11px]">
                 <span className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-50 px-2 py-0.5 font-semibold text-slate-700">
                   Count: <strong className="text-slate-900">{journals.length}</strong>
@@ -507,100 +538,85 @@ const JournalEntries = () => {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
-              <div className="relative md:col-span-2">
-                <FaSearch className="absolute left-3 top-2.5 text-xs text-slate-400" />
-                <input
-                  value={filters.search}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                  placeholder="Search journal no, reference, narration"
-                  className="w-full rounded-md border border-slate-300 py-2 pl-8 pr-3 text-xs"
-                />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[260px] flex-1">
+                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+                  <input
+                    value={filters.search}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                    placeholder="Search journal no, reference, narration"
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  />
+                </div>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="draft">Draft</option>
+                  <option value="posted">Posted</option>
+                  <option value="reversed">Reversed</option>
+                </select>
+                <select
+                  value={filters.journalType}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, journalType: e.target.value }))}
+                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                >
+                  <option value="all">All Journal Types</option>
+                  {JOURNAL_TYPES.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {getJournalTypePresentation(type.value)?.label || type.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={filters.propertyId}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
+                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                >
+                  <option value="all">All Properties</option>
+                  {propertyOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setFilters({ search: "", status: "all", journalType: "all", propertyId: "all" })}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
+                >
+                  <FaFilter /> Reset
+                </button>
               </div>
-
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
-              >
-                <option value="all">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="posted">Posted</option>
-                <option value="reversed">Reversed</option>
-              </select>
-
-              <select
-                value={filters.journalType}
-                onChange={(e) => setFilters((prev) => ({ ...prev, journalType: e.target.value }))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
-              >
-                <option value="all">All Journal Types</option>
-                {JOURNAL_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {getJournalTypePresentation(type.value)?.label || type.label}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filters.propertyId}
-                onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
-              >
-                <option value="all">All Properties</option>
-                {propertyOptions.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                onClick={() =>
-                  setFilters({
-                    search: "",
-                    status: "all",
-                    journalType: "all",
-                    propertyId: "all",
-                  })
-                }
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                <FaFilter /> Reset
-              </button>
             </div>
-          </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-[#0B3B2E] text-white">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Journal</th>
-                    <th className="px-4 py-3 text-left">Date</th>
-                    <th className="px-4 py-3 text-left">Type</th>
-                    <th className="px-4 py-3 text-left">Property</th>
-                    <th className="px-4 py-3 text-left">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
-                    <th className="px-4 py-3 text-left">Debit</th>
-                    <th className="px-4 py-3 text-left">Credit</th>
-                    <th className="px-4 py-3 text-right">Amount</th>
-                    <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full min-w-[1440px] text-sm">
+                <thead>
+                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Journal</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Property</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Debit</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Credit</th>
+                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Amount</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Status</th>
+                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
-                        Loading journals...
-                      </td>
+                      <td colSpan={10} className="px-4 py-10 text-center text-slate-500">Loading journals...</td>
                     </tr>
                   ) : journals.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
-                        No journals found.
-                      </td>
+                      <td colSpan={10} className="px-4 py-10 text-center text-slate-500">No journals found.</td>
                     </tr>
                   ) : (
                     journals.map((journal, index) => {
@@ -611,33 +627,19 @@ const JournalEntries = () => {
                       return (
                         <tr
                           key={journal._id}
-                          className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}
+                          className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/40"} hover:bg-slate-50`}
                         >
                           <td className="px-4 py-3">
                             <div className="font-black text-slate-900">{journal.journalNo}</div>
                             <div className="text-xs text-slate-500">{journal.reference || journal.narration || "No reference"}</div>
                           </td>
-                          <td className="px-4 py-3 text-slate-700">
-                            {journal.date ? new Date(journal.date).toLocaleDateString() : "-"}
-                          </td>
-                          <td className="px-4 py-3 text-slate-700">
-                            {getJournalTypePresentation(journal.journalType)?.label || journal.journalType}
-                          </td>
-                          <td className="px-4 py-3 text-slate-700">
-                            {journal.property?.propertyName || journal.property?.name || "N/A"}
-                          </td>
-                          <td className="px-4 py-3 text-slate-700">
-                            {journal.landlord?.landlordName || journal.landlord?.name || "-"}
-                          </td>
-                          <td className="px-4 py-3 text-slate-700">
-                            {journal.debitAccount?.code} - {journal.debitAccount?.name}
-                          </td>
-                          <td className="px-4 py-3 text-slate-700">
-                            {journal.creditAccount?.code} - {journal.creditAccount?.name}
-                          </td>
-                          <td className="px-4 py-3 text-right font-black text-slate-900">
-                            KES {Number(journal.amount || 0).toLocaleString()}
-                          </td>
+                          <td className="px-4 py-3 text-slate-700">{journal.date ? new Date(journal.date).toLocaleDateString() : "-"}</td>
+                          <td className="px-4 py-3 text-slate-700">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
+                          <td className="px-4 py-3 text-slate-700">{journal.property?.propertyName || journal.property?.name || "N/A"}</td>
+                          <td className="px-4 py-3 text-slate-700">{journal.landlord?.landlordName || journal.landlord?.name || "-"}</td>
+                          <td className="px-4 py-3 text-slate-700">{journal.debitAccount?.code} - {journal.debitAccount?.name}</td>
+                          <td className="px-4 py-3 text-slate-700">{journal.creditAccount?.code} - {journal.creditAccount?.name}</td>
+                          <td className="px-4 py-3 text-right font-black text-slate-900">KES {Number(journal.amount || 0).toLocaleString()}</td>
                           <td className="px-4 py-3">
                             <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>
                               {journal.status}
@@ -649,34 +651,31 @@ const JournalEntries = () => {
                                 <>
                                   <button
                                     onClick={() => openEditModal(journal)}
-                                    disabled={!!rowActionKey}
+                                    disabled={!canUpdateJournal || !!rowActionKey}
                                     className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 disabled:opacity-60"
                                   >
                                     <FaEdit /> Edit
                                   </button>
-
                                   <button
                                     onClick={() => handlePostJournal(journal)}
-                                    disabled={!!rowActionKey}
+                                    disabled={!canPostJournal || !!rowActionKey}
                                     className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-xs font-black text-green-700 disabled:opacity-60"
                                   >
                                     <FaCheck /> {busyPost ? "Posting..." : "Post"}
                                   </button>
-
                                   <button
                                     onClick={() => handleDeleteJournal(journal)}
-                                    disabled={!!rowActionKey}
+                                    disabled={!canDeleteJournal || !!rowActionKey}
                                     className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60"
                                   >
                                     <FaTrash /> {busyDelete ? "Deleting..." : "Delete"}
                                   </button>
                                 </>
                               )}
-
                               {journal.status === "posted" && (
                                 <button
                                   onClick={() => handleReverseJournal(journal)}
-                                  disabled={!!rowActionKey}
+                                  disabled={!canReverseJournal || !!rowActionKey}
                                   className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700 disabled:opacity-60"
                                 >
                                   <FaUndo /> {busyReverse ? "Reversing..." : "Reverse"}
@@ -696,13 +695,17 @@ const JournalEntries = () => {
       </div>
 
       {showCreateModal && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/45 p-4">
-          <div className="w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
+        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/45 p-4 sm:items-center sm:p-6">
+          <div className="flex w-full max-w-5xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+            <div className="sticky top-0 z-20 flex shrink-0 items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Financial Accounts</p>
                 <h3 className="text-xl font-black">{editingJournalId ? "Edit Draft Journal" : "Create Journal Entry"}</h3>
-                <p className="mt-1 text-sm text-emerald-50">{editingJournalId ? "Only draft journals can be edited directly. Posted journals must be reversed to preserve audit integrity." : "Draft first, then review and post from the journal list."}</p>
+                <p className="mt-1 text-sm text-emerald-50">
+                  {editingJournalId
+                    ? "Only draft journals can be edited directly. Posted journals must be reversed to preserve audit integrity."
+                    : "Draft first, then review and post from the journal list."}
+                </p>
               </div>
               <button
                 onClick={closeCreateModal}
@@ -897,7 +900,7 @@ const JournalEntries = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+            <div className="sticky bottom-0 z-20 flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
               <button
                 onClick={closeCreateModal}
                 className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700"
@@ -906,7 +909,7 @@ const JournalEntries = () => {
               </button>
               <button
                 onClick={handleSaveJournal}
-                disabled={saving}
+                disabled={!(editingJournalId ? canUpdateJournal : canCreateJournal) || saving}
                 className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60"
               >
                 <FaPlus /> {saving ? "Saving..." : editingJournalId ? "Update Draft Journal" : "Save Draft Journal"}
@@ -917,6 +920,7 @@ const JournalEntries = () => {
       )}
     </DashboardLayout>
   );
+
 };
 
 export default JournalEntries;

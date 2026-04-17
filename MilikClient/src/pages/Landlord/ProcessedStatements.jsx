@@ -13,6 +13,7 @@ import {
   FaUndo,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
+import { hasCompanyPermission } from "../../utils/permissions";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
   getProcessedStatements,
@@ -61,8 +62,11 @@ const ProcessedStatements = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const currentUser = useSelector((state) => state.auth?.currentUser);
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const canProcessLandlordPayments = hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "process", "accounts");
+  const canReverseProcessedStatement = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "reverse", "accounts");
+  const canExportProcessedStatement = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "export", "accounts");
   const { statements, loading } = useSelector((state) => state.processedStatements);
 
   const [activeTab, setActiveTab] = useState("outstanding");
@@ -169,6 +173,10 @@ const ProcessedStatements = () => {
   };
 
   const handleMarkAsPaid = async (statementId) => {
+    if (!canProcessLandlordPayments) {
+      toast.warning("You do not have permission to process landlord payments");
+      return;
+    }
     try {
       await dispatch(
         updateStatement({
@@ -186,6 +194,10 @@ const ProcessedStatements = () => {
   };
 
   const handleMarkAsUnpaid = async (statementId) => {
+    if (!canProcessLandlordPayments) {
+      toast.warning("You do not have permission to update landlord payment status");
+      return;
+    }
     try {
       await dispatch(
         updateStatement({
@@ -248,6 +260,10 @@ const ProcessedStatements = () => {
   };
 
   const handleReverseStatement = async (statement) => {
+    if (!canReverseProcessedStatement) {
+      toast.warning("You do not have permission to reverse processed statements");
+      return;
+    }
     const defaultReason = statement?.reversalReason || "Processed statement reversed";
     const reasonInput = window.prompt("Enter reversal reason", defaultReason);
     if (reasonInput === null) return;
@@ -283,6 +299,10 @@ const ProcessedStatements = () => {
   };
 
   const handlePrintStatement = async (statement) => {
+    if (!canExportProcessedStatement) {
+      toast.warning("You do not have permission to print processed statements");
+      return;
+    }
     const sourceStatementId =
       statement?.sourceStatement?._id || (typeof statement?.sourceStatement === "string" ? statement.sourceStatement : "") || "";
 
@@ -728,12 +748,14 @@ const ProcessedStatements = () => {
                                     <div className="flex flex-wrap gap-2">
                                       <button
                                         onClick={() => handlePrintStatement(statement)}
-                                        className="flex items-center gap-2 rounded bg-gray-700 px-3 py-2 text-sm text-white transition hover:bg-gray-800"
+                                        disabled={!canExportProcessedStatement}
+                                        title={canExportProcessedStatement ? "Print" : "You do not have permission to print processed statements"}
+                                        className="flex items-center gap-2 rounded bg-gray-700 px-3 py-2 text-sm text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                                       >
                                         <FaPrint /> Print
                                       </button>
 
-                                      {!isNegative && statement.status !== "reversed" && ["unpaid", "part_paid"].includes(statement.status) && (
+                                      {!isNegative && statement.status !== "reversed" && ["unpaid", "part_paid"].includes(statement.status) && canProcessLandlordPayments && (
                                         <button
                                           onClick={() => setShowPayModal(statement._id)}
                                           className={`flex items-center gap-2 rounded px-3 py-2 text-sm text-white transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
@@ -742,7 +764,7 @@ const ProcessedStatements = () => {
                                         </button>
                                       )}
 
-                                      {isNegative && statement.status !== "reversed" && outstandingRecovery > 0 && (
+                                      {isNegative && statement.status !== "reversed" && outstandingRecovery > 0 && canProcessLandlordPayments && (
                                         <button
                                           onClick={() => setShowRecoveryModal(statement._id)}
                                           className="flex items-center gap-2 rounded bg-red-600 px-3 py-2 text-sm text-white transition hover:bg-red-700"
@@ -751,7 +773,7 @@ const ProcessedStatements = () => {
                                         </button>
                                       )}
 
-                                      {!isNegative && statement.status !== "reversed" && ["unpaid", "part_paid"].includes(statement.status) && statement.commissionAmount > 0 && (
+                                      {!isNegative && statement.status !== "reversed" && ["unpaid", "part_paid"].includes(statement.status) && statement.commissionAmount > 0 && canProcessLandlordPayments && (
                                         <button
                                           onClick={() => setShowCommissionModal(statement._id)}
                                           className={`flex items-center gap-2 rounded px-3 py-2 text-sm text-white transition ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
@@ -760,7 +782,7 @@ const ProcessedStatements = () => {
                                         </button>
                                       )}
 
-                                      {!isNegative && statement.status !== "reversed" && ["unpaid", "part_paid"].includes(statement.status) && (
+                                      {!isNegative && statement.status !== "reversed" && ["unpaid", "part_paid"].includes(statement.status) && canProcessLandlordPayments && (
                                         <button
                                           onClick={() => handleMarkAsPaid(statement._id)}
                                           className={`flex items-center gap-2 rounded px-3 py-2 text-sm text-white transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
@@ -769,7 +791,7 @@ const ProcessedStatements = () => {
                                         </button>
                                       )}
 
-                                      {!isNegative && statement.status === "paid" && (
+                                      {!isNegative && statement.status === "paid" && canProcessLandlordPayments && (
                                         <button
                                           onClick={() => handleMarkAsUnpaid(statement._id)}
                                           className="flex items-center gap-2 rounded bg-yellow-500 px-3 py-2 text-sm text-white transition hover:bg-yellow-600"
@@ -778,7 +800,7 @@ const ProcessedStatements = () => {
                                         </button>
                                       )}
 
-                                      {statement.status !== "reversed" && (
+                                      {statement.status !== "reversed" && canReverseProcessedStatement && (
                                         <button
                                           onClick={() => handleReverseStatement(statement)}
                                           className="ml-auto flex items-center gap-2 rounded bg-slate-700 px-3 py-2 text-sm text-white transition hover:bg-slate-800"

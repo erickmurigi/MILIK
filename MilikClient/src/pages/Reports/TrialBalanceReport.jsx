@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
+import { hasCompanyPermission } from "../../utils/permissions";
 import { FaBalanceScale, FaFileDownload, FaFilePdf, FaFilter, FaSyncAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTrialBalanceReport } from "../../redux/apiCalls";
@@ -28,6 +29,7 @@ const escapeHtml = (value) =>
 const TrialBalanceReport = () => {
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
 
   const businessId = useMemo(() => {
     const activeCompanyId = localStorage.getItem("milik_active_company_id");
@@ -106,6 +108,10 @@ const TrialBalanceReport = () => {
   }, [loadReport]);
 
   const handleExportCSV = () => {
+    if (!canExportReports) {
+      toast.warning("You do not have permission to export reports");
+      return;
+    }
     const csvData = [
       ["Code", "Account Name", "Type", "Group", "Sub Group", "Debit", "Credit"].join(","),
       ...report.rows.map((row) =>
@@ -143,6 +149,10 @@ const TrialBalanceReport = () => {
   };
 
   const handlePrintPDF = () => {
+    if (!canExportReports) {
+      toast.warning("You do not have permission to print reports");
+      return;
+    }
     if (loading) {
       toast.info("Please wait for the report to finish loading.");
       return;
@@ -452,13 +462,13 @@ const TrialBalanceReport = () => {
                   <FaSyncAlt /> Refresh
                 </button>
                 <button
-                  onClick={handleExportCSV}
+                  onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"}
                   className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition"
                 >
                   <FaFileDownload /> Export CSV
                 </button>
                 <button
-                  onClick={handlePrintPDF}
+                  onClick={handlePrintPDF} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"}
                   className="flex items-center gap-2 px-4 py-2 bg-[#0B3B2E] hover:bg-[#0A3127] text-white rounded-lg font-bold transition"
                 >
                   <FaFilePdf /> Print PDF

@@ -18,6 +18,7 @@ import { createTenant, getTenants, updateTenant } from "../../redux/tenantsRedux
 import { createTenantInvoice } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 // Milik theme constants
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
@@ -316,6 +317,9 @@ const AddTenant = () => {
 
   const { currentCompany } = useSelector((state) => state.company);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const canSaveTenant = isEditMode
+    ? hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "update", "propertyManagement")
+    : hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement");
   const isSelfManagingLandlordMode = useMemo(
     () => isSelfManagingLandlordCompany(currentCompany || currentUser?.company || null),
     [currentCompany, currentUser?.company]
@@ -1094,6 +1098,10 @@ useEffect(() => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!canSaveTenant) {
+      toast.error(isEditMode ? "You do not have permission to update tenants" : "You do not have permission to create tenants");
+      return;
+    }
     setGeneralError("");
 
     const errors = validateForm();
@@ -1838,7 +1846,7 @@ for (const request of invoiceRequests) {
                               onChange={(val) => updateAdditionalUtility(idx, "utility", val)}
                               getLabel={(x) => x}
                               getValue={(x) => x}
-                              disabled={loading || tenantLoading}
+                              disabled={!canSaveTenant || loading || tenantLoading}
                             />
                           </div>
 
@@ -1976,23 +1984,28 @@ for (const request of invoiceRequests) {
       </div>
 
       {showInvoicePrompt && pendingInvoiceContext ? (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white">
-            <div className={`px-6 py-4 ${MILIK_GREEN_BG} text-white`}>
-              <div className="flex items-center justify-between gap-3">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm sm:items-center sm:p-6">
+          <div className="flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+            <div className={`sticky top-0 z-20 px-6 py-4 ${MILIK_GREEN_BG} text-white`}>
+              <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-bold tracking-tight">Create tenant invoice now?</h2>
                   <p className="text-sm text-white/80 mt-1">
                     {pendingInvoiceContext.tenant?.name || formData.name} has been saved successfully.
                   </p>
                 </div>
-                <div className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide">
-                  MILIK
-                </div>
+                <button
+                  type="button"
+                  onClick={handleSkipInitialInvoicing}
+                  disabled={isCreatingInitialInvoices}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <FaTimes /> Close
+                </button>
               </div>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                   <p className="text-slate-500 text-xs uppercase tracking-wide">Tenant</p>
@@ -2064,7 +2077,7 @@ for (const request of invoiceRequests) {
               </div>
             </div>
 
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row gap-3 justify-end">
+            <div className="sticky bottom-0 z-20 flex flex-col justify-end gap-3 border-t border-slate-200 bg-slate-50/95 px-6 py-4 backdrop-blur-sm sm:flex-row">
               <button
                 type="button"
                 onClick={handleSkipInitialInvoicing}

@@ -15,20 +15,27 @@ import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const SNAPSHOT_CATEGORIES = new Set(['RENT_CHARGE', 'UTILITY_CHARGE']);
 
+const normalizeArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.items)) return value.items;
+  if (Array.isArray(value?.rentPayments)) return value.rentPayments;
+  return [];
+};
+
+const normalizeText = (value) => String(value || '').trim().toLowerCase();
+const parseDate = (value) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date : null;
+};
+const getInvoiceRecognitionDate = (invoice) => parseDate(invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt);
+
 const FinancialOverview = ({ darkMode }) => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const units = useSelector((state) => state.unit?.units || []);
-
+  const units = useSelector((state) => normalizeArray(state.unit?.units));
   const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
-
-  const rentPayments = Array.isArray(rawRentPayments)
-    ? rawRentPayments
-    : Array.isArray(rawRentPayments?.data)
-    ? rawRentPayments.data
-    : Array.isArray(rawRentPayments?.rentPayments)
-    ? rawRentPayments.rentPayments
-    : [];
+  const rentPayments = useMemo(() => normalizeArray(rawRentPayments), [rawRentPayments]);
 
   const [invoices, setInvoices] = useState([]);
   const [processedStatements, setProcessedStatements] = useState([]);
@@ -85,7 +92,6 @@ const FinancialOverview = ({ darkMode }) => {
     };
 
     loadData();
-
     return () => {
       active = false;
     };
@@ -95,26 +101,16 @@ const FinancialOverview = ({ darkMode }) => {
   const currentYear = now.getFullYear();
   const currentMonthIndex = now.getMonth();
 
-  const parseDate = (value) => {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
-  };
-
-  const isActiveInvoice = (invoice) => {
-    const status = String(invoice?.status || '').toLowerCase();
-    return !['cancelled', 'reversed'].includes(status);
-  };
-
+  const isActiveInvoice = (invoice) => !['cancelled', 'reversed'].includes(normalizeText(invoice?.status));
   const isSnapshotInvoice = (invoice) => SNAPSHOT_CATEGORIES.has(String(invoice?.category || '').toUpperCase());
-
   const amountFromInvoice = (invoice) => Number(invoice?.adjustedAmount ?? invoice?.netAmount ?? invoice?.amount ?? 0);
 
   const outstandingFromInvoice = (invoice) => {
     const snapshotOutstanding = Number(invoice?.outstanding ?? invoice?.remainingCreditableAmount ?? 0);
     if (snapshotOutstanding > 0) return snapshotOutstanding;
 
-    const status = String(invoice?.status || '').toLowerCase();
-    if (status === 'pending' || status === 'partially_paid') {
+    const status = normalizeText(invoice?.status);
+    if (['pending', 'partially_paid', 'part_paid'].includes(status)) {
       return Math.max(0, amountFromInvoice(invoice));
     }
 
@@ -134,7 +130,7 @@ const FinancialOverview = ({ darkMode }) => {
 
     invoices.forEach((invoice) => {
       if (!isActiveInvoice(invoice) || !isSnapshotInvoice(invoice)) return;
-      const date = parseDate(invoice?.invoiceDate || invoice?.createdAt);
+      const date = getInvoiceRecognitionDate(invoice);
       if (!date || date.getFullYear() !== currentYear) return;
       expectedByMonth[date.getMonth()] += amountFromInvoice(invoice);
     });
@@ -144,7 +140,7 @@ const FinancialOverview = ({ darkMode }) => {
       if (!date || date.getFullYear() !== currentYear) return;
       if (payment?.isConfirmed !== true) return;
       if (payment?.isReversed || payment?.isCancelled || payment?.reversalOf) return;
-      if (String(payment?.postingStatus || '').toLowerCase() === 'reversed') return;
+      if (normalizeText(payment?.postingStatus) === 'reversed') return;
       collectedByMonth[date.getMonth()] += Math.abs(Number(payment?.amount || 0));
     });
 
@@ -165,17 +161,31 @@ const FinancialOverview = ({ darkMode }) => {
       }, 0),
     [invoices]
   );
+
   const collectionRate = currentMonthExpected > 0 ? (currentMonthCollected / currentMonthExpected) * 100 : 0;
-  const unpostedReceipts = rentPayments.filter(
-    (payment) =>
-      payment?.reversalOf !== true &&
-      !payment?.reversalOf &&
-      payment?.isReversed !== true &&
-      payment?.isCancelled !== true &&
-      (payment?.postingStatus === 'unposted' || payment?.isConfirmed !== true)
-  ).length;
-  const pendingStatements = processedStatements.filter((item) => ['processed', 'unpaid', 'part_paid'].includes(item?.status)).length;
-  const occupiedUnits = units.filter((unit) => String(unit?.status || '').toLowerCase() === 'occupied').length;
+  const unpostedReceipts = useMemo(
+    () =>
+      rentPayments.filter(
+        (payment) =>
+          !payment?.reversalOf &&
+          !payment?.isReversed &&
+          !payment?.isCancelled &&
+          (normalizeText(payment?.postingStatus) === 'unposted' || payment?.isConfirmed !== true)
+      ).length,
+    [rentPayments]
+  );
+  const pendingStatements = useMemo(
+    () =>
+      processedStatements.filter((item) => {
+        if (normalizeText(item?.status) === 'reversed') return false;
+        return ['processed', 'unpaid', 'part_paid'].includes(normalizeText(item?.status)) || Number(item?.balanceDue || 0) > 0 || Number(item?.recoveryBalance || 0) > 0;
+      }).length,
+    [processedStatements]
+  );
+  const occupiedUnits = useMemo(
+    () => units.filter((unit) => normalizeText(unit?.status) === 'occupied' || unit?.isVacant === false).length,
+    [units]
+  );
 
   const cards = [
     { label: isLandlordMode ? 'Billed' : 'Expected', value: formatMoney(currentMonthExpected) },
@@ -208,8 +218,8 @@ const FinancialOverview = ({ darkMode }) => {
           </h2>
           <p className={`mt-1 text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
             {isLandlordMode
-              ? 'Current-month billed versus collected, with live arrears across your own portfolio.'
-              : 'Current-month expected versus collected, with total live arrears across unpaid invoices.'}
+              ? 'Current-month billed versus collected, aligned to booking dates and live arrears across your portfolio.'
+              : 'Current-month expected versus collected, aligned to booking dates with live arrears across unpaid invoices.'}
           </p>
         </div>
         <div className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'bg-[#31694E]/20 text-[#8bd1b0]' : 'bg-[#ECF6F1] text-[#1f4a35]'}`}>

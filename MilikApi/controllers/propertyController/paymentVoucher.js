@@ -16,6 +16,7 @@ import {
   resolveLandlordRemittancePayableAccount,
   ensurePropertyControlAccount,
 } from "../../services/propertyAccountingService.js";
+import { syncProcessedStatementSettlementState } from "../../services/processedStatementSettlementService.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -350,6 +351,22 @@ const getExpenseCategory = (voucherCategory) => {
   if (voucherCategory === "landlord_maintenance") return "maintenance";
   if (voucherCategory === "landlord_other") return "other";
   return null;
+};
+
+
+const syncLinkedProcessedStatementForVoucher = async ({ voucher, businessId = null } = {}) => {
+  const referenceId = String(voucher?.reference || "").trim();
+  if (!referenceId || !mongoose.Types.ObjectId.isValid(referenceId)) return null;
+
+  try {
+    return await syncProcessedStatementSettlementState({
+      statementId: referenceId,
+      businessId: businessId || voucher?.business || null,
+    });
+  } catch (error) {
+    console.error("Failed to sync processed statement after voucher change:", error);
+    return null;
+  }
 };
 
 const populateVoucherQuery = (query) =>
@@ -989,6 +1006,7 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
     }
 
     await voucher.save();
+    await syncLinkedProcessedStatementForVoucher({ voucher, businessId: business });
 
     const updated = await populateVoucherQuery(PaymentVoucher.findById(voucher._id));
 
@@ -1030,6 +1048,7 @@ export const deletePaymentVoucher = async (req, res, next) => {
     await releaseSourceRequisitionFromVoucher({ voucher: row, businessId: business });
 
     await PaymentVoucher.findOneAndDelete({ _id: req.params.id, business });
+    await syncLinkedProcessedStatementForVoucher({ voucher: row, businessId: business });
     emitToCompany(row.business, "voucher:deleted", { voucherId: row._id });
 
     res.status(200).json({ success: true, message: "Payment voucher deleted" });

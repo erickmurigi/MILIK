@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { getProperties, updateProperty } from '../../redux/propertyRedux';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
-import { FaEdit, FaTrash, FaPlus, FaCheck, FaTimes, FaSearch, FaArrowLeft } from 'react-icons/fa';
+import { FaEdit, FaTrash, FaPlus, FaCheck, FaTimes, FaSearch, FaArrowLeft, FaRedoAlt } from 'react-icons/fa';
 
 const MILIK_GREEN = "#0B3B2E";
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
@@ -60,6 +60,11 @@ const CommissionsList = () => {
     total: properties?.length || 0,
     configured: properties?.filter(p => p.commissionPercentage && p.commissionPercentage > 0).length || 0,
     unconfigured: properties?.filter(p => !p.commissionPercentage || p.commissionPercentage === 0).length || 0,
+  };
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setFilterMode('all');
   };
 
   const handleEdit = (property) => {
@@ -159,204 +164,234 @@ const CommissionsList = () => {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gray-100 p-6">
-        <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Commission Management</h1>
-              <p className="text-gray-600 mt-1">View and manage property commission settings</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowAddModal(true)}
-                className={`flex items-center gap-2 px-4 py-2 ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER} text-white rounded-lg font-semibold transition`}
-              >
-                <FaPlus /> Add Commission
-              </button>
-              <button
-                onClick={() => navigate(-1)}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition"
-              >
-                <FaArrowLeft /> Back
-              </button>
-            </div>
-          </div>
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="bg-white rounded-lg shadow p-4">
-              <div className="text-sm text-gray-600 mb-1">Total Properties</div>
-              <div className="text-3xl font-bold text-gray-900">{stats.total}</div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <div className="text-sm text-gray-600 mb-1">Configured</div>
-              <div className="text-3xl font-bold" style={{ color: MILIK_GREEN }}>{stats.configured}</div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <div className="text-sm text-gray-600 mb-1">Unconfigured</div>
-              <div className="text-3xl font-bold" style={{ color: MILIK_ORANGE }}>{stats.unconfigured}</div>
-            </div>
-          </div>
-
-          {/* Search & Filter */}
-          <div className="bg-white rounded-lg shadow p-4 mb-6">
-            <div className="flex gap-4 items-center">
-              <div className="flex-1 relative">
-                <FaSearch className="absolute left-3 top-3 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by code or name..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                />
+      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+        <div className="mx-auto flex w-full max-w-[96%] flex-col gap-4">
+          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Property Management</p>
+                <h1 className="mt-1 text-2xl font-black text-slate-900">Commission Management</h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  Maintain commission settings in a property-style list with cleaner filters, compact actions, and a tighter table layout.
+                </p>
               </div>
-              <select
-                value={filterMode}
-                onChange={(e) => setFilterMode(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              >
-                <option value="all">All Properties</option>
-                <option value="configured">Configured Only</option>
-                <option value="unconfigured">Unconfigured Only</option>
-              </select>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black text-white shadow-sm transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
+                >
+                  <FaPlus /> Add Commission
+                </button>
+                <button
+                  onClick={() => navigate(-1)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+                >
+                  <FaArrowLeft /> Back
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Table */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead style={{ backgroundColor: MILIK_GREEN }} className="text-white">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Code</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Property Name</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Commission %</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Recognition Basis</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Tenants Pay To</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold">Deposits Held By</th>
-                    <th className="px-6 py-3 text-center text-sm font-semibold">Actions</th>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Total Properties</p>
+              <p className="mt-2 text-2xl font-black text-slate-900">{stats.total}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Configured</p>
+              <p className="mt-2 text-2xl font-black text-emerald-800">{stats.configured}</p>
+            </div>
+            <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">Unconfigured</p>
+              <p className="mt-2 text-2xl font-black text-orange-800">{stats.unconfigured}</p>
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[240px] flex-1">
+                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by property code or name"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  />
+                </div>
+
+                <select
+                  value={filterMode}
+                  onChange={(e) => setFilterMode(e.target.value)}
+                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                >
+                  <option value="all">All Properties</option>
+                  <option value="configured">Configured Only</option>
+                  <option value="unconfigured">Unconfigured Only</option>
+                </select>
+
+                <button
+                  onClick={resetFilters}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
+                >
+                  <FaRedoAlt /> Reset
+                </button>
+
+                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm">
+                  Visible
+                  <span className="text-sm text-slate-900">{filteredProperties.length}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full min-w-[1120px] text-sm">
+                <thead>
+                  <tr className={`${MILIK_GREEN_BG} sticky top-0 z-10 text-white`}>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Code</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Property</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Commission</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Recognition Basis</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Tenants Pay To</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Deposits Held By</th>
+                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredProperties.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
-                        <FaSearch className="text-4xl text-gray-300 mx-auto mb-3" />
-                        <p>No properties found</p>
+                      <td colSpan="7" className="px-4 py-10 text-center text-slate-500">
+                        <FaSearch className="mx-auto mb-3 text-3xl text-slate-300" />
+                        <p className="text-sm font-semibold">No commission rows matched the current filters.</p>
                       </td>
                     </tr>
                   ) : (
-                    filteredProperties.map((property) => (
+                    filteredProperties.map((property, index) => (
                       <React.Fragment key={property._id}>
                         {editingId === property._id ? (
-                          // Edit Mode Row
-                          <tr className="border-t border-gray-200" style={{ backgroundColor: '#f0f8ff' }}>
-                            <td colSpan="7" className="px-6 py-4">
-                              <div className="grid grid-cols-2 gap-4 items-end">
-                                {/* Commission % */}
-                                <div>
-                                  <label className="block text-xs font-semibold text-gray-700 mb-1">Commission %</label>
-                                  <input
-                                    type="number"
-                                    value={editFormData.commissionPercentage}
-                                    onChange={(e) => handleEditChange('commissionPercentage', e.target.value)}
-                                    min="0"
-                                    max="100"
-                                    step="0.01"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                  />
+                          <tr className="border-t border-slate-200 bg-slate-50/80">
+                            <td colSpan="7" className="px-4 py-4">
+                              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                  <div>
+                                    <p className="text-sm font-black text-slate-900">
+                                      {property.propertyCode || '—'} • {property.propertyName || property.name || 'Property'}
+                                    </p>
+                                    <p className="text-xs text-slate-500">Edit commission and collection settings for this property.</p>
+                                  </div>
                                 </div>
 
-                                {/* Recognition Basis */}
-                                <div>
-                                  <label className="block text-xs font-semibold text-gray-700 mb-1">Recognition Basis</label>
-                                  <select
-                                    value={editFormData.commissionRecognitionBasis}
-                                    onChange={(e) => handleEditChange('commissionRecognitionBasis', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                  >
-                                    <option value="received">Rent Collected (Cash)</option>
-                                    <option value="invoiced">Rent Expected (Accrual)</option>
-                                  </select>
+                                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                                  <div>
+                                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-slate-500">Commission %</label>
+                                    <input
+                                      type="number"
+                                      value={editFormData.commissionPercentage}
+                                      onChange={(e) => handleEditChange('commissionPercentage', e.target.value)}
+                                      min="0"
+                                      max="100"
+                                      step="0.01"
+                                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-slate-500">Recognition Basis</label>
+                                    <select
+                                      value={editFormData.commissionRecognitionBasis}
+                                      onChange={(e) => handleEditChange('commissionRecognitionBasis', e.target.value)}
+                                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                                    >
+                                      <option value="received">Rent Collected (Cash)</option>
+                                      <option value="invoiced">Rent Expected (Accrual)</option>
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-slate-500">Tenants Pay To</label>
+                                    <select
+                                      value={editFormData.tenantsPaysTo}
+                                      onChange={(e) => handleEditChange('tenantsPaysTo', e.target.value)}
+                                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                                    >
+                                      <option value="propertyManager">Manager</option>
+                                      <option value="landlord">Landlord</option>
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-slate-500">Deposits Held By</label>
+                                    <select
+                                      value={editFormData.depositHeldBy}
+                                      onChange={(e) => handleEditChange('depositHeldBy', e.target.value)}
+                                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                                    >
+                                      <option value="propertyManager">Manager</option>
+                                      <option value="landlord">Landlord</option>
+                                    </select>
+                                  </div>
                                 </div>
 
-                                {/* Tenants Pay To */}
-                                <div>
-                                  <label className="block text-xs font-semibold text-gray-700 mb-1">Tenants Pay To</label>
-                                  <select
-                                    value={editFormData.tenantsPaysTo}
-                                    onChange={(e) => handleEditChange('tenantsPaysTo', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                  >
-                                    <option value="propertyManager">Manager</option>
-                                    <option value="landlord">Landlord</option>
-                                  </select>
-                                </div>
-
-                                {/* Deposits Held By */}
-                                <div>
-                                  <label className="block text-xs font-semibold text-gray-700 mb-1">Deposits Held By</label>
-                                  <select
-                                    value={editFormData.depositHeldBy}
-                                    onChange={(e) => handleEditChange('depositHeldBy', e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                  >
-                                    <option value="propertyManager">Manager</option>
-                                    <option value="landlord">Landlord</option>
-                                  </select>
-                                </div>
-
-                                {/* Buttons */}
-                                <div className="col-span-2 flex gap-2">
-                                  <button
-                                    onClick={() => handleSaveEdit(property._id)}
-                                    className={`flex items-center gap-1 flex-1 px-3 py-2 ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER} text-white rounded text-sm font-semibold transition`}
-                                  >
-                                    <FaCheck /> Save
-                                  </button>
+                                <div className="mt-4 flex flex-wrap justify-end gap-2">
                                   <button
                                     onClick={() => {
                                       setEditingId(null);
                                       setEditFormData(null);
                                     }}
-                                    className="flex items-center gap-1 flex-1 px-3 py-2 bg-gray-400 hover:bg-gray-500 text-white rounded text-sm font-semibold transition"
+                                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-100"
                                   >
                                     <FaTimes /> Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => handleSaveEdit(property._id)}
+                                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black text-white transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
+                                  >
+                                    <FaCheck /> Save Changes
                                   </button>
                                 </div>
                               </div>
                             </td>
                           </tr>
                         ) : (
-                          // Display Mode Row
-                          <tr className="border-t border-gray-200 hover:bg-gray-50">
-                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{property.propertyCode || '-'}</td>
-                            <td className="px-6 py-4 text-sm text-gray-700">{property.propertyName}</td>
-                            <td className="px-6 py-4 text-sm">
+                          <tr className={`border-t border-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-slate-50`}>
+                            <td className="px-4 py-3 text-sm font-semibold text-slate-900">{property.propertyCode || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-slate-700">
+                              <div className="font-semibold text-slate-900">{property.propertyName || property.name || '-'}</div>
+                            </td>
+                            <td className="px-4 py-3 text-sm">
                               {property.commissionPercentage && property.commissionPercentage > 0 ? (
-                                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold" style={{ backgroundColor: `${MILIK_ORANGE}15`, color: MILIK_ORANGE }}>
+                                <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-orange-700">
                                   {property.commissionPercentage}%
                                 </span>
                               ) : (
-                                <span className="text-gray-400">Not set</span>
+                                <span className="text-slate-400">Not set</span>
                               )}
                             </td>
-                            <td className="px-6 py-4 text-sm text-gray-700">{property.commissionRecognitionBasis ? (property.commissionRecognitionBasis === 'received' ? 'Rent Collected (Cash)' : 'Rent Expected (Accrual)') : '-'}</td>
-                            <td className="px-6 py-4 text-sm text-gray-700">{property.tenantsPaysTo ? (property.tenantsPaysTo === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}</td>
-                            <td className="px-6 py-4 text-sm text-gray-700">{property.depositHeldBy ? (property.depositHeldBy === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}</td>
-                            <td className="px-6 py-4 text-center">
-                              <div className="flex gap-2 justify-center">
+                            <td className="px-4 py-3 text-sm text-slate-700">
+                              {property.commissionRecognitionBasis
+                                ? property.commissionRecognitionBasis === 'received'
+                                  ? 'Rent Collected (Cash)'
+                                  : 'Rent Expected (Accrual)'
+                                : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-slate-700">
+                              {property.tenantsPaysTo ? (property.tenantsPaysTo === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-slate-700">
+                              {property.depositHeldBy ? (property.depositHeldBy === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="inline-flex flex-wrap justify-end gap-2">
                                 <button
                                   onClick={() => handleEdit(property)}
-                                  className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-semibold transition flex items-center gap-1"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 transition hover:bg-blue-100"
                                 >
                                   <FaEdit /> Edit
                                 </button>
                                 <button
                                   onClick={() => handleDelete(property._id)}
-                                  className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-sm font-semibold transition flex items-center gap-1"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-100"
                                 >
                                   <FaTrash /> Remove
                                 </button>
@@ -374,35 +409,33 @@ const CommissionsList = () => {
         </div>
       </div>
 
-      {/* Add Commission Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
-            <div className={`${MILIK_GREEN_BG} text-white p-4 rounded-t-lg`}>
-              <h3 className="text-lg font-bold">Add Commission Settings</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
+          <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className={`${MILIK_GREEN_BG} px-6 py-4 text-white`}>
+              <h3 className="text-xl font-black">Add Commission Settings</h3>
+              <p className="mt-1 text-sm text-emerald-100">Apply a commission structure to a property that is still unconfigured.</p>
             </div>
 
-            <div className="p-6 space-y-4">
-              {/* Select Property */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Property</label>
+            <div className="grid gap-4 p-6 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-sm font-bold text-slate-700">Property</label>
                 <select
                   value={addFormData.property || ''}
                   onChange={(e) => setAddFormData(prev => ({ ...prev, property: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="">-- Select Property --</option>
                   {unconfiguredProperties.map((prop) => (
                     <option key={prop._id} value={prop._id}>
-                      {prop.propertyCode} - {prop.propertyName}
+                      {prop.propertyCode} - {prop.propertyName || prop.name}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Commission % */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Commission (%)</label>
+                <label className="mb-2 block text-sm font-bold text-slate-700">Commission (%)</label>
                 <input
                   type="number"
                   value={addFormData.commissionPercentage}
@@ -410,70 +443,67 @@ const CommissionsList = () => {
                   min="0"
                   max="100"
                   step="0.01"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 />
               </div>
 
-              {/* Recognition Basis */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Recognition Basis</label>
+                <label className="mb-2 block text-sm font-bold text-slate-700">Recognition Basis</label>
                 <select
                   value={addFormData.commissionRecognitionBasis}
                   onChange={(e) => setAddFormData(prev => ({ ...prev, commissionRecognitionBasis: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="received">Rent Collected (Cash)</option>
                   <option value="invoiced">Rent Expected (Accrual)</option>
                 </select>
               </div>
 
-              {/* Tenants Pay To */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Tenants Pay To</label>
+                <label className="mb-2 block text-sm font-bold text-slate-700">Tenants Pay To</label>
                 <select
                   value={addFormData.tenantsPaysTo}
                   onChange={(e) => setAddFormData(prev => ({ ...prev, tenantsPaysTo: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="propertyManager">Manager</option>
                   <option value="landlord">Landlord</option>
                 </select>
               </div>
 
-              {/* Deposits Held By */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Deposits Held By</label>
+                <label className="mb-2 block text-sm font-bold text-slate-700">Deposits Held By</label>
                 <select
                   value={addFormData.depositHeldBy}
                   onChange={(e) => setAddFormData(prev => ({ ...prev, depositHeldBy: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="propertyManager">Manager</option>
                   <option value="landlord">Landlord</option>
                 </select>
               </div>
+            </div>
 
-              {/* Buttons */}
-              <div className="flex gap-2 pt-4">
-                <button
-                  onClick={handleAddCommission}
-                  className={`flex-1 px-4 py-2 ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER} text-white font-semibold rounded-lg transition`}
-                >
-                  Add Commission
-                </button>
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 font-semibold rounded-lg transition"
-                >
-                  Cancel
-                </button>
-              </div>
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddCommission}
+                className={`rounded-xl px-4 py-2.5 text-sm font-black text-white transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
+              >
+                Add Commission
+              </button>
             </div>
           </div>
         </div>
       )}
     </DashboardLayout>
   );
+
 };
 
 export default CommissionsList;

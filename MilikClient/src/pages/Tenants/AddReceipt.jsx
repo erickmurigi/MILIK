@@ -7,6 +7,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { createRentPayment, getRentPayments, getTenantInvoices, getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -122,6 +123,8 @@ const AddReceipt = () => {
   const prefilledMsisdn = searchParams.get("msisdn") || "";
   const prefilledPayerName = searchParams.get("payerName") || "";
   const { currentCompany } = useSelector((state) => state.company || {});
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const canSaveReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement");
   const rawProperties = useSelector((state) => state.property?.properties);
   const rawTenants = useSelector((state) => state.tenant?.tenants);
   const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
@@ -472,6 +475,10 @@ const AddReceipt = () => {
   };
 
   const handleSubmit = async () => {
+    if (!canSaveReceipt) {
+      toast.error("You do not have permission to record receipts");
+      return;
+    }
     if (!currentCompany?._id) {
       toast.error("No active company selected");
       return;
@@ -1102,7 +1109,9 @@ const AddReceipt = () => {
               </button>
               <button
                 onClick={handleSubmit}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                disabled={!canSaveReceipt}
+                title={canSaveReceipt ? "Save receipt" : "You do not have permission to record receipts"}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white shadow-sm transition ${canSaveReceipt ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}
               >
                 <FaSave /> Save Receipt
               </button>

@@ -40,6 +40,7 @@ const billItemOptions = [
 const emptyFilters = {
   search: "",
   tenant: "",
+  propertyId: "",
   billItem: "",
   type: "",
   status: "",
@@ -206,13 +207,13 @@ function TakeOnBalanceModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-6">
       <div
         className="absolute inset-0 bg-slate-950/30 backdrop-blur-[5px]"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#0F5132] to-[#FF8C00] px-6 py-5 text-white">
+      <div className="relative flex w-full max-w-3xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+        <div className="shrink-0 border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#0F5132] to-[#FF8C00] px-6 py-5 text-white">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/70">
@@ -235,7 +236,7 @@ function TakeOnBalanceModal({
           </div>
         </div>
 
-        <div className="max-h-[80vh] overflow-y-auto px-6 py-6">
+        <div className="flex-1 overflow-y-auto px-6 py-6">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div className="space-y-5">
               <div>
@@ -461,7 +462,8 @@ function TakeOnBalanceModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+        <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <div className="flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
@@ -478,6 +480,7 @@ function TakeOnBalanceModal({
             <FaSave />
             {saving ? "Saving..." : mode === "edit" ? "Save Changes" : "Save Take-On Balance"}
           </button>
+          </div>
         </div>
       </div>
     </div>
@@ -488,10 +491,10 @@ function TakeOnViewModal({ open, row, onClose }) {
   if (!open || !row) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-6">
       <div className="absolute inset-0 bg-slate-950/25 backdrop-blur-[4px]" onClick={onClose} />
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <div className="border-b border-slate-200 bg-gradient-to-r from-slate-900 via-[#0B3B2E] to-[#FF8C00] px-6 py-5 text-white">
+      <div className="relative w-full max-w-2xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+        <div className="sticky top-0 z-20 border-b border-slate-200 bg-gradient-to-r from-slate-900 via-[#0B3B2E] to-[#FF8C00] px-6 py-5 text-white">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/70">
@@ -597,6 +600,15 @@ const TakeOnBalances = () => {
     return map;
   }, [propertyOptions]);
 
+  const getRowPropertyId = (row) =>
+    normalizeId(getTenantPropertyId(row?.tenant) || row?.property?._id || row?.property || "");
+
+  const getRowPropertyName = (row) => {
+    const propertyId = getRowPropertyId(row);
+    const propertyRecord = propertyLookup.get(propertyId);
+    return getPropertyDisplay(propertyRecord || row?.property || getTenantPropertyRecord(row?.tenant));
+  };
+
   const loadRows = async () => {
     if (!currentCompany?._id) return;
     try {
@@ -643,6 +655,9 @@ const TakeOnBalances = () => {
         return false;
       }
       if (appliedFilters.tenant && normalizeId(row.tenant?._id || row.tenant) !== appliedFilters.tenant) {
+        return false;
+      }
+      if (appliedFilters.propertyId && getRowPropertyId(row) !== appliedFilters.propertyId) {
         return false;
       }
       if (appliedFilters.billItem && row.billItemKey !== appliedFilters.billItem) {
@@ -877,39 +892,36 @@ const TakeOnBalances = () => {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mx-auto flex w-full max-w-[96%] flex-col gap-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#FF8C00]">
-                Tenants Financing
-              </p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-                Tenant Take-On Balances
-              </h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-600">
-                Manage opening tenant balances in a clean, auditable list with live allocation
-                tracking for Amount, Allocated, and Balance.
-              </p>
-            </div>
+      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+        <div className="mx-auto flex w-full max-w-[96%] flex-col gap-4">
+          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Tenants Financing</p>
+                <h1 className="mt-1 text-2xl font-black text-slate-900">Tenant Take-On Balances</h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  Tightened to the invoices-page standard with cleaner filters, compact action buttons, wider table flow, and sticky control sections.
+                </p>
+              </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={loadRows}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
-              >
-                <FaRedoAlt />
-                Refresh
-              </button>
-              <button
-                type="button"
-                onClick={openCreateModal}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-              >
-                <FaPlus />
-                Add Take-On Balance
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={loadRows}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+                >
+                  <FaRedoAlt />
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={openCreateModal}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                >
+                  <FaPlus />
+                  Add Take-On Balance
+                </button>
+              </div>
             </div>
           </div>
 
@@ -930,15 +942,11 @@ const TakeOnBalances = () => {
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                       {label}
                     </p>
-                    <p className="mt-3 text-2xl font-bold text-slate-900">
-                      {formatCurrency(value)}
-                    </p>
+                    <p className="mt-3 text-2xl font-bold text-slate-900">{formatCurrency(value)}</p>
                   </div>
                   <div
                     className={`rounded-2xl p-3 ${
-                      idx === 2
-                        ? "bg-orange-100 text-orange-700"
-                        : "bg-slate-100 text-slate-700"
+                      idx === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-700"
                     }`}
                   >
                     <FaMoneyBillWave className="text-xl" />
@@ -948,55 +956,51 @@ const TakeOnBalances = () => {
             ))}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-5 py-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <FaFilter className="text-orange-500" />
-                Filters
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-4 px-5 py-5 md:grid-cols-2 xl:grid-cols-5">
-              <div className="xl:col-span-2">
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Search
-                </label>
-                <div className="relative">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[260px] flex-1">
+                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
                   <input
                     value={draftFilters.search}
                     onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Tenant, unit, bill item, invoice number"
-                    className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
+                    placeholder="Tenant, property, unit, bill item, invoice number"
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Tenant
-                </label>
                 <select
-                  value={draftFilters.tenant}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenant: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
+                  value={draftFilters.propertyId}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, tenant: "" }))}
+                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
-                  <option value="">All tenants</option>
-                  {tenants.map((tenant) => (
-                    <option key={tenant._id} value={tenant._id}>
-                      {getTenantDisplayName(tenant)}
+                  <option value="">All properties</option>
+                  {propertyOptions.map((property) => (
+                    <option key={property._id || property.id} value={normalizeId(property._id || property.id)}>
+                      {getPropertyDisplay(property)}
                     </option>
                   ))}
                 </select>
-              </div>
 
-              <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Bill Item
-                </label>
+                <select
+                  value={draftFilters.tenant}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenant: e.target.value }))}
+                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                >
+                  <option value="">All tenants</option>
+                  {tenants
+                    .filter((tenant) => !draftFilters.propertyId || getTenantPropertyId(tenant) === draftFilters.propertyId)
+                    .map((tenant) => (
+                      <option key={tenant._id} value={tenant._id}>
+                        {getTenantDisplayName(tenant)}
+                      </option>
+                    ))}
+                </select>
+
                 <select
                   value={draftFilters.billItem}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, billItem: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
+                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="">All bill items</option>
                   {filterBillItemOptions.map((option) => (
@@ -1005,146 +1009,116 @@ const TakeOnBalances = () => {
                     </option>
                   ))}
                 </select>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Type
-                  </label>
-                  <select
-                    value={draftFilters.type}
-                    onChange={(e) => setDraftFilters((prev) => ({ ...prev, type: e.target.value }))}
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                  >
-                    <option value="">All</option>
-                    <option value="Debit">Debit</option>
-                    <option value="Credit">Credit</option>
-                  </select>
-                </div>
+                <select
+                  value={draftFilters.type}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, type: e.target.value }))}
+                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                >
+                  <option value="">All types</option>
+                  <option value="Debit">Debit</option>
+                  <option value="Credit">Credit</option>
+                </select>
 
-                <div>
-                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Status
-                  </label>
-                  <select
-                    value={draftFilters.status}
-                    onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))}
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                  >
-                    <option value="">All</option>
-                    <option value="unallocated">Unallocated</option>
-                    <option value="partially_allocated">Partially Allocated</option>
-                    <option value="fully_allocated">Fully Allocated</option>
-                  </select>
+                <select
+                  value={draftFilters.status}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                >
+                  <option value="">All statuses</option>
+                  <option value="unallocated">Unallocated</option>
+                  <option value="partially_allocated">Partially Allocated</option>
+                  <option value="fully_allocated">Fully Allocated</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraftFilters(emptyFilters);
+                    setAppliedFilters(emptyFilters);
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
+                >
+                  Reset
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAppliedFilters(draftFilters)}
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
+                >
+                  Apply Filters
+                </button>
+
+                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm">
+                  Rows
+                  <span className="text-sm text-slate-900">{filteredRows.length}</span>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-5 py-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setDraftFilters(emptyFilters);
-                  setAppliedFilters(emptyFilters);
-                }}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-              >
-                Reset
-              </button>
-              <button
-                type="button"
-                onClick={() => setAppliedFilters(draftFilters)}
-                className={`rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-              >
-                Apply Filters
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-[1180px] w-full divide-y divide-slate-200 table-auto">
-                <thead className="bg-slate-50">
-                  <tr>
-                    {[
-                      "Tenant",
-                      "Unit",
-                      "Bill Item",
-                      "Type",
-                      "Amount",
-                      "Allocated",
-                      "Balance",
-                      "Effective Date",
-                      "Actions",
-                    ].map((header) => (
-                      <th
-                        key={header}
-                        className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500"
-                      >
-                        {header}
-                      </th>
-                    ))}
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full min-w-[1360px] text-sm">
+                <thead>
+                  <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Tenant</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Property</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Unit</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Bill Item</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Type</th>
+                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Amount</th>
+                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Allocated</th>
+                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Balance</th>
+                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Effective Date</th>
+                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Actions</th>
                   </tr>
                 </thead>
 
-                <tbody className="divide-y divide-slate-100 bg-white">
+                <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500">
+                      <td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-500">
                         Loading take-on balances...
                       </td>
                     </tr>
                   ) : filteredRows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500">
+                      <td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-500">
                         No take-on balances found for the selected filters.
                       </td>
                     </tr>
                   ) : (
-                    filteredRows.map((row) => {
+                    filteredRows.map((row, index) => {
                       const meta = statusMeta[row.status] || statusMeta.unallocated;
 
                       return (
-                        <tr key={row.invoiceId} className="transition hover:bg-slate-50/80">
-                          <td className="min-w-[220px] px-4 py-4 text-sm font-semibold text-slate-900">
-                            {getTenantDisplayName(row.tenant)}
+                        <tr
+                          key={row.invoiceId || row.receiptId || `${getRowPropertyId(row)}-${getTenantDisplayName(row.tenant)}-${index}`}
+                          className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/40"} hover:bg-slate-50`}
+                        >
+                          <td className="min-w-[220px] px-4 py-3 text-sm">
+                            <div className="font-semibold text-slate-900">{getTenantDisplayName(row.tenant)}</div>
                           </td>
-                          <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-700">
-                            {getUnitDisplay(row.unit)}
-                          </td>
-                          <td className="min-w-[240px] px-4 py-4 text-sm text-slate-700">
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{getRowPropertyName(row)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{getUnitDisplay(row.unit)}</td>
+                          <td className="min-w-[220px] px-4 py-3 text-sm text-slate-700">
                             <div className="font-semibold text-slate-900">{row.billItemLabel}</div>
-                            <div className="mt-1 text-xs text-slate-500">
-                              {row.invoiceNumber || "No invoice number"}
-                            </div>
+                            <div className="mt-1 text-xs text-slate-500">{row.invoiceNumber || "No invoice number"}</div>
                           </td>
-                          <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-700">{row.type}</td>
-                          <td className="whitespace-nowrap px-4 py-4 text-sm font-semibold text-slate-900">
-                            {formatCurrency(row.amount)}
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{row.type}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-slate-900">{formatCurrency(row.amount)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-slate-700">{formatCurrency(row.allocated)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
+                            <div className="font-semibold text-slate-900">{formatCurrency(row.balance)}</div>
+                            <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${meta.classes}`}>{meta.label}</span>
                           </td>
-                          <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-700">
-                            {formatCurrency(row.allocated)}
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-4 text-sm">
-                            <div className="font-semibold text-slate-900">
-                              {formatCurrency(row.balance)}
-                            </div>
-                            <span
-                              className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${meta.classes}`}
-                            >
-                              {meta.label}
-                            </span>
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-700">
-                            {formatDate(row.effectiveDate)}
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-4 text-sm">
-                            <div className="flex items-center gap-2 action-buttons">
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{formatDate(row.effectiveDate)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
+                            <div className="inline-flex flex-wrap justify-end gap-2 action-buttons">
                               <button
                                 type="button"
                                 onClick={() => setSelectedRow(row)}
-                                className="rounded-lg border border-slate-300 p-2 text-slate-600 transition hover:bg-slate-100"
+                                className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 transition hover:bg-slate-100"
                                 title="View"
                               >
                                 <FaEye />
@@ -1153,7 +1127,7 @@ const TakeOnBalances = () => {
                                 type="button"
                                 onClick={() => openEditModal(row)}
                                 disabled={!row.canEdit}
-                                className="rounded-lg border border-orange-200 p-2 text-orange-600 transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="rounded-lg border border-orange-200 bg-orange-50 p-2 text-orange-600 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-40"
                                 title={row.canEdit ? "Edit" : "Allocated rows cannot be edited"}
                               >
                                 <FaEdit />
@@ -1162,7 +1136,7 @@ const TakeOnBalances = () => {
                                 type="button"
                                 onClick={() => setRowToDelete(row)}
                                 disabled={!row.canDelete}
-                                className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
                                 title={row.canDelete ? "Delete" : "Allocated rows cannot be deleted"}
                               >
                                 <FaTrash />
@@ -1217,6 +1191,7 @@ const TakeOnBalances = () => {
       />
     </DashboardLayout>
   );
+
 };
 
 export default TakeOnBalances;
