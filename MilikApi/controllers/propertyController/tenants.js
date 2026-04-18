@@ -4,6 +4,7 @@ import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
 import RentPayment from "../../models/RentPayment.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
+import Lease from "../../models/Lease.js";
 
 
 const ACTIVE_TENANT_STATUSES = ["active", "overdue"];
@@ -179,6 +180,90 @@ const computeOperationalTenantStatus = ({ tenant = {} }) => {
 const normalizeTenantStatus = (value) => {
   const raw = String(value || "active").trim().toLowerCase();
   return raw === "moved_out" ? "terminated" : raw;
+};
+
+
+const addDays = (dateValue, days = 0) => {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setDate(date.getDate() + Number(days || 0));
+  return date;
+};
+
+const syncTenantLeaseRecord = async ({
+  tenantDoc,
+  unitDoc = null,
+  action = "upsert",
+  effectiveDate = null,
+  terminationReason = "",
+} = {}) => {
+  if (!tenantDoc?._id || !tenantDoc?.business) return null;
+
+  const tenantId = tenantDoc._id;
+  const businessId = tenantDoc.business;
+  const normalizedLeaseType = normalizeLower(tenantDoc.leaseType || "at_will");
+  const normalizedTenantStatus = normalizeTenantStatus(tenantDoc.status || "active");
+  const activeLease = await Lease.findOne({
+    business: businessId,
+    tenant: tenantId,
+    status: { $in: ["draft", "pending_signature", "active"] },
+  }).sort({ createdAt: -1 });
+
+  if (action === "terminate" || normalizedTenantStatus === "terminated") {
+    if (!activeLease) return null;
+
+    const terminationDate = effectiveDate
+      ? new Date(effectiveDate)
+      : tenantDoc.moveOutDate
+        ? new Date(tenantDoc.moveOutDate)
+        : new Date();
+
+    activeLease.status = "terminated";
+    activeLease.endDate = terminationDate;
+    activeLease.terminatedAt = terminationDate;
+    activeLease.terminationReason = terminationReason || tenantDoc.terminationReason || activeLease.terminationReason || "";
+    return activeLease.save();
+  }
+
+  if (normalizedLeaseType !== "fixed") {
+    return activeLease || null;
+  }
+
+  const resolvedUnit = unitDoc || (tenantDoc.unit ? await Unit.findById(tenantDoc.unit).populate("property", "landlord") : null);
+  if (!resolvedUnit?._id) return activeLease || null;
+
+  const startDate = tenantDoc.moveInDate ? new Date(tenantDoc.moveInDate) : new Date(tenantDoc.createdAt || Date.now());
+  const endDate = tenantDoc.moveOutDate ? new Date(tenantDoc.moveOutDate) : addDays(startDate, 365);
+  if (!endDate || Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+    return activeLease || null;
+  }
+
+  const payload = {
+    tenant: tenantId,
+    unit: resolvedUnit._id,
+    landlord: resolvedUnit?.property?.landlord || null,
+    business: businessId,
+    leaseType: "fixed",
+    startDate,
+    endDate,
+    rentAmount: Number(tenantDoc.rent || resolvedUnit.rent || 0),
+    depositAmount: Number(tenantDoc.depositAmount || 0),
+    paymentDueDay: 5,
+    noticePeriodDays: 30,
+    lateFee: Number(activeLease?.lateFee || 0),
+    terms: normalizeString(activeLease?.terms || ""),
+    status: "active",
+    activatedAt: activeLease?.activatedAt || new Date(),
+    autoCreatedFromTenant: true,
+  };
+
+  if (activeLease) {
+    Object.assign(activeLease, payload);
+    return activeLease.save();
+  }
+
+  const newLease = new Lease(payload);
+  return newLease.save();
 };
 
 const sanitizeUtilities = (utilities = []) => {
@@ -527,6 +612,12 @@ export const createTenant = async (req, res, next) => {
 
     const populatedTenant = await populateTenantQuery(Tenant.findById(savedTenant._id));
 
+    await syncTenantLeaseRecord({
+      tenantDoc: populatedTenant,
+      unitDoc: unit,
+      action: "upsert",
+    });
+
     return res.status(201).json({
       success: true,
       data: populatedTenant,
@@ -850,6 +941,12 @@ export const updateTenant = async (req, res, next) => {
       });
     }
 
+    await syncTenantLeaseRecord({
+      tenantDoc: updatedTenant,
+      unitDoc: targetUnit || updatedTenant.unit || null,
+      action: "upsert",
+    });
+
     return res.status(200).json({
       success: true,
       data: updatedTenant,
@@ -1034,6 +1131,13 @@ export const updateTenantStatus = async (req, res, next) => {
         { new: true, runValidators: true }
       )
     );
+
+    await syncTenantLeaseRecord({
+      tenantDoc: updatedTenantDoc,
+      action: status === "terminated" ? "terminate" : "upsert",
+      effectiveDate: updateData.terminationDate || updateData.moveOutDate || null,
+      terminationReason,
+    });
 
     const updatedTenant =
       typeof updatedTenantDoc?.toObject === "function"

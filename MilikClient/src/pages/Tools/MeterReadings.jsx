@@ -72,6 +72,8 @@ const emptyFilters = {
   billingPeriod: "",
 };
 
+const ACTIVE_TENANT_STATUSES = new Set(["active", "overdue"]);
+
 const statusBadgeClass = {
   draft: "bg-orange-100 text-orange-700",
   billed: "bg-green-100 text-green-700",
@@ -95,6 +97,18 @@ const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("en-GB");
+};
+
+const sanitizeDecimalInput = (value) => {
+  const raw = String(value ?? "")
+    .replace(/,/g, "")
+    .replace(/[^\d.]/g, "");
+
+  if (!raw) return "";
+
+  const [whole = "", ...fractionParts] = raw.split(".");
+  if (!fractionParts.length) return whole;
+  return `${whole}.${fractionParts.join("")}`;
 };
 
 const inferUnitsConsumed = (form) => {
@@ -303,11 +317,15 @@ const MeterReadings = () => {
   }, [units, form.property]);
 
   const filteredTenants = useMemo(() => {
-    if (!form.unit) return tenants;
-    return tenants.filter(
-      (tenant) => String(tenant?.unit?._id || tenant?.unit) === String(form.unit)
-    );
-  }, [tenants, form.unit]);
+    const scopedTenants = !form.unit
+      ? tenants
+      : tenants.filter((tenant) => String(tenant?.unit?._id || tenant?.unit) === String(form.unit));
+
+    return scopedTenants.filter((tenant) => {
+      const status = String(tenant?.status || "").trim().toLowerCase();
+      return ACTIVE_TENANT_STATUSES.has(status) || String(tenant?._id || "") === String(form.tenant || "");
+    });
+  }, [tenants, form.unit, form.tenant]);
 
   const unitsForSelectedProperty = useMemo(() => {
     if (draftFilters.property === "any") return units;
@@ -317,18 +335,74 @@ const MeterReadings = () => {
     );
   }, [units, draftFilters.property]);
 
+  const selectedUnit = useMemo(
+    () => units.find((unit) => String(unit._id) === String(form.unit)),
+    [units, form.unit]
+  );
+
+  const selectedUnitUtilityOptions = useMemo(() => {
+    const unitUtilityNames = Array.from(
+      new Set(
+        (selectedUnit?.utilities || [])
+          .map((item) => String(item?.utility || "").trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+
+    if (!unitUtilityNames.length) return utilityOptions;
+
+    const seen = new Set(unitUtilityNames.map((item) => item.toLowerCase()));
+    const fallback = utilityOptions.filter((item) => !seen.has(String(item || "").toLowerCase()));
+    return [...unitUtilityNames, ...fallback];
+  }, [selectedUnit, utilityOptions]);
+
+  const inferredPreviousReading = useMemo(() => {
+    if (!form.property || !form.unit || !form.utilityType) return 0;
+
+    const targetUtility = String(form.utilityType || "").trim().toLowerCase();
+    const targetPeriod = String(form.billingPeriod || "").trim();
+
+    const candidates = readings
+      .filter((reading) => {
+        if (editingId && String(reading?._id || "") === String(editingId)) return false;
+        if (!["draft", "billed"].includes(String(reading?.status || "").trim().toLowerCase())) return false;
+        if (String(reading?.property?._id || reading?.property || "") !== String(form.property)) return false;
+        if (String(reading?.unit?._id || reading?.unit || "") !== String(form.unit)) return false;
+        if (String(reading?.utilityType || "").trim().toLowerCase() !== targetUtility) return false;
+
+        const readingPeriod = String(reading?.billingPeriod || "").trim();
+        if (/^\d{4}-\d{2}$/.test(targetPeriod) && /^\d{4}-\d{2}$/.test(readingPeriod)) {
+          return readingPeriod < targetPeriod;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        const periodCompare = String(b?.billingPeriod || "").localeCompare(String(a?.billingPeriod || ""));
+        if (periodCompare !== 0) return periodCompare;
+        return new Date(b?.readingDate || 0).getTime() - new Date(a?.readingDate || 0).getTime();
+      });
+
+    return Number(candidates[0]?.currentReading || 0);
+  }, [readings, form.property, form.unit, form.utilityType, form.billingPeriod, editingId]);
+
+  const effectivePreviousReading = form.previousReading === "" ? inferredPreviousReading : Number(form.previousReading || 0);
+
   const formDerived = useMemo(() => {
-    const unitsConsumed = inferUnitsConsumed(form);
+    const unitsConsumed = inferUnitsConsumed({
+      ...form,
+      previousReading: effectivePreviousReading,
+    });
     const rate = Number(form.rate || 0);
     return {
       unitsConsumed,
       amount: Number((unitsConsumed * rate).toFixed(2)),
     };
-  }, [form]);
+  }, [form, effectivePreviousReading]);
 
-  const selectedUnit = useMemo(
-    () => units.find((unit) => String(unit._id) === String(form.unit)),
-    [units, form.unit]
+  const selectedAutoTenant = useMemo(
+    () => filteredTenants.find((tenant) => ACTIVE_TENANT_STATUSES.has(String(tenant?.status || "").trim().toLowerCase())) || null,
+    [filteredTenants]
   );
 
   useEffect(() => {
@@ -449,7 +523,11 @@ const MeterReadings = () => {
 
   const handleFormChange = (field, value) => {
     setForm((prev) => {
-      const next = { ...prev, [field]: value };
+      const normalizedValue = ["previousReading", "currentReading", "rate"].includes(field)
+        ? sanitizeDecimalInput(value)
+        : value;
+
+      const next = { ...prev, [field]: normalizedValue };
       if (field === "property") {
         next.unit = "";
         next.tenant = "";
@@ -934,6 +1012,11 @@ const MeterReadings = () => {
                             </option>
                           ))}
                         </select>
+                        {!form.tenant && selectedAutoTenant && (
+                          <p className="text-[11px] font-medium text-emerald-700">
+                            Auto-detect will use {selectedAutoTenant.name} for this unit.
+                          </p>
+                        )}
                       </label>
 
                       <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -944,7 +1027,7 @@ const MeterReadings = () => {
                           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                         >
                           <option value="">Select utility</option>
-                          {utilityOptions.map((utility) => (
+                          {selectedUnitUtilityOptions.map((utility) => (
                             <option key={utility} value={utility}>
                               {utility}
                             </option>
@@ -975,22 +1058,25 @@ const MeterReadings = () => {
                       <label className="space-y-1 text-sm font-medium text-slate-700">
                         <span>Previous reading</span>
                         <input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           value={form.previousReading}
                           onChange={(e) => handleFormChange("previousReading", e.target.value)}
                           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                          placeholder="Auto from last reading if left blank"
+                          placeholder={`Auto from last saved reading (${formatNumber(inferredPreviousReading)})`}
                         />
+                        {form.previousReading === "" && (
+                          <p className="text-[11px] font-medium text-slate-500">
+                            Using {formatNumber(inferredPreviousReading)} from the latest saved reading for this unit and utility.
+                          </p>
+                        )}
                       </label>
 
                       <label className="space-y-1 text-sm font-medium text-slate-700">
                         <span>Current reading</span>
                         <input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           value={form.currentReading}
                           onChange={(e) => handleFormChange("currentReading", e.target.value)}
                           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
@@ -1000,9 +1086,8 @@ const MeterReadings = () => {
                       <label className="space-y-1 text-sm font-medium text-slate-700">
                         <span>Rate per unit</span>
                         <input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           value={form.rate}
                           onChange={(e) => handleFormChange("rate", e.target.value)}
                           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"

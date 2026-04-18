@@ -9,7 +9,9 @@ import { createTenantInvoiceRecord } from "./tenantInvoices.js";
 import { resolvePropertyAccountingContext } from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
-const ACTIVE_METER_READING_STATUSES = ["draft", "billed", "void"];
+const PREVIOUS_READING_STATUSES = ["draft", "billed"];
+const DUPLICATE_BLOCKING_STATUSES = ["draft", "billed"];
+const ACTIVE_TENANT_STATUSES = ["active", "overdue"];
 
 const normalizeDate = (value, fallback = new Date()) => {
   const date = value ? new Date(value) : new Date(fallback);
@@ -39,13 +41,19 @@ const resolveBusinessId = (req) => {
   return null;
 };
 
-const resolveActorUserId = async (req) =>
-  resolveAuditActorUserId({
+const resolveActorUserId = async (req, options = {}) => {
+  const {
+    businessId: explicitBusinessId = null,
+    candidateUserIds = [],
+  } = options || {};
+
+  return resolveAuditActorUserId({
     req,
-    businessId: resolveBusinessId(req),
-    candidateUserIds: [req.body?.createdBy || null],
+    businessId: explicitBusinessId || resolveBusinessId(req),
+    candidateUserIds: [...candidateUserIds, req.body?.createdBy || null],
     fallbackErrorMessage: "No valid company user could be resolved for meter reading attribution.",
   });
+};
 
 const populateReadingQuery = (query) =>
   query
@@ -60,7 +68,7 @@ const findActiveTenantForUnit = async ({ businessId, unitId }) => {
   return Tenant.findOne({
     business: businessId,
     unit: unitId,
-    status: { $in: ["active", "overdue"] },
+    status: { $in: ACTIVE_TENANT_STATUSES },
   })
     .sort({ moveInDate: -1, createdAt: -1 })
     .select("_id name unit business status")
@@ -110,21 +118,35 @@ const resolveUtilityRate = async ({ businessId, unitDoc, utilityType, providedRa
   return 0;
 };
 
-const getPreviousReadingValue = async ({ businessId, propertyId, unitId, utilityType, excludeId = null }) => {
+const getPreviousReadingValue = async ({
+  businessId,
+  propertyId,
+  unitId,
+  utilityType,
+  billingPeriod = null,
+  readingDate = null,
+  excludeId = null,
+}) => {
   const query = {
     business: businessId,
     property: propertyId,
     unit: unitId,
     utilityType: { $regex: `^${String(utilityType || "").trim()}$`, $options: "i" },
-    status: { $in: ACTIVE_METER_READING_STATUSES },
+    status: { $in: PREVIOUS_READING_STATUSES },
   };
+
+  if (billingPeriod && /^\d{4}-\d{2}$/.test(String(billingPeriod))) {
+    query.billingPeriod = { $lt: String(billingPeriod) };
+  } else if (readingDate) {
+    query.readingDate = { $lte: normalizeDate(readingDate) };
+  }
 
   if (excludeId && mongoose.Types.ObjectId.isValid(String(excludeId))) {
     query._id = { $ne: excludeId };
   }
 
   const previous = await MeterReading.findOne(query)
-    .sort({ readingDate: -1, createdAt: -1 })
+    .sort({ billingPeriod: -1, readingDate: -1, createdAt: -1 })
     .select("currentReading")
     .lean();
 
@@ -193,7 +215,7 @@ const checkDuplicateReading = async ({ businessId, unitId, utilityType, billingP
     unit: unitId,
     utilityType: { $regex: `^${String(utilityType || "").trim()}$`, $options: "i" },
     billingPeriod,
-    status: { $in: ACTIVE_METER_READING_STATUSES },
+    status: { $in: DUPLICATE_BLOCKING_STATUSES },
   };
 
   if (excludeId && mongoose.Types.ObjectId.isValid(String(excludeId))) {
@@ -246,6 +268,8 @@ const buildReadingPayload = async ({ req, existingReading = null }) => {
           propertyId,
           unitId,
           utilityType,
+          billingPeriod,
+          readingDate,
           excludeId: existingReading?._id || null,
         });
 
@@ -345,6 +369,40 @@ const softDeleteReading = async ({ reading, actorUserId = null, reason = "", del
   return populateReadingQuery(MeterReading.findById(reading._id));
 };
 
+const resolveBillableTenantForReading = async (reading) => {
+  if (reading?.tenant) {
+    const linkedTenant = await Tenant.findOne({
+      _id: reading.tenant,
+      business: reading.business,
+      unit: reading.unit,
+      status: { $in: ACTIVE_TENANT_STATUSES },
+    })
+      .select("_id name")
+      .lean();
+
+    if (linkedTenant?._id) {
+      return linkedTenant;
+    }
+
+    throw new Error(
+      "The linked tenant on this draft meter reading is no longer active on the unit. Edit the draft reading and attach the correct current tenant before billing."
+    );
+  }
+
+  const activeTenant = await findActiveTenantForUnit({
+    businessId: reading.business,
+    unitId: reading.unit,
+  });
+
+  if (activeTenant?._id) {
+    return activeTenant;
+  }
+
+  throw new Error(
+    "No active tenant is linked to this meter reading's unit. Attach the correct tenant before billing."
+  );
+};
+
 export const getMeterReadings = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -388,7 +446,7 @@ export const createMeterReading = async (req, res, next) => {
       billingPeriod: payload.billingPeriod,
     });
 
-    const actorUserId = await resolveActorUserId(req);
+    const actorUserId = await resolveActorUserId(req, { businessId: payload.business });
 
     const reading = await MeterReading.create({
       ...payload,
@@ -432,7 +490,7 @@ export const updateMeterReading = async (req, res, next) => {
     });
 
     Object.assign(reading, payload, {
-      updatedBy: await resolveActorUserId(req),
+      updatedBy: await resolveActorUserId(req, { businessId: payload.business }),
     });
 
     await reading.save();
@@ -462,7 +520,7 @@ export const deleteMeterReading = async (req, res, next) => {
       return res.status(400).json({ message: "This meter reading has already been deleted." });
     }
 
-    const actorUserId = await resolveActorUserId(req).catch(() => null);
+    const actorUserId = await resolveActorUserId(req, { businessId: String(reading.business || "") }).catch(() => null);
 
     if (reading.status === "billed" && reading.billedInvoice) {
       const invoiceDeletion = await invokeInvoiceDeletionForMeterReading({
@@ -546,7 +604,7 @@ export const voidMeterReading = async (req, res, next) => {
       return res.status(400).json({ message: "This meter reading is already voided." });
     }
 
-    const actorUserId = await resolveActorUserId(req);
+    const actorUserId = await resolveActorUserId(req, { businessId: String(reading.business || "") });
     reading.status = "void";
     reading.voidedAt = new Date();
     reading.voidedBy = actorUserId;
@@ -588,16 +646,7 @@ export const billMeterReading = async (req, res, next) => {
       businessId: reading.business,
     });
 
-    const activeTenant = reading.tenant
-      ? await Tenant.findById(reading.tenant).select("_id name").lean()
-      : await findActiveTenantForUnit({ businessId: reading.business, unitId: reading.unit });
-
-    if (!activeTenant?._id) {
-      return res.status(400).json({
-        message:
-          "No active tenant is linked to this meter reading's unit. Attach the correct tenant before billing.",
-      });
-    }
+    const activeTenant = await resolveBillableTenantForReading(reading);
 
     const invoiceDate = normalizeDate(req.body.invoiceDate || reading.readingDate || new Date());
     const dueDate = normalizeDate(req.body.dueDate || invoiceDate, invoiceDate);
@@ -636,7 +685,7 @@ export const billMeterReading = async (req, res, next) => {
     reading.status = "billed";
     reading.billedInvoice = invoice._id;
     reading.billedAt = new Date();
-    reading.updatedBy = await resolveActorUserId(req);
+    reading.updatedBy = await resolveActorUserId(req, { businessId: String(reading.business || "") });
     await reading.save();
 
     const populatedReading = await populateReadingQuery(MeterReading.findById(reading._id));

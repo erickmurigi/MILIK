@@ -1,10 +1,68 @@
-// controllers/leaseController.js
+// controllers/propertyController/lease.js
+import mongoose from "mongoose";
 import Lease from "../../models/Lease.js";
 import Tenant from "../../models/Tenant.js";
+import Unit from "../../models/Unit.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 
-const getScopedBusiness = (req) =>
-  req.user.isSystemAdmin && req.query.business ? req.query.business : req.user.company;
+const ACTIVE_LEASE_STATUSES = ["draft", "pending_signature", "active"];
+const TERMINAL_LEASE_STATUSES = ["expired", "terminated", "renewed", "cancelled"];
+
+const resolveBusinessId = (req, fallback = null) =>
+  (req.user?.isSystemAdmin && (req.body?.business || req.query?.business)) ||
+  fallback ||
+  req.user?.company ||
+  req.user?.business ||
+  null;
+
+const normalizeObjectId = (value) => {
+  if (!value) return null;
+  const raw = typeof value === "object" && value._id ? value._id : value;
+  return mongoose.Types.ObjectId.isValid(String(raw)) ? String(raw) : null;
+};
+
+const normalizeString = (value, fallback = "") => {
+  if (value === undefined || value === null) return fallback;
+  return String(value).trim();
+};
+
+const normalizeLeaseType = (value, fallback = "fixed") => {
+  const raw = String(value || fallback).trim().toLowerCase();
+  return raw === "at_will" ? "at_will" : "fixed";
+};
+
+const normalizeLeaseStatus = (value, fallback = "active") => {
+  const raw = String(value || fallback).trim().toLowerCase();
+  return [
+    "draft",
+    "pending_signature",
+    "active",
+    "expired",
+    "terminated",
+    "renewed",
+    "cancelled",
+  ].includes(raw)
+    ? raw
+    : fallback;
+};
+
+const normalizeDay = (value, fallback = 5) => {
+  const numeric = Number(value || fallback);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(1, Math.min(28, Math.trunc(numeric)));
+};
+
+const normalizeMoney = (value, fallback = 0) => {
+  const numeric = Number(value ?? fallback);
+  return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+const addDays = (dateValue, days) => {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setDate(date.getDate() + Number(days || 0));
+  return date;
+};
 
 const sanitizeBillingScheduleAdjustments = (rows = []) => {
   if (!Array.isArray(rows)) return [];
@@ -28,217 +86,384 @@ const sanitizeBillingScheduleAdjustments = (rows = []) => {
     }));
 };
 
-// Create lease
-export const createLease = async(req, res, next) => {
-    const payload = {
-      ...req.body,
-      business: req.user.company,
-    };
+const populateLeaseQuery = (query) =>
+  query
+    .populate("tenant", "name tenantCode email phone idNumber leaseType moveInDate moveOutDate status")
+    .populate("unit", "unitNumber unitName property rent status")
+    .populate("unit.property", "propertyName propertyCode name address landlord")
+    .populate("landlord", "name fullName landlordCode phone");
 
-    if (payload.billingScheduleAdjustments) {
-      payload.billingScheduleAdjustments = sanitizeBillingScheduleAdjustments(
-        payload.billingScheduleAdjustments
-      );
-    }
+const buildAgreementNumber = async (businessId) => {
+  const year = new Date().getFullYear();
+  const prefix = `AGR-${year}-`;
+  const latest = await Lease.findOne({
+    business: businessId,
+    agreementNumber: { $regex: `^${prefix}` },
+  })
+    .sort({ createdAt: -1, agreementNumber: -1 })
+    .select("agreementNumber")
+    .lean();
 
+  const lastSequence = latest?.agreementNumber
+    ? Number(String(latest.agreementNumber).split("-").pop()) || 0
+    : 0;
+
+  return `${prefix}${String(lastSequence + 1).padStart(4, "0")}`;
+};
+
+const ensureTenantAndUnitMatchBusiness = async ({ businessId, tenantId, unitId } = {}) => {
+  const tenant = await Tenant.findOne({ _id: tenantId, business: businessId })
+    .populate("unit", "_id property")
+    .lean();
+  if (!tenant) {
+    return { error: "Tenant not found for the selected company." };
+  }
+
+  const unit = await Unit.findOne({ _id: unitId, business: businessId })
+    .populate("property", "landlord propertyName propertyCode name")
+    .lean();
+  if (!unit) {
+    return { error: "Unit not found for the selected company." };
+  }
+
+  return { tenant, unit };
+};
+
+const ensureNoConflictingAgreement = async ({
+  businessId,
+  tenantId,
+  unitId,
+  excludeLeaseId = null,
+  desiredStatus = "active",
+} = {}) => {
+  if (!ACTIVE_LEASE_STATUSES.includes(String(desiredStatus || "").toLowerCase())) {
+    return null;
+  }
+
+  const filter = {
+    business: businessId,
+    tenant: tenantId,
+    unit: unitId,
+    status: { $in: ACTIVE_LEASE_STATUSES },
+  };
+
+  if (excludeLeaseId) {
+    filter._id = { $ne: excludeLeaseId };
+  }
+
+  return Lease.findOne(filter).select("_id agreementNumber status").lean();
+};
+
+const sanitizeLeasePayload = async ({ req, payload = {}, existingLease = null } = {}) => {
+  const businessId = resolveBusinessId(req, existingLease?.business);
+  if (!businessId) {
+    const error = new Error("Business context is required to manage agreements.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const tenantId = normalizeObjectId(payload.tenant ?? existingLease?.tenant);
+  const unitId = normalizeObjectId(payload.unit ?? existingLease?.unit);
+
+  if (!tenantId || !unitId) {
+    const error = new Error("Tenant and unit are required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const { tenant, unit, error: linkageError } = await ensureTenantAndUnitMatchBusiness({
+    businessId,
+    tenantId,
+    unitId,
+  });
+
+  if (linkageError) {
+    const error = new Error(linkageError);
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const startDate = payload.startDate ? new Date(payload.startDate) : new Date(existingLease?.startDate || tenant?.moveInDate || Date.now());
+  const endDate = payload.endDate ? new Date(payload.endDate) : new Date(existingLease?.endDate || tenant?.moveOutDate || addDays(startDate, 365));
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+    const error = new Error("Agreement end date must be after the start date.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const status = normalizeLeaseStatus(payload.status, existingLease?.status || "active");
+  const conflictingLease = await ensureNoConflictingAgreement({
+    businessId,
+    tenantId,
+    unitId,
+    excludeLeaseId: existingLease?._id,
+    desiredStatus: status,
+  });
+
+  if (conflictingLease) {
+    const error = new Error(
+      `Another active agreement already exists for this tenant and unit${
+        conflictingLease.agreementNumber ? ` (${conflictingLease.agreementNumber})` : ""
+      }.`
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const agreementNumber = normalizeString(payload.agreementNumber || existingLease?.agreementNumber);
+
+  return {
+    business: businessId,
+    agreementNumber: agreementNumber || (existingLease?.agreementNumber || (await buildAgreementNumber(businessId))),
+    tenant: tenantId,
+    unit: unitId,
+    landlord: normalizeObjectId(payload.landlord || existingLease?.landlord || unit?.property?.landlord) || null,
+    leaseType: normalizeLeaseType(payload.leaseType, existingLease?.leaseType || tenant?.leaseType || "fixed"),
+    startDate,
+    endDate,
+    rentAmount: normalizeMoney(payload.rentAmount, existingLease?.rentAmount ?? tenant?.rent ?? unit?.rent ?? 0),
+    depositAmount: normalizeMoney(payload.depositAmount, existingLease?.depositAmount ?? tenant?.depositAmount ?? 0),
+    paymentDueDay: normalizeDay(payload.paymentDueDay, existingLease?.paymentDueDay || 5),
+    noticePeriodDays: Math.max(0, Number(payload.noticePeriodDays ?? existingLease?.noticePeriodDays ?? 30) || 0),
+    lateFee: normalizeMoney(payload.lateFee, existingLease?.lateFee ?? 0),
+    terms: normalizeString(payload.terms, existingLease?.terms || ""),
+    status,
+    documentUrl: normalizeString(payload.documentUrl, existingLease?.documentUrl || ""),
+    documentName: normalizeString(payload.documentName, existingLease?.documentName || ""),
+    signedByTenant: payload.signedByTenant !== undefined ? !!payload.signedByTenant : !!existingLease?.signedByTenant,
+    signedByLandlord: payload.signedByLandlord !== undefined ? !!payload.signedByLandlord : !!existingLease?.signedByLandlord,
+    signedDate:
+      payload.signedDate !== undefined
+        ? payload.signedDate
+          ? new Date(payload.signedDate)
+          : null
+        : existingLease?.signedDate || null,
+    terminationReason: normalizeString(payload.terminationReason, existingLease?.terminationReason || ""),
+    terminatedAt:
+      status === "terminated"
+        ? payload.terminatedAt
+          ? new Date(payload.terminatedAt)
+          : existingLease?.terminatedAt || new Date()
+        : null,
+    activatedAt:
+      status === "active"
+        ? existingLease?.activatedAt || new Date()
+        : existingLease?.activatedAt || null,
+    version: Math.max(1, Number(payload.version ?? existingLease?.version ?? 1) || 1),
+    renewalOf: normalizeObjectId(payload.renewalOf || existingLease?.renewalOf) || null,
+    autoCreatedFromTenant:
+      payload.autoCreatedFromTenant !== undefined
+        ? !!payload.autoCreatedFromTenant
+        : !!existingLease?.autoCreatedFromTenant,
+    billingScheduleAdjustments:
+      payload.billingScheduleAdjustments !== undefined
+        ? sanitizeBillingScheduleAdjustments(payload.billingScheduleAdjustments)
+        : existingLease?.billingScheduleAdjustments || [],
+  };
+};
+
+export const createLease = async (req, res, next) => {
+  try {
+    const payload = await sanitizeLeasePayload({ req, payload: req.body || {} });
     const newLease = new Lease(payload);
+    const savedDoc = await newLease.save();
+    const savedLease = await populateLeaseQuery(Lease.findById(savedDoc._id));
 
-    try {
-        const savedLease = await newLease.save();
-        emitToCompany(req.user.company, 'lease:new', savedLease);
-        res.status(200).json(savedLease);
-    } catch (err) {
-        next(err);
+    emitToCompany(payload.business, "lease:new", savedLease);
+    return res.status(201).json(savedLease);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getLeases = async (req, res, next) => {
+  try {
+    const { status, tenant, unit, property } = req.query;
+    const business = resolveBusinessId(req);
+    const filter = business ? { business } : {};
+
+    if (status) filter.status = status;
+    if (tenant) filter.tenant = tenant;
+    if (unit) filter.unit = unit;
+    if (property) {
+      const propertyUnits = await Unit.find({ business, property }).select("_id").lean();
+      filter.unit = { $in: propertyUnits.map((item) => item._id) };
     }
-}
 
-// Get all leases
-export const getLeases = async(req, res, next) => {
-    const { status, tenant, unit } = req.query;
-    try {
-        const business = getScopedBusiness(req);
-        const filter = { business };
-        if (status) filter.status = status;
-        if (tenant) filter.tenant = tenant;
-        if (unit) filter.unit = unit;
+    const leases = await populateLeaseQuery(Lease.find(filter).sort({ startDate: -1, createdAt: -1 }));
+    return res.status(200).json(leases);
+  } catch (err) {
+    next(err);
+  }
+};
 
-        const leases = await Lease.find(filter)
-            .populate('tenant', 'name email phone')
-            .populate('unit', 'unitNumber property')
-            .populate('unit.property', 'name address')
-            .sort({ startDate: -1 });
-        res.status(200).json(leases);
-    } catch (err) {
-        next(err);
+export const getLease = async (req, res, next) => {
+  try {
+    const business = resolveBusinessId(req);
+    const filter = business ? { _id: req.params.id, business } : { _id: req.params.id };
+    const lease = await populateLeaseQuery(Lease.findOne(filter));
+
+    if (!lease) return res.status(404).json({ message: "Lease not found" });
+    return res.status(200).json(lease);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateLease = async (req, res, next) => {
+  try {
+    const business = resolveBusinessId(req);
+    const existingLease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id });
+
+    if (!existingLease) {
+      return res.status(404).json({ message: "Lease not found" });
     }
-}
 
-// Get single lease
-export const getLease = async(req, res, next) => {
-    try {
-        const business = req.user.isSystemAdmin ? undefined : req.user.company;
-        const filter = business ? { _id: req.params.id, business } : { _id: req.params.id };
+    const updateData = await sanitizeLeasePayload({ req, payload: req.body || {}, existingLease });
+    const updatedLease = await populateLeaseQuery(
+      Lease.findByIdAndUpdate(existingLease._id, { $set: updateData }, { new: true, runValidators: true })
+    );
 
-        const lease = await Lease.findOne(filter)
-            .populate('tenant', 'name email phone idNumber')
-            .populate('unit', 'unitNumber property amenities')
-            .populate('unit.property', 'name address landlord');
+    emitToCompany(updatedLease.business, "lease:updated", updatedLease);
+    return res.status(200).json(updatedLease);
+  } catch (err) {
+    next(err);
+  }
+};
 
-        if (!lease) return res.status(404).json({ message: "Lease not found" });
-        res.status(200).json(lease);
-    } catch (err) {
-        next(err);
+export const deleteLease = async (req, res, next) => {
+  try {
+    const business = resolveBusinessId(req);
+    const filter = business ? { _id: req.params.id, business } : { _id: req.params.id };
+
+    const lease = await Lease.findOne(filter).lean();
+    if (!lease) {
+      return res.status(404).json({ message: "Lease not found" });
     }
-}
 
-// Update lease
-export const updateLease = async(req, res, next) => {
-    try {
-        const business = req.user.isSystemAdmin && req.body?.business ? req.body.business : req.user.company;
-        const filter = req.user.isSystemAdmin
-          ? { _id: req.params.id }
-          : { _id: req.params.id, business };
-
-        const updateData = { ...req.body };
-        delete updateData.business;
-
-        if (Object.prototype.hasOwnProperty.call(updateData, "billingScheduleAdjustments")) {
-          updateData.billingScheduleAdjustments = sanitizeBillingScheduleAdjustments(
-            updateData.billingScheduleAdjustments
-          );
-        }
-
-        const updatedLease = await Lease.findOneAndUpdate(
-            filter,
-            { $set: updateData },
-            { new: true }
-        )
-          .populate('tenant', 'name email phone idNumber')
-          .populate('unit', 'unitNumber property amenities')
-          .populate('unit.property', 'name address landlord');
-
-        if (!updatedLease) {
-          return res.status(404).json({ message: "Lease not found" });
-        }
-
-        emitToCompany(updatedLease.business, 'lease:updated', updatedLease);
-        res.status(200).json(updatedLease);
-    } catch (err) {
-        next(err);
+    if (lease.billingScheduleAdjustments?.some((item) => String(item?.status || "") === "active")) {
+      return res.status(400).json({ message: "Delete or freeze billing adjustments before deleting the agreement." });
     }
-}
 
-// Delete lease
-export const deleteLease = async(req, res, next) => {
-    try {
-        const filter = req.user.isSystemAdmin
-          ? { _id: req.params.id }
-          : { _id: req.params.id, business: req.user.company };
+    await Lease.findByIdAndDelete(lease._id);
+    emitToCompany(lease.business, "lease:deleted", { _id: lease._id });
+    return res.status(200).json({ message: "Lease deleted successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
 
-        const deletedLease = await Lease.findOneAndDelete(filter);
-        if (!deletedLease) {
-          return res.status(404).json({ message: "Lease not found" });
-        }
-        emitToCompany(deletedLease.business, 'lease:deleted', { _id: deletedLease._id });
-        res.status(200).json({ message: "Lease deleted successfully" });
-    } catch (err) {
-        next(err);
+export const signLease = async (req, res, next) => {
+  try {
+    const business = resolveBusinessId(req);
+    const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id });
+
+    if (!lease) return res.status(404).json({ message: "Lease not found" });
+
+    const signedBy = String(req.body?.signedBy || "").trim().toLowerCase();
+    const updateData = {};
+
+    if (signedBy === "tenant") {
+      updateData.signedByTenant = true;
+    } else if (signedBy === "landlord") {
+      updateData.signedByLandlord = true;
+    } else {
+      return res.status(400).json({ message: "signedBy must be tenant or landlord" });
     }
-}
 
-// Sign lease
-export const signLease = async(req, res, next) => {
-    try {
-        const { signedBy, signature } = req.body;
-        const filter = req.user.isSystemAdmin
-          ? { _id: req.params.id }
-          : { _id: req.params.id, business: req.user.company };
-        const lease = await Lease.findOne(filter);
+    const tenantSigned = signedBy === "tenant" ? true : lease.signedByTenant;
+    const landlordSigned = signedBy === "landlord" ? true : lease.signedByLandlord;
 
-        if (!lease) return res.status(404).json({ message: "Lease not found" });
-
-        const updateData = {};
-        if (signedBy === 'tenant') {
-            updateData.signedByTenant = true;
-            updateData.tenantSignature = signature;
-        } else if (signedBy === 'landlord') {
-            updateData.signedByLandlord = true;
-            updateData.landlordSignature = signature;
-        }
-
-        if ((lease.signedByTenant && signedBy === 'landlord') || 
-            (lease.signedByLandlord && signedBy === 'tenant')) {
-            updateData.signedDate = new Date();
-            updateData.status = 'active';
-        }
-
-        const updatedLease = await Lease.findByIdAndUpdate(
-            req.params.id,
-            { $set: updateData },
-            { new: true }
-        );
-        res.status(200).json(updatedLease);
-    } catch (err) {
-        next(err);
+    if (tenantSigned && landlordSigned) {
+      updateData.signedDate = new Date();
+      updateData.status = "active";
+      updateData.activatedAt = lease.activatedAt || new Date();
+    } else if (["draft", "pending_signature"].includes(String(lease.status || "").toLowerCase())) {
+      updateData.status = "pending_signature";
     }
-}
 
-// Get expiring leases
-export const getExpiringLeases = async(req, res, next) => {
-    const { days = 30 } = req.query;
-    try {
-        const business = getScopedBusiness(req);
-        const today = new Date();
-        const futureDate = new Date();
-        futureDate.setDate(today.getDate() + parseInt(days));
+    const updatedLease = await populateLeaseQuery(
+      Lease.findByIdAndUpdate(lease._id, { $set: updateData }, { new: true, runValidators: true })
+    );
 
-        const leases = await Lease.find({
-            business,
-            status: 'active',
-            endDate: { $gte: today, $lte: futureDate }
-        })
-        .populate('tenant', 'name email phone')
-        .populate('unit', 'unitNumber property')
-        .sort({ endDate: 1 });
+    emitToCompany(updatedLease.business, "lease:updated", updatedLease);
+    return res.status(200).json(updatedLease);
+  } catch (err) {
+    next(err);
+  }
+};
 
-        res.status(200).json(leases);
-    } catch (err) {
-        next(err);
-    }
-}
+export const getExpiringLeases = async (req, res, next) => {
+  const { days = 30 } = req.query;
+  try {
+    const business = resolveBusinessId(req);
+    const today = new Date();
+    const futureDate = addDays(today, Number(days || 30));
 
-// Renew lease
-export const renewLease = async(req, res, next) => {
-    try {
-        const { newEndDate, newRentAmount } = req.body;
-        const filter = req.user.isSystemAdmin
-          ? { _id: req.params.id }
-          : { _id: req.params.id, business: req.user.company };
-        const lease = await Lease.findOne(filter);
+    const leases = await populateLeaseQuery(
+      Lease.find({
+        business,
+        status: "active",
+        endDate: { $gte: today, $lte: futureDate },
+      }).sort({ endDate: 1 })
+    );
 
-        if (!lease) return res.status(404).json({ message: "Lease not found" });
+    return res.status(200).json(leases);
+  } catch (err) {
+    next(err);
+  }
+};
 
-        const newLease = new Lease({
-            tenant: lease.tenant,
-            unit: lease.unit,
-            startDate: new Date(),
-            endDate: newEndDate,
-            rentAmount: newRentAmount || lease.rentAmount,
-            depositAmount: lease.depositAmount,
-            paymentDueDay: lease.paymentDueDay,
-            lateFee: lease.lateFee,
-            terms: lease.terms,
-            status: 'active',
-            business: lease.business,
-            billingScheduleAdjustments: []
-        });
+export const renewLease = async (req, res, next) => {
+  try {
+    const business = resolveBusinessId(req);
+    const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id });
 
-        await Lease.findByIdAndUpdate(req.params.id, { status: 'renewed' });
+    if (!lease) return res.status(404).json({ message: "Lease not found" });
 
-        const savedLease = await newLease.save();
-        emitToCompany(savedLease.business, 'lease:new', savedLease);
-        res.status(200).json(savedLease);
-    } catch (err) {
-        next(err);
-    }
-}
+    const previousEnd = lease.endDate ? new Date(lease.endDate) : new Date();
+    const defaultStart = addDays(previousEnd, 1) || new Date();
+    const renewalPayload = await sanitizeLeasePayload({
+      req,
+      payload: {
+        ...req.body,
+        tenant: lease.tenant,
+        unit: lease.unit,
+        landlord: lease.landlord,
+        startDate: req.body?.newStartDate || req.body?.startDate || defaultStart,
+        endDate: req.body?.newEndDate || req.body?.endDate,
+        rentAmount: req.body?.newRentAmount ?? req.body?.rentAmount ?? lease.rentAmount,
+        depositAmount: req.body?.depositAmount ?? lease.depositAmount,
+        paymentDueDay: req.body?.paymentDueDay ?? lease.paymentDueDay,
+        lateFee: req.body?.lateFee ?? lease.lateFee,
+        noticePeriodDays: req.body?.noticePeriodDays ?? lease.noticePeriodDays,
+        terms: req.body?.terms ?? lease.terms,
+        status: req.body?.status || "active",
+        signedByTenant: false,
+        signedByLandlord: false,
+        signedDate: null,
+        version: Number(lease.version || 1) + 1,
+        renewalOf: lease._id,
+        autoCreatedFromTenant: false,
+        billingScheduleAdjustments: [],
+      },
+    });
+
+    await Lease.findByIdAndUpdate(lease._id, {
+      $set: {
+        status: "renewed",
+        terminatedAt: lease.endDate || new Date(),
+      },
+    });
+
+    const renewedLease = new Lease(renewalPayload);
+    const savedDoc = await renewedLease.save();
+    const savedLease = await populateLeaseQuery(Lease.findById(savedDoc._id));
+
+    emitToCompany(savedLease.business, "lease:new", savedLease);
+    return res.status(200).json(savedLease);
+  } catch (err) {
+    next(err);
+  }
+};

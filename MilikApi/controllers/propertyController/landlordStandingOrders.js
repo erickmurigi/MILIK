@@ -1,9 +1,11 @@
 import mongoose from "mongoose";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
+import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import LandlordStandingOrder from "../../models/LandlordStandingOrder.js";
 import ProcessedStatement from "../../models/ProcessedStatement.js";
+import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
-import { postEntry } from "../../services/ledgerPostingService.js";
+import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import { resolveLandlordRemittancePayableAccount, resolvePropertyAccountingContext } from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import {
@@ -41,13 +43,59 @@ const normalizePaymentMethod = (value) => {
   return "bank_transfer";
 };
 
-const buildDestination = (payload = {}) => ({
-  accountName: String(payload?.accountName || "").trim(),
-  accountNumber: String(payload?.accountNumber || "").trim(),
-  bankName: String(payload?.bankName || "").trim(),
-  branchName: String(payload?.branchName || "").trim(),
-  mobileNumber: String(payload?.mobileNumber || "").trim(),
+const buildDestination = (payload = {}, existing = {}) => ({
+  accountName: String(payload?.accountName ?? existing?.accountName ?? "").trim(),
+  accountNumber: String(payload?.accountNumber ?? existing?.accountNumber ?? "").trim(),
+  bankName: String(payload?.bankName ?? existing?.bankName ?? "").trim(),
+  branchName: String(payload?.branchName ?? existing?.branchName ?? "").trim(),
+  mobileNumber: String(payload?.mobileNumber ?? existing?.mobileNumber ?? "").trim(),
 });
+
+const validateDestination = ({ paymentMethod, destination }) => {
+  const normalizedMethod = normalizePaymentMethod(paymentMethod);
+  if (normalizedMethod === "mobile_money") {
+    if (!String(destination?.mobileNumber || "").trim()) {
+      return "M-Pesa / mobile money standing orders require a destination mobile number.";
+    }
+  }
+
+  if (["bank_transfer", "check", "credit_card"].includes(normalizedMethod)) {
+    const hasAccountName = Boolean(String(destination?.accountName || "").trim());
+    const hasBankName = Boolean(String(destination?.bankName || "").trim());
+    const hasAccountNumber = Boolean(String(destination?.accountNumber || "").trim());
+    if (!hasAccountName || (!hasBankName && !hasAccountNumber)) {
+      return "Bank standing orders require the payee name and either bank name or account number.";
+    }
+  }
+
+  return "";
+};
+
+const getActiveRunHistory = (runHistory = [], frequency = "monthly") =>
+  (Array.isArray(runHistory) ? runHistory : []).filter((item) => {
+    if (!item) return false;
+    if (item.cancelledAt) return false;
+    if (String(item?.status || "").toLowerCase() === "cancelled") return false;
+    const periodKey = String(item?.periodKey || getPeriodKey(item?.dueDate || item?.runDate, frequency) || "").trim();
+    return Boolean(periodKey);
+  });
+
+const recalculateRunSummary = (row) => {
+  const activeRuns = getActiveRunHistory(row?.runHistory, row?.frequency);
+  const sortedRuns = [...activeRuns].sort((left, right) => {
+    const leftDate = normalizeToStartOfDay(left?.runDate || left?.dueDate || null);
+    const rightDate = normalizeToStartOfDay(right?.runDate || right?.dueDate || null);
+    return (rightDate?.getTime?.() || 0) - (leftDate?.getTime?.() || 0);
+  });
+  const latestRun = sortedRuns[0] || null;
+
+  row.totalRuns = activeRuns.length;
+  row.totalProcessedAmount = round2(
+    activeRuns.reduce((sum, item) => sum + Number(item?.amount || 0), 0)
+  );
+  row.lastRunAt = latestRun?.runDate || null;
+  row.lastRunDate = latestRun?.runDate || null;
+};
 
 const generateOrderNo = async (businessId) => {
   const prefix = "LSO";
@@ -75,7 +123,8 @@ const populateQuery = (query) =>
     .populate("cashbook", "code accountCode name accountName")
     .populate("createdBy", "username email firstName lastName")
     .populate("updatedBy", "username email firstName lastName")
-    .populate("runHistory.processedBy", "username email firstName lastName");
+    .populate("runHistory.processedBy", "username email firstName lastName")
+    .populate("runHistory.cancelledBy", "username email firstName lastName");
 
 const resolveActorUserId = async (req, businessId) =>
   resolveAuditActorUserId({
@@ -152,6 +201,7 @@ const isPeriodClosedByProcessedStatement = async ({ businessId, propertyId, land
 
 const serializeStandingOrder = (row) => {
   const plain = typeof row?.toObject === "function" ? row.toObject({ virtuals: true }) : { ...(row || {}) };
+  const activeRunHistory = getActiveRunHistory(plain.runHistory, plain.frequency);
   const schedule = buildRunSchedule({
     startDate: plain.startDate,
     endDate: plain.endDate,
@@ -161,13 +211,14 @@ const serializeStandingOrder = (row) => {
   });
   const eligiblePeriods = filterEligibleSchedule({
     schedule,
-    runHistory: plain.runHistory,
+    runHistory: activeRunHistory,
     now: new Date(),
     frequency: plain.frequency,
   });
 
   const processedPeriods = (Array.isArray(plain.runHistory) ? plain.runHistory : [])
     .map((run) => ({
+      id: run?._id || null,
       periodKey: String(run?.periodKey || getPeriodKey(run?.dueDate || run?.runDate, plain.frequency) || ""),
       periodLabel: String(run?.periodLabel || "").trim() || null,
       runDate: run?.runDate || null,
@@ -177,9 +228,22 @@ const serializeStandingOrder = (row) => {
       amount: round2(run?.amount || 0),
       referenceNo: run?.referenceNo || "",
       note: run?.note || "",
+      journalGroupId: run?.journalGroupId || null,
+      visibleStatementEntryId: run?.visibleStatementEntryId || null,
+      offsetEntryId: run?.offsetEntryId || null,
+      processedBy: run?.processedBy || null,
+      cancelledAt: run?.cancelledAt || null,
+      cancelledBy: run?.cancelledBy || null,
+      cancellationReason: run?.cancellationReason || "",
+      reversalVisibleEntryId: run?.reversalVisibleEntryId || null,
+      reversalOffsetEntryId: run?.reversalOffsetEntryId || null,
+      isCancelled: Boolean(run?.cancelledAt),
     }))
     .filter((item) => item.periodKey)
     .sort(comparePeriodOrder);
+
+  const processedPeriodsCount = processedPeriods.filter((item) => !item.isCancelled).length;
+  const cancelledPeriodsCount = processedPeriods.filter((item) => item.isCancelled).length;
 
   return {
     ...plain,
@@ -191,8 +255,9 @@ const serializeStandingOrder = (row) => {
       periodEnd: item.periodEnd,
     })),
     processedPeriods,
-    processedPeriodsCount: processedPeriods.length,
-    unprocessedPeriodsCount: Math.max(schedule.length - processedPeriods.length, 0),
+    processedPeriodsCount,
+    cancelledPeriodsCount,
+    unprocessedPeriodsCount: Math.max(schedule.length - processedPeriodsCount, 0),
     nextEligiblePeriod: eligiblePeriods[0] || null,
   };
 };
@@ -200,6 +265,7 @@ const serializeStandingOrder = (row) => {
 const serializeRows = (rows = []) => rows.map((row) => serializeStandingOrder(row));
 
 const resolveSelectedScheduleItem = (row, payload = {}) => {
+  const activeRunHistory = getActiveRunHistory(row?.runHistory, row?.frequency);
   const schedule = buildRunSchedule({
     startDate: row.startDate,
     endDate: row.endDate,
@@ -209,7 +275,7 @@ const resolveSelectedScheduleItem = (row, payload = {}) => {
   });
   const eligiblePeriods = filterEligibleSchedule({
     schedule,
-    runHistory: row.runHistory,
+    runHistory: activeRunHistory,
     now: new Date(),
     frequency: row.frequency,
   });
@@ -226,6 +292,28 @@ const resolveSelectedScheduleItem = (row, payload = {}) => {
   }
 
   return eligiblePeriods[0] || null;
+};
+
+const syncNextRunDate = (row, { preserveStopped = false } = {}) => {
+  const serialized = serializeStandingOrder(row);
+  if (preserveStopped && row.status === "stopped") {
+    row.nextRunDate = null;
+    return serialized;
+  }
+
+  row.nextRunDate = serialized.nextEligiblePeriod?.dueDate || null;
+
+  if (!serialized.nextEligiblePeriod && row.status === "active") {
+    row.status = "stopped";
+    row.nextRunDate = null;
+  }
+
+  if (row.endDate && row.nextRunDate && normalizeToStartOfDay(row.nextRunDate) > normalizeToEndOfDay(row.endDate)) {
+    row.status = "stopped";
+    row.nextRunDate = null;
+  }
+
+  return serialized;
 };
 
 export const createLandlordStandingOrder = async (req, res, next) => {
@@ -265,6 +353,12 @@ export const createLandlordStandingOrder = async (req, res, next) => {
       : "draft";
     const referenceNo = String(req.body?.referenceNo || "").trim() || (await generateOrderNo(businessId));
     const dayOfMonth = Number(req.body?.dayOfMonth || startDate.getDate() || 5);
+    const paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
+    const destination = buildDestination(req.body?.destination || req.body);
+    const destinationError = validateDestination({ paymentMethod, destination });
+    if (destinationError) {
+      return res.status(400).json({ success: false, message: destinationError });
+    }
 
     const doc = await LandlordStandingOrder.create({
       business: accountingContext.businessId,
@@ -281,15 +375,18 @@ export const createLandlordStandingOrder = async (req, res, next) => {
       endDate,
       nextRunDate: status === "stopped" ? null : startDate,
       status,
-      paymentMethod: normalizePaymentMethod(req.body?.paymentMethod),
+      paymentMethod,
       cashbook: isValidObjectId(req.body?.cashbook) ? req.body.cashbook : null,
-      destination: buildDestination(req.body?.destination || req.body),
+      destination,
       createdBy: actorUserId,
       updatedBy: actorUserId,
       notes: String(req.body?.notes || "").trim(),
       totalRuns: 0,
       totalProcessedAmount: 0,
     });
+
+    syncNextRunDate(doc, { preserveStopped: true });
+    await doc.save();
 
     const populated = await populateQuery(LandlordStandingOrder.findById(doc._id));
     res.status(201).json(serializeStandingOrder(await populated));
@@ -334,6 +431,8 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
     const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
 
+    const hasProcessedRuns = getActiveRunHistory(row.runHistory, row.frequency).length > 0;
+
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "title")) {
       const title = String(req.body?.title || "").trim();
       if (!title) return res.status(400).json({ success: false, message: "Standing order title is required" });
@@ -352,6 +451,9 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
     }
 
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "frequency")) {
+      if (hasProcessedRuns && normalizeFrequency(req.body?.frequency) !== normalizeFrequency(row.frequency)) {
+        return res.status(400).json({ success: false, message: "Frequency cannot be changed after processed runs exist. Create a new standing order for the new schedule." });
+      }
       row.frequency = normalizeFrequency(req.body?.frequency);
     }
 
@@ -366,6 +468,9 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "startDate")) {
       const startDate = parseDate(req.body?.startDate, null);
       if (!startDate) return res.status(400).json({ success: false, message: "Valid start date is required" });
+      if (hasProcessedRuns && normalizeToStartOfDay(startDate)?.getTime() !== normalizeToStartOfDay(row.startDate)?.getTime()) {
+        return res.status(400).json({ success: false, message: "Start date cannot be changed after processed runs exist. Create a new standing order for the new start date." });
+      }
       row.startDate = startDate;
       if (!row.nextRunDate) row.nextRunDate = startDate;
     }
@@ -380,7 +485,11 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
 
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "dayOfMonth")) {
       const dayOfMonth = Number(req.body?.dayOfMonth || 0);
-      row.dayOfMonth = Math.max(1, Math.min(31, dayOfMonth || row.dayOfMonth || 5));
+      const normalizedDay = Math.max(1, Math.min(31, dayOfMonth || row.dayOfMonth || 5));
+      if (hasProcessedRuns && normalizedDay !== Number(row.dayOfMonth || 5)) {
+        return res.status(400).json({ success: false, message: "Run day cannot be changed after processed runs exist. Create a new standing order for the new schedule." });
+      }
+      row.dayOfMonth = normalizedDay;
     }
 
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "landlord") || Object.prototype.hasOwnProperty.call(req.body || {}, "property")) {
@@ -388,6 +497,9 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
       const targetProperty = Object.prototype.hasOwnProperty.call(req.body || {}, "property") ? req.body?.property : row.property;
       if (!isValidObjectId(targetLandlord)) return res.status(400).json({ success: false, message: "Landlord is required" });
       if (!isValidObjectId(targetProperty)) return res.status(400).json({ success: false, message: "Property is required" });
+      if (hasProcessedRuns && (String(targetLandlord) !== String(row.landlord) || String(targetProperty) !== String(row.property))) {
+        return res.status(400).json({ success: false, message: "Property or landlord cannot be changed after processed runs exist. Create a new standing order instead." });
+      }
 
       const accountingContext = await resolvePropertyAccountingContext({
         businessId,
@@ -404,13 +516,21 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
         Object.prototype.hasOwnProperty.call(req.body || {}, key)
       )
     ) {
-      row.destination = buildDestination(req.body?.destination || req.body);
+      row.destination = buildDestination(req.body?.destination || req.body, row.destination || {});
+    }
+
+    const destinationError = validateDestination({ paymentMethod: row.paymentMethod, destination: row.destination || {} });
+    if (destinationError) {
+      return res.status(400).json({ success: false, message: destinationError });
     }
 
     row.updatedBy = actorUserId;
 
     if (!row.referenceNo && row.standingOrderNo) row.referenceNo = row.standingOrderNo;
     if (!row.standingOrderNo && row.referenceNo) row.standingOrderNo = row.referenceNo;
+
+    recalculateRunSummary(row);
+    syncNextRunDate(row, { preserveStopped: true });
 
     await row.save();
     const populated = await populateQuery(LandlordStandingOrder.findById(row._id));
@@ -437,12 +557,18 @@ export const updateLandlordStandingOrderStatus = async (req, res, next) => {
     row.status = status;
     row.updatedBy = actorUserId;
 
-    const serialized = serializeStandingOrder(row);
-    if (status === "active" && !row.nextRunDate) {
-      row.nextRunDate = serialized.nextEligiblePeriod?.dueDate || row.startDate || new Date();
+    if (status === "active") {
+      const destinationError = validateDestination({ paymentMethod: row.paymentMethod, destination: row.destination || {} });
+      if (destinationError) {
+        return res.status(400).json({ success: false, message: destinationError });
+      }
+      row.nextRunDate = serializeStandingOrder(row).nextEligiblePeriod?.dueDate || row.startDate || new Date();
     }
     if (status === "stopped") {
       row.nextRunDate = null;
+    }
+    if (status === "paused") {
+      row.nextRunDate = serializeStandingOrder(row).nextEligiblePeriod?.dueDate || null;
     }
 
     await row.save();
@@ -462,8 +588,8 @@ export const runLandlordStandingOrder = async (req, res, next) => {
     const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
 
-    if (!["active", "paused", "draft"].includes(String(row.status))) {
-      return res.status(400).json({ success: false, message: "This standing order cannot be run in its current state." });
+    if (String(row.status || "").toLowerCase() !== "active") {
+      return res.status(400).json({ success: false, message: "Only active standing orders can be processed. Activate this standing order first." });
     }
 
     if (!isValidObjectId(row.property) || !isValidObjectId(row.landlord)) {
@@ -478,7 +604,7 @@ export const runLandlordStandingOrder = async (req, res, next) => {
       });
     }
 
-    const alreadyProcessed = (Array.isArray(row.runHistory) ? row.runHistory : []).some(
+    const alreadyProcessed = getActiveRunHistory(row.runHistory, row.frequency).some(
       (item) => String(item?.periodKey || getPeriodKey(item?.dueDate || item?.runDate, row.frequency)) === selectedPeriod.periodKey
     );
     if (alreadyProcessed) {
@@ -528,6 +654,14 @@ export const runLandlordStandingOrder = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Standing order posting accounts could not be resolved." });
     }
 
+    const destinationError = validateDestination({
+      paymentMethod: req.body?.paymentMethod || row.paymentMethod,
+      destination: row.destination || {},
+    });
+    if (destinationError) {
+      return res.status(400).json({ success: false, message: destinationError });
+    }
+
     const runDate = normalizeToStartOfDay(req.body?.runDate || selectedPeriod.dueDate || new Date());
     const journalGroupId = new mongoose.Types.ObjectId();
     const sourceTransactionId = `${row._id}:${selectedPeriod.periodKey}`;
@@ -560,6 +694,8 @@ export const runLandlordStandingOrder = async (req, res, next) => {
         postingKind: "standing_order_run",
         description: notes,
         referenceNo: row.referenceNo,
+        paymentMethod: normalizePaymentMethod(req.body?.paymentMethod || row.paymentMethod),
+        cashbookAccountId: String(cashbookAccount._id),
       },
       createdBy: actorUserId,
       approvedBy: actorUserId,
@@ -592,6 +728,7 @@ export const runLandlordStandingOrder = async (req, res, next) => {
         periodLabel: selectedPeriod.periodLabel,
         postingKind: "standing_order_cashbook_offset",
         paymentMethod: normalizePaymentMethod(req.body?.paymentMethod || row.paymentMethod),
+        cashbookAccountId: String(cashbookAccount._id),
       },
       createdBy: actorUserId,
       approvedBy: actorUserId,
@@ -615,26 +752,101 @@ export const runLandlordStandingOrder = async (req, res, next) => {
       offsetEntryId: offsetEntry._id,
     });
 
-    row.totalRuns = Number(row.totalRuns || 0) + 1;
-    row.totalProcessedAmount = round2(Number(row.totalProcessedAmount || 0) + round2(amount));
-    row.lastRunAt = runDate;
-    row.lastRunDate = runDate;
-    row.status = row.status === "draft" ? "active" : row.status;
-
-    const serializedAfterRun = serializeStandingOrder(row);
-    row.nextRunDate = serializedAfterRun.nextEligiblePeriod?.dueDate || addFrequency(selectedPeriod.dueDate, row.frequency, row.dayOfMonth) || null;
-
-    if (row.endDate && row.nextRunDate && normalizeToStartOfDay(row.nextRunDate) > normalizeToEndOfDay(row.endDate)) {
-      row.status = "stopped";
-      row.nextRunDate = null;
-    }
-
-    if (!serializedAfterRun.nextEligiblePeriod) {
-      row.nextRunDate = null;
-      if (row.status === "active") row.status = "stopped";
-    }
+    recalculateRunSummary(row);
+    syncNextRunDate(row);
 
     row.updatedBy = actorUserId;
+    await row.save();
+
+    await aggregateChartOfAccountBalances(String(row.business), [
+      String(remittancePayableAccount._id),
+      String(cashbookAccount._id),
+    ]);
+
+    const populated = await populateQuery(LandlordStandingOrder.findById(row._id));
+    res.status(200).json(serializeStandingOrder(await populated));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const reverseLandlordStandingOrderRun = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
+
+    const actorUserId = await resolveActorUserId(req, businessId);
+    const row = await LandlordStandingOrder.findOne({ _id: req.params.id, business: businessId });
+    if (!row) return res.status(404).json({ success: false, message: "Standing order not found" });
+
+    const runId = String(req.params.runId || req.body?.runId || "").trim();
+    const periodKey = String(req.body?.periodKey || "").trim();
+    const runRow = runId
+      ? row.runHistory.id(runId)
+      : row.runHistory.find((item) => String(item?.periodKey || getPeriodKey(item?.dueDate || item?.runDate, row.frequency) || "") === periodKey);
+
+    if (!runRow) {
+      return res.status(404).json({ success: false, message: "Processed standing order run not found." });
+    }
+
+    if (runRow.cancelledAt) {
+      return res.status(400).json({ success: false, message: "This standing order run has already been reversed." });
+    }
+
+    const closedPeriod = await isPeriodClosedByProcessedStatement({
+      businessId,
+      propertyId: row.property,
+      landlordId: row.landlord,
+      periodStart: runRow.periodStart || runRow.dueDate || row.startDate,
+      periodEnd: runRow.periodEnd || runRow.dueDate || row.startDate,
+    });
+
+    if (closedPeriod) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This run already belongs to a processed landlord statement. Reverse or reopen the affected processed statement first.",
+      });
+    }
+
+    const reason =
+      String(req.body?.reason || "").trim() ||
+      `Standing order run ${runRow.periodLabel || runRow.periodKey || "period"} reversed`;
+
+    const touchedAccountIds = new Set();
+    const reverseOne = async (entryId) => {
+      if (!entryId || !isValidObjectId(entryId)) return null;
+      const originalEntry = await FinancialLedgerEntry.findOne({
+        _id: entryId,
+        business: businessId,
+        reversalOf: null,
+        status: "approved",
+      }).select("_id accountId");
+      if (!originalEntry) return null;
+      if (originalEntry?.accountId) touchedAccountIds.add(String(originalEntry.accountId));
+      const reversal = await postReversal({ entryId: originalEntry._id, reason, userId: actorUserId });
+      if (reversal?.reversalEntry?.accountId) {
+        touchedAccountIds.add(String(reversal.reversalEntry.accountId));
+      }
+      return reversal;
+    };
+
+    const visibleReversal = await reverseOne(runRow.visibleStatementEntryId);
+    const offsetReversal = await reverseOne(runRow.offsetEntryId);
+
+    if (touchedAccountIds.size > 0) {
+      await aggregateChartOfAccountBalances(String(row.business), Array.from(touchedAccountIds));
+    }
+
+    runRow.cancelledAt = new Date();
+    runRow.cancelledBy = actorUserId;
+    runRow.cancellationReason = reason;
+    runRow.reversalVisibleEntryId = visibleReversal?.reversalEntry?._id || null;
+    runRow.reversalOffsetEntryId = offsetReversal?.reversalEntry?._id || null;
+
+    row.updatedBy = actorUserId;
+    recalculateRunSummary(row);
+    syncNextRunDate(row, { preserveStopped: true });
     await row.save();
 
     const populated = await populateQuery(LandlordStandingOrder.findById(row._id));

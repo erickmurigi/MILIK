@@ -89,6 +89,22 @@ const buildAppliedAmountsByInvoice = (payments = [], tenantId = "") => {
   return appliedByInvoice;
 };
 
+const mapOutstandingInvoiceStatus = ({ rawStatus = "", outstanding = 0, paid = 0 }) => {
+  const normalizedStatus = String(rawStatus || "").toLowerCase();
+
+  if (normalizedStatus === "paid") return "Settled";
+  if (normalizedStatus === "partially_paid") return "Partially Paid";
+  if (normalizedStatus === "cancelled") return "Cancelled";
+  if (normalizedStatus === "reversed") return "Reversed";
+  if (normalizedStatus === "pending") {
+    if (outstanding <= 0) return "Settled";
+    return paid > 0 ? "Partially Paid" : "Open";
+  }
+
+  if (outstanding <= 0) return "Settled";
+  return paid > 0 ? "Partially Paid" : "Open";
+};
+
 
 const isCashbookAccount = (account) => {
   if (!account) return false;
@@ -166,7 +182,7 @@ const AddReceipt = () => {
         ]);
 
         const [invoiceRows, chartRows] = await Promise.all([
-          getTenantInvoices({ business: currentCompany._id }),
+          getTenantInvoices({ business: currentCompany._id, includeSnapshots: true }),
           getChartOfAccounts({ business: currentCompany._id, type: "asset" }),
         ]);
 
@@ -270,26 +286,28 @@ const AddReceipt = () => {
   const calculateTenantBalance = (tenantId) => {
     if (!tenantId) return { totalOwed: 0, totalPaid: 0, balance: 0 };
 
-    const tenantPayments = rentPayments.filter(
-      (payment) =>
-        String(payment?.tenant?._id || payment?.tenant || "") === String(tenantId) &&
-        payment.isConfirmed === true &&
-        payment.isCancelled !== true &&
-        payment.isReversed !== true &&
-        !payment?.reversalOf &&
-        payment.ledgerType === "receipts" &&
-        String(payment?.postingStatus || "").toLowerCase() !== "reversed"
-    );
-    const totalPaid = tenantPayments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
-
+    const appliedByInvoice = buildAppliedAmountsByInvoice(rentPayments, tenantId);
     const invoices = getCreatedInvoicesForTenant(tenantId);
-    const totalOwed = invoices.reduce((sum, inv) => sum + (Number((inv.netAmount ?? inv.adjustedAmount ?? inv.amount) || 0)), 0);
 
-    return {
-      totalOwed,
-      totalPaid,
-      balance: totalOwed - totalPaid,
-    };
+    return invoices.reduce(
+      (summary, inv) => {
+        const billedAmount = Number((inv.netAmount ?? inv.adjustedAmount ?? inv.amount) || 0);
+        const paidAmount = Math.max(
+          0,
+          Number(inv?.appliedAmount ?? (appliedByInvoice.get(String(inv?._id || "")) || 0))
+        );
+        const outstandingAmount = Math.max(
+          0,
+          Number(inv?.outstanding ?? Math.max(0, billedAmount - paidAmount))
+        );
+
+        summary.totalOwed += billedAmount;
+        summary.totalPaid += Math.min(billedAmount, paidAmount);
+        summary.balance += outstandingAmount;
+        return summary;
+      },
+      { totalOwed: 0, totalPaid: 0, balance: 0 }
+    );
   };
 
   const getOutstandingInvoices = (tenantId) => {
@@ -310,9 +328,9 @@ const AddReceipt = () => {
         const billedAmount = Number((inv.netAmount ?? inv.adjustedAmount ?? inv.amount) || 0);
         const paid = Math.min(
           billedAmount,
-          Math.max(0, Number(appliedByInvoice.get(String(inv._id || "")) || 0))
+          Math.max(0, Number(inv?.appliedAmount ?? (appliedByInvoice.get(String(inv._id || "")) || 0)))
         );
-        const outstanding = Math.max(0, billedAmount - paid);
+        const outstanding = Math.max(0, Number(inv?.outstanding ?? Math.max(0, billedAmount - paid)));
         const invoiceDate = inv.invoiceDate ? new Date(inv.invoiceDate) : null;
         const periodLabel =
           invoiceDate && !Number.isNaN(invoiceDate.getTime())
@@ -321,6 +339,11 @@ const AddReceipt = () => {
 
         const chargeType = getChargeTypeFromInvoice(inv);
         const invoiceLabel = String(inv?.description || inv?.invoiceNumber || periodLabel).trim() || periodLabel;
+        const status = mapOutstandingInvoiceStatus({
+          rawStatus: inv?.computedStatus || inv?.status || "",
+          outstanding,
+          paid,
+        });
 
         return {
           invoiceId: String(inv._id || ""),
@@ -333,7 +356,7 @@ const AddReceipt = () => {
           billedAmount,
           paid,
           outstanding,
-          status: outstanding > 0 ? (paid > 0 ? "Partially Paid" : "Open") : "Settled",
+          status,
         };
       })
       .filter((inv) => inv.billedAmount > 0);

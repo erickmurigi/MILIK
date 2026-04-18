@@ -438,6 +438,43 @@ const getBookingTaxSelection = (form = {}) => ({
   taxMode: form?.taxMode || "company_default",
 });
 
+const buildAppliedAmountsByInvoice = (payments = []) => {
+  const appliedByInvoice = new Map();
+
+  (Array.isArray(payments) ? payments : []).forEach((payment) => {
+    if (payment?.ledgerType !== "receipts") return;
+    if (payment?.isConfirmed !== true) return;
+    if (payment?.isCancelled === true || payment?.isReversed === true || payment?.reversalOf) return;
+    if (String(payment?.postingStatus || "").toLowerCase() === "reversed") return;
+
+    (Array.isArray(payment?.allocations) ? payment.allocations : []).forEach((allocation) => {
+      const invoiceId = String(allocation?.invoice || allocation?.invoiceId || "");
+      if (!invoiceId) return;
+      const amount = Number(allocation?.appliedAmount || 0);
+      if (!amount) return;
+      appliedByInvoice.set(invoiceId, Number(appliedByInvoice.get(invoiceId) || 0) + amount);
+    });
+  });
+
+  return appliedByInvoice;
+};
+
+const mapInvoiceStatusLabel = ({ rawStatus = "", outstanding = 0, appliedAmount = 0 }) => {
+  const normalizedStatus = String(rawStatus || "").toLowerCase();
+
+  if (normalizedStatus === "paid") return "Paid";
+  if (normalizedStatus === "partially_paid") return "Partially Paid";
+  if (normalizedStatus === "cancelled") return "Cancelled";
+  if (normalizedStatus === "reversed") return "Reversed";
+  if (normalizedStatus === "pending") {
+    if (outstanding <= 0) return "Paid";
+    return appliedAmount > 0 ? "Partially Paid" : "Issued";
+  }
+
+  if (outstanding <= 0) return "Paid";
+  return appliedAmount > 0 ? "Partially Paid" : "Issued";
+};
+
 const resolveBookingDateOverride = (form = {}) =>
   form?.bookWithInvoiceDate ? form?.invoiceDate || null : null;
 
@@ -725,10 +762,12 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
           rows = await getTenantInvoices({
             tenantId,
             business: currentCompany._id,
+            includeSnapshots: true,
           });
         } else {
           rows = await getTenantInvoices({
             business: currentCompany._id,
+            includeSnapshots: true,
           });
         }
 
@@ -1000,44 +1039,7 @@ const getTenantPropertyId = (tenant) => {
   }, [batchBookingForm, batchBookingScopeTenants, normalizedTaxConfig]);
 
   const invoiceRows = useMemo(() => {
-    const confirmedReceiptsByTenant = {};
-
-    (rentPayments || [])
-      .filter(
-        (payment) =>
-          payment?.ledgerType === "receipts" &&
-          payment?.isConfirmed === true &&
-          payment?.isCancelled !== true &&
-          payment?.isReversed !== true &&
-          !payment?.reversalOf &&
-          String(payment?.postingStatus || "").toLowerCase() !== "reversed"
-      )
-      .forEach((payment) => {
-        const tenantRef = payment?.tenant?._id || payment?.tenant;
-        const tenantKey = String(tenantRef || "");
-        if (!tenantKey) return;
-
-        if (!confirmedReceiptsByTenant[tenantKey]) {
-          confirmedReceiptsByTenant[tenantKey] = [];
-        }
-
-        confirmedReceiptsByTenant[tenantKey].push({
-          amount: Math.abs(Number(payment?.amount || 0)),
-          paymentDate: payment?.paymentDate || payment?.createdAt,
-        });
-      });
-
-    Object.values(confirmedReceiptsByTenant).forEach((rows) => {
-      rows.sort((a, b) => new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime());
-    });
-
-    const tenantPaidAllocation = {};
-    Object.keys(confirmedReceiptsByTenant).forEach((tenantKey) => {
-      tenantPaidAllocation[tenantKey] = confirmedReceiptsByTenant[tenantKey].reduce(
-        (sum, row) => sum + Number(row.amount || 0),
-        0
-      );
-    });
+    const appliedByInvoice = buildAppliedAmountsByInvoice(rentPayments);
 
     const sortedInvoices = [...tenantInvoicesFromApi].sort((a, b) => {
       const aTime = a?.invoiceDate ? new Date(a.invoiceDate).getTime() : new Date(a?.createdAt || 0).getTime();
@@ -1049,26 +1051,22 @@ const getTenantPropertyId = (tenant) => {
       .map((invoice, idx) => {
         const invoiceTenantId = String(invoice?.tenant?._id || invoice?.tenant || "");
         const tenant = tenantLookup[invoiceTenantId] || invoice?.tenant || {};
-        const invoiceAmount = Number(invoice?.amount || 0);
-        const allocatedPaid = Math.min(invoiceAmount, Math.max(0, tenantPaidAllocation[invoiceTenantId] || 0));
-        tenantPaidAllocation[invoiceTenantId] = Math.max(
-          0,
-          Number(tenantPaidAllocation[invoiceTenantId] || 0) - allocatedPaid
+        const invoiceAmount = Number((invoice?.adjustedAmount ?? invoice?.amount) || 0);
+        const fallbackAppliedAmount = Math.min(
+          invoiceAmount,
+          Math.max(0, Number(appliedByInvoice.get(String(invoice?._id || "")) || 0))
         );
-
-        const rawStatus = String(invoice?.status || "").toLowerCase();
-        const derivedStatus =
-          rawStatus === "paid"
-            ? "Paid"
-            : rawStatus === "partially_paid"
-            ? "Issued"
-            : rawStatus === "cancelled"
-            ? "Cancelled"
-            : rawStatus === "reversed"
-            ? "Reversed"
-            : allocatedPaid >= invoiceAmount
-            ? "Paid"
-            : "Issued";
+        const resolvedAppliedAmount = Math.max(0, Number(invoice?.appliedAmount ?? fallbackAppliedAmount));
+        const resolvedOutstanding = Math.max(
+          0,
+          Number(invoice?.outstanding ?? Math.max(0, invoiceAmount - resolvedAppliedAmount))
+        );
+        const rawStatus = String(invoice?.computedStatus || invoice?.status || "").toLowerCase();
+        const derivedStatus = mapInvoiceStatusLabel({
+          rawStatus,
+          outstanding: resolvedOutstanding,
+          appliedAmount: resolvedAppliedAmount,
+        });
 
         const invoiceDate = invoice?.invoiceDate || invoice?.createdAt;
         const parsedDate = invoiceDate ? new Date(invoiceDate) : new Date();
@@ -1108,6 +1106,8 @@ const getTenantPropertyId = (tenant) => {
           propertyName,
           unitName,
           amount: invoiceAmount,
+          appliedAmount: resolvedAppliedAmount,
+          outstandingAmount: resolvedOutstanding,
           status: derivedStatus,
           createdAt: invoice?.createdAt || invoice?.invoiceDate,
           createdDate: formatDateDisplay(invoice?.createdAt || invoice?.invoiceDate),
@@ -1130,7 +1130,9 @@ const getTenantPropertyId = (tenant) => {
     return invoiceRows.filter((invoice) => {
       if (deletingInvoiceIds.includes(invoice._id)) return false;
       if (appliedFilters.status === "ACTIVE") {
-        if (!["Issued", "Paid"].includes(invoice.status)) return false;
+        if (["Cancelled", "Reversed"].includes(invoice.status)) return false;
+      } else if (appliedFilters.status === "Issued") {
+        if (!["Issued", "Partially Paid"].includes(invoice.status)) return false;
       } else if (appliedFilters.status !== "ALL" && invoice.status !== appliedFilters.status) {
         return false;
       }
@@ -1200,8 +1202,8 @@ const visibleInvoiceKeys = useMemo(
 
   const totalAmount = filteredInvoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
   const pendingAmount = filteredInvoices
-    .filter((inv) => inv.status === "Issued")
-    .reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+    .filter((inv) => ["Issued", "Partially Paid"].includes(inv.status))
+    .reduce((sum, inv) => sum + (Number(inv.outstandingAmount ?? inv.amount) || 0), 0);
 
   const selectedCount = selectedInvoices.length;
   const canEdit = selectedCount === 1;

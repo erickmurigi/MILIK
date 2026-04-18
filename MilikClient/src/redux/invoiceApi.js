@@ -49,13 +49,14 @@ export const createTenantInvoicesBatch = async ({ business = null, items = [] } 
 };
 
 // Get tenant invoices
-export const getTenantInvoices = async ({ tenantId, business, status, category } = {}) => {
+export const getTenantInvoices = async ({ tenantId, business, status, category, includeSnapshots = false } = {}) => {
   const params = new URLSearchParams();
 
   if (tenantId) params.append("tenant", tenantId);
   if (business) params.append("business", business);
   if (status) params.append("status", status);
   if (category) params.append("category", category);
+  if (includeSnapshots) params.append("includeSnapshots", "1");
 
   const query = params.toString();
   const res = await adminRequests.get(`/tenant-invoices${query ? `?${query}` : ""}`);

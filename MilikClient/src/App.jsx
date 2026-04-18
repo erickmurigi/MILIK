@@ -42,6 +42,7 @@ import TenantPrepayments from "./pages/Tenants/TenantPrepayments";
 import InstantReceipts from "./pages/Tenants/InstantReceipts";
 import TakeOnBalances from "./pages/Tenants/TakeOnBalances";
 import UnitTypesPage from "./pages/Lease/Lease";
+import TenantAgreements from "./pages/Tenants/TenantAgreements";
 import Vacants from "./pages/Vacants/Vacants";
 import Maintenances from "./pages/Maintenances/Maintenances";
 import Inspections from "./pages/Inspections/Inspections";
@@ -457,7 +458,7 @@ function App() {
         <Route path="/units/new" element={<ProtectedRoute><AddUnit /></ProtectedRoute>} />
         <Route path="/units/:id" element={<ProtectedRoute><AddUnit /></ProtectedRoute>} />
         <Route path="/units/space-types" element={<PermissionRoute resource="units" moduleKey="propertyManagement"><UnitTypesPage /></PermissionRoute>} />
-        <Route path="/agreements" element={<ProtectedRoute><Navigate to="/units/space-types" replace /></ProtectedRoute>} />
+        <Route path="/agreements" element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TenantAgreements /></PermissionRoute>} />
         <Route path="/tenants" element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><Tenants /></PermissionRoute>} />
         <Route path="/tenant/new" element={<ProtectedRoute><AddTenant /></ProtectedRoute>} />
         <Route path="/tenant/:id/statement" element={<ProtectedRoute><TenantStatement /></ProtectedRoute>} />

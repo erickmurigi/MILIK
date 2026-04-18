@@ -42,6 +42,30 @@ const runHistorySchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    cancellationReason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    reversalVisibleEntryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FinancialLedgerEntry",
+      default: null,
+    },
+    reversalOffsetEntryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FinancialLedgerEntry",
+      default: null,
+    },
   },
   {
     _id: true,

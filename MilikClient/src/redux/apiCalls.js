@@ -1493,6 +1493,11 @@ export const runLandlordStandingOrder = async (id, payload) => {
   return res.data;
 };
 
+export const reverseLandlordStandingOrderRun = async (id, runId, payload) => {
+  const res = await adminRequests.post(`/landlord-standing-orders/${id}/runs/${runId}/reverse`, payload);
+  return res.data;
+};
+
 export const deleteLandlordStandingOrder = async (id, context = {}) => {
   const params = new URLSearchParams();
   if (context.business) params.append("business", context.business);
@@ -2376,13 +2381,14 @@ export const createSuperAdmin = (adminData) => async (dispatch) => {
 };
 
 // Get tenant invoices
-export const getTenantInvoices = async ({ tenantId = null, business = null, status = null, category = null } = {}) => {
+export const getTenantInvoices = async ({ tenantId = null, business = null, status = null, category = null, includeSnapshots = false } = {}) => {
   const params = new URLSearchParams();
 
   if (tenantId) params.append("tenant", tenantId);
   if (business) params.append("business", business);
   if (status) params.append("status", status);
   if (category) params.append("category", category);
+  if (includeSnapshots) params.append("includeSnapshots", "1");
 
   const query = params.toString();
   const res = await adminRequests.get(`/tenant-invoices${query ? `?${query}` : ""}`);

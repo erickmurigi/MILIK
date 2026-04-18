@@ -598,6 +598,25 @@ const Tenants = () => {
     setActionMenuOpen(false);
   };
 
+
+  const handleOpenAgreement = () => {
+    if (!canViewTenants) {
+      toast.warning("You do not have permission to view tenant agreements");
+      return;
+    }
+    if (selectedTenants.length === 0) {
+      toast.warning("Please select one tenant to open the agreement workspace");
+      return;
+    }
+    if (selectedTenants.length > 1) {
+      toast.warning("Please select only one tenant to open the agreement workspace");
+      return;
+    }
+
+    navigate(`/agreements?tenant=${encodeURIComponent(selectedTenants[0])}`);
+    setActionMenuOpen(false);
+  };
+
   const handleAddUtility = () => {
     if (!canUpdateTenant) {
       toast.warning("You do not have permission to update tenant utilities");
@@ -1100,6 +1119,13 @@ const confirmTransferUnit = async () => {
                     >
                       <FaMoneyBillWave size={12} />
                       <span>View Tenant Receipts</span>
+                    </button>
+                    <button
+                      onClick={handleOpenAgreement}
+                      className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
+                    >
+                      <FaFileInvoiceDollar size={12} />
+                      <span>Open Tenant Agreement</span>
                     </button>
                     {canUpdateTenant && (
                     <button
