@@ -43,6 +43,8 @@ const accountCanManage = (user) => {
   return String(user.moduleAccess?.accounts || "").toLowerCase() === "full access";
 };
 
+const ITEMS_PER_PAGE = 50;
+
 const sourceLabel = (entry) => {
   const type = String(entry?.sourceTransactionType || "other").replace(/_/g, " ");
   return type.replace(/\b\w/g, (m) => m.toUpperCase());
@@ -61,6 +63,7 @@ const LedgerAccountActivity = () => {
   const [closingBalance, setClosingBalance] = useState(0);
   const [loading, setLoading] = useState(false);
   const [actingKey, setActingKey] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const today = new Date();
   const [filters, setFilters] = useState({
@@ -191,6 +194,21 @@ const LedgerAccountActivity = () => {
     }
   };
 
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedRows = rows.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, rows.length]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
+
   const openSource = (entry) => {
     const type = String(entry?.sourceTransactionType || "").toLowerCase();
     const sourceId = entry?.sourceTransactionId;
@@ -210,10 +228,10 @@ const LedgerAccountActivity = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-        <div className="mx-auto max-w-[1600px] space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-3 md:p-4">
+        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-3">
+          <div className="flex-shrink-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <button
@@ -258,7 +276,7 @@ const LedgerAccountActivity = () => {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex-shrink-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
               <FaFilter />
               Filters
@@ -313,14 +331,14 @@ const LedgerAccountActivity = () => {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             {loading ? (
               <div className="px-4 py-6 text-sm text-slate-600">Loading ledger activity...</div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="flex-1 min-h-0 overflow-auto">
                 <table className="min-w-[1400px] w-full text-sm">
-                  <thead className="bg-[#0B3B2E] text-white">
-                    <tr>
+                  <thead>
+                    <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                       <th className="px-4 py-3 text-left">Date</th>
                       <th className="px-4 py-3 text-left">Reference</th>
                       <th className="px-4 py-3 text-left">Type</th>
@@ -341,7 +359,7 @@ const LedgerAccountActivity = () => {
                         </td>
                       </tr>
                     ) : (
-                      rows.map((entry) => {
+                      paginatedRows.map((entry) => {
                         const tenantName = entry?.tenant?.name || "-";
                         const unitLabel = entry?.unit?.unitNumber || entry?.unit?.name || "-";
                         const canReverseSource = canManage && ["rent_payment", "tenant_invoice"].includes(String(entry?.sourceTransactionType || "").toLowerCase());
@@ -420,6 +438,17 @@ const LedgerAccountActivity = () => {
                 </table>
               </div>
             )}
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+                <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of <span className="font-bold text-slate-900">{rows.length}</span> ledger entries</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

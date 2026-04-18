@@ -193,15 +193,21 @@ const TenantAgreements = () => {
     return map;
   }, [properties]);
 
+  const resolvePropertyRecord = (propertyValue) => {
+    if (!propertyValue) return null;
+    if (typeof propertyValue === "object") {
+      if (propertyValue.propertyName || propertyValue.name) return propertyValue;
+      const resolvedId = normalizeId(propertyValue);
+      return propertiesById.get(resolvedId) || null;
+    }
+    return propertiesById.get(normalizeId(propertyValue)) || null;
+  };
+
   const agreementRows = useMemo(() => {
     return (Array.isArray(leases) ? leases : []).map((lease) => {
       const tenant = lease?.tenant || tenantsById.get(normalizeId(lease?.tenant)) || null;
       const unit = lease?.unit || unitsById.get(normalizeId(lease?.unit)) || null;
-      const property =
-        lease?.unit?.property ||
-        unit?.property ||
-        propertiesById.get(normalizeId(lease?.unit?.property || unit?.property)) ||
-        null;
+      const property = resolvePropertyRecord(lease?.unit?.property) || resolvePropertyRecord(unit?.property) || null;
       const daysToExpiry = getDaysUntil(lease?.endDate);
       const isExpiring = String(lease?.status || "").toLowerCase() === "active" && daysToExpiry !== null && daysToExpiry <= 30;
 
@@ -216,6 +222,7 @@ const TenantAgreements = () => {
         unitLabel: unit?.unitNumber || unit?.unitName || unit?.name || "-",
         propertyId: normalizeId(property?._id || unit?.property || lease?.unit?.property),
         propertyName: property?.propertyName || property?.name || "Unknown Property",
+        propertyCode: property?.propertyCode || "",
         leaseType: lease?.leaseType || tenant?.leaseType || "fixed",
         status: lease?.status || "active",
         startDate: lease?.startDate,
@@ -523,11 +530,13 @@ const TenantAgreements = () => {
                 className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm focus:outline-none"
               >
                 <option value="any">All Properties</option>
-                {(Array.isArray(properties) ? properties : []).map((property) => (
-                  <option key={property._id} value={property._id}>
-                    {property.propertyCode ? `${property.propertyCode} - ${property.propertyName || property.name}` : property.propertyName || property.name}
-                  </option>
-                ))}
+                {[...(Array.isArray(properties) ? properties : [])]
+                  .sort((a, b) => String(a?.propertyName || a?.name || "").localeCompare(String(b?.propertyName || b?.name || ""), undefined, { sensitivity: "base" }))
+                  .map((property) => (
+                    <option key={property._id} value={property._id}>
+                      {property.propertyCode ? `${property.propertyCode} - ${property.propertyName || property.name}` : property.propertyName || property.name}
+                    </option>
+                  ))}
               </select>
 
               <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 shadow-sm">
@@ -588,7 +597,18 @@ const TenantAgreements = () => {
                       </td>
                     </tr>
                   ) : (
-                    pagedRows.map((row) => (
+                    pagedRows.map((row) => {
+                      const normalizedStatus = String(row.status || "").toLowerCase();
+                      const tenantPending = !row.signedByTenant;
+                      const landlordPending = !row.signedByLandlord;
+                      const canEdit = !["renewed", "terminated", "cancelled"].includes(normalizedStatus);
+                      const canSign = !["renewed", "terminated", "cancelled", "expired"].includes(normalizedStatus);
+                      const canRenew = ["active", "expired"].includes(normalizedStatus);
+                      const canTerminate = ["draft", "pending_signature", "active", "expired"].includes(normalizedStatus);
+                      const canDelete = ["draft", "cancelled"].includes(normalizedStatus) && tenantPending && landlordPending;
+                      const hasDocument = Boolean(String(row.raw?.documentUrl || "").trim());
+
+                      return (
                       <tr key={row.id} className="border-b border-gray-200 hover:bg-[#f9fbfa]">
                         <td className="px-3 py-3 align-top">
                           <div className="font-black text-[#0B3B2E]">{row.agreementNumber}</div>
@@ -604,8 +624,18 @@ const TenantAgreements = () => {
                           <div className="mt-1 text-[11px] text-slate-500">{row.tenantCode || "No code"}</div>
                         </td>
                         <td className="px-3 py-3 align-top">
-                          <div className="font-semibold text-gray-900">{row.propertyName}</div>
-                          <div className="mt-1 text-[11px] text-slate-500">Unit {row.unitLabel}</div>
+                          <div className="font-semibold text-gray-900">{row.propertyCode ? `${row.propertyCode} • ${row.propertyName}` : row.propertyName}</div>
+                          <div className="mt-1 text-[11px] text-slate-500">{row.unitLabel !== "-" ? row.unitLabel : "No unit linked"}</div>
+                          {hasDocument && (
+                            <a
+                              href={row.raw.documentUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-700 hover:bg-slate-200"
+                            >
+                              Document Link
+                            </a>
+                          )}
                         </td>
                         <td className="px-3 py-3 align-top">
                           <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${getStatusTone(row.status)}`}>
@@ -628,52 +658,65 @@ const TenantAgreements = () => {
                         </td>
                         <td className="px-3 py-3 align-top">
                           <div className="flex flex-wrap gap-1.5">
-                            <button
-                              onClick={() => openEditModal(row)}
-                              className="rounded-lg border border-[#0B3B2E]/15 bg-[#0B3B2E]/5 px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E]/10"
-                            >
-                              <FaEdit className="inline mr-1" /> Edit
-                            </button>
-                            <button
-                              onClick={() => handleSign(row, "tenant")}
-                              className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 transition hover:bg-blue-100"
-                            >
-                              <FaFileSignature className="inline mr-1" /> Tenant Sign
-                            </button>
-                            <button
-                              onClick={() => handleSign(row, "landlord")}
-                              className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700 transition hover:bg-violet-100"
-                            >
-                              <FaCheck className="inline mr-1" /> Landlord Sign
-                            </button>
-                            <button
-                              onClick={() => handleRenew(row)}
-                              className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 transition hover:bg-amber-100"
-                            >
-                              <FaClock className="inline mr-1" /> Renew
-                            </button>
-                            <button
-                              onClick={() => handleTerminate(row)}
-                              className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700 transition hover:bg-red-100"
-                            >
-                              <FaTimes className="inline mr-1" /> Terminate
-                            </button>
+                            {canEdit && (
+                              <button
+                                onClick={() => openEditModal(row)}
+                                className="rounded-lg border border-[#0B3B2E]/15 bg-[#0B3B2E]/5 px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E]/10"
+                              >
+                                <FaEdit className="inline mr-1" /> Edit
+                              </button>
+                            )}
+                            {canSign && tenantPending && (
+                              <button
+                                onClick={() => handleSign(row, "tenant")}
+                                className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 transition hover:bg-blue-100"
+                              >
+                                <FaFileSignature className="inline mr-1" /> Tenant Sign
+                              </button>
+                            )}
+                            {canSign && landlordPending && (
+                              <button
+                                onClick={() => handleSign(row, "landlord")}
+                                className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700 transition hover:bg-violet-100"
+                              >
+                                <FaCheck className="inline mr-1" /> Landlord Sign
+                              </button>
+                            )}
+                            {canRenew && (
+                              <button
+                                onClick={() => handleRenew(row)}
+                                className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 transition hover:bg-amber-100"
+                              >
+                                <FaClock className="inline mr-1" /> Renew
+                              </button>
+                            )}
+                            {canTerminate && (
+                              <button
+                                onClick={() => handleTerminate(row)}
+                                className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700 transition hover:bg-red-100"
+                              >
+                                <FaTimes className="inline mr-1" /> Terminate
+                              </button>
+                            )}
                             <button
                               onClick={() => navigate(`/tenant/${row.tenantId}/statement`, { state: { tabTitle: `${row.tenantName} Statement` } })}
                               className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 transition hover:bg-emerald-100"
                             >
                               <FaFileContract className="inline mr-1" /> Statement
                             </button>
-                            <button
-                              onClick={() => handleDelete(row)}
-                              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-700 transition hover:bg-slate-100"
-                            >
-                              <FaTrash className="inline mr-1" /> Delete
-                            </button>
+                            {canDelete && (
+                              <button
+                                onClick={() => handleDelete(row)}
+                                className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-700 transition hover:bg-slate-100"
+                              >
+                                <FaTrash className="inline mr-1" /> Delete
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
-                    ))
+                    );
+                    })
                   )}
                 </tbody>
               </table>
@@ -712,7 +755,7 @@ const TenantAgreements = () => {
                   <h2 className="text-lg font-black text-gray-900">{form._id ? "Edit Tenant Agreement" : "New Tenant Agreement"}</h2>
                   <p className="mt-1 text-sm text-gray-600">Capture rent terms, deposit, due day, and renewal details in one place.</p>
                 </div>
-                <button onClick={() => setModalOpen(false)} className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
+                <button onClick={() => { setModalOpen(false); setForm(buildInitialForm()); }} className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
                   <FaTimes />
                 </button>
               </div>
@@ -869,7 +912,7 @@ const TenantAgreements = () => {
                 <div className="mt-5 flex items-center justify-end gap-2 border-t border-gray-200 pt-4">
                   <button
                     type="button"
-                    onClick={() => setModalOpen(false)}
+                    onClick={() => { setModalOpen(false); setForm(buildInitialForm()); }}
                     className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
                   >
                     Cancel

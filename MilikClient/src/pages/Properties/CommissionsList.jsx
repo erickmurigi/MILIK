@@ -10,6 +10,7 @@ const MILIK_GREEN = "#0B3B2E";
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "#FF8C00";
+const ITEMS_PER_PAGE = 50;
 
 const CommissionsList = () => {
   const dispatch = useDispatch();
@@ -21,6 +22,7 @@ const CommissionsList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState('all'); // all, configured, unconfigured
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -61,6 +63,20 @@ const CommissionsList = () => {
     configured: properties?.filter(p => p.commissionPercentage && p.commissionPercentage > 0).length || 0,
     unconfigured: properties?.filter(p => !p.commissionPercentage || p.commissionPercentage === 0).length || 0,
   };
+
+  const totalPages = Math.max(1, Math.ceil(filteredProperties.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedProperties = filteredProperties.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterMode]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
 
   const resetFilters = () => {
     setSearchTerm('');
@@ -163,10 +179,10 @@ const CommissionsList = () => {
   const unconfiguredProperties = properties?.filter(p => !p.commissionPercentage || p.commissionPercentage === 0) || [];
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-        <div className="mx-auto flex w-full max-w-[96%] flex-col gap-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-3 sm:p-4">
+        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-3">
+          <div className="flex-shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Property Management</p>
@@ -192,18 +208,18 @@ const CommissionsList = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="flex-shrink-0 grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Total Properties</p>
-              <p className="mt-2 text-2xl font-black text-slate-900">{stats.total}</p>
+              <p className="mt-1 text-xl font-black text-slate-900">{stats.total}</p>
             </div>
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Configured</p>
-              <p className="mt-2 text-2xl font-black text-emerald-800">{stats.configured}</p>
+              <p className="mt-1 text-xl font-black text-emerald-800">{stats.configured}</p>
             </div>
             <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">Unconfigured</p>
-              <p className="mt-2 text-2xl font-black text-orange-800">{stats.unconfigured}</p>
+              <p className="mt-1 text-xl font-black text-orange-800">{stats.unconfigured}</p>
             </div>
           </div>
 
@@ -267,7 +283,7 @@ const CommissionsList = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredProperties.map((property, index) => (
+                    paginatedProperties.map((property, index) => (
                       <React.Fragment key={property._id}>
                         {editingId === property._id ? (
                           <tr className="border-t border-slate-200 bg-slate-50/80">
@@ -404,6 +420,31 @@ const CommissionsList = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+                <div className="font-semibold">
+                  Showing <span className="font-bold text-slate-900">{paginatedProperties.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredProperties.length)}</span> of <span className="font-bold text-slate-900">{filteredProperties.length}</span> properties
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={safeCurrentPage === 1}
+                    className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={safeCurrentPage === totalPages}
+                    className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -62,6 +62,8 @@ const getMpesaConfigs = (company) => {
 
 const normalizeCode = (value = "") => String(value || "").trim().toLowerCase();
 
+const ITEMS_PER_PAGE = 50;
+
 const buildInstantReceiptDescription = (row) => {
   const accountRef = String(row?.accountReference || row?.billRefNumber || "").trim();
   const payer = String(row?.payerName || "").trim();
@@ -88,6 +90,7 @@ const InstantReceipts = () => {
   const [sourceFilter, setSourceFilter] = useState("callback_confirmation");
   const [selectedShortCode, setSelectedShortCode] = useState("");
   const [confirmModal, setConfirmModal] = useState({ open: false, row: null, tenantCode: "" });
+  const [currentPage, setCurrentPage] = useState(1);
 
   const mpesaConfigs = useMemo(() => getMpesaConfigs(currentCompany), [currentCompany]);
 
@@ -167,6 +170,21 @@ const InstantReceipts = () => {
       unmatched,
     };
   }, [filteredRows]);
+
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedRows = filteredRows.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, sourceFilter, selectedShortCode, rows.length]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
 
   const openAddReceipt = (row) => {
     const params = new URLSearchParams();
@@ -315,10 +333,10 @@ const InstantReceipts = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
-        <div className="mx-auto" style={{ maxWidth: "96%" }}>
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-2.5 mb-3">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-3">
+        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-3">
+          <div className="flex-shrink-0 bg-white rounded-lg shadow-sm border border-slate-200 p-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <button
                 onClick={() => navigate("/tenants")}
@@ -360,7 +378,7 @@ const InstantReceipts = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-4">
+          <div className="flex-shrink-0 bg-white rounded-lg shadow-sm border border-slate-200 p-3">
             <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
               <div className="md:col-span-2 relative">
                 <FaSearch className="absolute left-3 top-2.5 text-slate-400 text-xs" />
@@ -414,11 +432,11 @@ const InstantReceipts = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white rounded-lg shadow-sm border border-slate-200">
+            <div className="flex-1 min-h-0 overflow-auto">
               <table className="min-w-full text-xs">
-                <thead className="bg-slate-100 text-slate-700 uppercase tracking-wide">
-                  <tr>
+                <thead>
+                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white uppercase tracking-wide">
                     <th className="px-3 py-2 text-left">M-Pesa Code</th>
                     <th className="px-3 py-2 text-left">Date</th>
                     <th className="px-3 py-2 text-left">Tenant</th>
@@ -439,7 +457,7 @@ const InstantReceipts = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredRows.map((row, index) => {
+                    paginatedRows.map((row, index) => {
                       const matchedReceipt = row?.matchedReceipt || null;
                       const isConfirmed = matchedReceipt?.isConfirmed === true;
                       const canDelete = matchedReceipt?._id ? !isConfirmed : true;
@@ -534,6 +552,17 @@ const InstantReceipts = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+                <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> instant receipt rows</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

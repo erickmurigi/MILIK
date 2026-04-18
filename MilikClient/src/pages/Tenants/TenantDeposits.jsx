@@ -13,6 +13,7 @@ import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
+const ITEMS_PER_PAGE = 50;
 
 const ensureArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -165,6 +166,7 @@ const TenantDeposits = () => {
     description: "",
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const resetFilters = () => {
     setFilters({
@@ -339,6 +341,21 @@ const TenantDeposits = () => {
     );
   }, [depositRows]);
 
+
+  const totalPages = Math.max(1, Math.ceil(depositRows.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedRows = depositRows.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, depositRows.length]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
+
   const openBillDepositModal = (row) => {
     if (!row?.canBill) return;
     setBillingModal({ open: true, row });
@@ -429,10 +446,10 @@ const TenantDeposits = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-        <div className="mx-auto flex w-full max-w-[96%] flex-col gap-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-3 sm:p-4">
+        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-3">
+          <div className="flex-shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Tenant Deposits</p>
@@ -480,7 +497,7 @@ const TenantDeposits = () => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-3">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[240px] flex-1">
                   <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
@@ -567,7 +584,7 @@ const TenantDeposits = () => {
                       </td>
                     </tr>
                   ) : (
-                    depositRows.map((row, index) => (
+                    paginatedRows.map((row, index) => (
                       <tr key={row.tenantId} className={`border-t border-slate-100 align-top ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-slate-50`}>
                         <td className="px-4 py-3">
                           <div className="font-semibold text-slate-900">{row.tenantName}</div>
@@ -608,6 +625,17 @@ const TenantDeposits = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+                <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, depositRows.length)}</span> of <span className="font-bold text-slate-900">{depositRows.length}</span> tenant deposit rows</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -342,6 +342,14 @@ export const deleteLease = async (req, res, next) => {
       return res.status(404).json({ message: "Lease not found" });
     }
 
+    if (!["draft", "cancelled"].includes(String(lease.status || "").toLowerCase())) {
+      return res.status(400).json({ message: "Only draft or cancelled agreements can be deleted. Use terminate or renew to preserve agreement history." });
+    }
+
+    if (lease.signedByTenant || lease.signedByLandlord) {
+      return res.status(400).json({ message: "Signed agreements cannot be deleted. Cancel the agreement instead to preserve audit history." });
+    }
+
     if (lease.billingScheduleAdjustments?.some((item) => String(item?.status || "") === "active")) {
       return res.status(400).json({ message: "Delete or freeze billing adjustments before deleting the agreement." });
     }
@@ -362,6 +370,10 @@ export const signLease = async (req, res, next) => {
     if (!lease) return res.status(404).json({ message: "Lease not found" });
 
     const signedBy = String(req.body?.signedBy || "").trim().toLowerCase();
+    const currentStatus = String(lease.status || "").toLowerCase();
+    if (["renewed", "terminated", "cancelled"].includes(currentStatus)) {
+      return res.status(400).json({ message: "This agreement can no longer be signed in its current status." });
+    }
     const updateData = {};
 
     if (signedBy === "tenant") {
@@ -421,6 +433,10 @@ export const renewLease = async (req, res, next) => {
     const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id });
 
     if (!lease) return res.status(404).json({ message: "Lease not found" });
+
+    if (["renewed", "terminated", "cancelled"].includes(String(lease.status || "").toLowerCase())) {
+      return res.status(400).json({ message: "Only active or expired agreements can be renewed." });
+    }
 
     const previousEnd = lease.endDate ? new Date(lease.endDate) : new Date();
     const defaultStart = addDays(previousEnd, 1) || new Date();

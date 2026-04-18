@@ -29,6 +29,7 @@ const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
+const ITEMS_PER_PAGE = 50;
 
 const billItemOptions = [
   { value: "rent", label: "Rent", category: "RENT_CHARGE", defaultLabel: "Rent" },
@@ -567,6 +568,7 @@ const TakeOnBalances = () => {
   const [form, setForm] = useState(emptyForm);
   const [selectedRow, setSelectedRow] = useState(null);
   const [rowToDelete, setRowToDelete] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [chartAccounts, setChartAccounts] = useState([]);
   const propertyOptions = useMemo(() => {
     const map = new Map();
@@ -869,6 +871,21 @@ const TakeOnBalances = () => {
     }
   };
 
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedRows = filteredRows.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [appliedFilters, filteredRows.length]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
+
   const handleDelete = async () => {
     if (!rowToDelete?.invoiceId && !rowToDelete?.receiptId) return;
     try {
@@ -894,7 +911,7 @@ const TakeOnBalances = () => {
     <DashboardLayout>
       <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
         <div className="mx-auto flex w-full max-w-[96%] flex-col gap-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <div className="flex-shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Tenants Financing</p>
@@ -925,7 +942,7 @@ const TakeOnBalances = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="flex-shrink-0 grid grid-cols-1 gap-3 md:grid-cols-3">
             {[
               ["Total Amount", totals.amount],
               ["Allocated", totals.allocated],
@@ -957,7 +974,7 @@ const TakeOnBalances = () => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-3">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[260px] flex-1">
                   <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
@@ -1088,7 +1105,7 @@ const TakeOnBalances = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredRows.map((row, index) => {
+                    paginatedRows.map((row, index) => {
                       const meta = statusMeta[row.status] || statusMeta.unallocated;
 
                       return (
@@ -1149,6 +1166,17 @@ const TakeOnBalances = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+                <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> take-on balance rows</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -8,6 +8,7 @@ import { getTenantInvoices } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 
 const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString()}`;
+const ITEMS_PER_PAGE = 50;
 const normalizeArray = (value) => (Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : []);
 
 const daysBetween = (earlier, later = new Date()) => {
@@ -36,6 +37,7 @@ const RentalAgedAnalysisReport = () => {
   const [properties, setProperties] = useState([]);
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState({ propertyId: "all", category: "all", search: "" });
+  const [currentPage, setCurrentPage] = useState(1);
 
   const loadData = async () => {
     if (!businessId) return;
@@ -123,6 +125,21 @@ const RentalAgedAnalysisReport = () => {
     });
   }, [rows, filters]);
 
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedRows = filteredRows.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
+
   const totals = useMemo(
     () =>
       filteredRows.reduce(
@@ -169,11 +186,11 @@ const RentalAgedAnalysisReport = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 p-3 md:p-5">
-        <div className="mx-auto" style={{ maxWidth: "96%" }}>
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-5 py-5 text-white">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-3 md:p-4">
+        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex-shrink-0 border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-4 py-4 text-white">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-100">Tenant receivables ageing</p>
@@ -190,7 +207,7 @@ const RentalAgedAnalysisReport = () => {
               </div>
             </div>
 
-            <div className="grid gap-3 border-b border-slate-200 bg-white p-4 md:grid-cols-6">
+            <div className="flex-shrink-0 grid gap-3 border-b border-slate-200 bg-white p-3 md:grid-cols-6">
               {[
                 { label: 'Current', value: formatMoney(totals.current), accent: 'text-emerald-700' },
                 { label: '1-30 Days', value: formatMoney(totals.days30), accent: 'text-amber-600' },
@@ -201,12 +218,12 @@ const RentalAgedAnalysisReport = () => {
               ].map((card) => (
                 <div key={card.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                   <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{card.label}</div>
-                  <div className={`mt-2 text-2xl font-black ${card.accent}`}>{card.value}</div>
+                  <div className={`mt-1 text-xl font-black ${card.accent}`}>{card.value}</div>
                 </div>
               ))}
             </div>
 
-            <div className="border-b border-slate-200 bg-slate-50 p-4">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 p-3">
               <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr_1fr_auto]">
                 <div className="relative">
                   <FaFilter className="absolute left-3 top-3 text-slate-400" />
@@ -226,7 +243,7 @@ const RentalAgedAnalysisReport = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="flex-1 min-h-0 overflow-auto">
               <table className="min-w-full table-fixed text-sm">
                 <colgroup>
                   <col className="w-[18%]" />
@@ -240,8 +257,8 @@ const RentalAgedAnalysisReport = () => {
                   <col className="w-[10%]" />
                   <col className="w-[9%]" />
                 </colgroup>
-                <thead className="bg-slate-100 text-slate-700">
-                  <tr>
+                <thead>
+                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                     {['Tenant', 'Property', 'Unit', 'Current', '1-30', '31-60', '61-90', '90+', 'Total', 'Oldest Due'].map((header) => {
                       const isNumeric = ['Current', '1-30', '31-60', '61-90', '90+', 'Total'].includes(header);
                       return (
@@ -258,7 +275,7 @@ const RentalAgedAnalysisReport = () => {
                 <tbody>
                   {filteredRows.length === 0 ? (
                     <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-500">No aged receivables found for the current filters.</td></tr>
-                  ) : filteredRows.map((row) => (
+                  ) : paginatedRows.map((row) => (
                     <tr key={row.tenantId} className="border-t border-slate-200 hover:bg-slate-50/80">
                       <td className="px-4 py-3 font-semibold text-slate-900">{row.tenantName}</td>
                       <td className="px-4 py-3 text-slate-700">{row.propertyName}</td>
@@ -274,6 +291,17 @@ const RentalAgedAnalysisReport = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+                <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> tenant ageing rows</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
