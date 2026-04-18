@@ -158,6 +158,10 @@ const ProcessedStatementSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    earlyPayouts: {
+      type: Number,
+      default: 0,
+    },
     expensesByCategory: {
       type: mongoose.Schema.Types.Mixed,
       default: {},

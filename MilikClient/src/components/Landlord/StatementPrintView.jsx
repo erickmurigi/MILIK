@@ -364,6 +364,16 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
       workspaceSummary.additions ??
       sumPrintRows(workspace?.additionRows || [])
   );
+  const totalAdvanceRecoveries = Number(
+    workspaceSummary.totalAdvanceRecoveries ??
+      workspaceSummary.advanceRecoveries ??
+      sumPrintRows(workspace?.advanceRecoveryRows || [])
+  );
+  const totalEarlyPayouts = Number(
+    workspaceSummary.totalEarlyPayouts ??
+      workspaceSummary.alreadyPaidToLandlord ??
+      sumPrintRows(workspace?.earlyPayoutRows || [])
+  );
   const commissionPercentage = Number(
     workspaceSummary.commissionPercentage ?? statement?.property?.commissionPercentage ?? 0
   );
@@ -851,6 +861,18 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
               <td>EXPENSES & OTHER DEDUCTIONS</td>
               <td>{formatCurrency(totalExpenses)}</td>
             </tr>
+            {totalAdvanceRecoveries > 0 && (
+              <tr>
+                <td>ADVANCE RECOVERIES</td>
+                <td>{formatCurrency(totalAdvanceRecoveries)}</td>
+              </tr>
+            )}
+            {totalEarlyPayouts > 0 && (
+              <tr>
+                <td>ALREADY PAID TO LANDLORD / EARLY PAYOUTS</td>
+                <td>{formatCurrency(totalEarlyPayouts)}</td>
+              </tr>
+            )}
             <tr>
               <td>COMMISSION ({commissionPercentage.toFixed(1)}%)</td>
               <td>{formatCurrency(commissionAmount)}</td>

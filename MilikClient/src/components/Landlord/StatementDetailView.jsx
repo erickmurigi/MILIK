@@ -238,6 +238,8 @@ const StatementDetailView = ({
   const totals = workspace.totals || {};
   const expenseLines = Array.isArray(workspace.expenseRows) ? workspace.expenseRows : [];
   const additionLines = Array.isArray(workspace.additionRows) ? workspace.additionRows : [];
+  const advanceRecoveryLines = Array.isArray(workspace.advanceRecoveryRows) ? workspace.advanceRecoveryRows : [];
+  const earlyPayoutLines = Array.isArray(workspace.earlyPayoutRows) ? workspace.earlyPayoutRows : [];
   const settlement = resolveStatementSettlement(summary);
   const totalRentInvoiced = Number(summary.totalRentInvoiced ?? summary.rentInvoiced ?? 0);
   const totalRentReceived = Number(
@@ -265,6 +267,8 @@ const StatementDetailView = ({
   const totalUtilityCollected = Number(summary.totalUtilityCollected ?? 0);
   const totalExpenses = Number(summary.totalExpenses ?? summary.nonCommissionDeductions ?? 0);
   const totalAdditions = Number(summary.totalAdditions ?? summary.additions ?? 0);
+  const totalAdvanceRecoveries = Number(summary.totalAdvanceRecoveries ?? summary.advanceRecoveries ?? 0);
+  const totalEarlyPayouts = Number(summary.totalEarlyPayouts ?? summary.alreadyPaidToLandlord ?? 0);
   const totalDirectToLandlord = Number(
     summary.directToLandlordCollections ??
       summary.directToLandlordOffsets ??
@@ -523,6 +527,44 @@ const StatementDetailView = ({
         </div>
       </div>
 
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-200 bg-gray-50">
+            <h3 className="font-bold text-gray-900">Advance Recoveries</h3>
+          </div>
+          <div className="divide-y">
+            {advanceRecoveryLines.length === 0 && <p className="p-4 text-sm text-gray-500">No recoverable advance recoveries in this statement.</p>}
+            {advanceRecoveryLines.map((line) => (
+              <div key={line._id || line.sourceId} className="p-4 flex justify-between gap-3 text-sm">
+                <div>
+                  <p className="font-semibold text-gray-900">{line.description || line.category}</p>
+                  <p className="text-gray-500">{formatDate(line.transactionDate || line.date)}</p>
+                </div>
+                <p className="font-mono font-semibold text-amber-700">{formatCurrency(Math.abs(Number(line.amount || 0)))}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-200 bg-gray-50">
+            <h3 className="font-bold text-gray-900">Already Paid to Landlord / Early Payouts</h3>
+          </div>
+          <div className="divide-y">
+            {earlyPayoutLines.length === 0 && <p className="p-4 text-sm text-gray-500">No early payouts were already paid to the landlord in this statement.</p>}
+            {earlyPayoutLines.map((line) => (
+              <div key={line._id || line.sourceId} className="p-4 flex justify-between gap-3 text-sm">
+                <div>
+                  <p className="font-semibold text-gray-900">{line.description || line.category}</p>
+                  <p className="text-gray-500">{formatDate(line.transactionDate || line.date)}</p>
+                </div>
+                <p className="font-mono font-semibold text-emerald-700">{formatCurrency(Math.abs(Number(line.amount || 0)))}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white rounded-lg border border-gray-200 p-5">
         <h3 className="font-bold text-gray-900 mb-3">Commission Section</h3>
         <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-4">
@@ -588,6 +630,18 @@ const StatementDetailView = ({
                 <td className="py-3 text-gray-700 font-semibold">Additions / Credits</td>
                 <td className="py-3 text-right font-mono text-gray-900">{formatCurrency(totalAdditions)}</td>
               </tr>
+              {totalAdvanceRecoveries > 0 && (
+                <tr className="border-b border-gray-200">
+                  <td className="py-3 text-gray-700 font-semibold">Advance Recoveries</td>
+                  <td className="py-3 text-right font-mono text-amber-700">({formatCurrency(totalAdvanceRecoveries)})</td>
+                </tr>
+              )}
+              {totalEarlyPayouts > 0 && (
+                <tr className="border-b border-gray-200">
+                  <td className="py-3 text-gray-700 font-semibold">Already Paid to Landlord / Early Payouts</td>
+                  <td className="py-3 text-right font-mono text-emerald-700">({formatCurrency(totalEarlyPayouts)})</td>
+                </tr>
+              )}
               {totalDirectToLandlord > 0 && (
                 <tr className="border-b border-gray-200">
                   <td className="py-3 text-gray-700 font-semibold">Direct to Landlord Collections</td>

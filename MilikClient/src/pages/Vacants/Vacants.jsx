@@ -938,20 +938,33 @@ const Vacants = () => {
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="min-w-full border-collapse bg-white text-xs" style={{ tableLayout: "auto" }}>
+              <table className="w-full min-w-[1600px] border-collapse bg-white text-xs" style={{ tableLayout: "fixed" }}>
+                <colgroup>
+                  <col style={{ width: "42px" }} />
+                  <col style={{ width: "160px" }} />
+                  <col style={{ width: "110px" }} />
+                  <col style={{ width: "95px" }} />
+                  <col style={{ width: "130px" }} />
+                  <col style={{ width: "150px" }} />
+                  <col style={{ width: "170px" }} />
+                  <col style={{ width: "130px" }} />
+                  <col style={{ width: "90px" }} />
+                  <col style={{ width: "110px" }} />
+                  <col style={{ width: "413px" }} />
+                </colgroup>
                 <thead>
                   <tr className="sticky top-0 z-10 border-b border-gray-300 bg-[#0B3B2E]">
-                    <th className="w-8 border-r border-gray-300 px-1 py-2 text-center font-bold text-white"></th>
-                    <th className="w-24 border-r border-gray-300 px-2 py-2 text-left font-bold text-white">Property</th>
-                    <th className="w-24 border-r border-gray-300 px-2 py-2 text-left font-bold text-white">Unit No</th>
-                    <th className="w-20 border-r border-gray-300 px-2 py-2 text-left font-bold text-white">Code</th>
-                    <th className="w-24 border-r border-gray-300 px-2 py-2 text-left font-bold text-white">Unit Type</th>
-                    <th className="w-28 border-r border-gray-300 px-2 py-2 text-left font-bold text-white">Availability</th>
-                    <th className="w-36 border-r border-gray-300 px-2 py-2 text-left font-bold text-white">Current Tenant</th>
-                    <th className="w-24 border-r border-gray-300 px-2 py-2 text-left font-bold text-white">Available From</th>
-                    <th className="w-20 border-r border-gray-300 px-2 py-2 text-right font-bold text-white">Days Vacant</th>
-                    <th className="w-24 border-r border-gray-300 px-2 py-2 text-right font-bold text-white">Rent</th>
-                    <th className="min-w-[250px] px-2 py-2 text-left font-bold text-white">Actions</th>
+                    <th className="border-r border-gray-300 px-1 py-2 text-center font-bold text-white"></th>
+                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Property</th>
+                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Unit No</th>
+                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Code</th>
+                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Unit Type</th>
+                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Availability</th>
+                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Current Tenant</th>
+                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Available From</th>
+                    <th className="border-r border-gray-300 px-2 py-2 text-right font-bold text-white whitespace-nowrap">Days Vacant</th>
+                    <th className="border-r border-gray-300 px-2 py-2 text-right font-bold text-white whitespace-nowrap">Rent</th>
+                    <th className="px-2 py-2 text-left font-bold text-white whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -993,41 +1006,45 @@ const Vacants = () => {
                               </button>
                             </td>
                             <td className="border-r border-gray-200 px-2 py-2 align-top font-bold text-slate-800">
-                              {row.propertyName}
+                              <div className="truncate whitespace-nowrap" title={row.propertyName}>
+                                {row.propertyName}
+                              </div>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 align-top font-bold text-slate-900">
+                            <td className="border-r border-gray-200 px-2 py-2 align-top font-bold text-slate-900 whitespace-nowrap">
                               {row.unitNo}
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 align-top font-semibold text-slate-600">
+                            <td className="border-r border-gray-200 px-2 py-2 align-top font-semibold text-slate-600 whitespace-nowrap">
                               {row.unitCode}
                             </td>
                             <td className="border-r border-gray-200 px-2 py-2 align-top">
-                              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-800">
+                              <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-800">
                                 {row.unitTypeLabel}
                               </span>
                             </td>
                             <td className="border-r border-gray-200 px-2 py-2 align-top">
-                              <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${getAvailabilityTone(row.status)}`}>
+                              <span className={`inline-flex max-w-full truncate whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${getAvailabilityTone(row.status)}`}>
                                 {row.statusLabel}
                               </span>
                             </td>
                             <td className="border-r border-gray-200 px-2 py-2 align-top font-semibold text-slate-700">
-                              {row.tenantName}
+                              <div className="truncate whitespace-nowrap" title={row.tenantName}>
+                                {row.tenantName}
+                              </div>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 align-top font-semibold text-slate-700">
+                            <td className="border-r border-gray-200 px-2 py-2 align-top font-semibold text-slate-700 whitespace-nowrap">
                               {row.availableFromLabel}
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 text-right align-top font-bold text-slate-700">
+                            <td className="border-r border-gray-200 px-2 py-2 text-right align-top font-bold text-slate-700 whitespace-nowrap">
                               {row.daysVacantLabel}
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 text-right align-top font-bold text-slate-900">
+                            <td className="border-r border-gray-200 px-2 py-2 text-right align-top font-bold text-slate-900 whitespace-nowrap">
                               {row.rentLabel}
                             </td>
                             <td className="px-2 py-2 align-top">
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex min-w-0 flex-wrap gap-1.5">
                                 <button
                                   onClick={() => navigate(`/units/${row.id}`)}
-                                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                                  className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                                 >
                                   <FaUserEdit size={10} />
                                   View Unit
@@ -1036,7 +1053,7 @@ const Vacants = () => {
                                 {row.tenantId ? (
                                   <button
                                     onClick={() => navigate(`/tenant/${row.tenantId}/statement`, { state: { tabTitle: `${row.unitNo} Tenant` } })}
-                                    className="flex items-center gap-1 rounded-lg bg-slate-700 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-slate-800"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-slate-700 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-slate-800"
                                   >
                                     <FaUserEdit size={10} />
                                     Review Tenant
@@ -1045,7 +1062,7 @@ const Vacants = () => {
                                   <button
                                     onClick={() => openTenantTakeOn(row)}
                                     disabled={!canAddTenant}
-                                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] text-white shadow-sm ${
+                                    className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] text-white shadow-sm ${
                                       canAddTenant ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "cursor-not-allowed bg-gray-400"
                                     }`}
                                   >
@@ -1057,7 +1074,7 @@ const Vacants = () => {
                                 {["vacant", "notice_given"].includes(row.status) && (
                                   <button
                                     onClick={() => handleReserve(row)}
-                                    className="flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-violet-700"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-violet-700"
                                   >
                                     <FaTag size={10} />
                                     Reserve
@@ -1067,7 +1084,7 @@ const Vacants = () => {
                                 {["vacant", "notice_given", "reserved"].includes(row.status) && (
                                   <button
                                     onClick={() => handleMaintenance(row)}
-                                    className="flex items-center gap-1 rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-amber-700"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-amber-700"
                                   >
                                     <FaWrench size={10} />
                                     Maintenance
@@ -1077,7 +1094,7 @@ const Vacants = () => {
                                 {row.status === "off_market" ? (
                                   <button
                                     onClick={() => handleRestore(row)}
-                                    className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-emerald-700"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-emerald-700"
                                   >
                                     <FaUndo size={10} />
                                     Restore
@@ -1085,7 +1102,7 @@ const Vacants = () => {
                                 ) : (
                                   <button
                                     onClick={() => handleOffMarket(row)}
-                                    className="flex items-center gap-1 rounded-lg bg-slate-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-slate-700"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-slate-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-slate-700"
                                   >
                                     <FaArchive size={10} />
                                     Off Market
@@ -1095,7 +1112,7 @@ const Vacants = () => {
                                 {["reserved", "under_maintenance"].includes(row.status) && (
                                   <button
                                     onClick={() => handleReady(row)}
-                                    className="flex items-center gap-1 rounded-lg bg-green-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-green-700"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-green-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-green-700"
                                   >
                                     <FaCheckCircle size={10} />
                                     Mark Ready

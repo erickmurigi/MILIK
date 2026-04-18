@@ -1117,15 +1117,15 @@ export const generateLandlordStatement = async ({
       property: propertyObjectId,
       business: businessObjectId,
       landlord: landlordObjectId,
-      category: "ADJUSTMENT",
+      category: { $in: ["ADJUSTMENT", "ADVANCE_TO_LANDLORD"] },
       transactionDate: { $gte: periodStart, $lte: periodEnd },
       status: "approved",
       sourceTransactionType: {
-        $in: ["manual_adjustment", "other", "processed_statement", "recurring_deduction"],
+        $in: ["manual_adjustment", "other", "processed_statement", "recurring_deduction", "advance"],
       },
       $or: [
         { "metadata.includeInLandlordStatement": true },
-        { "metadata.statementBucket": { $in: ["addition", "deduction"] } },
+        { "metadata.statementBucket": { $in: ["addition", "deduction", "advance_recovery", "advance_payment"] } },
       ],
     })
       .select(
@@ -1605,8 +1605,12 @@ export const generateLandlordStatement = async ({
   let directToLandlordOffset = 0;
   const additionRows = [];
   const extraDeductionRows = [];
+  const advanceRecoveryRows = [];
+  const earlyPayoutRows = [];
   let totalAdditions = 0;
   let totalExtraDeductions = 0;
+  let totalAdvanceRecoveries = 0;
+  let totalEarlyPayouts = 0;
 
   for (const receipt of receiptsInPeriod) {
     const row = ensureRow(receipt.tenant, receipt.unit);
@@ -1947,10 +1951,13 @@ export const generateLandlordStatement = async ({
     if (amount <= 0) continue;
 
     const bucket = String(adjustment?.metadata?.statementBucket || "").toLowerCase();
+    const isAdvanceRecovery = bucket === "advance_recovery";
+    const isAdvancePayment = bucket === "advance_payment";
     const isAddition =
       bucket === "addition" ||
-      Number(adjustment.credit || 0) > 0 ||
-      adjustment.direction === "credit";
+      (!isAdvanceRecovery &&
+        !isAdvancePayment &&
+        (Number(adjustment.credit || 0) > 0 || adjustment.direction === "credit"));
 
     const isStandingOrderDeduction =
       String(adjustment?.metadata?.postingKind || "").toLowerCase() === "standing_order_run" ||
@@ -1959,13 +1966,73 @@ export const generateLandlordStatement = async ({
     const description =
       adjustment.notes ||
       adjustment?.metadata?.description ||
-      (isStandingOrderDeduction
+      (isAdvancePayment
+        ? "Early payout already paid to landlord"
+        : isAdvanceRecovery
+        ? "Recoverable landlord advance recovery"
+        : isStandingOrderDeduction
         ? "Standing order deduction"
         : isAddition
         ? "Statement addition"
         : "Statement deduction");
 
-    if (isAddition) {
+    if (isAdvancePayment) {
+      totalEarlyPayouts = round2(totalEarlyPayouts + amount);
+      earlyPayoutRows.push({
+        date: adjustment.transactionDate,
+        description,
+        amount: round2(amount),
+        category: "advance_payment",
+        sourceId: String(adjustment._id),
+      });
+
+      pushEntry({
+        tenantId: adjustment.tenant || null,
+        unitId: adjustment.unit || null,
+        transactionDate: adjustment.transactionDate,
+        category: "ADVANCE_TO_LANDLORD",
+        amount,
+        direction: "debit",
+        description,
+        sourceTransactionType:
+          adjustment.sourceTransactionType || "advance",
+        sourceTransactionId:
+          adjustment.sourceTransactionId || String(adjustment._id),
+        metadata: {
+          statementBucket: "advance_payment",
+          postingKind: String(adjustment?.metadata?.postingKind || "landlord_advance_against_payable"),
+          advancementId: adjustment?.metadata?.advancementId || null,
+        },
+      });
+    } else if (isAdvanceRecovery) {
+      totalAdvanceRecoveries = round2(totalAdvanceRecoveries + amount);
+      advanceRecoveryRows.push({
+        date: adjustment.transactionDate,
+        description,
+        amount: round2(amount),
+        category: "advance_recovery",
+        sourceId: String(adjustment._id),
+      });
+
+      pushEntry({
+        tenantId: adjustment.tenant || null,
+        unitId: adjustment.unit || null,
+        transactionDate: adjustment.transactionDate,
+        category: "ADJUSTMENT",
+        amount,
+        direction: "debit",
+        description,
+        sourceTransactionType:
+          adjustment.sourceTransactionType || "advance",
+        sourceTransactionId:
+          adjustment.sourceTransactionId || String(adjustment._id),
+        metadata: {
+          statementBucket: "advance_recovery",
+          postingKind: String(adjustment?.metadata?.postingKind || "landlord_advancement_recovery"),
+          advancementId: adjustment?.metadata?.advancementId || null,
+        },
+      });
+    } else if (isAddition) {
       totalAdditions += amount;
       additionRows.push({
         date: adjustment.transactionDate,
@@ -2336,9 +2403,16 @@ export const generateLandlordStatement = async ({
   const landlordOffsets = round2(directToLandlordOffset);
   const additionsTotal = round2(totalAdditions || 0);
   const extraDeductionsTotal = round2(totalExtraDeductions || 0);
+  const advanceRecoveriesTotal = round2(totalAdvanceRecoveries || 0);
+  const earlyPayoutsTotal = round2(totalEarlyPayouts || 0);
   const openingSettlementBalance = round2(openingLandlordSettlementBalance);
   const netRemittance = round2(
-    openingSettlementBalance + settlementCollections + additionsTotal - deductions
+    openingSettlementBalance +
+      settlementCollections +
+      additionsTotal -
+      deductions -
+      advanceRecoveriesTotal -
+      earlyPayoutsTotal
   );
 
   const depositMemoRows = Object.values(depositMemoBuckets)
@@ -2468,6 +2542,8 @@ export const generateLandlordStatement = async ({
     expenseRows,
     deductionRows: expenseRows,
     additionRows,
+    advanceRecoveryRows,
+    earlyPayoutRows,
     directToLandlordRows,
     depositMemo: {
       rows: depositMemoRows,
@@ -2521,6 +2597,13 @@ export const generateLandlordStatement = async ({
       totalDeductions: deductions,
       nonCommissionDeductions,
       totalExpenses: round2(totalExpenses),
+      advanceRecoveries: advanceRecoveriesTotal,
+      totalAdvanceRecoveries: advanceRecoveriesTotal,
+      alreadyPaidToLandlord: earlyPayoutsTotal,
+      totalEarlyPayouts: earlyPayoutsTotal,
+      netBeforeAdvancePayments: round2(
+        openingSettlementBalance + settlementCollections + additionsTotal - deductions - advanceRecoveriesTotal
+      ),
       directToLandlordOffsets: landlordOffsets,
       netStatement: netRemittance,
       amountPayableToLandlord: netRemittance > 0 ? netRemittance : 0,
@@ -2633,11 +2716,13 @@ export const generateLandlordStatement = async ({
       count:
         additionRows.length +
         extraDeductionRows.length +
+        advanceRecoveryRows.length +
+        earlyPayoutRows.length +
         directToLandlordRows.length,
       totalAmount: round2(
-        additionsTotal - extraDeductionsTotal - landlordOffsets
+        additionsTotal - extraDeductionsTotal - advanceRecoveriesTotal - earlyPayoutsTotal - landlordOffsets
       ),
-      totalDebit: round2(totalExtraDeductions + landlordOffsets),
+      totalDebit: round2(totalExtraDeductions + totalAdvanceRecoveries + totalEarlyPayouts + landlordOffsets),
       totalCredit: additionsTotal,
     },
   };

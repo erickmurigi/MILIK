@@ -1,3 +1,4 @@
+
 import mongoose from "mongoose";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import LandlordAdvancement from "../../models/LandlordAdvancement.js";
@@ -20,6 +21,22 @@ import {
   round2,
 } from "../../utils/recurringSchedule.js";
 
+const ADVANCE_TYPES = ["against_payable", "future_recoverable"];
+const LEGACY_STATUSES = ["draft", "active", "paused", "completed", "cancelled"];
+const WORKFLOW_STATUSES = [
+  "draft",
+  "submitted",
+  "approved",
+  "rejected",
+  "disbursed",
+  "recovering",
+  "cleared",
+  "cancelled",
+  "reversed",
+  "paused",
+  ...LEGACY_STATUSES,
+];
+
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const oid = (value) => new mongoose.Types.ObjectId(String(value));
 
@@ -40,6 +57,21 @@ const normalizePaymentMethod = (value) => {
     return normalized;
   }
   return "bank_transfer";
+};
+
+const normalizeAdvanceType = (value, row = null) => {
+  const normalized = String(value || row?.advanceType || "").trim().toLowerCase();
+  if (ADVANCE_TYPES.includes(normalized)) return normalized;
+  // Historical MILIK records were only future recoverable
+  return "future_recoverable";
+};
+
+const normalizeRequestedStatus = (value = "") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "";
+  if (normalized === "active") return "disbursed";
+  if (normalized === "completed") return "cleared";
+  return normalized;
 };
 
 const addMonths = (dateValue, months = 0) => {
@@ -125,7 +157,13 @@ const populateQuery = (query) =>
     .populate("cashbook", "code accountCode name accountName")
     .populate("createdBy", "username email firstName lastName")
     .populate("updatedBy", "username email firstName lastName")
-    .populate("recoveryHistory.processedBy", "username email firstName lastName");
+    .populate("submittedBy", "username email firstName lastName")
+    .populate("approvedBy", "username email firstName lastName")
+    .populate("rejectedBy", "username email firstName lastName")
+    .populate("cancelledBy", "username email firstName lastName")
+    .populate("reversedBy", "username email firstName lastName")
+    .populate("recoveryHistory.processedBy", "username email firstName lastName")
+    .populate("recoveryHistory.cancelledBy", "username email firstName lastName");
 
 const resolveActorUserId = async (req, businessId) =>
   resolveAuditActorUserId({
@@ -192,7 +230,48 @@ const getActiveRecoveryHistory = (row) =>
 const getCancelledRecoveryHistory = (row) =>
   (Array.isArray(row?.recoveryHistory) ? row.recoveryHistory : []).filter((item) => item?.cancelledAt);
 
+const resolveLifecycleStatus = (row) => {
+  const rawStatus = String(row?.status || "draft").toLowerCase();
+  const advanceType = normalizeAdvanceType(row?.advanceType, row);
+  const hasDisbursement = Boolean(row?.disbursedAt || row?.disbursementEntryId || row?.disbursementOffsetEntryId);
+  const outstanding = round2(Number(row?.balanceOutstanding || 0));
+
+  if (rawStatus === "reversed") return "reversed";
+  if (rawStatus === "cancelled") return "cancelled";
+  if (rawStatus === "rejected") return "rejected";
+  if (rawStatus === "submitted") return "submitted";
+  if (rawStatus === "draft") return "draft";
+  if (rawStatus === "approved" && !hasDisbursement) return "approved";
+  if (rawStatus === "completed" || rawStatus === "cleared") return "cleared";
+  if (rawStatus === "paused") return "paused";
+
+  if (!hasDisbursement) {
+    return rawStatus === "approved" ? "approved" : rawStatus === "submitted" ? "submitted" : "draft";
+  }
+
+  if (advanceType === "future_recoverable") {
+    if (outstanding <= 0) return "cleared";
+    if (getActiveRecoveryHistory(row).length > 0 || rawStatus === "recovering") return "recovering";
+    return "disbursed";
+  }
+
+  return "disbursed";
+};
+
 const recalculateRecoveryBalances = (row) => {
+  const advanceType = normalizeAdvanceType(row?.advanceType, row);
+
+  if (advanceType === "against_payable") {
+    row.recoveredAmount = 0;
+    row.interestRecoveredAmount = 0;
+    row.totalRecoverableAmount = 0;
+    row.balanceOutstanding = 0;
+    if (row.disbursedAt && !["cancelled", "reversed", "rejected"].includes(String(row.status || "").toLowerCase())) {
+      row.status = "disbursed";
+    }
+    return;
+  }
+
   const activeHistory = getActiveRecoveryHistory(row);
   const recoveredPrincipal = round2(
     activeHistory.reduce((sum, item) => sum + Number(item?.principalAmount || item?.amount || 0), 0)
@@ -203,16 +282,21 @@ const recalculateRecoveryBalances = (row) => {
 
   row.recoveredAmount = recoveredPrincipal;
   row.interestRecoveredAmount = recoveredInterest;
-  row.balanceOutstanding = round2(
-    Number(row.totalRecoverableAmount || row.amount || 0) -
-      Number(row.recoveredAmount || 0) -
-      Number(row.interestRecoveredAmount || 0)
+
+  const totalRecoverable = round2(
+    Number(row.totalRecoverableAmount || row.amount || 0) || 0
   );
 
-  if (row.balanceOutstanding <= 0) {
-    row.status = "completed";
+  row.balanceOutstanding = round2(
+    totalRecoverable - Number(row.recoveredAmount || 0) - Number(row.interestRecoveredAmount || 0)
+  );
+
+  if (row.balanceOutstanding <= 0 && row.disbursedAt) {
+    row.status = "cleared";
+  } else if (row.disbursedAt) {
+    row.status = activeHistory.length > 0 ? "recovering" : "disbursed";
   } else if (String(row.status || "") === "completed") {
-    row.status = "active";
+    row.status = "approved";
   }
 };
 
@@ -236,11 +320,19 @@ const isPeriodClosedByProcessedStatement = async ({ businessId, propertyId, land
   return candidates.some((item) => {
     const start = normalizeToStartOfDay(item.periodStart);
     const end = statementCursorFor(item);
-    return start && end && start.getTime() <= normalizeToStartOfDay(periodStart).getTime() && end.getTime() >= normalizeToEndOfDay(periodEnd).getTime();
+    return (
+      start &&
+      end &&
+      start.getTime() <= normalizeToStartOfDay(periodStart).getTime() &&
+      end.getTime() >= normalizeToEndOfDay(periodEnd).getTime()
+    );
   });
 };
 
 const computeSchedule = (row) => {
+  const advanceType = normalizeAdvanceType(row?.advanceType, row);
+  if (advanceType !== "future_recoverable") return [];
+
   const scheduleWindow = resolveAdvancementScheduleWindow({
     startDate: row.startDate,
     endDate: row.endDate,
@@ -262,13 +354,14 @@ const computeSchedule = (row) => {
       .filter(Boolean)
   );
 
+  const principalTarget = Number(row.amount || 0);
   const installmentCount = Math.max(schedule.length || 1, 1);
-  const baseInstallment = installmentCount > 0 ? round2(Number(row.amount || 0) / installmentCount) : round2(row.amount || 0);
+  const baseInstallment = installmentCount > 0 ? round2(principalTarget / installmentCount) : round2(principalTarget);
 
   let scheduledTotal = 0;
-  const scheduleWithAmounts = schedule.map((item, index) => {
+  return schedule.map((item, index) => {
     const isLast = index === schedule.length - 1;
-    const amount = isLast ? round2(Number(row.amount || 0) - scheduledTotal) : baseInstallment;
+    const amount = isLast ? round2(principalTarget - scheduledTotal) : baseInstallment;
     scheduledTotal = round2(scheduledTotal + amount);
     const processedEntry = getActiveRecoveryHistory(row).find(
       (history) => String(history?.periodKey || "") === item.periodKey
@@ -277,42 +370,116 @@ const computeSchedule = (row) => {
     return {
       ...item,
       scheduledAmount: amount,
+      scheduledPrincipalAmount: amount,
+      scheduledInterestAmount: 0,
       processed: processedKeys.has(item.periodKey),
       processedAt: processedEntry?.processedAt || null,
       processedAmount: processedEntry ? round2(processedEntry.amount || 0) : 0,
       referenceNo: processedEntry?.referenceNo || "",
     };
   });
+};
 
-  return scheduleWithAmounts;
+const computeCurrentLandlordPayable = async ({ businessId, propertyId, landlordId }) => {
+  const payableAccount = await resolveLandlordRemittancePayableAccount(businessId);
+  if (!payableAccount?._id) return 0;
+
+  const grouped = await FinancialLedgerEntry.aggregate([
+    {
+      $match: {
+        business: oid(businessId),
+        property: oid(propertyId),
+        landlord: oid(landlordId),
+        accountId: oid(payableAccount._id),
+        status: { $nin: ["draft", "void"] },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalDebit: { $sum: { $ifNull: ["$debit", 0] } },
+        totalCredit: { $sum: { $ifNull: ["$credit", 0] } },
+      },
+    },
+  ]);
+
+  const totals = grouped[0] || { totalDebit: 0, totalCredit: 0 };
+  return round2(Number(totals.totalCredit || 0) - Number(totals.totalDebit || 0));
+};
+
+const ensureAgainstPayableAmountIsSafe = async ({ businessId, propertyId, landlordId, amount }) => {
+  const currentPayable = await computeCurrentLandlordPayable({ businessId, propertyId, landlordId });
+  const requestedAmount = round2(Number(amount || 0));
+
+  if (requestedAmount > currentPayable) {
+    const error = new Error(
+      `Current landlord payable is only KES ${currentPayable.toLocaleString()}. Use Future Recoverable Advance for any excess amount.`
+    );
+    error.statusCode = 400;
+    error.payableSnapshotAmount = currentPayable;
+    throw error;
+  }
+
+  return currentPayable;
+};
+
+const computeStatementWindowForDisbursement = (row) => {
+  const effectiveDate = normalizeToStartOfDay(row?.disbursementDate || new Date());
+  return {
+    periodStart: effectiveDate,
+    periodEnd: normalizeToEndOfDay(effectiveDate),
+  };
+};
+
+const syncDisbursementDerivedFields = async (row) => {
+  const advanceType = normalizeAdvanceType(row?.advanceType, row);
+  if (advanceType === "against_payable") {
+    row.balanceOutstanding = 0;
+    row.totalRecoverableAmount = 0;
+    row.recoveredAmount = 0;
+    row.interestRecoveredAmount = 0;
+  } else {
+    recalculateRecoveryBalances(row);
+  }
+  row.status = resolveLifecycleStatus(row);
 };
 
 const serializeAdvancement = (row) => {
   const plain = typeof row?.toObject === "function" ? row.toObject({ virtuals: true }) : { ...(row || {}) };
-  const scheduleWindow = resolveAdvancementScheduleWindow({
-    startDate: plain.startDate,
-    endDate: plain.endDate,
-    periodMonths: plain.periodMonths,
-    gracePeriodMonths: plain.gracePeriodMonths,
-  });
+  const advanceType = normalizeAdvanceType(plain.advanceType, plain);
+  const scheduleWindow =
+    advanceType === "future_recoverable"
+      ? resolveAdvancementScheduleWindow({
+          startDate: plain.startDate,
+          endDate: plain.endDate,
+          periodMonths: plain.periodMonths,
+          gracePeriodMonths: plain.gracePeriodMonths,
+        })
+      : {
+          effectiveStartDate: plain.startDate || null,
+          endDate: plain.endDate || plain.startDate || null,
+        };
   const schedule = computeSchedule(plain);
   const activeHistory = getActiveRecoveryHistory(plain);
   const cancelledHistory = getCancelledRecoveryHistory(plain);
-  const eligiblePeriods = filterEligibleSchedule({
-    schedule,
-    runHistory: activeHistory,
-    now: new Date(),
-    frequency: plain.frequency,
-  }).map((item) => ({
-    periodKey: item.periodKey,
-    periodLabel: item.periodLabel,
-    dueDate: item.dueDate,
-    periodStart: item.periodStart,
-    periodEnd: item.periodEnd,
-    scheduledAmount: item.scheduledAmount,
-    scheduledPrincipalAmount: item.scheduledPrincipalAmount,
-    scheduledInterestAmount: item.scheduledInterestAmount,
-  }));
+  const eligiblePeriods =
+    advanceType === "future_recoverable"
+      ? filterEligibleSchedule({
+          schedule,
+          runHistory: activeHistory,
+          now: new Date(),
+          frequency: plain.frequency,
+        }).map((item) => ({
+          periodKey: item.periodKey,
+          periodLabel: item.periodLabel,
+          dueDate: item.dueDate,
+          periodStart: item.periodStart,
+          periodEnd: item.periodEnd,
+          scheduledAmount: item.scheduledAmount,
+          scheduledPrincipalAmount: item.scheduledPrincipalAmount,
+          scheduledInterestAmount: item.scheduledInterestAmount,
+        }))
+      : [];
 
   const processedPeriods = activeHistory
     .map((run) => ({
@@ -345,8 +512,15 @@ const serializeAdvancement = (row) => {
     .filter((item) => item.periodKey)
     .sort(comparePeriodOrder);
 
+  const totalRecoveredAmount = round2(Number(plain.recoveredAmount || 0) + Number(plain.interestRecoveredAmount || 0));
+  const lifecycleStatus = resolveLifecycleStatus(plain);
+  const outstandingRecoverableAmount = advanceType === "future_recoverable" ? round2(Number(plain.balanceOutstanding || 0)) : 0;
+
   return {
     ...plain,
+    advanceType,
+    legacyStatus: plain.status,
+    status: lifecycleStatus,
     computedRecoveryStartDate: scheduleWindow.effectiveStartDate || plain.startDate || null,
     computedRecoveryEndDate: scheduleWindow.endDate || plain.endDate || null,
     amortizationSchedule: schedule,
@@ -357,6 +531,12 @@ const serializeAdvancement = (row) => {
     cancelledPeriodsCount: cancelledPeriods.length,
     unprocessedPeriodsCount: Math.max(schedule.length - processedPeriods.length, 0),
     nextEligibleRecoveryPeriod: eligiblePeriods[0] || null,
+    outstandingRecoverableAmount,
+    totalRecoveredAmount,
+    alreadyPaidToLandlord: advanceType === "against_payable" && plain.disbursedAt ? round2(plain.amount || 0) : 0,
+    isRecoverable: advanceType === "future_recoverable",
+    canRecover: advanceType === "future_recoverable" && ["disbursed", "recovering", "approved", "paused"].includes(lifecycleStatus),
+    canDisburse: !plain.disbursedAt && !["cancelled", "rejected", "reversed", "cleared"].includes(lifecycleStatus),
   };
 };
 
@@ -384,55 +564,108 @@ const postDisbursementIfMissing = async ({ row, actorUserId, paymentMethod, cash
     propertyId: row.property,
     landlordId: row.landlord,
   });
-  const advanceRecoverableAccount = await resolveAdvanceRecoverableAccount(row.business);
-  const cashbookAccount = await resolveCashbookAccount({ businessId: row.business, cashbook, paymentMethod });
 
-  if (!advanceRecoverableAccount?._id || !cashbookAccount?._id) {
-    throw new Error("Landlord advancement posting accounts could not be resolved.");
+  const advanceType = normalizeAdvanceType(row.advanceType, row);
+  const cashbookAccount = await resolveCashbookAccount({ businessId: row.business, cashbook, paymentMethod });
+  if (!cashbookAccount?._id) {
+    throw new Error("Selected cashbook / payout account could not be resolved.");
   }
 
   const journalGroupId = new mongoose.Types.ObjectId();
-  const notes = String(row.narration || row.title || "Landlord advancement disbursement").trim();
+  const notes = String(
+    row.narration ||
+      row.title ||
+      (advanceType === "against_payable"
+        ? "Landlord advance against current payable"
+        : "Future recoverable landlord advance")
+  ).trim();
 
-  const debitEntry = await postEntry({
+  let primaryAccount = null;
+  let primaryDirection = "debit";
+  let primaryCategory = "ADVANCE_TO_LANDLORD";
+  let primaryMetadata = {};
+
+  if (advanceType === "against_payable") {
+    const payableAccount = await resolveLandlordRemittancePayableAccount(row.business);
+    if (!payableAccount?._id) {
+      throw new Error("Landlord remittance payable account could not be resolved.");
+    }
+
+    const currentPayable = await ensureAgainstPayableAmountIsSafe({
+      businessId: row.business,
+      propertyId: row.property,
+      landlordId: row.landlord,
+      amount: row.amount,
+    });
+
+    row.payableAvailableAtDisbursement = currentPayable;
+    row.payableBalanceAfterDisbursement = round2(currentPayable - Number(row.amount || 0));
+
+    primaryAccount = payableAccount;
+    primaryDirection = "debit";
+    primaryCategory = "ADVANCE_TO_LANDLORD";
+    primaryMetadata = {
+      advancementId: String(row._id),
+      referenceNo: row.referenceNo,
+      advanceType,
+      includeInLandlordStatement: true,
+      statementBucket: "advance_payment",
+      postingKind: "landlord_advance_against_payable",
+      alreadyPaidToLandlord: true,
+    };
+  } else {
+    const advanceRecoverableAccount = await resolveAdvanceRecoverableAccount(row.business);
+    if (!advanceRecoverableAccount?._id) {
+      throw new Error("Landlord advances recoverable account could not be resolved.");
+    }
+    primaryAccount = advanceRecoverableAccount;
+    primaryDirection = "debit";
+    primaryCategory = "ADVANCE_TO_LANDLORD";
+    primaryMetadata = {
+      advancementId: String(row._id),
+      referenceNo: row.referenceNo,
+      advanceType,
+      postingKind: "landlord_advancement_disbursement",
+      includeInLandlordStatement: false,
+    };
+  }
+
+  const statementWindow = computeStatementWindowForDisbursement(row);
+
+  const primaryEntry = await postEntry({
     business: accountingContext.businessId,
     property: accountingContext.propertyId,
     landlord: accountingContext.landlordId,
     sourceTransactionType: "advance",
     sourceTransactionId: String(row._id),
     transactionDate: row.disbursementDate,
-    statementPeriodStart: row.startDate,
-    statementPeriodEnd: row.startDate,
-    category: "ADVANCE_TO_LANDLORD",
+    statementPeriodStart: statementWindow.periodStart,
+    statementPeriodEnd: statementWindow.periodEnd,
+    category: primaryCategory,
     amount: round2(row.amount || 0),
-    direction: "debit",
-    accountId: advanceRecoverableAccount._id,
+    direction: primaryDirection,
+    accountId: primaryAccount._id,
     journalGroupId,
     payer: "manager",
     receiver: "landlord",
     notes,
-    metadata: {
-      advancementId: String(row._id),
-      referenceNo: row.referenceNo,
-      postingKind: "landlord_advancement_disbursement",
-      includeInLandlordStatement: false,
-    },
+    metadata: primaryMetadata,
     createdBy: actorUserId,
     approvedBy: actorUserId,
     approvedAt: row.disbursementDate,
     status: "approved",
   });
 
-  const creditEntry = await postEntry({
+  const offsetEntry = await postEntry({
     business: accountingContext.businessId,
     property: accountingContext.propertyId,
     landlord: accountingContext.landlordId,
     sourceTransactionType: "advance",
     sourceTransactionId: String(row._id),
     transactionDate: row.disbursementDate,
-    statementPeriodStart: row.startDate,
-    statementPeriodEnd: row.startDate,
-    category: "ADVANCE_TO_LANDLORD",
+    statementPeriodStart: statementWindow.periodStart,
+    statementPeriodEnd: statementWindow.periodEnd,
+    category: primaryCategory,
     amount: round2(row.amount || 0),
     direction: "credit",
     accountId: cashbookAccount._id,
@@ -443,9 +676,12 @@ const postDisbursementIfMissing = async ({ row, actorUserId, paymentMethod, cash
     metadata: {
       advancementId: String(row._id),
       referenceNo: row.referenceNo,
+      advanceType,
       postingKind: "landlord_advancement_cashbook_offset",
       includeInLandlordStatement: false,
       paymentMethod,
+      cashbookId: String(cashbookAccount._id),
+      cashbookName: cashbookAccount.name || cashbookAccount.accountName || cashbookAccount.code || "",
     },
     createdBy: actorUserId,
     approvedBy: actorUserId,
@@ -454,9 +690,372 @@ const postDisbursementIfMissing = async ({ row, actorUserId, paymentMethod, cash
   });
 
   row.disbursementJournalGroupId = journalGroupId;
-  row.disbursementEntryId = debitEntry._id;
-  row.disbursementOffsetEntryId = creditEntry._id;
+  row.disbursementEntryId = primaryEntry._id;
+  row.disbursementOffsetEntryId = offsetEntry._id;
   row.disbursedAt = row.disbursementDate;
+  row.approvedAt = row.approvedAt || row.disbursementDate;
+  row.approvedBy = row.approvedBy || actorUserId;
+  await syncDisbursementDerivedFields(row);
+
+  await aggregateChartOfAccountBalances(String(row.business), [
+    String(primaryAccount._id),
+    String(cashbookAccount._id),
+  ]);
+};
+
+const reverseDisbursementIfPossible = async ({ row, businessId, actorUserId, reason }) => {
+  if (!row.disbursementEntryId || !row.disbursementOffsetEntryId) {
+    throw new Error("No posted disbursement exists for this landlord advance.");
+  }
+
+  if (getActiveRecoveryHistory(row).length > 0) {
+    const error = new Error("Recoveries already exist on this landlord advance. Cancel the recoveries before reversing the disbursement.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const advanceType = normalizeAdvanceType(row.advanceType, row);
+  if (advanceType === "against_payable") {
+    const window = computeStatementWindowForDisbursement(row);
+    const periodClosed = await isPeriodClosedByProcessedStatement({
+      businessId,
+      propertyId: row.property,
+      landlordId: row.landlord,
+      periodStart: window.periodStart,
+      periodEnd: window.periodEnd,
+    });
+
+    if (periodClosed) {
+      const error = new Error("This early payout already falls inside a processed landlord statement period. Reverse or reopen that processed statement first.");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  const touchedAccountIds = new Set();
+
+  const reverseOne = async (entryId) => {
+    if (!entryId || !isValidObjectId(entryId)) return null;
+    const originalEntry = await FinancialLedgerEntry.findOne({
+      _id: entryId,
+      business: businessId,
+      reversalOf: null,
+      status: { $nin: ["void"] },
+    }).select("_id accountId status reversedByEntry");
+    if (!originalEntry || originalEntry.reversedByEntry || originalEntry.status === "reversed") return null;
+
+    if (originalEntry?.accountId) touchedAccountIds.add(String(originalEntry.accountId));
+    const reversal = await postReversal({ entryId: originalEntry._id, reason, userId: actorUserId });
+    if (reversal?.reversalEntry?.accountId) {
+      touchedAccountIds.add(String(reversal.reversalEntry.accountId));
+    }
+    return reversal;
+  };
+
+  await reverseOne(row.disbursementEntryId);
+  await reverseOne(row.disbursementOffsetEntryId);
+
+  if (touchedAccountIds.size > 0) {
+    await aggregateChartOfAccountBalances(String(row.business), Array.from(touchedAccountIds));
+  }
+
+  row.reversedAt = new Date();
+  row.reversedBy = actorUserId;
+  row.reversalReason = reason;
+  row.status = "reversed";
+};
+
+const applyDraftOrPreDisbursementUpdates = async ({ row, req, businessId }) => {
+  const advanceTypeBefore = normalizeAdvanceType(row.advanceType, row);
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "title")) {
+    const title = String(req.body?.title || "").trim();
+    if (!title) {
+      const error = new Error("Advance title is required");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.title = title;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "advanceType")) {
+    row.advanceType = normalizeAdvanceType(req.body?.advanceType, row);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "narration")) row.narration = String(req.body?.narration || "").trim();
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "notes")) row.notes = String(req.body?.notes || "").trim();
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "paymentMethod")) row.paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "cashbook")) row.cashbook = isValidObjectId(req.body?.cashbook) ? req.body?.cashbook : null;
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "amount")) {
+    const amount = Number(req.body?.amount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      const error = new Error("Valid advance amount is required");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.amount = round2(amount);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "frequency")) row.frequency = normalizeFrequency(req.body?.frequency);
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "dayOfMonth")) {
+    const dayOfMonth = Number(req.body?.dayOfMonth || 0);
+    row.dayOfMonth = Math.max(1, Math.min(31, dayOfMonth || row.dayOfMonth || 5));
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "disbursementDate")) {
+    const disbursementDate = parseDate(req.body?.disbursementDate, null);
+    if (!disbursementDate) {
+      const error = new Error("Valid disbursement date is required");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.disbursementDate = disbursementDate;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "startDate")) {
+    const startDate = parseDate(req.body?.startDate, null);
+    if (!startDate) {
+      const error = new Error("Valid recovery start date is required");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.startDate = startDate;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "periodMonths")) {
+    row.periodMonths = normalizePeriodMonths(req.body?.periodMonths);
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "gracePeriodMonths")) {
+    row.gracePeriodMonths = normalizeGracePeriodMonths(req.body?.gracePeriodMonths);
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "endDate")) {
+    const endDate = parseDate(req.body?.endDate, null);
+    if (endDate && row.startDate && endDate < row.startDate) {
+      const error = new Error("Recovery end date cannot be earlier than start date");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.endDate = endDate;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "interestRate")) {
+    row.interestRate = Math.max(Number(req.body?.interestRate || 0), 0);
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "interestType")) {
+    const interestType = String(req.body?.interestType || "").trim().toLowerCase();
+    row.interestType = ["simple_flat", "reducing_balance"].includes(interestType) ? interestType : "simple_flat";
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "scheduledInterestTotal")) {
+    row.scheduledInterestTotal = Math.max(Number(req.body?.scheduledInterestTotal || 0), 0);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "landlord") || Object.prototype.hasOwnProperty.call(req.body || {}, "property")) {
+    const targetLandlord = Object.prototype.hasOwnProperty.call(req.body || {}, "landlord") ? req.body?.landlord : row.landlord;
+    const targetProperty = Object.prototype.hasOwnProperty.call(req.body || {}, "property") ? req.body?.property : row.property;
+    if (!isValidObjectId(targetLandlord) || !isValidObjectId(targetProperty)) {
+      const error = new Error("Property and landlord are required");
+      error.statusCode = 400;
+      throw error;
+    }
+    const accountingContext = await resolvePropertyAccountingContext({ businessId, propertyId: targetProperty, landlordId: targetLandlord });
+    row.landlord = accountingContext.landlordId;
+    row.property = accountingContext.propertyId;
+  }
+
+  const advanceType = normalizeAdvanceType(row.advanceType, row);
+
+  if (advanceType === "future_recoverable") {
+    const scheduleWindow = resolveAdvancementScheduleWindow({
+      startDate: row.startDate,
+      endDate: row.endDate,
+      periodMonths: row.periodMonths,
+      gracePeriodMonths: row.gracePeriodMonths,
+    });
+    row.endDate = scheduleWindow.endDate || row.endDate;
+    row.payableSnapshotAmount = 0;
+  } else {
+    row.startDate = row.disbursementDate || row.startDate;
+    row.endDate = row.disbursementDate || row.endDate || row.startDate;
+    row.periodMonths = null;
+    row.gracePeriodMonths = 0;
+    row.frequency = "monthly";
+    row.dayOfMonth = Math.max(1, Math.min(31, Number(row.startDate ? new Date(row.startDate).getDate() : 5) || 5));
+    row.interestRate = 0;
+    row.scheduledInterestTotal = 0;
+    row.interestRecoveredAmount = 0;
+    row.totalRecoverableAmount = 0;
+    row.recoveredAmount = 0;
+    row.balanceOutstanding = 0;
+    row.payableSnapshotAmount = await ensureAgainstPayableAmountIsSafe({
+      businessId,
+      propertyId: row.property,
+      landlordId: row.landlord,
+      amount: row.amount,
+    });
+  }
+
+  if (advanceTypeBefore !== advanceType && advanceType === "future_recoverable") {
+    recalculateRecoveryBalances(row);
+  }
+};
+
+const persistAndRespond = async (res, row, statusCode = 200) => {
+  await row.save();
+  const populated = await populateQuery(LandlordAdvancement.findById(row._id));
+  res.status(statusCode).json(serializeAdvancement(await populated));
+};
+
+const ensureSafeDeletion = (row) => {
+  if (row.disbursedAt || (Array.isArray(row.recoveryHistory) && row.recoveryHistory.length > 0)) {
+    const error = new Error("Posted or recovered landlord advances cannot be deleted. Cancel or reverse them instead to preserve the audit trail.");
+    error.statusCode = 400;
+    throw error;
+  }
+};
+
+const handleStatusTransition = async ({ row, requestedStatus, req, businessId, actorUserId }) => {
+  const nextStatus = normalizeRequestedStatus(requestedStatus);
+  if (!WORKFLOW_STATUSES.includes(nextStatus)) {
+    const error = new Error("Invalid landlord advance status");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const lifecycleStatus = resolveLifecycleStatus(row);
+  const hasPosting = Boolean(row.disbursedAt || row.disbursementEntryId || row.disbursementOffsetEntryId);
+
+  if (nextStatus === "draft") {
+    if (hasPosting || getActiveRecoveryHistory(row).length > 0) {
+      const error = new Error("A posted landlord advance cannot be moved back to draft.");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.status = "draft";
+    return;
+  }
+
+  if (nextStatus === "submitted") {
+    if (hasPosting) {
+      const error = new Error("A posted landlord advance cannot be resubmitted.");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.status = "submitted";
+    row.submittedAt = new Date();
+    row.submittedBy = actorUserId;
+    return;
+  }
+
+  if (nextStatus === "approved") {
+    if (["cancelled", "rejected", "reversed", "cleared"].includes(lifecycleStatus)) {
+      const error = new Error("This landlord advance cannot be approved in its current status.");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.status = "approved";
+    row.approvedAt = new Date();
+    row.approvedBy = actorUserId;
+    if (!row.submittedAt) {
+      row.submittedAt = new Date();
+      row.submittedBy = actorUserId;
+    }
+    return;
+  }
+
+  if (nextStatus === "rejected") {
+    if (hasPosting) {
+      const error = new Error("A posted landlord advance cannot be rejected. Reverse it instead.");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.status = "rejected";
+    row.rejectedAt = new Date();
+    row.rejectedBy = actorUserId;
+    row.rejectionReason = String(req.body?.reason || req.body?.rejectionReason || "").trim();
+    return;
+  }
+
+  if (nextStatus === "cancelled") {
+    if (hasPosting) {
+      const error = new Error("A posted landlord advance cannot be cancelled. Reverse it instead.");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.status = "cancelled";
+    row.cancelledAt = new Date();
+    row.cancelledBy = actorUserId;
+    row.cancellationReason = String(req.body?.reason || req.body?.cancellationReason || "").trim();
+    return;
+  }
+
+  if (nextStatus === "disbursed" || nextStatus === "recovering") {
+    if (!row.disbursedAt) {
+      await postDisbursementIfMissing({
+        row,
+        actorUserId,
+        paymentMethod: row.paymentMethod,
+        cashbook: row.cashbook,
+      });
+    } else {
+      const advanceType = normalizeAdvanceType(row.advanceType, row);
+      if (nextStatus === "recovering" && advanceType === "future_recoverable") {
+        row.status = round2(Number(row.balanceOutstanding || 0)) > 0 ? "recovering" : "cleared";
+      } else if (nextStatus === "disbursed" && advanceType === "future_recoverable") {
+        row.status = round2(Number(row.balanceOutstanding || 0)) > 0 ? "recovering" : "cleared";
+      } else {
+        row.status = "disbursed";
+      }
+    }
+    return;
+  }
+
+  if (nextStatus === "cleared") {
+    const advanceType = normalizeAdvanceType(row.advanceType, row);
+    if (advanceType === "future_recoverable" && round2(Number(row.balanceOutstanding || 0)) > 0) {
+      const error = new Error("This recoverable advance still has an outstanding balance and cannot be marked cleared.");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!row.disbursedAt) {
+      const error = new Error("Only a disbursed landlord advance can be cleared.");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.status = "cleared";
+    return;
+  }
+
+  if (nextStatus === "paused") {
+    const advanceType = normalizeAdvanceType(row.advanceType, row);
+    if (advanceType !== "future_recoverable" || !row.disbursedAt) {
+      const error = new Error("Only a disbursed future recoverable advance can be paused.");
+      error.statusCode = 400;
+      throw error;
+    }
+    row.status = "paused";
+    return;
+  }
+
+  if (nextStatus === "reversed") {
+    if (!hasPosting) {
+      const error = new Error("Only a posted landlord advance can be reversed.");
+      error.statusCode = 400;
+      throw error;
+    }
+    await reverseDisbursementIfPossible({
+      row,
+      businessId,
+      actorUserId,
+      reason:
+        String(req.body?.reason || req.body?.reversalReason || "").trim() ||
+        `Landlord advance ${row.referenceNo || row._id} reversed`,
+    });
+    return;
+  }
+
+  throw new Error("Unsupported landlord advance status transition.");
 };
 
 export const createLandlordAdvancement = async (req, res, next) => {
@@ -479,56 +1078,102 @@ export const createLandlordAdvancement = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Valid advancement amount is required" });
     }
 
-    const title = String(req.body?.title || req.body?.narration || "Landlord Advancement").trim();
+    const advanceType = normalizeAdvanceType(req.body?.advanceType);
     const disbursementDate = parseDate(req.body?.disbursementDate, new Date());
     const startDate = parseDate(req.body?.startDate, disbursementDate || new Date());
     const normalizedPeriodMonths = normalizePeriodMonths(req.body?.periodMonths);
     const normalizedGracePeriodMonths = normalizeGracePeriodMonths(req.body?.gracePeriodMonths);
-    const scheduleWindow = resolveAdvancementScheduleWindow({
-      startDate,
-      endDate: req.body?.endDate,
-      periodMonths: normalizedPeriodMonths,
-      gracePeriodMonths: normalizedGracePeriodMonths,
-    });
+    const scheduleWindow =
+      advanceType === "future_recoverable"
+        ? resolveAdvancementScheduleWindow({
+            startDate,
+            endDate: req.body?.endDate,
+            periodMonths: normalizedPeriodMonths,
+            gracePeriodMonths: normalizedGracePeriodMonths,
+          })
+        : {
+            effectiveStartDate: disbursementDate,
+            endDate: disbursementDate,
+          };
     const endDate = parseDate(scheduleWindow.endDate, startDate);
     if (!startDate) return res.status(400).json({ success: false, message: "Valid recovery start date is required" });
     if (endDate && endDate < startDate) return res.status(400).json({ success: false, message: "Recovery end date cannot be earlier than start date" });
 
     const referenceNo = String(req.body?.referenceNo || "").trim() || (await generateReferenceNo(businessId));
-    const status = ["draft", "active", "paused", "completed", "cancelled"].includes(String(req.body?.status || "").toLowerCase())
-      ? String(req.body?.status || "").toLowerCase()
-      : "draft";
+    const requestedStatus = normalizeRequestedStatus(req.body?.status || "draft");
+    const status = WORKFLOW_STATUSES.includes(requestedStatus) ? requestedStatus : "draft";
     const frequency = normalizeFrequency(req.body?.frequency);
     const dayOfMonth = Number(req.body?.dayOfMonth || startDate.getDate() || 5);
     const paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
+
+    const title =
+      String(req.body?.title || "").trim() ||
+      (advanceType === "against_payable" ? "Landlord Advance - Early Payout" : "Landlord Advance - Recover from Next Statement");
 
     const row = new LandlordAdvancement({
       business: accountingContext.businessId,
       landlord: accountingContext.landlordId,
       property: accountingContext.propertyId,
+      advanceType,
       title,
       referenceNo,
       amount: round2(amount),
+      scheduledInterestTotal: advanceType === "future_recoverable" ? Math.max(Number(req.body?.scheduledInterestTotal || 0), 0) : 0,
+      totalRecoverableAmount: advanceType === "future_recoverable" ? round2(amount + Number(req.body?.scheduledInterestTotal || 0)) : 0,
       recoveredAmount: 0,
-      balanceOutstanding: round2(amount),
-      frequency,
+      balanceOutstanding: advanceType === "future_recoverable" ? round2(amount + Number(req.body?.scheduledInterestTotal || 0)) : 0,
+      frequency: advanceType === "future_recoverable" ? frequency : "monthly",
       dayOfMonth: Math.max(1, Math.min(31, dayOfMonth)),
       disbursementDate,
-      startDate,
-      periodMonths: normalizedPeriodMonths,
-      gracePeriodMonths: normalizedGracePeriodMonths,
-      endDate,
+      startDate: advanceType === "future_recoverable" ? startDate : disbursementDate,
+      periodMonths: advanceType === "future_recoverable" ? normalizedPeriodMonths : null,
+      gracePeriodMonths: advanceType === "future_recoverable" ? normalizedGracePeriodMonths : 0,
+      endDate: advanceType === "future_recoverable" ? endDate : disbursementDate,
       paymentMethod,
       cashbook: isValidObjectId(req.body?.cashbook) ? req.body.cashbook : null,
-      status,
+      status: ["disbursed", "recovering"].includes(status) ? "approved" : status,
       narration: String(req.body?.narration || "").trim(),
       notes: String(req.body?.notes || "").trim(),
+      interestRate: advanceType === "future_recoverable" ? Math.max(Number(req.body?.interestRate || 0), 0) : 0,
+      interestType: ["simple_flat", "reducing_balance"].includes(String(req.body?.interestType || "").trim().toLowerCase())
+        ? String(req.body?.interestType || "").trim().toLowerCase()
+        : "simple_flat",
       createdBy: actorUserId,
       updatedBy: actorUserId,
       recoveryHistory: [],
     });
 
-    if (status === "active") {
+    if (advanceType === "against_payable") {
+      row.payableSnapshotAmount = await ensureAgainstPayableAmountIsSafe({
+        businessId,
+        propertyId: row.property,
+        landlordId: row.landlord,
+        amount: row.amount,
+      });
+    }
+
+    if (status === "submitted") {
+      row.submittedAt = new Date();
+      row.submittedBy = actorUserId;
+    }
+    if (status === "approved" || ["disbursed", "recovering"].includes(status)) {
+      row.approvedAt = new Date();
+      row.approvedBy = actorUserId;
+      row.submittedAt = row.submittedAt || new Date();
+      row.submittedBy = row.submittedBy || actorUserId;
+    }
+    if (status === "rejected") {
+      row.rejectedAt = new Date();
+      row.rejectedBy = actorUserId;
+      row.rejectionReason = String(req.body?.reason || req.body?.rejectionReason || "").trim();
+    }
+    if (status === "cancelled") {
+      row.cancelledAt = new Date();
+      row.cancelledBy = actorUserId;
+      row.cancellationReason = String(req.body?.reason || req.body?.cancellationReason || "").trim();
+    }
+
+    if (["disbursed", "recovering"].includes(status)) {
       await postDisbursementIfMissing({
         row,
         actorUserId,
@@ -537,10 +1182,11 @@ export const createLandlordAdvancement = async (req, res, next) => {
       });
     }
 
-    await row.save();
-    const populated = await populateQuery(LandlordAdvancement.findById(row._id));
-    res.status(201).json(serializeAdvancement(await populated));
+    await persistAndRespond(res, row, 201);
   } catch (error) {
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.message, payableSnapshotAmount: error.payableSnapshotAmount });
+    }
     next(error);
   }
 };
@@ -551,7 +1197,6 @@ export const getLandlordAdvancements = async (req, res, next) => {
     if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
 
     const filter = { business: businessId };
-    if (req.query?.status && req.query.status !== "all") filter.status = req.query.status;
     if (req.query?.landlord && isValidObjectId(req.query.landlord)) filter.landlord = req.query.landlord;
     if (req.query?.property && isValidObjectId(req.query.property)) filter.property = req.query.property;
     if (req.query?.search) {
@@ -565,7 +1210,14 @@ export const getLandlordAdvancements = async (req, res, next) => {
     }
 
     const rows = await populateQuery(LandlordAdvancement.find(filter).sort({ createdAt: -1 }));
-    res.status(200).json(serializeRows(await rows));
+    let serialized = serializeRows(await rows);
+
+    if (req.query?.status && req.query.status !== "all") {
+      const requested = normalizeRequestedStatus(req.query.status);
+      serialized = serialized.filter((row) => row.status === requested || String(row.legacyStatus || "").toLowerCase() === requested);
+    }
+
+    res.status(200).json(serialized);
   } catch (error) {
     next(error);
   }
@@ -581,105 +1233,58 @@ export const updateLandlordAdvancement = async (req, res, next) => {
     if (!row) return res.status(404).json({ success: false, message: "Landlord advancement not found" });
 
     const hasAccountingHistory = Boolean(row.disbursedAt) || (Array.isArray(row.recoveryHistory) && row.recoveryHistory.length > 0);
-    const structuralFields = ["amount", "landlord", "property", "startDate", "endDate", "periodMonths", "gracePeriodMonths", "frequency", "dayOfMonth", "disbursementDate"];
+    const structuralFields = [
+      "amount",
+      "advanceType",
+      "landlord",
+      "property",
+      "startDate",
+      "endDate",
+      "periodMonths",
+      "gracePeriodMonths",
+      "frequency",
+      "dayOfMonth",
+      "disbursementDate",
+    ];
     if (hasAccountingHistory && structuralFields.some((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field))) {
       return res.status(400).json({
         success: false,
-        message: "Posted or recovered advancements cannot change amount, property, landlord, or schedule. Create a new advancement or reverse the existing accounting history first.",
+        message: "Posted or recovered landlord advances cannot change amount, type, property, landlord, or recovery schedule. Reverse and recreate if a structural correction is required.",
       });
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "title")) {
-      const title = String(req.body?.title || "").trim();
-      if (!title) return res.status(400).json({ success: false, message: "Advancement title is required" });
-      row.title = title;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "narration")) row.narration = String(req.body?.narration || "").trim();
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "notes")) row.notes = String(req.body?.notes || "").trim();
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "paymentMethod")) row.paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "cashbook")) row.cashbook = isValidObjectId(req.body?.cashbook) ? req.body.cashbook : null;
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "status")) {
-      const status = String(req.body?.status || "").toLowerCase();
-      if (!["draft", "active", "paused", "completed", "cancelled"].includes(status)) {
-        return res.status(400).json({ success: false, message: "Invalid advancement status" });
-      }
-      row.status = status;
     }
 
     if (!hasAccountingHistory) {
-      if (Object.prototype.hasOwnProperty.call(req.body || {}, "amount")) {
-        const amount = Number(req.body?.amount || 0);
-        if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ success: false, message: "Valid advancement amount is required" });
-        row.amount = round2(amount);
+      await applyDraftOrPreDisbursementUpdates({ row, req, businessId });
+    } else {
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "title")) {
+        const title = String(req.body?.title || "").trim();
+        if (!title) return res.status(400).json({ success: false, message: "Advancement title is required" });
+        row.title = title;
       }
-      if (Object.prototype.hasOwnProperty.call(req.body || {}, "frequency")) row.frequency = normalizeFrequency(req.body?.frequency);
-      if (Object.prototype.hasOwnProperty.call(req.body || {}, "dayOfMonth")) {
-        const dayOfMonth = Number(req.body?.dayOfMonth || 0);
-        row.dayOfMonth = Math.max(1, Math.min(31, dayOfMonth || row.dayOfMonth || 5));
-      }
-      if (Object.prototype.hasOwnProperty.call(req.body || {}, "disbursementDate")) {
-        const disbursementDate = parseDate(req.body?.disbursementDate, null);
-        if (!disbursementDate) return res.status(400).json({ success: false, message: "Valid disbursement date is required" });
-        row.disbursementDate = disbursementDate;
-      }
-      if (Object.prototype.hasOwnProperty.call(req.body || {}, "startDate")) {
-        const startDate = parseDate(req.body?.startDate, null);
-        if (!startDate) return res.status(400).json({ success: false, message: "Valid recovery start date is required" });
-        row.startDate = startDate;
-      }
-      if (Object.prototype.hasOwnProperty.call(req.body || {}, "periodMonths")) {
-        row.periodMonths = normalizePeriodMonths(req.body?.periodMonths);
-      }
-      if (Object.prototype.hasOwnProperty.call(req.body || {}, "gracePeriodMonths")) {
-        row.gracePeriodMonths = normalizeGracePeriodMonths(req.body?.gracePeriodMonths);
-      }
-      if (Object.prototype.hasOwnProperty.call(req.body || {}, "endDate")) {
-        const endDate = parseDate(req.body?.endDate, null);
-        if (endDate && row.startDate && endDate < row.startDate) return res.status(400).json({ success: false, message: "Recovery end date cannot be earlier than start date" });
-        row.endDate = endDate;
-      }
-      if (Object.prototype.hasOwnProperty.call(req.body || {}, "landlord") || Object.prototype.hasOwnProperty.call(req.body || {}, "property")) {
-        const targetLandlord = Object.prototype.hasOwnProperty.call(req.body || {}, "landlord") ? req.body?.landlord : row.landlord;
-        const targetProperty = Object.prototype.hasOwnProperty.call(req.body || {}, "property") ? req.body?.property : row.property;
-        if (!isValidObjectId(targetLandlord) || !isValidObjectId(targetProperty)) {
-          return res.status(400).json({ success: false, message: "Property and landlord are required" });
-        }
-        const accountingContext = await resolvePropertyAccountingContext({ businessId, propertyId: targetProperty, landlordId: targetLandlord });
-        row.landlord = accountingContext.landlordId;
-        row.property = accountingContext.propertyId;
-      }
-
-      if (
-        Object.prototype.hasOwnProperty.call(req.body || {}, "startDate") ||
-        Object.prototype.hasOwnProperty.call(req.body || {}, "endDate") ||
-        Object.prototype.hasOwnProperty.call(req.body || {}, "periodMonths") ||
-        Object.prototype.hasOwnProperty.call(req.body || {}, "gracePeriodMonths")
-      ) {
-        const scheduleWindow = resolveAdvancementScheduleWindow({
-          startDate: row.startDate,
-          endDate: row.endDate,
-          periodMonths: row.periodMonths,
-          gracePeriodMonths: row.gracePeriodMonths,
-        });
-        row.endDate = scheduleWindow.endDate || row.endDate;
-      }
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "narration")) row.narration = String(req.body?.narration || "").trim();
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "notes")) row.notes = String(req.body?.notes || "").trim();
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "paymentMethod")) row.paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "cashbook")) row.cashbook = isValidObjectId(req.body?.cashbook) ? req.body?.cashbook : null;
     }
 
-    if (row.status === "active" && !row.disbursedAt) {
-      await postDisbursementIfMissing({
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "status")) {
+      await handleStatusTransition({
         row,
+        requestedStatus: req.body?.status,
+        req,
+        businessId,
         actorUserId,
-        paymentMethod: row.paymentMethod,
-        cashbook: row.cashbook,
       });
+    } else {
+      row.status = resolveLifecycleStatus(row);
     }
 
     row.updatedBy = actorUserId;
-    await row.save();
-    const populated = await populateQuery(LandlordAdvancement.findById(row._id));
-    res.status(200).json(serializeAdvancement(await populated));
+    await persistAndRespond(res, row, 200);
   } catch (error) {
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.message, payableSnapshotAmount: error.payableSnapshotAmount });
+    }
     next(error);
   }
 };
@@ -692,21 +1297,20 @@ export const updateLandlordAdvancementStatus = async (req, res, next) => {
     const row = await LandlordAdvancement.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Landlord advancement not found" });
 
-    const status = String(req.body?.status || "").toLowerCase();
-    if (!["draft", "active", "paused", "completed", "cancelled"].includes(status)) {
-      return res.status(400).json({ success: false, message: "Invalid advancement status" });
-    }
-    row.status = status;
+    await handleStatusTransition({
+      row,
+      requestedStatus: req.body?.status,
+      req,
+      businessId,
+      actorUserId,
+    });
+
     row.updatedBy = actorUserId;
-
-    if (status === "active" && !row.disbursedAt) {
-      await postDisbursementIfMissing({ row, actorUserId, paymentMethod: row.paymentMethod, cashbook: row.cashbook });
-    }
-
-    await row.save();
-    const populated = await populateQuery(LandlordAdvancement.findById(row._id));
-    res.status(200).json(serializeAdvancement(await populated));
+    await persistAndRespond(res, row, 200);
   } catch (error) {
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.message, payableSnapshotAmount: error.payableSnapshotAmount });
+    }
     next(error);
   }
 };
@@ -719,11 +1323,21 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
     const row = await LandlordAdvancement.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Landlord advancement not found" });
 
-    if (!row.disbursedAt) {
-      return res.status(400).json({ success: false, message: "Advancement must be disbursed/activated before recoveries can be processed." });
+    const advanceType = normalizeAdvanceType(row.advanceType, row);
+    if (advanceType !== "future_recoverable") {
+      return res.status(400).json({
+        success: false,
+        message: "Against payable advances are already treated as paid to the landlord and do not support statement recoveries.",
+      });
     }
-    if (!["active", "paused", "draft"].includes(String(row.status || ""))) {
-      return res.status(400).json({ success: false, message: "This advancement cannot be recovered in its current status." });
+
+    if (!row.disbursedAt) {
+      return res.status(400).json({ success: false, message: "Advance must be disbursed before recoveries can be processed." });
+    }
+
+    const lifecycleStatus = resolveLifecycleStatus(row);
+    if (!["recovering", "disbursed", "paused"].includes(lifecycleStatus)) {
+      return res.status(400).json({ success: false, message: "This landlord advance cannot be recovered in its current status." });
     }
 
     const selectedPeriod = resolveSelectedRecoveryPeriod(row, req.body || {});
@@ -755,7 +1369,7 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
     const amount = Number(req.body?.amount || selectedPeriod.scheduledAmount || 0);
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ success: false, message: "Valid recovery amount is required" });
     if (round2(amount) > round2(row.balanceOutstanding || 0)) {
-      return res.status(400).json({ success: false, message: "Recovery amount cannot exceed outstanding advancement balance." });
+      return res.status(400).json({ success: false, message: "Recovery amount cannot exceed outstanding recoverable advance balance." });
     }
 
     const accountingContext = await resolvePropertyAccountingContext({
@@ -772,13 +1386,13 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
     const processedAt = normalizeToStartOfDay(req.body?.processedAt || req.body?.runDate || selectedPeriod.dueDate || new Date());
     const journalGroupId = new mongoose.Types.ObjectId();
     const sourceTransactionId = `${row._id}:${selectedPeriod.periodKey}`;
-    const notes = String(req.body?.note || row.narration || row.title || "Landlord advancement recovery").trim();
+    const notes = String(req.body?.note || row.narration || row.title || "Recoverable landlord advance recovery").trim();
 
     const visibleEntry = await postEntry({
       business: accountingContext.businessId,
       property: accountingContext.propertyId,
       landlord: accountingContext.landlordId,
-      sourceTransactionType: "other",
+      sourceTransactionType: "advance",
       sourceTransactionId,
       transactionDate: processedAt,
       statementPeriodStart: selectedPeriod.periodStart,
@@ -793,9 +1407,10 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
       notes,
       metadata: {
         includeInLandlordStatement: true,
-        statementBucket: "deduction",
+        statementBucket: "advance_recovery",
         advancementId: String(row._id),
         referenceNo: row.referenceNo,
+        advanceType,
         periodKey: selectedPeriod.periodKey,
         periodLabel: selectedPeriod.periodLabel,
         postingKind: "landlord_advancement_recovery",
@@ -827,6 +1442,7 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
         includeInLandlordStatement: false,
         advancementId: String(row._id),
         referenceNo: row.referenceNo,
+        advanceType,
         periodKey: selectedPeriod.periodKey,
         periodLabel: selectedPeriod.periodLabel,
         postingKind: "landlord_advancement_recoverable_offset",
@@ -859,11 +1475,13 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
     });
     recalculateRecoveryBalances(row);
     row.updatedBy = actorUserId;
-    if (row.status === "draft") row.status = "active";
 
-    await row.save();
-    const populated = await populateQuery(LandlordAdvancement.findById(row._id));
-    res.status(200).json(serializeAdvancement(await populated));
+    await aggregateChartOfAccountBalances(String(row.business), [
+      String(remittancePayableAccount._id),
+      String(advanceRecoverableAccount._id),
+    ]);
+
+    await persistAndRespond(res, row, 200);
   } catch (error) {
     next(error);
   }
@@ -910,7 +1528,7 @@ export const cancelLandlordAdvancementRecovery = async (req, res, next) => {
 
     const reason =
       String(req.body?.reason || "").trim() ||
-      `Advancement recovery ${recoveryRow.periodLabel || recoveryRow.periodKey || "period"} cancelled`;
+      `Recoverable landlord advance recovery ${recoveryRow.periodLabel || recoveryRow.periodKey || "period"} cancelled`;
 
     const touchedAccountIds = new Set();
     const reverseOne = async (entryId) => {
@@ -919,9 +1537,9 @@ export const cancelLandlordAdvancementRecovery = async (req, res, next) => {
         _id: entryId,
         business: businessId,
         reversalOf: null,
-        status: "approved",
-      }).select("_id accountId");
-      if (!originalEntry) return null;
+        status: { $nin: ["void"] },
+      }).select("_id accountId status reversedByEntry");
+      if (!originalEntry || originalEntry.reversedByEntry || originalEntry.status === "reversed") return null;
       if (originalEntry?.accountId) touchedAccountIds.add(String(originalEntry.accountId));
       const reversal = await postReversal({ entryId: originalEntry._id, reason, userId: actorUserId });
       if (reversal?.reversalEntry?.accountId) {
@@ -942,10 +1560,8 @@ export const cancelLandlordAdvancementRecovery = async (req, res, next) => {
     recoveryRow.cancellationReason = reason;
     row.updatedBy = actorUserId;
     recalculateRecoveryBalances(row);
-    await row.save();
 
-    const populated = await populateQuery(LandlordAdvancement.findById(row._id));
-    res.status(200).json(serializeAdvancement(await populated));
+    await persistAndRespond(res, row, 200);
   } catch (error) {
     next(error);
   }
@@ -958,13 +1574,14 @@ export const deleteLandlordAdvancement = async (req, res, next) => {
     const row = await LandlordAdvancement.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Landlord advancement not found" });
 
-    if (row.disbursedAt || (Array.isArray(row.recoveryHistory) && row.recoveryHistory.length > 0)) {
-      return res.status(400).json({ success: false, message: "Posted or recovered advancements cannot be deleted. Preserve the audit trail and cancel or complete the record instead." });
-    }
+    ensureSafeDeletion(row);
 
     await LandlordAdvancement.deleteOne({ _id: row._id, business: businessId });
     res.status(200).json({ success: true, message: "Landlord advancement deleted" });
   } catch (error) {
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
     next(error);
   }
 };

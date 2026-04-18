@@ -1,5 +1,22 @@
 import mongoose from "mongoose";
 
+const ADVANCE_TYPES = ["against_payable", "future_recoverable"];
+const ADVANCEMENT_STATUSES = [
+  "draft",
+  "submitted",
+  "approved",
+  "rejected",
+  "disbursed",
+  "recovering",
+  "cleared",
+  "cancelled",
+  "reversed",
+  "paused",
+  // legacy statuses retained for compatibility with historical records
+  "active",
+  "completed",
+];
+
 const recoveryHistorySchema = new mongoose.Schema(
   {
     processedAt: { type: Date, required: true },
@@ -71,6 +88,12 @@ const LandlordAdvancementSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    advanceType: {
+      type: String,
+      enum: ADVANCE_TYPES,
+      default: "future_recoverable",
+      index: true,
+    },
     title: {
       type: String,
       required: true,
@@ -122,6 +145,21 @@ const LandlordAdvancementSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    payableSnapshotAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    payableAvailableAtDisbursement: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    payableBalanceAfterDisbursement: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     frequency: {
       type: String,
       enum: ["weekly", "monthly", "quarterly", "semi_annually", "annually", "yearly", "custom"],
@@ -168,7 +206,7 @@ const LandlordAdvancementSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["draft", "active", "paused", "completed", "cancelled"],
+      enum: ADVANCEMENT_STATUSES,
       default: "draft",
       index: true,
     },
@@ -178,6 +216,66 @@ const LandlordAdvancementSchema = new mongoose.Schema(
       trim: true,
     },
     notes: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    submittedAt: {
+      type: Date,
+      default: null,
+    },
+    submittedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    approvedAt: {
+      type: Date,
+      default: null,
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    rejectedAt: {
+      type: Date,
+      default: null,
+    },
+    rejectedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    rejectionReason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    cancellationReason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    reversedAt: {
+      type: Date,
+      default: null,
+    },
+    reversedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    reversalReason: {
       type: String,
       default: "",
       trim: true,
@@ -222,11 +320,28 @@ const LandlordAdvancementSchema = new mongoose.Schema(
 );
 
 LandlordAdvancementSchema.pre("validate", function syncBalance(next) {
+  const advanceType = String(this.advanceType || "future_recoverable").toLowerCase() === "against_payable"
+    ? "against_payable"
+    : "future_recoverable";
+
   const principalAmount = Number(this.amount || 0);
   const scheduledInterestTotal = Number(this.scheduledInterestTotal || 0);
-  const totalRecoverableAmount = Number(this.totalRecoverableAmount || principalAmount + scheduledInterestTotal);
   const recoveredPrincipal = Number(this.recoveredAmount || 0);
   const recoveredInterest = Number(this.interestRecoveredAmount || 0);
+
+  if (advanceType === "against_payable") {
+    this.interestRate = 0;
+    this.scheduledInterestTotal = 0;
+    this.interestRecoveredAmount = 0;
+    this.totalRecoverableAmount = 0;
+    this.recoveredAmount = 0;
+    this.balanceOutstanding = 0;
+    return next();
+  }
+
+  const totalRecoverableAmount = Number(
+    this.totalRecoverableAmount || principalAmount + scheduledInterestTotal
+  );
 
   this.scheduledInterestTotal = Math.max(Math.round((scheduledInterestTotal + Number.EPSILON) * 100) / 100, 0);
   this.totalRecoverableAmount = Math.max(Math.round((totalRecoverableAmount + Number.EPSILON) * 100) / 100, 0);
@@ -240,6 +355,7 @@ LandlordAdvancementSchema.pre("validate", function syncBalance(next) {
 LandlordAdvancementSchema.index({ business: 1, referenceNo: 1 }, { unique: true });
 LandlordAdvancementSchema.index({ business: 1, landlord: 1, status: 1, createdAt: -1 });
 LandlordAdvancementSchema.index({ business: 1, property: 1, status: 1, createdAt: -1 });
+LandlordAdvancementSchema.index({ business: 1, landlord: 1, property: 1, advanceType: 1, createdAt: -1 });
 LandlordAdvancementSchema.index({ business: 1, landlord: 1, property: 1, "recoveryHistory.periodKey": 1 });
 
 const LandlordAdvancement =

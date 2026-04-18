@@ -514,6 +514,8 @@ const buildStatementSnapshotPayload = (statement, payload = {}) => {
   const summary = workspace?.summary || {};
   const totals = workspace?.totals || {};
   const expenseRows = workspace?.expenseRows || workspace?.deductionRows || [];
+  const advanceRecoveryRows = workspace?.advanceRecoveryRows || [];
+  const earlyPayoutRows = workspace?.earlyPayoutRows || [];
   const rows = workspace?.rows || [];
   const directToLandlordRows = workspace?.directToLandlordRows || [];
 
@@ -557,7 +559,18 @@ const buildStatementSnapshotPayload = (statement, payload = {}) => {
     netAmountDue: numberOrZero(payload.netAmountDue ?? summary.amountPayableToLandlord ?? statement.closingBalance),
     totalExpenses: numberOrZero(payload.totalExpenses ?? summary.propertyExpenses),
     recurringDeductions: numberOrZero(payload.recurringDeductions),
-    advanceRecoveries: numberOrZero(payload.advanceRecoveries),
+    advanceRecoveries: numberOrZero(
+      payload.advanceRecoveries ??
+        summary.advanceRecoveries ??
+        summary.totalAdvanceRecoveries ??
+        advanceRecoveryRows.reduce((sum, item) => sum + numberOrZero(item?.amount), 0)
+    ),
+    earlyPayouts: numberOrZero(
+      payload.earlyPayouts ??
+        summary.alreadyPaidToLandlord ??
+        summary.totalEarlyPayouts ??
+        earlyPayoutRows.reduce((sum, item) => sum + numberOrZero(item?.amount), 0)
+    ),
     expensesByCategory:
       payload.expensesByCategory ||
       expenseRows.reduce((acc, item) => {
@@ -849,6 +862,7 @@ export const closeStatement = async (req, res) => {
             totalExpenses: numberOrZero(payload.totalExpenses),
             recurringDeductions: numberOrZero(payload.recurringDeductions),
             advanceRecoveries: numberOrZero(payload.advanceRecoveries),
+            earlyPayouts: numberOrZero(payload.earlyPayouts),
             expensesByCategory: payload.expensesByCategory || {},
             netAfterExpenses: numberOrZero(payload.netAfterExpenses ?? payload.netAmountDue),
             amountPayableByLandlordToManager: numberOrZero(payload.amountPayableByLandlordToManager),
