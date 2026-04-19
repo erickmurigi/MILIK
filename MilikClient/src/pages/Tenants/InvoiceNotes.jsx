@@ -25,6 +25,8 @@ import { adminRequests } from "../../utils/requestMethods";
 
 const todayInput = () => new Date().toISOString().split("T")[0];
 
+const ITEMS_PER_PAGE = 50;
+
 const normalizeList = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;
@@ -131,6 +133,7 @@ const InvoiceNotes = () => {
 
   const [properties, setProperties] = useState([]);
   const [noteType, setNoteType] = useState(initialNoteType);
+  const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState({
     propertyId: "",
     tenantId: "",
@@ -331,6 +334,20 @@ const InvoiceNotes = () => {
     });
   }, [notes, filters, propertyMap]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredNotes.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = filteredNotes.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedNotes = filteredNotes.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.search, filters.propertyId, filters.tenantId, filters.noteType, filters.status, filteredNotes.length]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
+
   const summaryCards = useMemo(() => {
     const activeNotes = filteredNotes.filter(isActiveNote);
     const reversedNotes = filteredNotes.filter(
@@ -460,50 +477,50 @@ const InvoiceNotes = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-3">
-        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-3">
-          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-            <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-500">
                   Tenant invoice notes
                 </p>
-                <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
+                <h1 className="mt-0.5 text-lg font-bold tracking-tight text-slate-900">
                   Credit &amp; Debit Notes
                 </h1>
-                <p className="mt-1 text-sm text-slate-600">
+                <p className="mt-0.5 text-xs text-slate-600">
                   Manage note adjustments with the same compact MILIK workspace style used across invoices and meter readings, while preserving source invoice controls and audited reversals.
                 </p>
               </div>
-              <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
+              <div className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-900">
                 {currentCompany?.companyName || currentCompany?.name || "No company selected"}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded border border-blue-200 bg-blue-50 p-2.5">
+            <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+              <div className="rounded border border-blue-200 bg-blue-50 px-2.5 py-1.5">
                 <p className="text-[11px] font-semibold text-blue-600">Visible Notes</p>
-                <p className="text-xl font-bold leading-tight text-blue-900">{summaryCards.totalCount}</p>
+                <p className="text-base font-bold leading-tight text-blue-900">{summaryCards.totalCount}</p>
               </div>
-              <div className="rounded border border-emerald-200 bg-emerald-50 p-2.5">
+              <div className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1.5">
                 <p className="text-[11px] font-semibold text-emerald-600">Active Notes</p>
-                <p className="text-xl font-bold leading-tight text-emerald-900">{summaryCards.activeCount}</p>
+                <p className="text-base font-bold leading-tight text-emerald-900">{summaryCards.activeCount}</p>
               </div>
-              <div className="rounded border border-amber-200 bg-amber-50 p-2.5">
+              <div className="rounded border border-amber-200 bg-amber-50 px-2.5 py-1.5">
                 <p className="text-[11px] font-semibold text-amber-600">Reversed Notes</p>
-                <p className="text-xl font-bold leading-tight text-amber-900">{summaryCards.reversedCount}</p>
+                <p className="text-base font-bold leading-tight text-amber-900">{summaryCards.reversedCount}</p>
               </div>
-              <div className="rounded border border-violet-200 bg-violet-50 p-2.5">
+              <div className="rounded border border-violet-200 bg-violet-50 px-2.5 py-1.5">
                 <p className="text-[11px] font-semibold text-violet-600">Visible Note Value</p>
-                <p className="text-xl font-bold leading-tight text-violet-900">{formatCurrency(summaryCards.totalValue)}</p>
+                <p className="text-base font-bold leading-tight text-violet-900">{formatCurrency(summaryCards.totalValue)}</p>
               </div>
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-3">
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex-1 min-h-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
@@ -514,7 +531,7 @@ const InvoiceNotes = () => {
                         nextParams.set("type", "credit");
                         setSearchParams(nextParams, { replace: true });
                       }}
-                      className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                      className={`inline-flex h-8 items-center rounded-lg border px-3 text-[11px] font-bold transition ${
                         filters.noteType === "CREDIT_NOTE"
                           ? "border-emerald-300 bg-emerald-50 text-emerald-700"
                           : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
@@ -531,7 +548,7 @@ const InvoiceNotes = () => {
                         nextParams.set("type", "debit");
                         setSearchParams(nextParams, { replace: true });
                       }}
-                      className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                      className={`inline-flex h-8 items-center rounded-lg border px-3 text-[11px] font-bold transition ${
                         filters.noteType === "DEBIT_NOTE"
                           ? "border-orange-300 bg-orange-50 text-orange-700"
                           : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
@@ -539,10 +556,10 @@ const InvoiceNotes = () => {
                     >
                       Debit Notes
                     </button>
-                    <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
                       {noteCountLabel}
                     </span>
-                    <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
                       Active Value {formatCurrency(summaryCards.activeValue)}
                     </span>
                   </div>
@@ -551,21 +568,21 @@ const InvoiceNotes = () => {
                     <button
                       type="button"
                       onClick={openAddModal}
-                      className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"
                     >
                       <FaPlus /> Add Note
                     </button>
                     <button
                       type="button"
                       onClick={loadData}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
                     >
                       <FaRedoAlt /> Refresh
                     </button>
                     <button
                       type="button"
                       onClick={resetWorkspaceFilters}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
                     >
                       <FaTimes /> Reset Filters
                     </button>
@@ -580,14 +597,14 @@ const InvoiceNotes = () => {
                       value={filters.search}
                       onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                       placeholder="Search note no, tenant, source invoice, property..."
-                      className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm focus:border-[#0B3B2E] focus:outline-none"
+                      className="h-8 w-full rounded-lg border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-xs focus:border-[#0B3B2E] focus:outline-none"
                     />
                   </div>
 
                   <select
                     value={filters.propertyId}
                     onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none"
+                    className="h-8 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
                   >
                     <option value="">All properties</option>
                     {properties.map((property) => (
@@ -600,7 +617,7 @@ const InvoiceNotes = () => {
                   <select
                     value={filters.tenantId}
                     onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value }))}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none"
+                    className="h-8 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
                   >
                     <option value="">All tenants</option>
                     {filterScopedTenants.map((tenant) => (
@@ -613,7 +630,7 @@ const InvoiceNotes = () => {
                   <select
                     value={filters.status}
                     onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none"
+                    className="h-8 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
                   >
                     <option value="active">Active only</option>
                     <option value="reversed">Reversed</option>
@@ -646,7 +663,7 @@ const InvoiceNotes = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredNotes.map((note, index) => (
+                    paginatedNotes.map((note, index) => (
                       <tr
                         key={note._id}
                         className={`align-top ${index % 2 === 0 ? "bg-white" : "bg-slate-50/70"} hover:bg-slate-50`}
@@ -710,16 +727,24 @@ const InvoiceNotes = () => {
               </table>
             </div>
 
-            <div className="border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
-              Showing <span className="font-semibold text-slate-900">{filteredNotes.length}</span> note{filteredNotes.length === 1 ? "" : "s"}
-              {filters.status !== "all" ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
+              <div className="font-semibold">
+                Showing <span className="font-bold text-slate-900">{filteredNotes.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredNotes.length)}</span> of <span className="font-bold text-slate-900">{filteredNotes.length}</span> note{filteredNotes.length === 1 ? "" : "s"}
+                {filters.status !== "all" ? (
+                  <span>
+                    {" "}· Status: <span className="font-bold text-slate-900">{filters.status}</span>
+                  </span>
+                ) : null}
                 <span>
-                  {" "}· Status: <span className="font-semibold text-slate-900">{filters.status}</span>
+                  {" "}· Current type: <span className="font-bold text-slate-900">{filters.noteType === "CREDIT_NOTE" ? "Credit Notes" : "Debit Notes"}</span>
                 </span>
-              ) : null}
-              <span>
-                {" "}· Current type: <span className="font-semibold text-slate-900">{filters.noteType === "CREDIT_NOTE" ? "Credit Notes" : "Debit Notes"}</span>
-              </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                <button type="button" onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                <button type="button" onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+              </div>
             </div>
           </div>
         </div>

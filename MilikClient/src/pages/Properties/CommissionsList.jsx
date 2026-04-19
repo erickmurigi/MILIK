@@ -180,27 +180,27 @@ const CommissionsList = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-3 sm:p-4">
-        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-3">
-          <div className="flex-shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Property Management</p>
-                <h1 className="mt-1 text-2xl font-black text-slate-900">Commission Management</h1>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#0B3B2E]">Property Management</p>
+                <h1 className="mt-0.5 text-lg font-black leading-tight text-slate-900">Commission Management</h1>
+                <p className="mt-0.5 text-[11px] leading-tight text-slate-500">
                   Maintain commission settings in a property-style list with cleaner filters, compact actions, and a tighter table layout.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setShowAddModal(true)}
-                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black text-white shadow-sm transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-black text-white shadow-sm transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
                 >
                   <FaPlus /> Add Commission
                 </button>
                 <button
                   onClick={() => navigate(-1)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
                 >
                   <FaArrowLeft /> Back
                 </button>
@@ -208,39 +208,39 @@ const CommissionsList = () => {
             </div>
           </div>
 
-          <div className="flex-shrink-0 grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Total Properties</p>
-              <p className="mt-1 text-xl font-black text-slate-900">{stats.total}</p>
+          <div className="flex-shrink-0 grid grid-cols-1 gap-2 md:grid-cols-3">
+            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Total Properties</p>
+              <p className="text-sm font-black leading-tight text-slate-900">{stats.total}</p>
             </div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Configured</p>
-              <p className="mt-1 text-xl font-black text-emerald-800">{stats.configured}</p>
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Configured</p>
+              <p className="text-sm font-black leading-tight text-emerald-800">{stats.configured}</p>
             </div>
-            <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">Unconfigured</p>
-              <p className="mt-1 text-xl font-black text-orange-800">{stats.unconfigured}</p>
+            <div className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1.5 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-700">Unconfigured</p>
+              <p className="text-sm font-black leading-tight text-orange-800">{stats.unconfigured}</p>
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-[240px] flex-1">
+                <div className="relative min-w-[220px] flex-1">
                   <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
                   <input
                     type="text"
                     placeholder="Search by property code or name"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[11px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
 
                 <select
                   value={filterMode}
                   onChange={(e) => setFilterMode(e.target.value)}
-                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded-md border border-slate-300 bg-[#DDEFE1] px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="all">All Properties</option>
                   <option value="configured">Configured Only</option>
@@ -249,12 +249,12 @@ const CommissionsList = () => {
 
                 <button
                   onClick={resetFilters}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
                 >
                   <FaRedoAlt /> Reset
                 </button>
 
-                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm">
+                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 shadow-sm">
                   Visible
                   <span className="text-sm text-slate-900">{filteredProperties.length}</span>
                 </div>
@@ -288,7 +288,7 @@ const CommissionsList = () => {
                         {editingId === property._id ? (
                           <tr className="border-t border-slate-200 bg-slate-50/80">
                             <td colSpan="7" className="px-4 py-4">
-                              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                              <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
                                 <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <div>
                                     <p className="text-sm font-black text-slate-900">

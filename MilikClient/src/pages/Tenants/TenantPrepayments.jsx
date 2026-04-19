@@ -137,22 +137,22 @@ const TenantPrepayments = () => {
   const currentPageRows = rows.slice(startIndex, endIndex);
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 p-4">
-        <div className="mx-auto max-w-[96%] space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Receipting Workspace</p>
-                <h1 className="mt-1 text-2xl font-black text-slate-900">Tenant Prepayments</h1>
-                <p className="mt-1 text-sm text-slate-500">
+                <h1 className="mt-0.5 text-xl font-black text-slate-900">Tenant Prepayments</h1>
+                <p className="mt-0.5 text-xs text-slate-500">
                   Review receipts with unapplied balance and route users into the supported allocation workflow without creating duplicate ledgers.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => navigate("/receipts/new")}
-                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-black text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-bold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                 >
                   <FaReceipt /> New Receipt
                 </button>
@@ -160,42 +160,42 @@ const TenantPrepayments = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Open Prepayments</p>
-              <p className="mt-2 text-2xl font-black text-slate-900">{totals.rowCount}</p>
+              <p className="mt-1 text-base font-black text-slate-900">{totals.rowCount}</p>
             </div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Unapplied Balance</p>
-              <p className="mt-2 text-2xl font-black text-amber-700">{formatMoney(totals.totalUnapplied)}</p>
+              <p className="mt-1 text-base font-black text-amber-700">{formatMoney(totals.totalUnapplied)}</p>
             </div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Already Allocated</p>
-              <p className="mt-2 text-2xl font-black text-emerald-700">{formatMoney(totals.totalAllocated)}</p>
+              <p className="mt-1 text-base font-black text-emerald-700">{formatMoney(totals.totalAllocated)}</p>
             </div>
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Confirmed Rows</p>
-              <p className="mt-2 text-2xl font-black text-blue-700">{totals.lockedRows}</p>
+              <p className="mt-1 text-base font-black text-blue-700">{totals.lockedRows}</p>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-4 border-b border-slate-200 bg-slate-50">
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-2">
                 <div className="relative lg:col-span-2">
                   <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search tenant, property, unit, reference"
-                    className="w-full px-3 py-3 pl-10 border border-slate-300 rounded-md text-sm"
+                    className="h-8 w-full px-3 py-1.5 pl-9 border border-slate-300 rounded-md text-xs"
                   />
                 </div>
                 <div>
                   <select
                     value={propertyFilter}
                     onChange={(e) => setPropertyFilter(e.target.value)}
-                    className="w-full px-3 py-3 border border-slate-300 rounded-md text-sm"
+                    className="h-8 w-full px-3 py-1.5 border border-slate-300 rounded-md text-xs"
                   >
                     <option value="all">All Properties</option>
                     {properties.map((property) => (
@@ -209,7 +209,7 @@ const TenantPrepayments = () => {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="w-full px-3 py-3 border border-slate-300 rounded-md text-sm"
+                    className="h-8 w-full px-3 py-1.5 border border-slate-300 rounded-md text-xs"
                   >
                     <option value="all">All Statuses</option>
                     <option value="confirmed">Confirmed Only</option>
@@ -238,10 +238,10 @@ const TenantPrepayments = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full min-w-[1100px] text-xs">
                 <thead>
-                  <tr className={`${MILIK_GREEN} text-white`}>
+                  <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
                     <th className="px-3 py-2 text-left">Receipt #</th>
                     <th className="px-3 py-2 text-left">Date</th>
                     <th className="px-3 py-2 text-left">Tenant</th>

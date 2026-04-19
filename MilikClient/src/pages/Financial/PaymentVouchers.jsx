@@ -27,6 +27,8 @@ import {
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 
+const ITEMS_PER_PAGE = 50;
+
 const BASE_CATEGORIES = [
   { value: "landlord_maintenance", label: "Landlord Expense - Maintenance", landlordLabel: "Owner Expense - Maintenance" },
   { value: "deposit_refund", label: "Deposit Refund", landlordLabel: "Deposit Refund" },
@@ -85,6 +87,7 @@ const PaymentVouchers = () => {
   const [rowActionKey, setRowActionKey] = useState("");
   const [liabilityAccounts, setLiabilityAccounts] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [editingVoucherId, setEditingVoucherId] = useState("");
   const [form, setForm] = useState(blankForm);
@@ -166,6 +169,21 @@ const PaymentVouchers = () => {
   }, [filtered]);
 
   const selectedRows = useMemo(() => filtered.filter((voucher) => selectedIds.includes(voucher._id)), [filtered, selectedIds]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = filtered.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentPageRows = filtered.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.search, filters.category, filters.status, filters.propertyId, filtered.length]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
+
 
   const openCreate = (prefill = null) => {
     setEditingVoucherId("");
@@ -280,31 +298,31 @@ const PaymentVouchers = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
-        <div className="mx-auto max-w-[96%] space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">{isLandlordWorkspace ? "Owner Finance" : "Financial Operations"}</p>
-                <h1 className="mt-1 flex items-center gap-3 text-2xl font-black text-slate-900"><FaFileInvoiceDollar className="text-[#0B3B2E]" /> Payment Vouchers</h1>
-                <p className="mt-1 text-sm text-slate-500">Create, edit, approve, pay, reverse, select, and delete vouchers with stronger operational controls.</p>
+                <h1 className="mt-0.5 flex items-center gap-2 text-xl font-black text-slate-900"><FaFileInvoiceDollar className="text-[#0B3B2E]" /> Payment Vouchers</h1>
+                <p className="mt-0.5 text-xs text-slate-500">Create, edit, approve, pay, reverse, select, and delete vouchers with stronger operational controls.</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={bulkDeleteSelected} className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-black text-rose-700">Delete Selected</button>
-                <button onClick={openCreate} disabled={!canCreateVoucher} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus /> New Voucher</button>
+                <button onClick={bulkDeleteSelected} className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete Selected</button>
+                <button onClick={openCreate} disabled={!canCreateVoucher} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus /> New Voucher</button>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Count</p><p className="mt-2 text-2xl font-black text-slate-900">{stats.count}</p></div>
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Total</p><p className="mt-2 text-2xl font-black text-blue-700">KES {stats.total.toLocaleString()}</p></div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Paid</p><p className="mt-2 text-2xl font-black text-emerald-700">KES {stats.paid.toLocaleString()}</p></div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Draft</p><p className="mt-2 text-2xl font-black text-amber-700">{stats.draft}</p></div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Count</p><p className="mt-1 text-base font-black text-slate-900">{stats.count}</p></div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Total</p><p className="mt-1 text-base font-black text-blue-700">KES {stats.total.toLocaleString()}</p></div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Paid</p><p className="mt-1 text-base font-black text-emerald-700">KES {stats.paid.toLocaleString()}</p></div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Draft</p><p className="mt-1 text-base font-black text-amber-700">{stats.draft}</p></div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="sticky top-0 z-20 flex-shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
             <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
               <div className="relative md:col-span-2">
                 <FaSearch className="absolute left-3 top-2.5 text-xs text-slate-400" />
@@ -312,14 +330,14 @@ const PaymentVouchers = () => {
                   value={filters.search}
                   onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                   placeholder={isLandlordWorkspace ? "Search voucher, narration, owner, property" : "Search voucher, narration, landlord, property"}
-                  className="w-full rounded-md border border-slate-300 py-2 pl-8 pr-3 text-xs"
+                  className="h-8 w-full rounded-md border border-slate-300 py-1.5 pl-8 pr-3 text-xs"
                 />
               </div>
 
               <select
                 value={filters.category}
                 onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="h-8 px-3 py-1.5 text-xs border border-slate-300 rounded-md"
               >
                 <option value="all">All categories</option>
                 {categories.map((item) => (
@@ -332,7 +350,7 @@ const PaymentVouchers = () => {
               <select
                 value={filters.status}
                 onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="h-8 px-3 py-1.5 text-xs border border-slate-300 rounded-md"
               >
                 <option value="all">All statuses</option>
                 <option value="draft">Draft</option>
@@ -344,7 +362,7 @@ const PaymentVouchers = () => {
               <select
                 value={filters.propertyId}
                 onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="h-8 px-3 py-1.5 text-xs border border-slate-300 rounded-md"
               >
                 <option value="all">All properties</option>
                 {properties.map((property) => (
@@ -356,27 +374,27 @@ const PaymentVouchers = () => {
 
               <button
                 onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-300 px-3 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
               >
                 <FaFilter /> Reset
               </button>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-[#0B3B2E] text-white">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="min-h-0 flex-1 overflow-auto">
+              <table className="min-w-full text-xs">
+                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
-                    <th className="px-4 py-3 text-left"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filtered.length && filtered.length > 0 ? <FaCheck /> : <FaSquare />}</button></th>
-                    <th className="px-4 py-3 text-left">Voucher</th>
-                    <th className="px-4 py-3 text-left">Category</th>
-                    <th className="px-4 py-3 text-left">Property</th>
-                    <th className="px-4 py-3 text-left">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
-                    <th className="px-4 py-3 text-right">Amount</th>
-                    <th className="px-4 py-3 text-left">Due Date</th>
-                    <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+                    <th className="px-3 py-2 text-left"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filtered.length && filtered.length > 0 ? <FaCheck /> : <FaSquare />}</button></th>
+                    <th className="px-3 py-2 text-left">Voucher</th>
+                    <th className="px-3 py-2 text-left">Category</th>
+                    <th className="px-3 py-2 text-left">Property</th>
+                    <th className="px-3 py-2 text-left">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
+                    <th className="px-3 py-2 text-right">Amount</th>
+                    <th className="px-3 py-2 text-left">Due Date</th>
+                    <th className="px-3 py-2 text-left">Status</th>
+                    <th className="px-3 py-2 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -384,7 +402,7 @@ const PaymentVouchers = () => {
                     <tr><td colSpan="9" className="px-4 py-10 text-center text-slate-500">Loading vouchers...</td></tr>
                   ) : filtered.length === 0 ? (
                     <tr><td colSpan="9" className="px-4 py-10 text-center text-slate-500">No payment vouchers found.</td></tr>
-                  ) : filtered.map((voucher, index) => {
+                  ) : currentPageRows.map((voucher, index) => {
                     const isBusy = (action) => rowActionKey === `${voucher._id}:${action}`;
                     return (
                       <tr key={voucher._id} className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
@@ -396,7 +414,7 @@ const PaymentVouchers = () => {
                         <td className="px-4 py-3 text-right font-black text-slate-900">KES {Number(voucher.amount || 0).toLocaleString()}</td>
                         <td className="px-4 py-3 text-slate-700">{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString() : "-"}</td>
                         <td className="px-4 py-3"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span></td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-3 py-2 text-right">
                           <div className="inline-flex flex-wrap justify-end gap-2">
                             {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"><FaEdit /> Edit</button>}
                             {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher._id, "approved")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700 disabled:opacity-60"><FaCheck /> {isBusy("approved") ? "Working..." : "Approve"}</button>}
@@ -410,6 +428,17 @@ const PaymentVouchers = () => {
                   })}
                 </tbody>
               </table>
+            </div>
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
+              <div className="font-semibold">
+                Showing <span className="font-bold text-slate-900">{filtered.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filtered.length)}</span> of <span className="font-bold text-slate-900">{filtered.length}</span> voucher(s)
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+              </div>
             </div>
           </div>
         </div>

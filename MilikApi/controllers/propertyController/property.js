@@ -4,6 +4,26 @@ import Unit from "../../models/Unit.js";
 import Tenant from "../../models/Tenant.js";
 import Landlord from "../../models/Landlord.js";
 import Company from "../../models/Company.js";
+import ChartOfAccount from "../../models/ChartOfAccount.js";
+import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import JournalEntry from "../../models/JournalEntry.js";
+import TenantInvoice from "../../models/TenantInvoice.js";
+import TenantInvoiceNote from "../../models/TenantInvoiceNote.js";
+import RentPayment from "../../models/RentPayment.js";
+import Receipt from "../../models/Receipts.js";
+import MeterReading from "../../models/MeterReading.js";
+import Maintenance from "../../models/Maintenance.js";
+import Inspection from "../../models/Inspection.js";
+import Lease from "../../models/Lease.js";
+import LandlordStatement from "../../models/LandlordStatement.js";
+import ProcessedStatement from "../../models/ProcessedStatement.js";
+import LandlordStandingOrder from "../../models/LandlordStandingOrder.js";
+import LandlordAdvancement from "../../models/LandlordAdvancement.js";
+import LandlordReceipt from "../../models/LandlordReceipt.js";
+import PaymentVoucher from "../../models/PaymentVoucher.js";
+import ExpenseProperty from "../../models/ExpenseProperty.js";
+import ExpenseRequisition from "../../models/ExpenseRequisition.js";
+import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import { ensurePropertyControlAccount } from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
@@ -258,6 +278,173 @@ const buildModeAwarePropertyAssignment = async ({ company, businessId, req, requ
   return {
     landlords: validLandlords,
   };
+};
+
+const getPropertyLifecycleStatus = (value = "") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return ["active", "maintenance", "closed", "archived"].includes(normalized)
+    ? normalized
+    : "active";
+};
+
+const countByIds = async (Model, field, ids = []) => {
+  if (!Array.isArray(ids) || ids.length === 0) return 0;
+  return Model.countDocuments({ [field]: { $in: ids } });
+};
+
+const countByPropertyOrUnits = async ({ Model, propertyId, unitIds = [], includeProperty = true } = {}) => {
+  const clauses = [];
+
+  if (includeProperty && propertyId) {
+    clauses.push({ property: propertyId });
+  }
+
+  if (Array.isArray(unitIds) && unitIds.length > 0) {
+    clauses.push({ unit: { $in: unitIds } });
+  }
+
+  if (clauses.length === 0) return 0;
+  if (clauses.length === 1) return Model.countDocuments(clauses[0]);
+
+  return Model.countDocuments({ $or: clauses });
+};
+
+const getPropertyDependencySummary = async (property) => {
+  const propertyId = property?._id;
+  const unitIds = await Unit.find({ property: propertyId }).distinct("_id");
+
+  const [
+    unitCount,
+    tenantCount,
+    leaseCount,
+    maintenanceCount,
+    inspectionCount,
+    tenantInvoiceCount,
+    tenantInvoiceNoteCount,
+    receiptCount,
+    legacyReceiptCount,
+    meterReadingCount,
+    latePenaltyBatchCount,
+    processedStatementCount,
+    landlordStatementCount,
+    landlordStandingOrderCount,
+    landlordAdvancementCount,
+    landlordReceiptCount,
+    paymentVoucherCount,
+    expensePropertyCount,
+    expenseRequisitionCount,
+    journalEntryCount,
+    financialLedgerCount,
+    controlAccountPostingCount,
+  ] = await Promise.all([
+    Unit.countDocuments({ property: propertyId }),
+    unitIds.length
+      ? Tenant.countDocuments({
+          $or: [
+            { unit: { $in: unitIds } },
+            { additionalUnits: { $in: unitIds } },
+            { "unitTransferHistory.fromUnit": { $in: unitIds } },
+            { "unitTransferHistory.toUnit": { $in: unitIds } },
+          ],
+        })
+      : 0,
+    countByIds(Lease, "unit", unitIds),
+    countByIds(Maintenance, "unit", unitIds),
+    countByPropertyOrUnits({ Model: Inspection, propertyId, unitIds }),
+    TenantInvoice.countDocuments({ property: propertyId }),
+    TenantInvoiceNote.countDocuments({ property: propertyId }),
+    countByIds(RentPayment, "unit", unitIds),
+    Receipt.countDocuments({ property: propertyId }),
+    MeterReading.countDocuments({ property: propertyId }),
+    LatePenaltyBatch.countDocuments({ property: propertyId }),
+    ProcessedStatement.countDocuments({ property: propertyId }),
+    LandlordStatement.countDocuments({ property: propertyId }),
+    LandlordStandingOrder.countDocuments({ property: propertyId }),
+    LandlordAdvancement.countDocuments({ property: propertyId }),
+    LandlordReceipt.countDocuments({ property: propertyId }),
+    PaymentVoucher.countDocuments({ property: propertyId }),
+    ExpenseProperty.countDocuments({ property: propertyId }),
+    ExpenseRequisition.countDocuments({ property: propertyId }),
+    JournalEntry.countDocuments({ property: propertyId }),
+    FinancialLedgerEntry.countDocuments({
+      property: propertyId,
+      status: { $nin: ["void", "draft"] },
+    }),
+    property?.controlAccount
+      ? FinancialLedgerEntry.countDocuments({
+          accountId: property.controlAccount,
+          business: property.business,
+          status: { $nin: ["void", "draft"] },
+        })
+      : 0,
+  ]);
+
+  const summary = {
+    units: unitCount,
+    tenants: tenantCount,
+    leases: leaseCount,
+    maintenance: maintenanceCount,
+    inspections: inspectionCount,
+    invoices: tenantInvoiceCount,
+    invoiceNotes: tenantInvoiceNoteCount,
+    receipts: receiptCount + legacyReceiptCount,
+    meterReadings: meterReadingCount,
+    latePenaltyBatches: latePenaltyBatchCount,
+    processedStatements: processedStatementCount,
+    landlordStatements: landlordStatementCount,
+    standingOrders: landlordStandingOrderCount,
+    landlordAdvancements: landlordAdvancementCount,
+    landlordReceipts: landlordReceiptCount,
+    paymentVouchers: paymentVoucherCount,
+    propertyExpenses: expensePropertyCount,
+    expenseRequisitions: expenseRequisitionCount,
+    journalEntries: journalEntryCount,
+    ledgerEntries: financialLedgerCount,
+    controlAccountPostings: controlAccountPostingCount,
+  };
+
+  const activeDependencyCount = Object.values(summary).reduce(
+    (total, count) => total + Number(count || 0),
+    0
+  );
+
+  return {
+    unitIds,
+    summary,
+    hasDependencies: activeDependencyCount > 0,
+  };
+};
+
+const formatPropertyDependencyMessage = (summary = {}) => {
+  const labels = {
+    units: "units",
+    tenants: "tenants",
+    leases: "leases",
+    maintenance: "maintenance records",
+    inspections: "inspections",
+    invoices: "invoices",
+    invoiceNotes: "invoice notes",
+    receipts: "receipts",
+    meterReadings: "meter readings",
+    latePenaltyBatches: "late penalty batches",
+    processedStatements: "processed statements",
+    landlordStatements: "landlord statements",
+    standingOrders: "standing orders",
+    landlordAdvancements: "landlord advancements",
+    landlordReceipts: "landlord receipts",
+    paymentVouchers: "payment vouchers",
+    propertyExpenses: "property expenses",
+    expenseRequisitions: "expense requisitions",
+    journalEntries: "journal entries",
+    ledgerEntries: "ledger entries",
+    controlAccountPostings: "control account postings",
+  };
+
+  const parts = Object.entries(summary)
+    .filter(([, count]) => Number(count || 0) > 0)
+    .map(([key, count]) => `${count} ${labels[key] || key}`);
+
+  return parts.slice(0, 6).join(", ");
 };
 
 // Create property
@@ -925,20 +1112,86 @@ export const deleteProperty = async (req, res, next) => {
       }
     }
 
-    const unitCount = await Unit.countDocuments({ property: property._id });
+    const { summary, hasDependencies } = await getPropertyDependencySummary(property);
 
-    if (unitCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot delete property with existing units. Delete units first.",
+    if (hasDependencies) {
+      const currentStatus = getPropertyLifecycleStatus(property.status);
+
+      if (currentStatus !== "archived") {
+        property.status = "archived";
+        if (req.user?._id && mongoose.Types.ObjectId.isValid(String(req.user._id))) {
+          property.updatedBy = req.user._id;
+        }
+        await property.save();
+      }
+
+      return res.status(200).json({
+        success: true,
+        mode: "archived",
+        data: {
+          id: String(property._id),
+          status: property.status,
+          dependencySummary: summary,
+          controlAccountId: property.controlAccount || null,
+        },
+        message:
+          currentStatus === "archived"
+            ? `Property has historical records and remains archived. Hard delete is blocked to preserve accounting and audit history (${formatPropertyDependencyMessage(summary)}).`
+            : `Property has historical records, so it was archived instead of deleted. Accounting, reports, and control account history were preserved (${formatPropertyDependencyMessage(summary)}).`,
       });
+    }
+
+    let controlAccountDeleted = false;
+    if (property.controlAccount && mongoose.Types.ObjectId.isValid(String(property.controlAccount))) {
+      const controlPostingCount = await FinancialLedgerEntry.countDocuments({
+        business: property.business,
+        accountId: property.controlAccount,
+        status: { $nin: ["void", "draft"] },
+      });
+
+      if (controlPostingCount > 0) {
+        property.status = "archived";
+        if (req.user?._id && mongoose.Types.ObjectId.isValid(String(req.user._id))) {
+          property.updatedBy = req.user._id;
+        }
+        await property.save();
+
+        return res.status(200).json({
+          success: true,
+          mode: "archived",
+          data: {
+            id: String(property._id),
+            status: property.status,
+            dependencySummary: {
+              ...summary,
+              controlAccountPostings: controlPostingCount,
+            },
+            controlAccountId: property.controlAccount,
+          },
+          message:
+            "Property control account already has postings, so the property was archived instead of deleted. Historical accounting links were preserved.",
+        });
+      }
+
+      await ChartOfAccount.deleteOne({
+        _id: property.controlAccount,
+        business: property.business,
+      });
+      controlAccountDeleted = true;
     }
 
     await property.deleteOne();
 
     res.json({
       success: true,
-      message: "Property deleted successfully",
+      mode: "deleted",
+      data: {
+        id: String(req.params.id),
+        controlAccountDeleted,
+      },
+      message: controlAccountDeleted
+        ? "Property and unused control account deleted successfully."
+        : "Property deleted successfully.",
     });
   } catch (error) {
     res.status(500).json({

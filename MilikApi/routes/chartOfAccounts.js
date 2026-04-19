@@ -54,6 +54,48 @@ const normalizeDate = (value, edge = "start") => {
   return date;
 };
 
+const isTruthy = (value) => ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+
+const buildLedgerActivityMatch = ({ business, accountId, start, end, direction, sourceTransactionType, includeReversed = false }) => {
+  const match = {
+    business: toObjectId(business),
+    accountId: toObjectId(accountId),
+    status: includeReversed ? { $nin: ["void", "draft"] } : { $nin: ["void", "draft", "reversed"] },
+  };
+
+  if (!includeReversed) {
+    match.reversalOf = null;
+  }
+
+  if (direction === "debit" || direction === "credit") {
+    match.direction = direction;
+  }
+
+  if (sourceTransactionType) {
+    match.sourceTransactionType = sourceTransactionType;
+  }
+
+  if (start || end) {
+    match.transactionDate = {};
+    if (start) match.transactionDate.$gte = start;
+    if (end) match.transactionDate.$lte = end;
+  }
+
+  return match;
+};
+
+const decorateLedgerActivityEntry = (entry = {}) => ({
+  ...entry,
+  isReversalEntry: Boolean(entry?.reversalOf),
+  isReversedOriginal: String(entry?.status || "").toLowerCase() === "reversed",
+  auditDisplayType: entry?.reversalOf
+    ? "reversal_entry"
+    : String(entry?.status || "").toLowerCase() === "reversed"
+    ? "reversed_original"
+    : "live_entry",
+  auditLinkId: entry?.reversalOf || entry?.reversedByEntry || null,
+});
+
 const serializeAccount = (account = {}) => ({
   ...account,
   group: normalizeAccountGroup(account.group, account.type),
@@ -96,7 +138,7 @@ router.get("/:id/activity", verifyUser, requireCompanyModule("accounts"), async 
   try {
     const business = resolveBusiness(req);
     const { id } = req.params;
-    const { startDate, endDate, direction, sourceTransactionType } = req.query;
+    const { startDate, endDate, direction, sourceTransactionType, includeReversed } = req.query;
 
     if (!business) {
       return res.status(400).json({ error: "business is required" });
@@ -119,31 +161,27 @@ router.get("/:id/activity", verifyUser, requireCompanyModule("accounts"), async 
     const start = normalizeDate(startDate, "start");
     const end = normalizeDate(endDate, "end");
 
-    const match = {
-      business: toObjectId(business),
-      accountId: toObjectId(id),
-      status: { $nin: ["void", "draft"] },
-    };
+    const shouldIncludeReversed = isTruthy(includeReversed);
 
-    if (direction === "debit" || direction === "credit") {
-      match.direction = direction;
-    }
+    const match = buildLedgerActivityMatch({
+      business,
+      accountId: id,
+      start,
+      end,
+      direction,
+      sourceTransactionType,
+      includeReversed: shouldIncludeReversed,
+    });
 
-    if (sourceTransactionType) {
-      match.sourceTransactionType = sourceTransactionType;
-    }
-
-    if (start || end) {
-      match.transactionDate = {};
-      if (start) match.transactionDate.$gte = start;
-      if (end) match.transactionDate.$lte = end;
-    }
-
-    const openingMatch = {
-      business: toObjectId(business),
-      accountId: toObjectId(id),
-      status: { $nin: ["void", "draft"] },
-    };
+    const openingMatch = buildLedgerActivityMatch({
+      business,
+      accountId: id,
+      start: null,
+      end: null,
+      direction,
+      sourceTransactionType,
+      includeReversed: shouldIncludeReversed,
+    });
 
     if (start) {
       openingMatch.transactionDate = { $lt: start };
@@ -172,16 +210,17 @@ router.get("/:id/activity", verifyUser, requireCompanyModule("accounts"), async 
     let runningBalance = openingBalance;
     const rows = entries.map((entry) => {
       runningBalance += entrySignedForAccount(entry, account.type);
-      return {
+      return decorateLedgerActivityEntry({
         ...entry,
         runningBalance,
-      };
+      });
     });
 
     return res.status(200).json({
       success: true,
       data: {
         account: serializeAccount(account),
+        includeReversed: shouldIncludeReversed,
         openingBalance,
         closingBalance: runningBalance,
         count: rows.length,

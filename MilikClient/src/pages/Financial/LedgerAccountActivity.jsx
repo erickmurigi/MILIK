@@ -1,12 +1,25 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { FaArrowLeft, FaExchangeAlt, FaFilter, FaSyncAlt, FaTrashAlt } from "react-icons/fa";
+import {
+  FaArrowLeft,
+  FaExchangeAlt,
+  FaFilter,
+  FaRedoAlt,
+  FaSyncAlt,
+  FaTrashAlt,
+} from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
 import { deleteTenantInvoice, getChartOfAccounts } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
+
+const MILIK_GREEN = "bg-[#0B3B2E]";
+const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
+const MILIK_ORANGE = "bg-[#FF8C00]";
+const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
+const ITEMS_PER_PAGE = 50;
 
 const formatMoney = (value) =>
   new Intl.NumberFormat("en-KE", {
@@ -43,11 +56,44 @@ const accountCanManage = (user) => {
   return String(user.moduleAccess?.accounts || "").toLowerCase() === "full access";
 };
 
-const ITEMS_PER_PAGE = 50;
-
 const sourceLabel = (entry) => {
+  if (entry?.isReversalEntry) return "Reversal Entry";
+  if (entry?.isReversedOriginal) return "Reversed Original";
   const type = String(entry?.sourceTransactionType || "other").replace(/_/g, " ");
   return type.replace(/\b\w/g, (m) => m.toUpperCase());
+};
+
+const getAuditBadge = (entry) => {
+  if (entry?.isReversalEntry) {
+    return {
+      label: "reversal entry",
+      className: "bg-blue-100 text-blue-700",
+    };
+  }
+
+  if (entry?.isReversedOriginal) {
+    return {
+      label: "reversed original",
+      className: "bg-amber-100 text-amber-700",
+    };
+  }
+
+  return {
+    label: String(entry?.status || "approved").toLowerCase(),
+    className: "bg-emerald-100 text-emerald-700",
+  };
+};
+
+const getAuditCaption = (entry) => {
+  if (entry?.isReversalEntry) {
+    return `Reversal of ${entry?.reversalOf || "linked entry"}`;
+  }
+
+  if (entry?.isReversedOriginal) {
+    return `Reversed by ${entry?.reversedByEntry || "linked reversal"}`;
+  }
+
+  return "Live activity";
 };
 
 const LedgerAccountActivity = () => {
@@ -73,10 +119,17 @@ const LedgerAccountActivity = () => {
     includeReversed: false,
   });
 
-  const [reclassifyModal, setReclassifyModal] = useState({ open: false, entry: null, newAccountId: "", reason: "" });
+  const [reclassifyModal, setReclassifyModal] = useState({
+    open: false,
+    entry: null,
+    newAccountId: "",
+    reason: "",
+  });
 
   const businessId = currentCompany?._id || "";
-  const canManage = accountCanManage(currentUser) && hasCompanyPermission(currentUser || {}, currentCompany, "ledger", "reverse", "accounts");
+  const canManage =
+    accountCanManage(currentUser) &&
+    hasCompanyPermission(currentUser || {}, currentCompany, "ledger", "reverse", "accounts");
 
   const loadActivity = async () => {
     if (!businessId || !accountId) return;
@@ -194,7 +247,6 @@ const LedgerAccountActivity = () => {
     }
   };
 
-
   const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
@@ -229,126 +281,144 @@ const LedgerAccountActivity = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-3 md:p-4">
-        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-3">
-          <div className="flex-shrink-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
                 <button
                   onClick={() => navigate("/financial/chart-of-accounts")}
-                  className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 hover:text-gray-900"
                 >
-                  <FaArrowLeft />
-                  Back to Chart of Accounts
+                  <FaArrowLeft size={10} />
+                  Back
                 </button>
-                <h1 className="text-2xl font-bold text-slate-900">
-                  {account?.code || "..."} {account?.name || "Ledger Activity"}
-                </h1>
-                <p className="mt-1 text-sm text-slate-600">
-                  Review debits, credits, running balances, and manage source transactions from the ledger safely.
-                </p>
+
+                <div className="min-w-0">
+                  <h1 className="truncate text-lg font-bold leading-tight text-slate-900">
+                    {account?.code || "..."} {account?.name || "Ledger Activity"}
+                  </h1>
+                  <p className="truncate text-[11px] leading-tight text-slate-500">
+                    Compact audit view for live postings and reversal history.
+                  </p>
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Opening</div>
+                  <div className="text-sm font-bold leading-tight text-blue-900">{formatMoney(openingBalance)}</div>
+                </div>
+                <div className="rounded-md border border-green-200 bg-green-50 px-2.5 py-1">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-green-600">Entries</div>
+                  <div className="text-sm font-bold leading-tight text-green-900">{rows.length}</div>
+                </div>
+                <div className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-orange-600">Closing</div>
+                  <div className="text-sm font-bold leading-tight text-orange-900">{formatMoney(closingBalance)}</div>
+                </div>
                 <button
                   onClick={loadActivity}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100"
                 >
-                  <FaSyncAlt />
+                  <FaSyncAlt className="text-[10px]" />
                   Refresh
                 </button>
               </div>
             </div>
-
-            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Opening Balance</div>
-                <div className="mt-2 text-2xl font-bold text-slate-900">{formatMoney(openingBalance)}</div>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Filtered Entries</div>
-                <div className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</div>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Closing Balance</div>
-                <div className="mt-2 text-2xl font-bold text-slate-900">{formatMoney(closingBalance)}</div>
-              </div>
-            </div>
           </div>
 
-          <div className="flex-shrink-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <FaFilter />
-              Filters
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-5">
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">From</span>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <div className="mr-1 inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+                  <FaFilter className="text-[10px]" />
+                  Filters
+                </div>
+
                 <input
                   type="date"
                   value={filters.startDate}
                   onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]"
+                  className="h-8 rounded-md border border-gray-300 px-2.5 text-[11px] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  title="From date"
                 />
-              </label>
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">To</span>
+
                 <input
                   type="date"
                   value={filters.endDate}
                   onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]"
+                  className="h-8 rounded-md border border-gray-300 px-2.5 text-[11px] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  title="To date"
                 />
-              </label>
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Direction</span>
+
                 <select
                   value={filters.direction}
                   onChange={(e) => setFilters((prev) => ({ ...prev, direction: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]"
+                  className="h-8 rounded-md border border-gray-300 bg-[#DDEFE1] px-2.5 text-[11px] text-gray-800 shadow-sm"
                 >
-                  <option value="all">All</option>
+                  <option value="all">All directions</option>
                   <option value="debit">Debits only</option>
                   <option value="credit">Credits only</option>
                 </select>
-              </label>
-              <label className="flex items-center gap-3 rounded-xl border border-slate-300 px-3 py-2.5 md:mt-5">
-                <input
-                  type="checkbox"
-                  checked={filters.includeReversed}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, includeReversed: e.target.checked }))}
-                />
-                <span className="text-sm font-medium text-slate-700">Include reversed</span>
-              </label>
-              <div className="md:mt-5">
+
+                <label className="flex h-8 items-center gap-2 rounded-md border border-[#0B3B2E]/20 bg-white px-2.5 text-[11px] font-medium text-slate-700 shadow-sm">
+                  <input
+                    type="checkbox"
+                    checked={filters.includeReversed}
+                    onChange={(e) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        includeReversed: e.target.checked,
+                      }))
+                    }
+                  />
+                  Show reversals
+                </label>
+
                 <button
                   onClick={loadActivity}
-                  className="w-full rounded-xl bg-[#0B3B2E] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#082d24]"
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
                 >
-                  Apply Filters
+                  <FaFilter className="text-[10px]" />
+                  Apply
+                </button>
+
+                <button
+                  onClick={() => {
+                    const now = new Date();
+                    setFilters({
+                      startDate: inputDate(new Date(now.getFullYear(), now.getMonth(), 1)),
+                      endDate: inputDate(now),
+                      direction: "all",
+                      includeReversed: false,
+                    });
+                  }}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                >
+                  <FaRedoAlt className="text-[10px]" />
+                  Reset
                 </button>
               </div>
             </div>
-          </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             {loading ? (
               <div className="px-4 py-6 text-sm text-slate-600">Loading ledger activity...</div>
             ) : (
-              <div className="flex-1 min-h-0 overflow-auto">
-                <table className="min-w-[1400px] w-full text-sm">
+              <div className="min-h-0 flex-1 overflow-auto">
+                <table className="w-full min-w-[1500px] text-xs">
                   <thead>
-                    <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                      <th className="px-4 py-3 text-left">Date</th>
-                      <th className="px-4 py-3 text-left">Reference</th>
-                      <th className="px-4 py-3 text-left">Type</th>
-                      <th className="px-4 py-3 text-left">Narration</th>
-                      <th className="px-4 py-3 text-left">Tenant / Unit</th>
-                      <th className="px-4 py-3 text-right">Debit</th>
-                      <th className="px-4 py-3 text-right">Credit</th>
-                      <th className="px-4 py-3 text-right">Running Balance</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
+                    <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                      <th className="px-3 py-2 text-left font-semibold">Date</th>
+                      <th className="px-3 py-2 text-left font-semibold">Reference</th>
+                      <th className="px-3 py-2 text-left font-semibold">Type</th>
+                      <th className="px-3 py-2 text-left font-semibold">Narration</th>
+                      <th className="px-3 py-2 text-left font-semibold">Tenant / Unit</th>
+                      <th className="px-3 py-2 text-right font-semibold">Debit</th>
+                      <th className="px-3 py-2 text-right font-semibold">Credit</th>
+                      <th className="px-3 py-2 text-right font-semibold">Running Balance</th>
+                      <th className="px-3 py-2 text-left font-semibold">Status</th>
+                      <th className="px-3 py-2 text-right font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -362,47 +432,62 @@ const LedgerAccountActivity = () => {
                       paginatedRows.map((entry) => {
                         const tenantName = entry?.tenant?.name || "-";
                         const unitLabel = entry?.unit?.unitNumber || entry?.unit?.name || "-";
-                        const canReverseSource = canManage && ["rent_payment", "tenant_invoice"].includes(String(entry?.sourceTransactionType || "").toLowerCase());
+                        const auditBadge = getAuditBadge(entry);
+                        const canReverseSource =
+                          canManage &&
+                          !entry?.isReversalEntry &&
+                          !entry?.isReversedOriginal &&
+                          !entry?.reversedByEntry &&
+                          ["rent_payment", "tenant_invoice"].includes(
+                            String(entry?.sourceTransactionType || "").toLowerCase()
+                          );
+
                         return (
                           <tr key={entry._id} className="border-b border-slate-100 align-top hover:bg-slate-50">
-                            <td className="px-4 py-3 whitespace-nowrap">{formatDate(entry.transactionDate)}</td>
-                            <td className="px-4 py-3">
+                            <td className="whitespace-nowrap px-3 py-2">{formatDate(entry.transactionDate)}</td>
+                            <td className="px-3 py-2">
                               <div className="font-medium text-slate-800">{entry.sourceTransactionId || entry._id}</div>
-                              <div className="text-xs text-slate-500">{entry.accountId?.code} {entry.accountId?.name}</div>
+                              <div className="text-[11px] text-slate-500">
+                                {entry.accountId?.code} {entry.accountId?.name}
+                              </div>
                             </td>
-                            <td className="px-4 py-3">{sourceLabel(entry)}</td>
-                            <td className="px-4 py-3 min-w-[280px] text-slate-700">{entry.notes || entry.category || "-"}</td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-2 text-slate-700">
+                              <div>{sourceLabel(entry)}</div>
+                              <div className="text-[11px] text-slate-500">{getAuditCaption(entry)}</div>
+                            </td>
+                            <td className="min-w-[300px] px-3 py-2 text-slate-700">
+                              <div>{entry.notes || entry.category || "-"}</div>
+                              {entry?.auditLinkId && (
+                                <div className="text-[11px] text-slate-500">Linked entry: {entry.auditLinkId}</div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
                               <div className="font-medium text-slate-800">{tenantName}</div>
-                              <div className="text-xs text-slate-500">{unitLabel}</div>
+                              <div className="text-[11px] text-slate-500">{unitLabel}</div>
                             </td>
-                            <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                            <td className="px-3 py-2 text-right font-semibold text-slate-900">
                               {String(entry.direction) === "debit" ? formatMoney(entry.amount) : "-"}
                             </td>
-                            <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                            <td className="px-3 py-2 text-right font-semibold text-slate-900">
                               {String(entry.direction) === "credit" ? formatMoney(entry.amount) : "-"}
                             </td>
-                            <td className="px-4 py-3 text-right font-bold text-slate-900">{formatMoney(entry.runningBalance)}</td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                                entry.status === "reversed"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : entry.status === "approved"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-slate-100 text-slate-700"
-                              }`}>
-                                {entry.status || "approved"}
+                            <td className="px-3 py-2 text-right font-bold text-slate-900">
+                              {formatMoney(entry.runningBalance)}
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${auditBadge.className}`}>
+                                {auditBadge.label}
                               </span>
                             </td>
-                            <td className="px-4 py-3">
-                              <div className="flex justify-end gap-2 flex-wrap">
+                            <td className="px-3 py-2">
+                              <div className="flex flex-wrap justify-end gap-2">
                                 <button
                                   onClick={() => openSource(entry)}
-                                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                                  className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
                                 >
                                   Open Source
                                 </button>
-                                {canManage && (
+                                {canManage && !entry?.isReversalEntry && (
                                   <button
                                     onClick={() =>
                                       setReclassifyModal({
@@ -412,7 +497,7 @@ const LedgerAccountActivity = () => {
                                         reason: `Move ${entry.accountId?.code || account?.code} to another ledger`,
                                       })
                                     }
-                                    className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                                    className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-blue-700"
                                   >
                                     <FaExchangeAlt />
                                     Move
@@ -422,10 +507,12 @@ const LedgerAccountActivity = () => {
                                   <button
                                     onClick={() => handleReverseOrDelete(entry)}
                                     disabled={actingKey === `${entry._id}:reverse`}
-                                    className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                                    className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
                                   >
                                     <FaTrashAlt />
-                                    {String(entry.sourceTransactionType).toLowerCase() === "tenant_invoice" ? "Delete" : "Reverse"}
+                                    {String(entry.sourceTransactionType).toLowerCase() === "tenant_invoice"
+                                      ? "Delete"
+                                      : "Reverse"}
                                   </button>
                                 )}
                               </div>
@@ -438,14 +525,33 @@ const LedgerAccountActivity = () => {
                 </table>
               </div>
             )}
+
             <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
               <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of <span className="font-bold text-slate-900">{rows.length}</span> ledger entries</div>
+                <div className="font-semibold">
+                  Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to{" "}
+                  <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of{" "}
+                  <span className="font-bold text-slate-900">{rows.length}</span> ledger entries
+                </div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={safeCurrentPage === 1}
+                    className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="font-semibold text-slate-700">
+                    Page {safeCurrentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={safeCurrentPage === totalPages}
+                    className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
             </div>
@@ -464,13 +570,17 @@ const LedgerAccountActivity = () => {
               <form onSubmit={submitReclassify} className="space-y-4 p-5">
                 <div>
                   <div className="text-sm text-slate-600">Current Ledger</div>
-                  <div className="mt-1 font-semibold text-slate-900">{account?.code} {account?.name}</div>
+                  <div className="mt-1 font-semibold text-slate-900">
+                    {account?.code} {account?.name}
+                  </div>
                 </div>
                 <label className="block">
                   <span className="text-sm font-semibold text-slate-700">Move To</span>
                   <select
                     value={reclassifyModal.newAccountId}
-                    onChange={(e) => setReclassifyModal((prev) => ({ ...prev, newAccountId: e.target.value }))}
+                    onChange={(e) =>
+                      setReclassifyModal((prev) => ({ ...prev, newAccountId: e.target.value }))
+                    }
                     className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]"
                   >
                     <option value="">Select destination ledger</option>

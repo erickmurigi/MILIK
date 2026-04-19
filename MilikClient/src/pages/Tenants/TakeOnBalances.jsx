@@ -908,15 +908,15 @@ const TakeOnBalances = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-        <div className="mx-auto flex w-full max-w-[96%] flex-col gap-4">
-          <div className="flex-shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Tenants Financing</p>
-                <h1 className="mt-1 text-2xl font-black text-slate-900">Tenant Take-On Balances</h1>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#0B3B2E]">Tenants Financing</p>
+                <h1 className="mt-0.5 text-lg font-black leading-tight text-slate-900">Tenant Take-On Balances</h1>
+                <p className="mt-0.5 text-[11px] leading-tight text-slate-500">
                   Tightened to the invoices-page standard with cleaner filters, compact action buttons, wider table flow, and sticky control sections.
                 </p>
               </div>
@@ -925,7 +925,7 @@ const TakeOnBalances = () => {
                 <button
                   type="button"
                   onClick={loadRows}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
                 >
                   <FaRedoAlt />
                   Refresh
@@ -933,7 +933,7 @@ const TakeOnBalances = () => {
                 <button
                   type="button"
                   onClick={openCreateModal}
-                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-black text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                 >
                   <FaPlus />
                   Add Take-On Balance
@@ -942,7 +942,7 @@ const TakeOnBalances = () => {
             </div>
           </div>
 
-          <div className="flex-shrink-0 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="flex-shrink-0 grid grid-cols-1 gap-2 md:grid-cols-3">
             {[
               ["Total Amount", totals.amount],
               ["Allocated", totals.allocated],
@@ -950,31 +950,31 @@ const TakeOnBalances = () => {
             ].map(([label, value], idx) => (
               <div
                 key={label}
-                className={`rounded-2xl border px-5 py-4 shadow-sm ${
+                className={`rounded-md border px-2.5 py-1.5 shadow-sm ${
                   idx === 2 ? "border-orange-200 bg-orange-50" : "border-slate-200 bg-white"
                 }`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                       {label}
                     </p>
-                    <p className="mt-3 text-2xl font-bold text-slate-900">{formatCurrency(value)}</p>
+                    <p className="text-sm font-bold leading-tight text-slate-900">{formatCurrency(value)}</p>
                   </div>
                   <div
-                    className={`rounded-2xl p-3 ${
+                    className={`rounded-md p-2 ${
                       idx === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-700"
                     }`}
                   >
-                    <FaMoneyBillWave className="text-xl" />
+                    <FaMoneyBillWave className="text-base" />
                   </div>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-3">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[260px] flex-1">
                   <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
@@ -982,14 +982,14 @@ const TakeOnBalances = () => {
                     value={draftFilters.search}
                     onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
                     placeholder="Tenant, property, unit, bill item, invoice number"
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[11px] shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
 
                 <select
                   value={draftFilters.propertyId}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, tenant: "" }))}
-                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded-md border border-slate-300 bg-[#DDEFE1] px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="">All properties</option>
                   {propertyOptions.map((property) => (
@@ -1002,7 +1002,7 @@ const TakeOnBalances = () => {
                 <select
                   value={draftFilters.tenant}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenant: e.target.value }))}
-                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded-md border border-slate-300 bg-[#DDEFE1] px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="">All tenants</option>
                   {tenants
@@ -1017,7 +1017,7 @@ const TakeOnBalances = () => {
                 <select
                   value={draftFilters.billItem}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, billItem: e.target.value }))}
-                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded-md border border-slate-300 bg-[#DDEFE1] px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="">All bill items</option>
                   {filterBillItemOptions.map((option) => (
@@ -1030,7 +1030,7 @@ const TakeOnBalances = () => {
                 <select
                   value={draftFilters.type}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, type: e.target.value }))}
-                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded-md border border-slate-300 bg-[#DDEFE1] px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="">All types</option>
                   <option value="Debit">Debit</option>
@@ -1040,7 +1040,7 @@ const TakeOnBalances = () => {
                 <select
                   value={draftFilters.status}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded-md border border-slate-300 bg-[#DDEFE1] px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="">All statuses</option>
                   <option value="unallocated">Unallocated</option>

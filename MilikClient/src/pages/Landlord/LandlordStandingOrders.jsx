@@ -31,6 +31,7 @@ import {
 import { getProperties } from "../../redux/propertyRedux";
 import { propertyBelongsToLandlord } from "./propertyUtils";
 
+const ITEMS_PER_PAGE = 50;
 const todayIso = () => new Date().toISOString().split("T")[0];
 
 const blankForm = {
@@ -171,6 +172,7 @@ const LandlordStandingOrders = () => {
   const [bulkRunning, setBulkRunning] = useState(false);
   const [cashbooks, setCashbooks] = useState([]);
   const [reversingRunId, setReversingRunId] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -243,6 +245,20 @@ const LandlordStandingOrders = () => {
     }),
     [rows]
   );
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = rows.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedRows = rows.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.search, filters.status, filters.landlordId, filters.propertyId, rows.length]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
 
   const openCreate = () => {
     setEditingId("");
@@ -395,10 +411,10 @@ const LandlordStandingOrders = () => {
 
   const selectableRowIds = useMemo(
     () =>
-      rows
+      paginatedRows
         .filter((row) => row.status === "active" && (row.eligiblePeriods || []).length > 0)
         .map((row) => String(row._id)),
-    [rows]
+    [paginatedRows]
   );
 
   const allSelectableChecked =
@@ -527,15 +543,15 @@ const LandlordStandingOrders = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 p-4">
-        <div className="mx-auto max-w-[96%] space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Landlord Payments</p>
-                <h1 className="mt-1 text-2xl font-black text-slate-900">Landlord Standing Orders</h1>
-                <p className="mt-1 text-sm text-slate-500">
+                <h1 className="mt-0.5 text-xl font-black text-slate-900">Landlord Standing Orders</h1>
+                <p className="mt-0.5 text-xs text-slate-500">
                   Manage recurring landlord deductions safely. Runs now respect active status, keep cashbook and payout destination details, update ledger balances, and allow controlled reversal while statement periods are still open.
                 </p>
               </div>
@@ -543,13 +559,13 @@ const LandlordStandingOrders = () => {
                 <button
                   onClick={handleRunSelected}
                   disabled={bulkRunning || selectedIds.length === 0}
-                  className="inline-flex items-center gap-2 rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-3 text-sm font-black text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-300 bg-indigo-50 px-3 text-[11px] font-bold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <FaCheck /> {bulkRunning ? "Running..." : `Run Selected${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
                 </button>
                 <button
                   onClick={openCreate}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white hover:bg-[#0A3127]"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"
                 >
                   <FaPlus /> Add Standing Order
                 </button>
@@ -557,42 +573,42 @@ const LandlordStandingOrders = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Orders</p>
-              <p className="mt-2 text-2xl font-black text-slate-900">{stats.total}</p>
+              <p className="mt-1 text-base font-black text-slate-900">{stats.total}</p>
             </div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Active</p>
-              <p className="mt-2 text-2xl font-black text-emerald-700">{stats.active}</p>
+              <p className="mt-1 text-base font-black text-emerald-700">{stats.active}</p>
             </div>
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Processed Value</p>
-              <p className="mt-2 text-2xl font-black text-blue-700">{money(stats.processed)}</p>
+              <p className="mt-1 text-base font-black text-blue-700">{money(stats.processed)}</p>
             </div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Pending Eligible Periods</p>
-              <p className="mt-2 text-2xl font-black text-amber-700">{stats.pendingPeriods}</p>
+              <p className="mt-1 text-base font-black text-amber-700">{stats.pendingPeriods}</p>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 bg-slate-50 p-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
                 <div className="relative xl:col-span-2">
                   <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
                   <input
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                     placeholder="Search order number, title, narration"
-                    className="w-full rounded-md border border-slate-300 px-3 py-3 pl-10 text-sm"
+                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 pl-9 text-xs"
                   />
                 </div>
                 <div>
                   <select
                     value={filters.landlordId}
                     onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))}
-                    className="w-full rounded-md border border-slate-300 px-3 py-3 text-sm"
+                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs"
                   >
                     <option value="all">All Landlords</option>
                     {activeLandlords.map((landlord) => (
@@ -606,7 +622,7 @@ const LandlordStandingOrders = () => {
                   <select
                     value={filters.propertyId}
                     onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                    className="w-full rounded-md border border-slate-300 px-3 py-3 text-sm"
+                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs"
                   >
                     <option value="all">All Properties</option>
                     {activeProperties.map((property) => (
@@ -621,7 +637,7 @@ const LandlordStandingOrders = () => {
                   <select
                     value={filters.status}
                     onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                    className="w-full rounded-md border border-slate-300 px-3 py-3 text-sm"
+                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs"
                   >
                     <option value="all">All Statuses</option>
                     <option value="draft">Draft</option>
@@ -655,10 +671,10 @@ const LandlordStandingOrders = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full min-w-[1340px] text-xs">
                 <thead>
-                  <tr className="bg-[#0B3B2E] text-white">
+                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                     <th className="px-3 py-2 text-left font-semibold">
                       <input
                         type="checkbox"
@@ -685,13 +701,13 @@ const LandlordStandingOrders = () => {
                       </td>
                     </tr>
                   )}
-                  {rows.map((row, index) => {
+                  {paginatedRows.map((row, index) => {
                     const expanded = expandedId === row._id;
                     const runnable = row.status === "active" && (row.eligiblePeriods || []).length > 0;
                     return (
                       <React.Fragment key={row._id}>
                         <tr className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                          <td className="px-4 py-3 align-top">
+                          <td className="px-3 py-2 align-top">
                             <input
                               type="checkbox"
                               checked={selectedIds.includes(String(row._id))}
@@ -701,7 +717,7 @@ const LandlordStandingOrders = () => {
                               title={!runnable ? "Only active standing orders with eligible periods can be bulk run" : "Select this standing order for bulk run"}
                             />
                           </td>
-                          <td className="px-4 py-3 align-top">
+                          <td className="px-3 py-2 align-top">
                             <div className="font-black text-slate-900">{row.standingOrderNo || row.referenceNo}</div>
                             <div className="text-xs text-slate-500">{row.title}</div>
                             <button
@@ -713,11 +729,11 @@ const LandlordStandingOrders = () => {
                               {expanded ? "Hide schedule and history" : "View schedule and history"}
                             </button>
                           </td>
-                          <td className="px-4 py-3 align-top text-slate-700">
+                          <td className="px-3 py-2 align-top text-slate-700">
                             <div>{getLandlordLabel(row.landlord)}</div>
                             <div className="text-xs text-slate-500">{row.property?.propertyName || row.property?.name || "No property"}</div>
                           </td>
-                          <td className="px-4 py-3 align-top text-slate-700">
+                          <td className="px-3 py-2 align-top text-slate-700">
                             <div className="font-semibold">{frequencyLabel(row.frequency)}</div>
                             <div className="text-xs text-slate-500">
                               Runs {canUseDayOfMonth(row.frequency) ? `on day ${row.dayOfMonth || new Date(row.startDate || Date.now()).getDate()}` : "every week"}
@@ -729,31 +745,31 @@ const LandlordStandingOrders = () => {
                               {` • Pending ${row.unprocessedPeriodsCount || 0}`}
                             </div>
                           </td>
-                          <td className="px-4 py-3 align-top text-slate-700">
+                          <td className="px-3 py-2 align-top text-slate-700">
                             <div className="font-semibold">
                               {paymentMethodOptions.find((item) => item.value === normalizePaymentMethod(row.paymentMethod))?.label || frequencyLabel(row.paymentMethod)}
                             </div>
                             <div className="text-xs text-slate-500">Cashbook: {getCashbookLabel(row.cashbook)}</div>
                             <div className="text-xs text-slate-500">{getPaymentDestinationSummary(row)}</div>
                           </td>
-                          <td className="px-4 py-3 text-right align-top font-black text-slate-900">{money(row.amount)}</td>
-                          <td className="px-4 py-3 align-top">
+                          <td className="px-3 py-2 text-right align-top font-black text-slate-900">{money(row.amount)}</td>
+                          <td className="px-3 py-2 align-top">
                             <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${statusPills[row.status] || statusPills.draft}`}>
                               {row.status}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right align-top">
+                          <td className="px-3 py-2 text-right align-top">
                             <div className="inline-flex flex-wrap justify-end gap-2">
                               <button
                                 onClick={() => openEdit(row)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"
+                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-blue-700"
                               >
                                 <FaEdit /> Edit
                               </button>
                               {row.status !== "active" && (
                                 <button
                                   onClick={() => handleStatus(row, "active")}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700"
+                                  className="inline-flex h-7 items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-700"
                                 >
                                   <FaPlay /> Activate
                                 </button>
@@ -761,7 +777,7 @@ const LandlordStandingOrders = () => {
                               {row.status === "active" && (
                                 <button
                                   onClick={() => handleStatus(row, "paused")}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700"
+                                  className="inline-flex h-7 items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 text-[11px] font-bold text-amber-700"
                                 >
                                   <FaPause /> Pause
                                 </button>
@@ -769,14 +785,14 @@ const LandlordStandingOrders = () => {
                               {row.status !== "stopped" && (
                                 <button
                                   onClick={() => handleStatus(row, "stopped")}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-black text-slate-700"
+                                  className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-300 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-700"
                                 >
                                   <FaStop /> Stop
                                 </button>
                               )}
                               <button
                                 onClick={() => openRunModal(row)}
-                                className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-black ${
+                                className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-bold ${
                                   runnable
                                     ? "border-indigo-300 bg-indigo-50 text-indigo-700"
                                     : "border-slate-300 bg-slate-100 text-slate-400"
@@ -786,7 +802,7 @@ const LandlordStandingOrders = () => {
                               </button>
                               <button
                                 onClick={() => handleDelete(row)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"
+                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-2.5 text-[11px] font-bold text-rose-700"
                               >
                                 <FaTrash /> Delete
                               </button>
@@ -795,9 +811,9 @@ const LandlordStandingOrders = () => {
                         </tr>
                         {expanded && (
                           <tr className="border-t border-slate-100 bg-slate-50">
-                            <td colSpan={8} className="px-4 py-4">
+                            <td colSpan={8} className="px-3 py-3">
                               <div className="mb-4 grid gap-4 xl:grid-cols-3">
-                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div className="rounded-xl border border-slate-200 bg-white p-3">
                                   <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Payment destination</p>
                                   <div className="mt-3 space-y-2 text-sm text-slate-700">
                                     <div><span className="font-bold text-slate-900">Method:</span> {paymentMethodOptions.find((item) => item.value === normalizePaymentMethod(row.paymentMethod))?.label || frequencyLabel(row.paymentMethod)}</div>
@@ -807,7 +823,7 @@ const LandlordStandingOrders = () => {
                                     <div><span className="font-bold text-slate-900">Internal notes:</span> {row.notes || "-"}</div>
                                   </div>
                                 </div>
-                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div className="rounded-xl border border-slate-200 bg-white p-3">
                                   <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Current schedule</p>
                                   <div className="mt-3 space-y-2 text-sm text-slate-700">
                                     <div><span className="font-bold text-slate-900">Start:</span> {formatDate(row.startDate)}</div>
@@ -817,7 +833,7 @@ const LandlordStandingOrders = () => {
                                     <div><span className="font-bold text-slate-900">Last processed:</span> {formatDate(row.lastRunDate || row.lastRunAt)}</div>
                                   </div>
                                 </div>
-                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div className="rounded-xl border border-slate-200 bg-white p-3">
                                   <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Controls</p>
                                   <div className="mt-3 space-y-3 text-sm text-slate-700">
                                     <div>Processed runs can be reversed only while the related landlord statement period is still open.</div>
@@ -827,7 +843,7 @@ const LandlordStandingOrders = () => {
                               </div>
 
                               <div className="grid gap-4 lg:grid-cols-2">
-                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div className="rounded-xl border border-slate-200 bg-white p-3">
                                   <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Eligible periods to run</p>
                                   <div className="mt-3 space-y-2">
                                     {(row.eligiblePeriods || []).length === 0 && (
@@ -856,7 +872,7 @@ const LandlordStandingOrders = () => {
                                     ))}
                                   </div>
                                 </div>
-                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div className="rounded-xl border border-slate-200 bg-white p-3">
                                   <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Processed periods</p>
                                   <div className="mt-3 max-h-80 space-y-2 overflow-y-auto">
                                     {(row.processedPeriods || []).length === 0 && (
@@ -917,6 +933,30 @@ const LandlordStandingOrders = () => {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 border border-slate-200 border-t-0 bg-white px-4 py-2 text-xs text-slate-600 rounded-b-lg">
+            <div className="font-semibold">
+              Showing <span className="font-bold text-slate-900">{rows.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of <span className="font-bold text-slate-900">{rows.length}</span> standing orders
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={safeCurrentPage === 1}
+                className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+              <button
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={safeCurrentPage === totalPages}
+                className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
             </div>
           </div>
         </div>

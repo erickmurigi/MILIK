@@ -161,7 +161,12 @@ export const deleteProperty = createAsyncThunk(
           }
         }
       );
-      return { id, message: response.data.message };
+      return {
+        id,
+        message: response.data?.message || 'Property deletion request completed',
+        mode: response.data?.mode || 'deleted',
+        data: response.data?.data || {},
+      };
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to delete property');
     }
@@ -365,10 +370,31 @@ const propertySlice = createSlice({
       .addCase(deleteProperty.fulfilled, (state, action) => {
         state.loading = false;
         state.success = true;
-        state.properties = state.properties.filter(
-          property => property._id !== action.payload.id
-        );
-        state.pagination.total -= 1;
+        if (action.payload.mode === 'deleted') {
+          state.properties = state.properties.filter(
+            property => property._id !== action.payload.id
+          );
+          state.pagination.total = Math.max(0, (state.pagination.total || 0) - 1);
+          if (state.currentProperty?._id === action.payload.id) {
+            state.currentProperty = null;
+          }
+        } else {
+          state.properties = state.properties.map((property) =>
+            property._id === action.payload.id
+              ? {
+                  ...property,
+                  status: action.payload.data?.status || 'archived',
+                }
+              : property
+          );
+
+          if (state.currentProperty?._id === action.payload.id) {
+            state.currentProperty = {
+              ...state.currentProperty,
+              status: action.payload.data?.status || 'archived',
+            };
+          }
+        }
       })
       .addCase(deleteProperty.rejected, (state, action) => {
         state.loading = false;

@@ -243,8 +243,8 @@ const Properties = () => {
   // Delete
   const handleDelete = async (propertyId) => {
     try {
-      await dispatch(deleteProperty(propertyId)).unwrap();
-      toast.success("Property deleted successfully");
+      const result = await dispatch(deleteProperty(propertyId)).unwrap();
+      toast.success(result?.message || "Property request completed successfully");
       setShowDeleteConfirm(null);
 
       // refresh
@@ -277,17 +277,42 @@ const Properties = () => {
     setConfirmDialog({
       isOpen: true,
       title: "Delete Properties",
-      message: `Are you sure you want to delete ${selectedProperties.length} properties? This action cannot be undone.`,
+      message: `Are you sure you want to delete ${selectedProperties.length} properties? Unused properties will be deleted permanently, but properties with operational or accounting history will be archived safely instead.`,
       confirmText: "Delete",
       isDangerous: true,
       onConfirm: async () => {
         try {
+          let deletedCount = 0;
+          let archivedCount = 0;
+          const responseMessages = [];
+
           for (const propertyId of selectedProperties) {
             // unwrap so errors are caught
             // eslint-disable-next-line no-await-in-loop
-            await dispatch(deleteProperty(propertyId)).unwrap();
+            const result = await dispatch(deleteProperty(propertyId)).unwrap();
+            if (result?.mode === 'deleted') {
+              deletedCount += 1;
+            } else {
+              archivedCount += 1;
+            }
+
+            if (result?.message) {
+              responseMessages.push(result.message);
+            }
           }
-          toast.success(`${selectedProperties.length} properties deleted successfully`);
+
+          if (deletedCount > 0 && archivedCount > 0) {
+            toast.success(`${deletedCount} properties deleted and ${archivedCount} archived safely.`);
+          } else if (archivedCount > 0) {
+            toast.success(`${archivedCount} properties archived safely instead of being deleted.`);
+          } else {
+            toast.success(`${deletedCount} properties deleted successfully`);
+          }
+
+          if (deletedCount === 0 && archivedCount === 1 && responseMessages[0]) {
+            toast.info(responseMessages[0]);
+          }
+
           setSelectedProperties([]);
           setSelectAll(false);
           setConfirmDialog({ isOpen: false });
@@ -1139,7 +1164,7 @@ const Properties = () => {
           <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-auto shadow-xl">
               <h3 className="text-lg font-bold text-gray-800 mb-2">Confirm Delete</h3>
-              <p className="text-gray-600 mb-6">Are you sure you want to delete this property? This action cannot be undone.</p>
+              <p className="text-gray-600 mb-6">Are you sure you want to delete this property? If the property has operational or accounting history, MILIK will archive it safely instead of hard-deleting it.</p>
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setShowDeleteConfirm(null)}

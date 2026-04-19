@@ -15,6 +15,8 @@ import {
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { importMpesaBatch, listMpesaCollections } from "../../redux/apiCalls";
 
+const ITEMS_PER_PAGE = 50;
+
 const ensureArray = (value) => {
   if (Array.isArray(value)) return value;
   if (Array.isArray(value?.items)) return value.items;
@@ -53,6 +55,7 @@ const MpesaBatchImport = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedShortCode, setSelectedShortCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -111,6 +114,20 @@ const MpesaBatchImport = () => {
     });
   }, [rows, search, sourceFilter, statusFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = filteredRows.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentPageRows = filteredRows.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, sourceFilter, filteredRows.length]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
+
   const totals = useMemo(() => {
     const matched = filteredRows.filter((row) => row?.matchingStatus === "captured");
     const matchedTenant = filteredRows.filter((row) => row?.matchingStatus === "matched_tenant");
@@ -166,26 +183,26 @@ const MpesaBatchImport = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-white p-4 md:p-6">
-        <div className="mx-auto space-y-4" style={{ maxWidth: "96%" }}>
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
-            <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-5 py-5 text-white">
-              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white p-2 md:p-3">
+        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-4 py-3 text-white">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-100">Receipting operations</p>
-                  <h1 className="mt-1 text-2xl font-black tracking-tight">M-Pesa Batch Import</h1>
-                  <p className="mt-1 max-w-3xl text-sm text-slate-200">
+                  <h1 className="mt-0.5 text-xl font-black tracking-tight">M-Pesa Batch Import</h1>
+                  <p className="mt-0.5 max-w-3xl text-xs text-slate-200">
                     This workspace now persists imported and callback-based M-Pesa rows on the backend, then routes them into the normal receipt flow without bypassing accounting controls.
                   </p>
                 </div>
-                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-slate-100">
+                <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs text-slate-100">
                   Callback endpoints: <span className="font-bold">/api/mpesa-collections/validation/:shortCode</span> and <span className="font-bold">/api/mpesa-collections/confirmation/:shortCode</span>
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-4 p-4 md:grid-cols-5 md:p-5">
+            <div className="grid gap-2 p-3 md:grid-cols-5">
               {[
                 { label: "Visible rows", value: totals.totalRows, accent: "text-slate-900" },
                 { label: "Captured receipts", value: totals.matchedReceipts, accent: "text-emerald-700" },
@@ -193,20 +210,20 @@ const MpesaBatchImport = () => {
                 { label: "Still unmatched", value: totals.unmatchedRows, accent: "text-amber-700" },
                 { label: "Pending amount", value: formatMoney(totals.pendingAmount), accent: "text-slate-900" },
               ].map((item) => (
-                <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
-                  <p className={`mt-2 text-2xl font-black ${item.accent}`}>{item.value}</p>
+                  <p className={`mt-1 text-base font-black ${item.accent}`}>{item.value}</p>
                 </div>
               ))}
             </div>
 
-            <div className="grid gap-4 border-t border-slate-200 p-4 md:grid-cols-[0.95fr_1.05fr] md:p-5">
-              <div className="flex min-h-[680px] flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="grid min-h-0 flex-1 gap-3 border-t border-slate-200 p-3 md:grid-cols-[0.95fr_1.05fr]">
+              <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="flex items-center gap-2 text-slate-900">
                   <FaFileImport className="text-[#0B3B2E]" />
-                  <h2 className="text-lg font-black">Import batch lines</h2>
+                  <h2 className="text-base font-black">Import batch lines</h2>
                 </div>
-                <p className="mt-1 text-sm text-slate-600">
+                <p className="mt-0.5 text-xs text-slate-600">
                   Paste one transaction per line. These rows will be stored in the backend, deduplicated by M-Pesa code where available, and then refreshed into this reconciliation workspace.
                 </p>
 
@@ -214,7 +231,7 @@ const MpesaBatchImport = () => {
                   <select
                     value={selectedShortCode}
                     onChange={(e) => setSelectedShortCode(e.target.value)}
-                    className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="h-8 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/10"
                   >
                     <option value="">Use primary M-Pesa paybill</option>
                     {mpesaConfigs.map((config, index) => (
@@ -226,34 +243,34 @@ const MpesaBatchImport = () => {
                   <button
                     onClick={handleImport}
                     disabled={isImporting}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold uppercase tracking-[0.12em] text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <FaPlusCircle /> {isImporting ? "Importing..." : "Import batch"}
                   </button>
                 </div>
 
                 <textarea
-                  rows={16}
+                  rows={13}
                   value={rawBatchText}
                   onChange={(e) => setRawBatchText(e.target.value)}
-                  className="mt-4 w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                  className="mt-3 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-900 shadow-sm transition focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/10"
                   placeholder="Example: 03/04/2026	RGF12K9P1D	John Doe	254712345678	TT0004	KES 12,000.00"
                 />
               </div>
 
-              <div className="flex min-h-[680px] flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <div className="flex items-center gap-2 text-slate-900">
                       <FaMobileAlt className="text-[#0B3B2E]" />
-                      <h2 className="text-lg font-black">Stored M-Pesa collections</h2>
+                      <h2 className="text-base font-black">Stored M-Pesa collections</h2>
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">Rows imported manually or received through callbacks are listed here and rechecked against tenants and receipts on every refresh.</p>
+                    <p className="mt-0.5 text-xs text-slate-600">Rows imported manually or received through callbacks are listed here and rechecked against tenants and receipts on every refresh.</p>
                   </div>
                   <button
                     onClick={loadRows}
                     disabled={isLoading}
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
                     <FaSyncAlt className={isLoading ? "animate-spin" : ""} /> Refresh
                   </button>
@@ -267,13 +284,13 @@ const MpesaBatchImport = () => {
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="Search code, tenant, phone, receipt"
-                        className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                        className="h-8 w-full rounded-lg border border-slate-300 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/10"
                       />
                     </div>
                     <select
                       value={statusFilter}
                       onChange={(e) => setStatusFilter(e.target.value)}
-                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                      className="h-8 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/10"
                     >
                       <option value="all">All statuses</option>
                       <option value="captured">Captured receipts</option>
@@ -284,7 +301,7 @@ const MpesaBatchImport = () => {
                     <select
                       value={sourceFilter}
                       onChange={(e) => setSourceFilter(e.target.value)}
-                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                      className="h-8 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/10"
                     >
                       <option value="all">All sources</option>
                       <option value="manual_batch">Manual batch</option>
@@ -306,14 +323,14 @@ const MpesaBatchImport = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
-                      {filteredRows.length === 0 ? (
+                      {currentPageRows.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
                             {isLoading ? "Loading M-Pesa collections..." : "No M-Pesa collections matched the current filters."}
                           </td>
                         </tr>
                       ) : (
-                        filteredRows.map((row) => {
+                        currentPageRows.map((row) => {
                           const matchedReceipt = row?.matchedReceipt || null;
                           const matchedTenant = row?.tenant || null;
                           const status = String(row?.matchingStatus || "unmatched");
@@ -399,6 +416,18 @@ const MpesaBatchImport = () => {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 text-xs text-slate-600">
+                  <div className="font-semibold">
+                    Showing <span className="font-bold text-slate-900">{filteredRows.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> M-Pesa row(s)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                    <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                    <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                    <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                  </div>
                 </div>
               </div>
             </div>

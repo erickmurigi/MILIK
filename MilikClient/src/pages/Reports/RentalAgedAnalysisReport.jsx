@@ -187,27 +187,27 @@ const RentalAgedAnalysisReport = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-3 md:p-4">
-        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex-shrink-0 border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-4 py-4 text-white">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="flex-shrink-0 border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-3 py-2 text-white">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-100">Tenant receivables ageing</p>
-                  <h1 className="mt-1 text-2xl font-black tracking-tight">Rental Aged Analysis</h1>
-                  <p className="mt-1 max-w-3xl text-sm text-slate-200">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-100">Tenant receivables ageing</p>
+                  <h1 className="mt-0.5 text-lg font-black leading-tight tracking-tight">Rental Aged Analysis</h1>
+                  <p className="mt-0.5 max-w-3xl text-[11px] leading-tight text-slate-200">
                     This version uses tenant invoices and receipt allocations instead of lease snapshots, so outstanding balances age from real invoice due dates and real applied receipts.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={exportCsv} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed"><FaFileDownload /> Export CSV</button>
-                  <button onClick={() => { if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed"><FaPrint /> Print</button>
-                  <button onClick={loadData} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white hover:bg-white/15"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
+                  <button onClick={exportCsv} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-3 text-[11px] font-bold text-white hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed"><FaFileDownload /> Export CSV</button>
+                  <button onClick={() => { if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-3 text-[11px] font-bold text-white hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed"><FaPrint /> Print</button>
+                  <button onClick={loadData} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-3 text-[11px] font-bold text-white hover:bg-white/15"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
                 </div>
               </div>
             </div>
 
-            <div className="flex-shrink-0 grid gap-3 border-b border-slate-200 bg-white p-3 md:grid-cols-6">
+            <div className="flex-shrink-0 grid gap-2 border-b border-slate-200 bg-white px-3 py-2 md:grid-cols-6">
               {[
                 { label: 'Current', value: formatMoney(totals.current), accent: 'text-emerald-700' },
                 { label: '1-30 Days', value: formatMoney(totals.days30), accent: 'text-amber-600' },
@@ -216,30 +216,30 @@ const RentalAgedAnalysisReport = () => {
                 { label: '90+ Days', value: formatMoney(totals.days90Plus), accent: 'text-red-700' },
                 { label: 'Grand Total', value: formatMoney(totals.total), accent: 'text-slate-900' },
               ].map((card) => (
-                <div key={card.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{card.label}</div>
-                  <div className={`mt-1 text-xl font-black ${card.accent}`}>{card.value}</div>
+                <div key={card.label} className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{card.label}</div>
+                  <div className={`text-sm font-black leading-tight ${card.accent}`}>{card.value}</div>
                 </div>
               ))}
             </div>
 
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 p-3">
-              <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr_1fr_auto]">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="grid gap-2 xl:grid-cols-[1.2fr_1fr_1fr_auto]">
                 <div className="relative">
-                  <FaFilter className="absolute left-3 top-3 text-slate-400" />
-                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search tenant, property, unit" className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm" />
+                  <FaFilter className="absolute left-3 top-2.5 text-slate-400 text-xs" />
+                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search tenant, property, unit" className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[11px]" />
                 </div>
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[11px]">
                   <option value="all">All properties</option>
                   {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
                 </select>
-                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[11px]">
                   <option value="all">All charges</option>
                   <option value="RENT_CHARGE">Rent only</option>
                   <option value="UTILITY_CHARGE">Utility only</option>
                   <option value="LATE_PENALTY_CHARGE">Late penalties only</option>
                 </select>
-                <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"><FaClock className="text-amber-600" /> {totals.count} tenant row(s)</div>
+                <div className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-700"><FaClock className="text-amber-600" /> {totals.count} tenant row(s)</div>
               </div>
             </div>
 

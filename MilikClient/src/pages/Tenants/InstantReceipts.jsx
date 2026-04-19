@@ -334,13 +334,13 @@ const InstantReceipts = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-3">
-        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-3">
-          <div className="flex-shrink-0 bg-white rounded-lg shadow-sm border border-slate-200 p-2.5">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="flex-shrink-0 bg-white rounded-lg shadow-sm border border-slate-200 px-3 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <button
                 onClick={() => navigate("/tenants")}
-                className="text-slate-600 hover:text-slate-900 flex items-center gap-2 font-semibold text-xs"
+                className="text-slate-600 hover:text-slate-900 flex items-center gap-1.5 font-semibold text-[11px]"
               >
                 <FaArrowLeft /> Back to Tenants
               </button>
@@ -349,36 +349,36 @@ const InstantReceipts = () => {
                 <button
                   onClick={loadRows}
                   disabled={loading}
-                  className="px-3 py-1 text-xs border border-slate-300 rounded-md hover:bg-slate-50 font-semibold flex items-center gap-2 disabled:opacity-60"
+                  className="h-8 px-3 text-[11px] border border-slate-300 rounded-md hover:bg-slate-50 font-semibold flex items-center gap-1.5 disabled:opacity-60"
                 >
                   <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
                 </button>
               </div>
             </div>
 
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <div className="text-sm font-black tracking-tight text-slate-900">Instant Receipts</div>
-              <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-slate-300 bg-slate-50 font-semibold text-slate-700">
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <div className="text-base font-black tracking-tight text-slate-900">Instant Receipts</div>
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-slate-300 bg-slate-50 font-semibold text-slate-700">
                   Notifications: <strong className="text-slate-900">{stats.count}</strong>
                 </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-green-300 bg-green-50 font-semibold text-green-700">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-green-300 bg-green-50 font-semibold text-green-700">
                   Total: <strong>{formatMoney(stats.totalAmount)}</strong>
                 </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-blue-300 bg-blue-50 font-semibold text-blue-700">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-blue-300 bg-blue-50 font-semibold text-blue-700">
                   Captured: <strong>{stats.captured}</strong>
                 </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-orange-300 bg-orange-50 font-semibold text-orange-700">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-orange-300 bg-orange-50 font-semibold text-orange-700">
                   Unconfirmed: <strong>{stats.unconfirmed}</strong>
                 </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-amber-300 bg-amber-50 font-semibold text-amber-700">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-amber-300 bg-amber-50 font-semibold text-amber-700">
                   Awaiting capture: <strong>{stats.unmatched}</strong>
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="flex-shrink-0 bg-white rounded-lg shadow-sm border border-slate-200 p-3">
+          <div className="flex-shrink-0 bg-white rounded-lg shadow-sm border border-slate-200 px-3 py-2">
             <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
               <div className="md:col-span-2 relative">
                 <FaSearch className="absolute left-3 top-2.5 text-slate-400 text-xs" />
@@ -386,14 +386,14 @@ const InstantReceipts = () => {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search code, tenant, TNT code, phone"
-                  className="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-md"
+                  className="h-8 w-full pl-8 pr-3 text-[11px] border border-slate-300 rounded-md"
                 />
               </div>
 
               <select
                 value={selectedShortCode}
                 onChange={(e) => setSelectedShortCode(e.target.value)}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="h-8 px-2.5 text-[11px] border border-slate-300 rounded-md"
               >
                 <option value="">Primary M-Pesa Paybill</option>
                 {mpesaConfigs.map((config, index) => (
@@ -406,7 +406,7 @@ const InstantReceipts = () => {
               <select
                 value={sourceFilter}
                 onChange={(e) => setSourceFilter(e.target.value)}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="h-8 px-2.5 text-[11px] border border-slate-300 rounded-md"
               >
                 <option value="callback_confirmation">Callback confirmations</option>
                 <option value="callback_validation">Callback validations</option>
@@ -417,7 +417,7 @@ const InstantReceipts = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="h-8 px-2.5 text-[11px] border border-slate-300 rounded-md"
               >
                 <option value="all">All statuses</option>
                 <option value="captured">Captured receipts</option>
@@ -425,9 +425,9 @@ const InstantReceipts = () => {
                 <option value="unmatched">Unmatched</option>
               </select>
 
-              <div className="md:col-span-2 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <div className="md:col-span-2 flex h-8 items-center gap-1.5 overflow-hidden rounded-md border border-slate-200 bg-slate-50 px-3 text-[11px] text-slate-600">
                 <FaMobileAlt className="text-[#0B3B2E]" />
-                Confirm can capture and post the receipt immediately by TNT code. Add Receipt opens the normal receipt page with the instant notification already filled in.
+                Confirm posts immediately by TNT code. Add Receipt opens the normal receipt form prefilled.
               </div>
             </div>
           </div>

@@ -105,6 +105,8 @@ const STATUS_STYLES = {
   reversed: "bg-zinc-200 text-zinc-700",
 };
 
+const ITEMS_PER_PAGE = 50;
+
 const TYPE_OPTIONS = [
   {
     value: "against_payable",
@@ -160,13 +162,13 @@ const mapRowToForm = (row) => {
 };
 
 const RecoveryHistoryRow = ({ item, onCancel }) => (
-  <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
+  <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
     <div>
       <div className="font-bold text-slate-900">{item.periodLabel || item.periodKey}</div>
       <div className="text-xs text-slate-500">
         Processed {formatDate(item.processedAt)} • Amount {money(item.amount)}
       </div>
-      {item.note ? <div className="mt-1 text-sm text-slate-600">{item.note}</div> : null}
+      {item.note ? <div className="mt-0.5 text-xs text-slate-600">{item.note}</div> : null}
     </div>
     {!item.cancelledAt ? (
       <button
@@ -205,6 +207,7 @@ const LandlordAdvancements = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [expandedId, setExpandedId] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState({
     search: "",
     status: "all",
@@ -286,6 +289,20 @@ const LandlordAdvancements = () => {
       return prev;
     });
   }, [showModal, form.advanceType]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = rows.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentPageRows = rows.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.search, filters.status, filters.landlordId, filters.advanceType, rows.length]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
 
   const filteredProperties = useMemo(() => {
     if (!form.landlord) return activeProperties;
@@ -594,51 +611,51 @@ const LandlordAdvancements = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="rounded-[28px] bg-[#0B3B2E] px-6 py-7 text-white shadow-xl">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+    <DashboardLayout lockContentScroll>
+      <div className="space-y-3">
+        <div className="rounded-xl bg-[#0B3B2E] px-3 py-2 text-white shadow-sm">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-200">Landlord Advancements</p>
-              <h1 className="mt-2 text-3xl font-black">landlord advances</h1>
-              <p className="mt-2 max-w-3xl text-sm text-emerald-100">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200">Landlord Advancements</p>
+              <h1 className="mt-0.5 text-xl font-black capitalize">landlord advances</h1>
+              <p className="mt-0.5 max-w-3xl text-xs text-emerald-100">
                 Run both early payouts against current landlord payable and future recoverable advances without turning the workflow into a loan system.
               </p>
             </div>
             <button
               onClick={openCreate}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-[#0B3B2E]"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white px-3 text-[11px] font-bold text-[#0B3B2E]"
             >
               <FaPlus /> New Landlord Advance
             </button>
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           {[
             { label: "Total records", value: stats.total, tone: "text-slate-900" },
             { label: "Total disbursed", value: money(stats.totalDisbursed), tone: "text-slate-900" },
             { label: "Already paid / early payouts", value: money(stats.earlyPayouts), tone: "text-emerald-700" },
             { label: "Outstanding recoverable", value: money(stats.recoverableOutstanding), tone: "text-amber-700" },
           ].map((card) => (
-            <div key={card.label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div key={card.label} className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
               <div className="text-xs font-black uppercase tracking-wide text-slate-500">{card.label}</div>
-              <div className={`mt-3 text-2xl font-black ${card.tone}`}>{card.value}</div>
+              <div className={`mt-1 text-base font-black ${card.tone}`}>{card.value}</div>
             </div>
           ))}
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid gap-3 lg:grid-cols-4">
+        <div className="sticky top-0 z-20 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+          <div className="grid gap-2 lg:grid-cols-4">
             <label className="block">
               <span className="text-xs font-black uppercase tracking-wide text-slate-500">Search</span>
               <div className="relative mt-2">
-                <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
+                <FaSearch className="absolute left-3 top-2.5 text-slate-400" />
                 <input
                   value={filters.search}
                   onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                   placeholder="Reference, title, note..."
-                  className="w-full rounded-2xl border border-slate-200 px-10 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                  className="h-8 w-full rounded-lg border border-slate-200 px-9 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                 />
               </div>
             </label>
@@ -647,7 +664,7 @@ const LandlordAdvancements = () => {
               <select
                 value={filters.status}
                 onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
               >
                 <option value="all">All statuses</option>
                 {["draft", "submitted", "approved", "disbursed", "recovering", "paused", "cleared", "cancelled", "rejected", "reversed"].map((status) => (
@@ -660,7 +677,7 @@ const LandlordAdvancements = () => {
               <select
                 value={filters.landlordId}
                 onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))}
-                className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
               >
                 <option value="all">All landlords</option>
                 {activeLandlords.map((landlord) => (
@@ -675,7 +692,7 @@ const LandlordAdvancements = () => {
               <select
                 value={filters.advanceType}
                 onChange={(e) => setFilters((prev) => ({ ...prev, advanceType: e.target.value }))}
-                className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
               >
                 <option value="all">All types</option>
                 {TYPE_OPTIONS.map((item) => (
@@ -688,16 +705,16 @@ const LandlordAdvancements = () => {
 
         <div className="space-y-4">
           {loading ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500">
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-xs font-semibold text-slate-500">
               Loading landlord advances...
             </div>
           ) : rows.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center">
               <div className="text-lg font-black text-slate-900">No landlord advances found</div>
               <div className="mt-2 text-sm text-slate-500">Start with a draft or a safe early payout / future recoverable advance.</div>
             </div>
           ) : (
-            rows.map((row) => {
+            currentPageRows.map((row) => {
               const expanded = expandedId === row._id;
               const landlordLabel =
                 row?.landlord?.landlordName ||
@@ -708,31 +725,31 @@ const LandlordAdvancements = () => {
                 row?.property?.propertyName || row?.property?.name || row?.property?.propertyCode || "Property";
 
               return (
-                <div key={row._id} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-                  <div className="p-5">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div key={row._id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <div className="p-3">
+                    <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`rounded-full px-3 py-1 text-xs font-black ${STATUS_STYLES[row.status] || STATUS_STYLES.draft}`}>
                             {statusLabel(row.status)}
                           </span>
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">
                             {TYPE_OPTIONS.find((item) => item.value === row.advanceType)?.label || statusLabel(row.advanceType)}
                           </span>
-                          <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-black text-zinc-700">
+                          <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-bold text-zinc-700">
                             {row.referenceNo}
                           </span>
                         </div>
                         <div>
-                          <h3 className="text-xl font-black text-slate-900">{rowTitle(row)}</h3>
-                          <div className="mt-1 text-sm text-slate-600">{landlordLabel} • {propertyLabel}</div>
+                          <h3 className="text-lg font-black text-slate-900">{rowTitle(row)}</h3>
+                          <div className="mt-0.5 text-xs text-slate-600">{landlordLabel} • {propertyLabel}</div>
                         </div>
-                        <div className="grid gap-3 md:grid-cols-4">
-                          <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <div className="grid gap-2 md:grid-cols-4">
+                          <div className="rounded-xl bg-slate-50 px-3 py-2">
                             <div className="text-xs font-black uppercase tracking-wide text-slate-500">Advance amount</div>
-                            <div className="mt-1 text-lg font-black text-slate-900">{money(row.amount)}</div>
+                            <div className="mt-0.5 text-sm font-black text-slate-900">{money(row.amount)}</div>
                           </div>
-                          <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                          <div className="rounded-xl bg-slate-50 px-3 py-2">
                             <div className="text-xs font-black uppercase tracking-wide text-slate-500">
                               {row.advanceType === "against_payable" ? "Already paid" : "Outstanding recoverable"}
                             </div>
@@ -740,11 +757,11 @@ const LandlordAdvancements = () => {
                               {money(row.advanceType === "against_payable" ? row.alreadyPaidToLandlord : row.outstandingRecoverableAmount)}
                             </div>
                           </div>
-                          <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                          <div className="rounded-xl bg-slate-50 px-3 py-2">
                             <div className="text-xs font-black uppercase tracking-wide text-slate-500">Disbursement date</div>
                             <div className="mt-1 text-sm font-black text-slate-900">{formatDate(row.disbursementDate)}</div>
                           </div>
-                          <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                          <div className="rounded-xl bg-slate-50 px-3 py-2">
                             <div className="text-xs font-black uppercase tracking-wide text-slate-500">
                               {row.advanceType === "future_recoverable" ? "Recovered so far" : "Cashbook"}
                             </div>
@@ -760,7 +777,7 @@ const LandlordAdvancements = () => {
                       <div className="flex flex-col items-stretch gap-3 xl:max-w-[380px]">
                         <button
                           onClick={() => setExpandedId((prev) => (prev === row._id ? "" : row._id))}
-                          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700"
                         >
                           <FaEye />
                           {expanded ? "Hide details" : "View details"}
@@ -804,7 +821,7 @@ const LandlordAdvancements = () => {
                         <div className="rounded-3xl border border-slate-200 bg-white p-5 xl:col-span-2">
                           <div className="text-xs font-black uppercase tracking-wide text-slate-500">Statement behaviour</div>
                           <div className="mt-4 grid gap-4 md:grid-cols-2">
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                               <div className="font-black text-slate-900">Accounting treatment</div>
                               {row.advanceType === "against_payable" ? (
                                 <ul className="mt-2 space-y-2 text-sm text-slate-600">
@@ -820,7 +837,7 @@ const LandlordAdvancements = () => {
                                 </ul>
                               )}
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                               <div className="font-black text-slate-900">Statement treatment</div>
                               {row.advanceType === "against_payable" ? (
                                 <div className="mt-2 text-sm text-slate-600">
@@ -843,7 +860,7 @@ const LandlordAdvancements = () => {
                                 </div>
                               </div>
                               {(row.processedPeriods || []).length === 0 ? (
-                                <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-sm text-slate-500">
+                                <div className="rounded-xl border border-dashed border-slate-200 p-5 text-sm text-slate-500">
                                   No recoveries have been posted yet.
                                 </div>
                               ) : (
@@ -861,7 +878,7 @@ const LandlordAdvancements = () => {
                           ) : null}
 
                           {!row.disbursedAt && row.advanceType === "against_payable" && Number(row.payableSnapshotAmount || 0) <= 0 ? (
-                            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                               <div className="flex items-start gap-2 font-black">
                                 <FaExclamationTriangle className="mt-0.5" />
                                 No current landlord payable is available for this early payout.
@@ -878,6 +895,20 @@ const LandlordAdvancements = () => {
                 </div>
               );
             })
+          )}
+
+          {!loading && rows.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600 shadow-sm">
+              <div className="font-semibold">
+                Showing <span className="font-bold text-slate-900">{rows.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of <span className="font-bold text-slate-900">{rows.length}</span> advancement record(s)
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -943,7 +974,7 @@ const LandlordAdvancements = () => {
                   <select
                     value={form.landlord}
                     onChange={(e) => setForm((prev) => ({ ...prev, landlord: e.target.value, property: "" }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                   >
                     <option value="">Select landlord</option>
                     {activeLandlords.map((landlord) => (
@@ -959,7 +990,7 @@ const LandlordAdvancements = () => {
                   <select
                     value={form.property}
                     onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                   >
                     <option value="">Select property</option>
                     {filteredProperties.map((property) => (
@@ -975,7 +1006,7 @@ const LandlordAdvancements = () => {
                   <select
                     value={form.status}
                     onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                   >
                     {INITIAL_STATUS_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -988,7 +1019,7 @@ const LandlordAdvancements = () => {
                   <input
                     value={form.title}
                     onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                   />
                 </label>
 
@@ -999,7 +1030,7 @@ const LandlordAdvancements = () => {
                     min="0"
                     value={form.amount}
                     onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                   />
                 </label>
 
@@ -1009,7 +1040,7 @@ const LandlordAdvancements = () => {
                     type="date"
                     value={form.disbursementDate}
                     onChange={(e) => setForm((prev) => ({ ...prev, disbursementDate: e.target.value, startDate: prev.advanceType === "against_payable" ? e.target.value : prev.startDate }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                   />
                 </label>
 
@@ -1018,7 +1049,7 @@ const LandlordAdvancements = () => {
                   <select
                     value={form.paymentMethod}
                     onChange={(e) => setForm((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                   >
                     <option value="bank_transfer">Bank transfer</option>
                     <option value="mpesa">M-Pesa</option>
@@ -1033,7 +1064,7 @@ const LandlordAdvancements = () => {
                   <select
                     value={form.cashbook}
                     onChange={(e) => setForm((prev) => ({ ...prev, cashbook: e.target.value }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                   >
                     <option value="">Use system default</option>
                     {cashbooks.map((account) => (
@@ -1052,7 +1083,7 @@ const LandlordAdvancements = () => {
                         type="date"
                         value={form.startDate}
                         onChange={(e) => setForm((prev) => ({ ...prev, startDate: e.target.value }))}
-                        className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                       />
                     </label>
                     <label className="block">
@@ -1062,7 +1093,7 @@ const LandlordAdvancements = () => {
                         min="1"
                         value={form.periodMonths}
                         onChange={(e) => setForm((prev) => ({ ...prev, periodMonths: e.target.value }))}
-                        className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                       />
                     </label>
                     <label className="block">
@@ -1072,7 +1103,7 @@ const LandlordAdvancements = () => {
                         min="0"
                         value={form.gracePeriodMonths}
                         onChange={(e) => setForm((prev) => ({ ...prev, gracePeriodMonths: e.target.value }))}
-                        className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                       />
                     </label>
                     <label className="block">
@@ -1080,7 +1111,7 @@ const LandlordAdvancements = () => {
                       <select
                         value={form.frequency}
                         onChange={(e) => setForm((prev) => ({ ...prev, frequency: e.target.value }))}
-                        className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                       >
                         <option value="monthly">Monthly</option>
                         <option value="weekly">Weekly</option>
@@ -1094,7 +1125,7 @@ const LandlordAdvancements = () => {
                         type="date"
                         value={form.endDate}
                         onChange={(e) => setForm((prev) => ({ ...prev, endDate: e.target.value }))}
-                        className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                       />
                     </label>
                   </>
@@ -1106,7 +1137,7 @@ const LandlordAdvancements = () => {
                     rows={3}
                     value={form.narration}
                     onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                   />
                 </label>
 
@@ -1116,20 +1147,20 @@ const LandlordAdvancements = () => {
                     rows={3}
                     value={form.notes}
                     onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#0B3B2E]"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                   />
                 </label>
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button onClick={resetModal} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700">
+              <button onClick={resetModal} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#0B3B2E] px-5 py-3 text-sm font-black text-white disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-5 py-3 text-sm font-black text-white disabled:opacity-60"
               >
                 <FaSave /> {saving ? "Saving..." : editingId ? "Update landlord advance" : "Save landlord advance"}
               </button>
@@ -1171,7 +1202,7 @@ const LandlordAdvancements = () => {
                       amount: selected?.scheduledAmount ? String(selected.scheduledAmount) : prev.amount,
                     }));
                   }}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-amber-600"
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-amber-600"
                 >
                   {(recoveryModal.row?.eligibleRecoveryPeriods || []).map((item) => (
                     <option key={item.periodKey} value={item.periodKey}>
@@ -1188,7 +1219,7 @@ const LandlordAdvancements = () => {
                     type="number"
                     value={recoveryModal.amount}
                     onChange={(e) => setRecoveryModal((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-amber-600"
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-amber-600"
                   />
                 </label>
                 <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
@@ -1204,19 +1235,19 @@ const LandlordAdvancements = () => {
                   rows={3}
                   value={recoveryModal.note}
                   onChange={(e) => setRecoveryModal((prev) => ({ ...prev, note: e.target.value }))}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-amber-600"
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-amber-600"
                 />
               </label>
             </div>
 
             <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button onClick={closeRecoveryModal} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700">
+              <button onClick={closeRecoveryModal} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">
                 Close
               </button>
               <button
                 onClick={handleProcessRecovery}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-2xl bg-amber-600 px-5 py-3 text-sm font-black text-white disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-5 py-3 text-sm font-black text-white disabled:opacity-60"
               >
                 <FaCheck /> {saving ? "Processing..." : "Post recovery"}
               </button>
