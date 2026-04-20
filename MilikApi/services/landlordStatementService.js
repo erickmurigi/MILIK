@@ -2665,8 +2665,8 @@ export const generateLandlordStatement = async ({
       received: round2(bucket.received),
       closingBalance: round2(bucket.closingBalance),
     }))
-    .filter((bucket) =>
-      [bucket.openingBalance, bucket.billed, bucket.received, bucket.closingBalance].some((value) => value !== 0)
+    .filter(
+      (bucket) => Number(bucket.billed || 0) !== 0 || Number(bucket.received || 0) !== 0
     );
 
   const depositMemoTotals = depositMemoRows.reduce(

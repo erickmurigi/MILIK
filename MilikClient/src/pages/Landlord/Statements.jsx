@@ -339,6 +339,9 @@ const Statements = () => {
   const [processedStatements, setProcessedStatements] = useState([]);
   const [loadingProcessedContext, setLoadingProcessedContext] = useState(false);
   const [processedContextLoaded, setProcessedContextLoaded] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [loadingPdfPreview, setLoadingPdfPreview] = useState(false);
 
   const autoDraftTimerRef = useRef(null);
   const lastAutoLoadedSelectionRef = useRef("");
@@ -944,6 +947,23 @@ const Statements = () => {
     }
   };
 
+  const closePdfModal = () => {
+    setShowPdfModal(false);
+    setLoadingPdfPreview(false);
+    setPdfPreviewUrl((currentUrl) => {
+      if (currentUrl) {
+        window.URL.revokeObjectURL(currentUrl);
+      }
+      return "";
+    });
+  };
+
+  useEffect(() => () => {
+    if (pdfPreviewUrl) {
+      window.URL.revokeObjectURL(pdfPreviewUrl);
+    }
+  }, [pdfPreviewUrl]);
+
   const handleDownload = async () => {
     if (!canExportStatement) {
       toast.warning("You do not have permission to download landlord statements");
@@ -975,34 +995,41 @@ const Statements = () => {
     }
     if (!draftStatement?._id) return;
 
+    setLoadingPdfPreview(true);
+
     try {
       const response = await adminRequests.get(`/statements/${draftStatement._id}/pdf`, {
         responseType: "blob",
       });
+
       const blob = new Blob([response.data], { type: "application/pdf" });
-      const blobUrl = window.URL.createObjectURL(blob);
-      const printWindow = window.open(blobUrl, "_blank");
-
-      if (!printWindow) {
-        window.URL.revokeObjectURL(blobUrl);
-        toast.error("Popup blocked. Allow popups to print the statement.");
-        return;
-      }
-
-      const tryPrint = () => {
-        try {
-          printWindow.focus();
-          printWindow.print();
-        } catch {
-          // ignore cross-window timing issues
+      setPdfPreviewUrl((currentUrl) => {
+        if (currentUrl) {
+          window.URL.revokeObjectURL(currentUrl);
         }
-      };
-
-      printWindow.onload = tryPrint;
-      setTimeout(tryPrint, 1200);
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 15000);
+        return window.URL.createObjectURL(blob);
+      });
+      setShowPdfModal(true);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to print statement PDF");
+    } finally {
+      setLoadingPdfPreview(false);
+    }
+  };
+
+  const handlePrintFromModal = () => {
+    const frame = document.getElementById("landlord-statement-pdf-frame");
+    if (!frame) {
+      toast.error("Statement preview is not ready yet");
+      return;
+    }
+
+    try {
+      frame.focus();
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+    } catch (error) {
+      toast.error("Unable to open the print dialog for this preview");
     }
   };
 
@@ -1043,30 +1070,7 @@ const Statements = () => {
     <DashboardLayout>
       <div className="min-h-screen bg-slate-50 px-3 py-5 sm:px-4 lg:px-5">
         <div className="mx-auto w-full max-w-[98%] space-y-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Landlord Statements</h1>
-              <p className="mt-1 text-sm text-slate-600">
-                Generate, preview, approve, print, and process statements per property.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => navigate("/landlord/processed-statements")}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-              >
-                <FaFileAlt />
-                Processed statements
-              </button>
-            </div>
-          </div>
-
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-slate-900">Statement Workspace</h2>
-            </div>
 
             <div className="grid grid-cols-1 gap-4 px-6 py-5 md:grid-cols-2 xl:grid-cols-7">
               <div>
@@ -1155,25 +1159,6 @@ const Statements = () => {
                   <FaSyncAlt className={loadingDraft ? "animate-spin" : ""} />
                   {loadingDraft ? "Loading..." : loadingProcessedContext ? "Checking period..." : "Generate / Refresh"}
                 </button>
-              </div>
-            </div>
-
-
-            <div className="px-6 pb-5">
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                <p className="font-medium">Statement period rules</p>
-                <p className="mt-1">
-                  The first statement defaults its start date to the property acquisition date. After a statement is processed, the next statement defaults to the next valid calendar day after the last processed cut-off timestamp, so transactions already captured in the prior statement are not pulled back into a regenerated draft. Period end now auto-fills to today and cannot be in the future.
-                </p>
-                {latestProcessedCutoffAt ? (
-                  <p className="mt-2 text-amber-900">
-                    Latest processed cut-off for this property: <span className="font-semibold">{formatDateTime(latestProcessedCutoffAt)}</span>
-                  </p>
-                ) : selectedProperty?.dateAcquired ? (
-                  <p className="mt-2 text-amber-900">
-                    First statement start anchor: <span className="font-semibold">{formatDate(selectedProperty.dateAcquired)}</span>
-                  </p>
-                ) : null}
               </div>
             </div>
             <div className="border-t border-slate-200 px-6 py-4">
@@ -1268,29 +1253,6 @@ const Statements = () => {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">Property</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">{getPropertyLabel(selectedProperty)}</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">Landlord</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">
-                    {landlord
-                      ? `${landlord.firstName || ""} ${landlord.lastName || ""}`.trim() || landlord.email || "Linked landlord"
-                      : "Derived from property"}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">Period</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">{`${formatDate(draftStatement?.periodStart || periodStart)} - ${formatDate(draftStatement?.periodEnd || periodEnd)}`}</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">Statement Number</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">{draftStatement.statementNumber || "-"}</p>
-                </div>
-              </div>
-
               {activeTab === "summary" ? (
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="border-b border-slate-200 px-6 py-4">

@@ -704,650 +704,399 @@ export const generateStatementPdf = async (statementId, businessId) => {
         * { box-sizing: border-box; }
         body {
           margin: 0;
-          padding: 18px;
+          padding: 10mm 8mm;
           font-family: Arial, Helvetica, sans-serif;
-          font-size: 11px;
-          color: #0f172a;
+          color: #111827;
           background: #ffffff;
+          font-size: 9px;
         }
         .sheet {
           width: 100%;
         }
-        .hero {
-          border: 1px solid #dbe3ea;
-          border-radius: 18px;
-          overflow: hidden;
-          margin-bottom: 14px;
-        }
-        .hero-top {
-          background: linear-gradient(135deg, #0b3b2e 0%, #123f34 52%, #1e4d3f 100%);
-          color: white;
-          padding: 18px 20px;
-        }
-        .hero-grid {
-          display: table;
+        .header-table,
+        .statement-table,
+        .simple-table,
+        .summary-table {
           width: 100%;
-          border-spacing: 0;
+          border-collapse: collapse;
         }
-        .hero-left,
-        .hero-right {
-          display: table-cell;
+        .header-table td {
           vertical-align: top;
         }
-        .hero-right {
-          width: 225px;
-          padding-left: 18px;
+        .brand-cell {
+          width: 78px;
+          padding-right: 10px;
         }
-        .brand {
-          display: table;
-          width: 100%;
-        }
-        .brand-logo-wrap,
-        .brand-copy {
-          display: table-cell;
-          vertical-align: top;
-        }
-        .brand-logo-wrap {
-          width: 84px;
-          padding-right: 14px;
-        }
-        .brand-logo,
-        .brand-fallback {
-          width: 72px;
-          height: 72px;
-          border-radius: 18px;
-          border: 1px solid rgba(255,255,255,0.24);
-          background: rgba(255,255,255,0.10);
+        .brand-logo {
+          width: 62px;
+          height: 62px;
           object-fit: contain;
         }
         .brand-fallback {
+          width: 62px;
+          height: 62px;
+          border: 1px solid #111827;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 24px;
-          font-weight: 800;
-          letter-spacing: 1px;
+          font-size: 20px;
+          font-weight: 700;
         }
-        .eyebrow {
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: 2px;
-          opacity: 0.82;
-          margin-bottom: 6px;
+        .business-name {
+          font-size: 20px;
+          font-weight: 700;
+          margin: 0 0 2px;
         }
-        .brand-name {
-          margin: 0;
-          font-size: 24px;
-          line-height: 1.15;
+        .business-line {
+          margin: 1px 0;
+          color: #374151;
         }
-        .brand-slogan {
-          margin-top: 5px;
-          font-size: 12px;
-          font-weight: 600;
-          color: rgba(255,255,255,0.92);
-        }
-        .brand-line {
-          margin-top: 4px;
-          font-size: 11px;
-          line-height: 1.5;
-          color: rgba(255,255,255,0.90);
-        }
-        .meta-card {
-          border: 1px solid rgba(255,255,255,0.22);
-          background: rgba(255,255,255,0.10);
-          border-radius: 16px;
-          padding: 12px 14px;
-        }
-        .meta-row {
-          margin-top: 8px;
-          font-size: 11px;
-          line-height: 1.5;
-        }
-        .hero-bottom {
-          background: #f8fafc;
-          padding: 14px 16px;
-          border-top: 1px solid #dbe3ea;
-        }
-        .top-cards {
-          display: table;
-          width: 100%;
-          border-spacing: 8px 0;
-          table-layout: fixed;
-          margin-left: -8px;
-          margin-right: -8px;
-        }
-        .top-card {
-          display: table-cell;
-          vertical-align: top;
-          border: 1px solid #dbe3ea;
-          border-radius: 14px;
-          background: white;
-          padding: 11px 12px;
-        }
-        .top-card .label {
-          font-size: 10px;
-          color: #64748b;
-          text-transform: uppercase;
-          letter-spacing: 1.8px;
-          margin-bottom: 6px;
-        }
-        .top-card .value {
+        .statement-title {
+          text-align: center;
           font-size: 13px;
           font-weight: 700;
-          color: #0f172a;
-          line-height: 1.4;
+          margin: 10px 0 4px;
+          text-transform: uppercase;
         }
-        .top-card .hint {
-          margin-top: 4px;
-          font-size: 10px;
-          color: #64748b;
-          line-height: 1.4;
+        .statement-subtitle {
+          text-align: center;
+          margin-bottom: 10px;
+          font-size: 9px;
+          color: #4b5563;
         }
-        .section {
-          margin-top: 14px;
-          page-break-inside: avoid;
-        }
-        .section-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-end;
-          gap: 10px;
+        .meta-table {
+          width: 100%;
+          border-collapse: collapse;
           margin-bottom: 8px;
         }
-        .section-title {
-          font-size: 14px;
+        .meta-table td {
+          padding: 2px 4px;
+          vertical-align: top;
+        }
+        .meta-label {
+          width: 86px;
           font-weight: 700;
-          color: #0f172a;
-          margin: 0;
+          text-transform: uppercase;
         }
-        .section-desc {
-          margin: 3px 0 0;
-          font-size: 11px;
-          color: #64748b;
+        .meta-value {
+          font-weight: 700;
         }
-        .card {
-          border: 1px solid #dbe3ea;
-          border-radius: 16px;
-          overflow: hidden;
-          background: #ffffff;
+        .period-cell {
+          text-align: right;
+          font-weight: 700;
+          white-space: nowrap;
         }
-        .card-accent {
-          height: 4px;
-          background: linear-gradient(90deg, #0b3b2e 0%, #f59e0b 100%);
+        .section-title {
+          margin: 10px 0 4px;
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          border-bottom: 1px solid #111827;
+          padding-bottom: 2px;
         }
         table {
           width: 100%;
           border-collapse: collapse;
         }
-        th, td {
-          border: 1px solid #dbe3ea;
-          padding: 6px 7px;
-          vertical-align: top;
+        th,
+        td {
+          border: 1px solid #111827;
+          padding: 3px 4px;
+          vertical-align: middle;
         }
-        thead th {
-          background: #0f3f34;
-          color: white;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        tbody tr:nth-child(even) td {
-          background: #f8fafc;
-        }
-        tfoot td {
-          background: #eef2f7;
+        th {
+          background: #f3f4f6;
           font-weight: 700;
         }
-        .num { text-align: right; white-space: nowrap; }
-        .center { text-align: center; }
-        .strong { font-weight: 700; }
-        .muted { color: #64748b; }
+        .num {
+          text-align: right;
+          white-space: nowrap;
+        }
+        .center {
+          text-align: center;
+        }
+        .muted {
+          color: #6b7280;
+        }
+        .schedule-wrap {
+          overflow: hidden;
+        }
+        .statement-table {
+          font-size: 8px;
+        }
+        .statement-table th,
+        .statement-table td {
+          padding: 2px 3px;
+        }
+        .statement-table thead tr:first-child th {
+          text-align: center;
+        }
+        .totals-row td {
+          font-weight: 700;
+          background: #f9fafb;
+        }
         .two-col {
-          display: table;
           width: 100%;
-          border-spacing: 12px 0;
-          table-layout: fixed;
-          margin-left: -12px;
-          margin-right: -12px;
+          border-collapse: collapse;
+          margin-top: 8px;
         }
-        .col {
-          display: table-cell;
-          vertical-align: top;
+        .two-col > tbody > tr > td {
           width: 50%;
-          padding-left: 12px;
-          padding-right: 12px;
-        }
-        .summary-table td:first-child {
-          font-weight: 600;
-          color: #334155;
-        }
-        .summary-table td:last-child {
-          font-weight: 700;
-        }
-        .summary-table tr.negative td {
-          background: #fef2f2;
-          color: #b91c1c;
-        }
-        .summary-table tr.settlement-positive td {
-          background: #0f172a;
-          color: white;
-          font-size: 12px;
-          font-weight: 700;
-        }
-        .summary-table tr.settlement-negative td {
-          background: #fef2f2;
-          color: #b91c1c;
-          font-size: 12px;
-          font-weight: 700;
-        }
-        .stack {
-          padding: 10px 12px 12px;
-        }
-        .item-list {
-          display: grid;
-          gap: 8px;
-          padding: 10px 12px 12px;
-        }
-        .item {
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          border-radius: 12px;
-          padding: 9px 10px;
-        }
-        .item-title {
-          font-size: 11px;
-          font-weight: 700;
-          color: #0f172a;
-          margin: 0 0 3px;
-        }
-        .item-sub {
-          font-size: 10px;
-          color: #64748b;
-          line-height: 1.45;
-          margin: 0;
-        }
-        .item-amount {
-          float: right;
-          font-size: 11px;
-          font-weight: 700;
-          color: #0f172a;
-          margin-left: 8px;
-        }
-        .metric-strip {
-          display: table;
-          width: 100%;
-          border-spacing: 8px 0;
-          table-layout: fixed;
-          margin-top: 10px;
-          margin-left: -8px;
-          margin-right: -8px;
-        }
-        .metric {
-          display: table-cell;
           vertical-align: top;
-          border: 1px solid #dbe3ea;
-          border-radius: 14px;
-          background: #f8fafc;
-          padding: 10px 12px;
+          border: none;
+          padding: 0;
         }
-        .metric .label {
-          font-size: 10px;
-          color: #64748b;
-          text-transform: uppercase;
-          letter-spacing: 1.5px;
-          margin-bottom: 4px;
+        .two-col > tbody > tr > td:first-child {
+          padding-right: 6px;
         }
-        .metric .value {
-          font-size: 13px;
+        .two-col > tbody > tr > td:last-child {
+          padding-left: 6px;
+        }
+        .summary-head {
+          background: #0B3B2E;
+          color: #ffffff;
+        }
+        .summary-head th {
+          background: #0B3B2E;
+          color: #ffffff;
+        }
+        .summary-table td,
+        .summary-table th {
+          padding: 4px 5px;
+        }
+        .summary-table .label {
           font-weight: 700;
+        }
+        .summary-table .final-row td {
+          font-weight: 700;
+          font-size: 10px;
+          background: #f3f4f6;
+        }
+        .negative {
+          color: #991b1b;
         }
         .footnote {
-          margin-top: 10px;
-          font-size: 10px;
-          color: #64748b;
+          margin-top: 8px;
+          font-size: 8px;
+          color: #6b7280;
         }
       </style>
     </head>
     <body>
       <div class="sheet">
-        <div class="hero">
-          <div class="hero-top">
-            <div class="hero-grid">
-              <div class="hero-left">
-                <div class="brand">
-                  <div class="brand-logo-wrap">
-                    ${
-                      businessLogo
-                        ? `<img src="${esc(businessLogo)}" alt="${esc(businessName)} logo" class="brand-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />`
-                        : ``
-                    }
-                    <div class="brand-fallback" ${businessLogo ? `style="display:none;"` : ``}>M</div>
-                  </div>
-                  <div class="brand-copy">
-                    <div class="eyebrow">MILIK landlord statement</div>
-                    <h1 class="brand-name">${esc(businessName)}</h1>
-                    <div class="brand-slogan">${esc(businessSlogan)}</div>
-                    ${businessPostalAddress ? `<div class="brand-line">${esc(businessPostalAddress)}</div>` : ""}
-                    ${businessLocation ? `<div class="brand-line">${esc(businessLocation)}</div>` : ""}
-                    <div class="brand-line">
-                      ${businessPhone ? `TEL: ${esc(businessPhone)}` : ""}
-                      ${businessPhone && businessEmail ? ` &nbsp;|&nbsp; ` : ""}
-                      ${businessEmail ? `EMAIL: ${esc(businessEmail)}` : ""}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="hero-right">
-                <div class="meta-card">
-                  <div class="eyebrow">Statement meta</div>
-                  <div class="meta-row"><strong>Statement #</strong><br />${esc(statement.statementNumber || "")}</div>
-                  <div class="meta-row"><strong>Period</strong><br />${formatDate(statement.periodStart)} - ${formatDate(statement.periodEnd)}</div>
-                  <div class="meta-row"><strong>Generated</strong><br />${formatDate(new Date())}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="hero-bottom">
-            <div class="top-cards">
-              <div class="top-card">
-                <div class="label">Property</div>
-                <div class="value">${esc(propertyName)}</div>
-                <div class="hint">Property account statement</div>
-              </div>
-              <div class="top-card">
-                <div class="label">Landlord</div>
-                <div class="value">${esc(landlordName)}</div>
-                <div class="hint">Linked statement beneficiary</div>
-              </div>
-              <div class="top-card">
-                <div class="label">Settlement</div>
-                <div class="value">${esc(settlement.label)}</div>
-                <div class="hint">${formatCurrency(settlement.amount)}</div>
-              </div>
-              <div class="top-card">
-                <div class="label">Statement type</div>
-                <div class="value">${esc(String(statement?.metadata?.statementType || statement?.metadata?.workspace?.statementType || "provisional").toUpperCase())}</div>
-                <div class="hint">Preview and PDF parity</div>
-              </div>
-            </div>
-          </div>
+        <table class="header-table">
+          <tr>
+            <td class="brand-cell">
+              ${businessLogo ? `<img src="${esc(businessLogo)}" alt="logo" class="brand-logo" />` : `<div class="brand-fallback">M</div>`}
+            </td>
+            <td>
+              <div class="business-name">${esc(businessName)}</div>
+              ${businessSlogan ? `<div class="business-line">${esc(businessSlogan)}</div>` : ""}
+              ${businessPostalAddress ? `<div class="business-line">${esc(businessPostalAddress)}</div>` : ""}
+              ${businessLocation ? `<div class="business-line">${esc(businessLocation)}</div>` : ""}
+              <div class="business-line">${businessPhone ? `TEL: ${esc(businessPhone)}` : ""}${businessPhone && businessEmail ? " | " : ""}${businessEmail ? `EMAIL: ${esc(businessEmail)}` : ""}</div>
+            </td>
+            <td class="period-cell">
+              <div>Statement No: ${esc(statement.statementNumber || "-")}</div>
+              <div>Generated: ${formatDate(statement.generatedAt || statement.updatedAt || new Date())}</div>
+            </td>
+          </tr>
+        </table>
+
+        <div class="statement-title">Property Account Statement - ${esc(String(statement?.metadata?.statementType || statement?.metadata?.workspace?.statementType || statement?.statementType || "Provisional").toUpperCase())}</div>
+        <div class="statement-subtitle">Professional landlord schedule and settlement summary</div>
+
+        <table class="meta-table">
+          <tr>
+            <td class="meta-label">Landlord</td>
+            <td class="meta-value">${esc(landlordName)}</td>
+            <td class="period-cell">STATEMENT PERIOD ${esc(workspace.periodLabel || `${formatDate(statement.periodStart)} - ${formatDate(statement.periodEnd)}`)}</td>
+          </tr>
+          <tr>
+            <td class="meta-label">Property</td>
+            <td class="meta-value">${esc(propertyName)}</td>
+            <td></td>
+          </tr>
+        </table>
+
+        <div class="section-title">Statement Schedule</div>
+        <div class="schedule-wrap">
+          <table class="statement-table">
+            <thead>
+              <tr>
+                <th rowspan="2">Unit</th>
+                <th rowspan="2">A/c No.</th>
+                <th rowspan="2">Tenant/Resident</th>
+                <th rowspan="2" class="num">Per Month</th>
+                <th rowspan="2" class="num">Balance B/F</th>
+                <th colspan="${1 + (hasInvoiceVatColumn ? 1 : 0) + utilityColumns.length}">Amount Invoiced</th>
+                <th colspan="${1 + (hasInvoiceVatColumn ? 1 : 0) + utilityColumns.length}">Amount Received</th>
+                <th rowspan="2" class="num">Balance C/F</th>
+              </tr>
+              <tr>
+                <th class="num">Rent</th>
+                ${hasInvoiceVatColumn ? `<th class="num">Rent VAT</th>` : ""}
+                ${utilityColumns.map((column) => `<th class="num">${esc(column.label)}</th>`).join("")}
+                <th class="num">Rent</th>
+                ${hasInvoiceVatColumn ? `<th class="num">Rent VAT</th>` : ""}
+                ${utilityColumns.map((column) => `<th class="num">${esc(column.label)}</th>`).join("")}
+              </tr>
+            </thead>
+            <tbody>
+              ${scheduleRowsHtml}
+              <tr class="totals-row">
+                <td colspan="3" class="num">Total</td>
+                <td class="num">${formatCurrency(totals.perMonth || 0)}</td>
+                <td class="num">${formatCurrency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
+                <td class="num">${formatCurrency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
+                ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.invoicedTax ?? summary.totalInvoiceVatInvoiced ?? 0)}</td>` : ""}
+                ${utilityColumns.map((column) => `<td class="num">${formatCurrency(column?.invoiced || 0)}</td>`).join("")}
+                <td class="num">${formatCurrency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
+                ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>` : ""}
+                ${utilityColumns.map((column) => `<td class="num">${formatCurrency(column?.paid || 0)}</td>`).join("")}
+                <td class="num">${formatCurrency(totals.closingBalance ?? summary.closingBalance ?? 0)}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
-        <div class="section">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">Statement schedule</h2>
-              <p class="section-desc">Compact tenant schedule showing brought-forward balance, current billing, collections, and closing position.</p>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-accent"></div>
-            <table>
-              <thead>
-                <tr>
-                  <th rowspan="2">Unit</th>
-                  <th rowspan="2">A/c No.</th>
-                  <th rowspan="2">Tenant / Resident</th>
-                  <th rowspan="2" class="num">Per Month</th>
-                  <th rowspan="2" class="num">Balance B/F</th>
-                  <th colspan="${(hasInvoiceVatColumn ? 2 : 1) + utilityColumns.length}" class="center">Amount Invoiced</th>
-                  <th colspan="${(hasInvoiceVatColumn ? 2 : 1) + utilityColumns.length}" class="center">Amount Paid</th>
-                  <th rowspan="2" class="num">Balance C/F</th>
-                </tr>
-                <tr>
-                  <th class="num">Rent</th>
-                  ${hasInvoiceVatColumn ? `<th class="num">VAT</th>` : ""}
-                  ${utilityColumns.map((column) => `<th class="num">${esc(column.label)}</th>`).join("")}
-                  <th class="num">Rent</th>
-                  ${hasInvoiceVatColumn ? `<th class="num">VAT</th>` : ""}
-                  ${utilityColumns.map((column) => `<th class="num">${esc(column.label)}</th>`).join("")}
-                </tr>
-              </thead>
-              <tbody>
-                ${scheduleRowsHtml || `<tr><td colspan="${8 + (hasInvoiceVatColumn ? 2 : 0) + utilityColumns.length * 2}" class="center muted">No tenant or unit rows were generated for this period.</td></tr>`}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colspan="3" class="num">Total</td>
-                  <td class="num">${formatCurrency(totals.perMonth)}</td>
-                  <td class="num">${formatCurrency(totals.openingBalance)}</td>
-                  <td class="num">${formatCurrency(totals.invoicedRent)}</td>
-                  ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.invoicedTax || summary.totalInvoiceVatInvoiced || 0)}</td>` : ""}
-                  ${utilityColumns
-                    .map(
-                      (column) =>
-                        `<td class="num">${formatCurrency(
-                          Number(
-                            (Array.isArray(totals.utilities) ? totals.utilities : utilityColumns).find(
-                              (item) => item.key === column.key
-                            )?.invoiced || column.invoiced || 0
-                          )
-                        )}</td>`
-                    )
-                    .join("")}
-                  <td class="num">${formatCurrency(totals.paidRent)}</td>
-                  ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.paidTax || totalInvoiceVatReceived || 0)}</td>` : ""}
-                  ${utilityColumns
-                    .map(
-                      (column) =>
-                        `<td class="num">${formatCurrency(
-                          Number(
-                            (Array.isArray(totals.utilities) ? totals.utilities : utilityColumns).find(
-                              (item) => item.key === column.key
-                            )?.paid || column.paid || 0
-                          )
-                        )}</td>`
-                    )
-                    .join("")}
-                  <td class="num">${formatCurrency(totals.closingBalance)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+        <table class="two-col">
+          <tr>
+            <td>
+              <div class="section-title">Additions</div>
+              <table class="simple-table">
+                <thead>
+                  <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
+                </thead>
+                <tbody>${renderSimpleRows(additionRows, "No additions posted in this period")}</tbody>
+                <tfoot>
+                  <tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(additionsAmount)}</td></tr>
+                </tfoot>
+              </table>
 
-          <div class="metric-strip">
-            <div class="metric">
-              <div class="label">Opening balance</div>
-              <div class="value">${formatCurrency(summary.openingBalance || totals.openingBalance || 0)}</div>
-            </div>
-            <div class="metric">
-              <div class="label">Closing balance</div>
-              <div class="value">${formatCurrency(summary.closingBalance || totals.closingBalance || 0)}</div>
-            </div>
-            <div class="metric">
-              <div class="label">Unapplied tenant credits</div>
-              <div class="value">${formatCurrency(summary.unappliedPayments || 0)}</div>
-            </div>
-            <div class="metric">
-              <div class="label">Settlement</div>
-              <div class="value">${formatCurrency(settlement.amount)}</div>
-            </div>
-          </div>
-        </div>
+              <div class="section-title">Expenses & Deductions</div>
+              <table class="simple-table">
+                <thead>
+                  <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
+                </thead>
+                <tbody>${renderSimpleRows(expenseRows, "No expenses or deductions posted in this period")}</tbody>
+                <tfoot>
+                  <tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(printableDeductionsTotal)}</td></tr>
+                </tfoot>
+              </table>
 
-        <div class="section">
-          <div class="two-col">
-            <div class="col">
-              <div class="card">
-                <div class="card-accent"></div>
-                <div class="stack">
-                  <div class="section-header" style="margin-bottom:10px;">
-                    <div>
-                      <h2 class="section-title">Settlement waterfall</h2>
-                      <p class="section-desc">The same stored summary used by the draft workspace.</p>
-                    </div>
-                  </div>
-                  <table class="summary-table">
-                    <tbody>
-                      ${settlementSummaryRowsHtml}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div class="card" style="margin-top:12px;">
-                <div class="card-accent"></div>
-                <div class="stack">
-                  <div class="section-header" style="margin-bottom:8px;">
-                    <div>
-                      <h2 class="section-title">Additions</h2>
-                      <p class="section-desc">Current-period additions carried into the landlord settlement.</p>
-                    </div>
-                  </div>
-                  <table>
-                    <thead>
-                      <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
-                    </thead>
-                    <tbody>${renderSimpleRows(additionRows, "No additions posted in this period")}</tbody>
-                    <tfoot>
-                      <tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(additionsAmount)}</td></tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-
-              <div class="card" style="margin-top:12px;">
-                <div class="card-accent"></div>
-                <div class="stack">
-                  <div class="section-header" style="margin-bottom:8px;">
-                    <div>
-                      <h2 class="section-title">Expenses & deductions</h2>
-                      <p class="section-desc">Non-commission deductions plus any commission deductions configured for the statement.</p>
-                    </div>
-                  </div>
-                  <table>
-                    <thead>
-                      <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
-                    </thead>
-                    <tbody>${renderSimpleRows(expenseRows, "No expenses or deductions posted in this period")}</tbody>
-                    <tfoot>
-                      <tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(nonCommissionDeductions + commissionGrossAmount)}</td></tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <div class="col">
               ${broughtForwardCreditApplicationRows.length > 0 ? `
-              <div class="card">
-                <div class="card-accent"></div>
-                <div class="stack">
-                  <div class="section-header" style="margin-bottom:8px;">
-                    <div>
-                      <h2 class="section-title">B/F credits applied</h2>
-                      <p class="section-desc">Prior-period credit used on current-period charge positions without duplicate cash recognition.</p>
-                    </div>
-                  </div>
-                  <table>
-                    <thead>
-                      <tr><th>Receipt</th><th>Applied to</th><th class="num">Amount</th></tr>
-                    </thead>
-                    <tbody>
-                      ${broughtForwardCreditApplicationRows
-                        .map(
-                          (row) => `
-                            <tr>
-                              <td>${esc(row.receiptReference || row.description || "B/F credit")}</td>
-                              <td>${esc(row.chargeReference || row.description || "Applied charge")}</td>
-                              <td class="num">${formatCurrency(row.amount || 0)}</td>
-                            </tr>`
-                        )
-                        .join("")}
-                    </tbody>
-                    <tfoot>
-                      <tr><td colspan="2" class="num">Total applied</td><td class="num">${formatCurrency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</td></tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-              ` : ""}
-
-              <div class="card" style="margin-top:${broughtForwardCreditApplicationRows.length > 0 ? "12px" : "0"};">
-                <div class="card-accent"></div>
-                <div class="stack">
-                  <div class="section-header" style="margin-bottom:8px;">
-                    <div>
-                      <h2 class="section-title">Direct to landlord collections</h2>
-                      <p class="section-desc">Memo-only direct receipts that stay visible without distorting manager cash settlement.</p>
-                    </div>
-                  </div>
-                  <table>
-                    <thead>
-                      <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
-                    </thead>
-                    <tbody>${renderSimpleRows(directToLandlordRows, "No direct-to-landlord collections posted in this period")}</tbody>
-                    <tfoot>
-                      <tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(directToLandlordAmount)}</td></tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
+                <div class="section-title">B/F Credits Applied</div>
+                <table class="simple-table">
+                  <thead>
+                    <tr><th>Receipt / Credit</th><th>Applied To</th><th class="num">Amount</th></tr>
+                  </thead>
+                  <tbody>
+                    ${broughtForwardCreditApplicationRows.map((row) => `
+                      <tr>
+                        <td>${esc(row.receiptReference || row.description || "B/F credit")}</td>
+                        <td>${esc(row.chargeReference || row.description || "Applied charge")}</td>
+                        <td class="num">${formatCurrency(row.amount || 0)}</td>
+                      </tr>`).join("")}
+                  </tbody>
+                  <tfoot>
+                    <tr><td colspan="2" class="num">Total applied</td><td class="num">${formatCurrency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</td></tr>
+                  </tfoot>
+                </table>` : ""}
+            </td>
+            <td>
+              <div class="section-title">Direct to Landlord Collections</div>
+              <table class="simple-table">
+                <thead>
+                  <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
+                </thead>
+                <tbody>${renderSimpleRows(directToLandlordRows, "No direct-to-landlord collections posted in this period")}</tbody>
+                <tfoot>
+                  <tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(directToLandlordAmount)}</td></tr>
+                </tfoot>
+              </table>
 
               ${depositMemoRows.length > 0 ? `
-              <div class="card" style="margin-top:12px;">
-                <div class="card-accent"></div>
-                <div class="stack">
-                  <div class="section-header" style="margin-bottom:8px;">
-                    <div>
-                      <h2 class="section-title">Deposit memorandum</h2>
-                      <p class="section-desc">Displayed as positive memorandum balances for readability and excluded from settlement.</p>
-                    </div>
-                  </div>
-                  <table>
-                    <thead>
-                      <tr><th>Holder</th><th class="num">Opening</th><th class="num">Billed / Adj.</th><th class="num">Received</th><th class="num">Closing</th></tr>
-                    </thead>
-                    <tbody>
-                      ${depositMemoRows
-                        .map(
-                          (row) => `
-                            <tr>
-                              <td>${esc(row.label)}</td>
-                              <td class="num">${formatDepositMemoCurrency(row.openingBalance)}</td>
-                              <td class="num">${formatDepositMemoCurrency(row.billed)}</td>
-                              <td class="num">${formatDepositMemoCurrency(row.received)}</td>
-                              <td class="num">${formatDepositMemoCurrency(row.closingBalance)}</td>
-                            </tr>`
-                        )
-                        .join("")}
-                    </tbody>
-                    <tfoot>
+                <div class="section-title">Deposit Memorandum</div>
+                <table class="simple-table">
+                  <thead>
+                    <tr><th>Holder</th><th class="num">Opening</th><th class="num">Billed / Adj.</th><th class="num">Received</th><th class="num">Closing</th></tr>
+                  </thead>
+                  <tbody>
+                    ${depositMemoRows.map((row) => `
                       <tr>
-                        <td class="num">Total</td>
-                        <td class="num">${formatDepositMemoCurrency(depositMemoTotals.openingBalance || 0)}</td>
-                        <td class="num">${formatDepositMemoCurrency(depositMemoTotals.billed || 0)}</td>
-                        <td class="num">${formatDepositMemoCurrency(depositMemoTotals.received || 0)}</td>
-                        <td class="num">${formatDepositMemoCurrency(depositMemoTotals.closingBalance || 0)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-              ` : ""}
-            </div>
-          </div>
-        </div>
+                        <td>${esc(row.label)}</td>
+                        <td class="num">${formatDepositMemoCurrency(row.openingBalance)}</td>
+                        <td class="num">${formatDepositMemoCurrency(row.billed)}</td>
+                        <td class="num">${formatDepositMemoCurrency(row.received)}</td>
+                        <td class="num">${formatDepositMemoCurrency(row.closingBalance)}</td>
+                      </tr>`).join("")}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td class="num">Total</td>
+                      <td class="num">${formatDepositMemoCurrency(depositMemoTotals.openingBalance || 0)}</td>
+                      <td class="num">${formatDepositMemoCurrency(depositMemoTotals.billed || 0)}</td>
+                      <td class="num">${formatDepositMemoCurrency(depositMemoTotals.received || 0)}</td>
+                      <td class="num">${formatDepositMemoCurrency(depositMemoTotals.closingBalance || 0)}</td>
+                    </tr>
+                  </tfoot>
+                </table>` : ""}
 
-        <div class="footnote">Generated from MILIK statement workspace. Preview and PDF are intended to remain visually compact while preserving the same statement totals and traceability sections.</div>
+              <div class="section-title">Statement Summary</div>
+              <table class="summary-table">
+                <thead class="summary-head">
+                  <tr><th colspan="2">Settlement Summary</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td class="label">Opening landlord settlement B/F</td><td class="num ${openingSettlementBalance < 0 ? "negative" : ""}">${formatCurrency(openingSettlementBalance)}</td></tr>
+                  <tr><td class="label">${esc(summaryBasisLabel)}</td><td class="num">${formatCurrency(summaryBasisAmount)}</td></tr>
+                  ${utilityPassThroughAmount > 0 ? `<tr><td class="label">${esc(utilityPassThroughLabel)}</td><td class="num">${formatCurrency(utilityPassThroughAmount)}</td></tr>` : ""}
+                  ${invoiceVatPassThroughAmount > 0 ? `<tr><td class="label">${esc(invoiceVatPassThroughLabel)}</td><td class="num">${formatCurrency(invoiceVatPassThroughAmount)}</td></tr>` : ""}
+                  <tr><td class="label">Additions</td><td class="num">${formatCurrency(additionsAmount)}</td></tr>
+                  <tr><td class="label">Expenses & other deductions</td><td class="num">${formatCurrency(nonCommissionDeductions)}</td></tr>
+                  <tr><td class="label">${esc(commissionBaseLabel)}</td><td class="num">${formatCurrency(commissionBaseAmount)}</td></tr>
+                  <tr><td class="label">Commission</td><td class="num">${formatCurrency(commissionAmount)}</td></tr>
+                  ${commissionTaxAmount > 0 ? `<tr><td class="label">VAT on commission</td><td class="num">${formatCurrency(commissionTaxAmount)}</td></tr>` : ""}
+                  <tr><td class="label">Direct to landlord collections (memo)</td><td class="num">${formatCurrency(directToLandlordAmount)}</td></tr>
+                  <tr class="final-row"><td class="label">${esc(settlement.label)}</td><td class="num ${settlement.isNegative ? "negative" : ""}">${formatCurrency(settlement.amount)}</td></tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <div class="footnote">Generated from MILIK statement workspace. This print layout is kept compact and wide so schedule columns fit within the in-system print preview and downloaded PDF.</div>
       </div>
     </body>
   </html>`;
     await acquirePdfRenderSlot();
     try {
-      const browser = await getBrowser();
-      const page = await browser.newPage();
+      const page = await createPdfPage();
+
+      await page.setViewport({
+        width: 1600,
+        height: 1000,
+        deviceScaleFactor: 1,
+      });
+      page.setDefaultNavigationTimeout(0);
+      page.setDefaultTimeout(0);
 
       await page.setContent(html, { waitUntil: "domcontentloaded" });
 
       const pdfBuffer = await page.pdf({
         format: "A4",
+        landscape: true,
         printBackground: true,
         margin: { top: "10mm", right: "8mm", bottom: "10mm", left: "8mm" },
       });
 
-      await page.close();
+      try {
+        await page.close();
+      } catch {
+        // ignore page close errors for disconnected sessions
+      }
 
       rememberPdfBuffer(cacheKey, pdfBuffer);
       return Buffer.from(pdfBuffer);
