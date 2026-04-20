@@ -30,10 +30,19 @@ import { getProperties } from "../../redux/propertyRedux";
 const ITEMS_PER_PAGE = 50;
 
 const BASE_CATEGORIES = [
-  { value: "landlord_maintenance", label: "Landlord Expense - Maintenance", landlordLabel: "Owner Expense - Maintenance" },
-  { value: "deposit_refund", label: "Deposit Refund", landlordLabel: "Deposit Refund" },
-  { value: "landlord_other", label: "Landlord Expense - Other", landlordLabel: "Owner Expense - Other" },
+  { value: "landlord_maintenance", label: "Landlord Expense - Maintenance", landlordLabel: "Owner Expense - Maintenance", propertyRequired: true, explicitDebitAccount: false },
+  { value: "deposit_refund", label: "Deposit Refund", landlordLabel: "Deposit Refund", propertyRequired: true, explicitDebitAccount: false },
+  { value: "landlord_other", label: "Landlord Expense - Other", landlordLabel: "Owner Expense - Other", propertyRequired: true, explicitDebitAccount: false },
+  { value: "manager_property", label: "Manager-Borne Property Expense", landlordLabel: "Manager-Borne Property Expense", propertyRequired: true, explicitDebitAccount: true },
+  { value: "company_operational", label: "Internal / Company Expense", landlordLabel: "Internal / Company Expense", propertyRequired: false, explicitDebitAccount: true },
+  { value: "petty_cash_float", label: "Petty Cash Float Funding", landlordLabel: "Petty Cash Float Funding", propertyRequired: false, explicitDebitAccount: true },
+  { value: "petty_cash_expense", label: "Petty Cash Expense", landlordLabel: "Petty Cash Expense", propertyRequired: false, explicitDebitAccount: true },
 ];
+
+const CASHBOOK_PATTERN = /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/i;
+const isCashbookLikeAccount = (account = {}) =>
+  String(account?.type || "").toLowerCase() === "asset" &&
+  CASHBOOK_PATTERN.test(`${account?.name || ""} ${account?.group || ""} ${account?.subGroup || ""}`);
 
 const statusColors = {
   draft: "bg-slate-100 text-slate-700 border-slate-200",
@@ -46,6 +55,8 @@ const blankForm = {
   category: "landlord_maintenance",
   propertyId: "",
   liabilityAccountId: "",
+  debitAccountId: "",
+  settlementAccountId: "",
   amount: "",
   dueDate: new Date().toISOString().split("T")[0],
   narration: "",
@@ -73,10 +84,9 @@ const PaymentVouchers = () => {
     })),
     [isLandlordWorkspace]
   );
-
   const canCreateVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "create", "accounts");
   const canUpdateVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "update", "accounts");
-  const canApproveVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "approve", "accounts");
+  const canApproveVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "process", "accounts");
   const canReverseVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "reverse", "accounts");
   const canDeleteVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "delete", "accounts");
 
@@ -86,19 +96,29 @@ const PaymentVouchers = () => {
   const [saving, setSaving] = useState(false);
   const [rowActionKey, setRowActionKey] = useState("");
   const [liabilityAccounts, setLiabilityAccounts] = useState([]);
+  const [debitAccounts, setDebitAccounts] = useState([]);
+  const [settlementAccounts, setSettlementAccounts] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [editingVoucherId, setEditingVoucherId] = useState("");
   const [form, setForm] = useState(blankForm);
+  const selectedCategoryMeta = useMemo(
+    () => categories.find((category) => category.value === form.category) || categories[0] || BASE_CATEGORIES[0],
+    [categories, form.category]
+  );
 
   const normalizeVoucher = (voucher) => ({
     ...voucher,
     propertyId: voucher?.property?._id || voucher?.property || voucher?.propertyId || "",
-    propertyName: voucher?.property?.propertyName || voucher?.property?.name || voucher?.propertyName || "N/A",
+    propertyName: voucher?.property?.propertyName || voucher?.property?.name || voucher?.propertyName || (["company_operational", "petty_cash_float", "petty_cash_expense"].includes(String(voucher?.category || "")) ? "Company / Internal" : "N/A"),
     landlordName: voucher?.landlord?.landlordName || voucher?.landlord?.name || voucher?.landlordName || "N/A",
     liabilityAccountId: voucher?.liabilityAccount?._id || voucher?.liabilityAccount || voucher?.liabilityAccountId || "",
     liabilityAccountName: voucher?.liabilityAccount?.name || voucher?.liabilityAccountName || "N/A",
+    debitAccountId: voucher?.debitAccount?._id || voucher?.debitAccount || voucher?.debitAccountId || "",
+    debitAccountName: voucher?.debitAccount?.name || voucher?.debitAccountName || "N/A",
+    settlementAccountId: voucher?.settlementAccount?._id || voucher?.settlementAccount || voucher?.settlementAccountId || "",
+    settlementAccountName: voucher?.settlementAccount?.name || voucher?.settlementAccountName || "N/A",
     sourceRequisitionId: voucher?.sourceRequisition?._id || voucher?.sourceRequisition || voucher?.sourceRequisitionId || "",
     sourceRequisitionNo: voucher?.sourceRequisition?.requisitionNo || voucher?.sourceRequisition?.referenceNo || voucher?.sourceRequisitionNo || "",
   });
@@ -130,16 +150,25 @@ const PaymentVouchers = () => {
   }, [location.pathname, location.state, navigate]);
 
   useEffect(() => {
-    const loadLiabilityAccounts = async () => {
+    const loadAccounts = async () => {
       if (!currentCompany?._id) return;
       try {
-        const rows = await getChartOfAccounts({ business: currentCompany._id, type: "liability" });
-        setLiabilityAccounts(Array.isArray(rows) ? rows.filter((row) => row?.isPosting !== false) : []);
+        const rows = await getChartOfAccounts({ business: currentCompany._id });
+        const postingAccounts = Array.isArray(rows) ? rows.filter((row) => row?.isPosting !== false) : [];
+        setLiabilityAccounts(postingAccounts.filter((row) => String(row?.type || "").toLowerCase() === "liability"));
+        setDebitAccounts(
+          postingAccounts.filter(
+            (row) =>
+              String(row?.type || "").toLowerCase() === "expense" ||
+              isCashbookLikeAccount(row)
+          )
+        );
+        setSettlementAccounts(postingAccounts.filter((row) => isCashbookLikeAccount(row)));
       } catch (error) {
-        toast.error(error?.response?.data?.message || "Failed to load liability accounts");
+        toast.error(error?.response?.data?.message || "Failed to load chart of accounts");
       }
     };
-    loadLiabilityAccounts();
+    loadAccounts();
   }, [currentCompany?._id]);
 
   const loadVouchers = async () => {
@@ -197,6 +226,8 @@ const PaymentVouchers = () => {
       category: voucher.category || "landlord_maintenance",
       propertyId: voucher.propertyId || "",
       liabilityAccountId: voucher.liabilityAccountId || "",
+      debitAccountId: voucher.debitAccountId || "",
+      settlementAccountId: voucher.settlementAccountId || "",
       amount: voucher.amount || "",
       dueDate: voucher.dueDate ? new Date(voucher.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
       narration: voucher.narration || "",
@@ -209,8 +240,10 @@ const PaymentVouchers = () => {
   };
 
   const validateForm = () => {
-    if (!form.propertyId) return "Property is required";
-    if (!form.liabilityAccountId) return "Credit liability posting account is required";
+    if (selectedCategoryMeta?.propertyRequired && !form.propertyId) return "Property is required for this voucher category";
+    if (!form.liabilityAccountId) return "Credit liability / payable account is required";
+    if (selectedCategoryMeta?.explicitDebitAccount && !form.debitAccountId) return "Debit posting account is required for this voucher category";
+    if (form.status === "paid" && !form.settlementAccountId) return "Settlement cashbook / petty cash account is required when saving a paid voucher";
     if (!form.amount || Number(form.amount) <= 0) return "Valid amount is required";
     return "";
   };
@@ -226,8 +259,10 @@ const PaymentVouchers = () => {
       business: currentCompany?._id,
       company: currentCompany?._id,
       category: form.category,
-      property: form.propertyId,
+      property: form.propertyId || undefined,
       liabilityAccount: form.liabilityAccountId,
+      debitAccount: form.debitAccountId || undefined,
+      settlementAccount: form.settlementAccountId || undefined,
       amount: Number(form.amount),
       dueDate: form.dueDate,
       narration: form.narration,
@@ -254,11 +289,19 @@ const PaymentVouchers = () => {
     }
   };
 
-  const updateStatus = async (id, status) => {
+  const updateStatus = async (voucher, status) => {
+    const id = voucher?._id;
+    if (!id) return;
+
+    if (status === "paid" && !voucher?.settlementAccountId) {
+      toast.info("Open the voucher, choose a settlement cashbook or petty-cash account, then mark it as paid.");
+      return;
+    }
+
     setRowActionKey(`${id}:${status}`);
     try {
       const updated = await updatePaymentVoucherStatus(id, { status }, { business: currentCompany?._id, company: currentCompany?._id });
-      setVouchers((prev) => prev.map((voucher) => voucher._id === id ? normalizeVoucher(updated) : voucher));
+      setVouchers((prev) => prev.map((row) => row._id === id ? normalizeVoucher(updated) : row));
       toast.success(`Voucher marked ${status}`);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to update voucher status");
@@ -417,9 +460,9 @@ const PaymentVouchers = () => {
                         <td className="px-3 py-2 text-right">
                           <div className="inline-flex flex-wrap justify-end gap-2">
                             {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"><FaEdit /> Edit</button>}
-                            {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher._id, "approved")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700 disabled:opacity-60"><FaCheck /> {isBusy("approved") ? "Working..." : "Approve"}</button>}
-                            {(voucher.status === "draft" || voucher.status === "approved") && canUpdateVoucher && <button onClick={() => updateStatus(voucher._id, "paid")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 disabled:opacity-60"><FaCheck /> {isBusy("paid") ? "Working..." : "Mark Paid"}</button>}
-                            {voucher.status !== "reversed" && canReverseVoucher && <button onClick={() => updateStatus(voucher._id, "reversed")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700 disabled:opacity-60"><FaUndo /> {isBusy("reversed") ? "Working..." : "Reverse"}</button>}
+                            {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher, "approved")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700 disabled:opacity-60"><FaCheck /> {isBusy("approved") ? "Working..." : "Approve"}</button>}
+                            {(voucher.status === "draft" || voucher.status === "approved") && canUpdateVoucher && <button onClick={() => updateStatus(voucher, "paid")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 disabled:opacity-60"><FaCheck /> {isBusy("paid") ? "Working..." : "Mark Paid"}</button>}
+                            {voucher.status !== "reversed" && canReverseVoucher && <button onClick={() => updateStatus(voucher, "reversed")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700 disabled:opacity-60"><FaUndo /> {isBusy("reversed") ? "Working..." : "Reverse"}</button>}
                             {canDeleteVoucher && <button onClick={() => removeVoucher(voucher)} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60"><FaTrash /> {isBusy("delete") ? "Working..." : "Delete"}</button>}
                           </div>
                         </td>
@@ -463,11 +506,13 @@ const PaymentVouchers = () => {
                 </div>
               ) : null}
               <label className="block"><span className="text-sm font-bold text-slate-700">Category</span><select value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20">{categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Property</span><select value={form.propertyId} onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select property</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}</select></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Liability Account</span><select value={form.liabilityAccountId} onChange={(e) => setForm((prev) => ({ ...prev, liabilityAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select liability account</option>{liabilityAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Property</span><select value={form.propertyId} onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">{selectedCategoryMeta?.propertyRequired ? "Select property" : "No property linkage"}</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">{selectedCategoryMeta?.propertyRequired ? "This voucher remains property-linked." : "Leave blank for company-level or petty-cash activity."}</span></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Liability Account</span><select value={form.liabilityAccountId} onChange={(e) => setForm((prev) => ({ ...prev, liabilityAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select liability account</option>{liabilityAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Used for accrual / payable recognition before settlement.</span></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Amount</span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Debit Posting Account</span><select value={form.debitAccountId} onChange={(e) => setForm((prev) => ({ ...prev, debitAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">{selectedCategoryMeta?.explicitDebitAccount ? "Select debit account" : "Automatic from voucher category"}</option>{debitAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">{selectedCategoryMeta?.explicitDebitAccount ? form.category === "petty_cash_float" ? "Choose the petty-cash asset account receiving the float." : "Choose the expense account to debit when this voucher is approved." : "Landlord-borne vouchers continue using the existing automatic posting logic."}</span></label>
               <label className="block"><span className="text-sm font-bold text-slate-700">Due Date</span><input type="date" value={form.dueDate} onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
-              {!editingVoucherId && <label className="block"><span className="text-sm font-bold text-slate-700">Initial Status</span><select value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="draft">Draft</option><option value="approved">Approved</option><option value="paid">Paid</option></select></label>}
+              {!editingVoucherId && <label className="block"><span className="text-sm font-bold text-slate-700">Initial Status</span><select value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="draft">Draft</option><option value="approved">Approved</option><option value="paid">Paid</option></select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Paid creates the accrual leg and immediately settles it through the selected cashbook.</span></label>}
+              <label className="block"><span className="text-sm font-bold text-slate-700">Settlement Cashbook / Petty Cash</span><select value={form.settlementAccountId} onChange={(e) => setForm((prev) => ({ ...prev, settlementAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select cashbook / petty cash account</option>{settlementAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Required before a voucher can be marked as paid.</span></label>
               <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Reference</span><input value={form.reference} onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Narration</span><textarea rows={3} value={form.narration} onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
             </div>

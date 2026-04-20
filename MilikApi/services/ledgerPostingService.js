@@ -11,7 +11,6 @@ const normalizeDate = (value, fallback = new Date()) => {
 const validatePayload = (payload) => {
   const requiredFields = [
     "business",
-    "property",
     "sourceTransactionType",
     "sourceTransactionId",
     "transactionDate",
@@ -33,8 +32,17 @@ const validatePayload = (payload) => {
 };
 
 const enrichPayloadFromProperty = async (payload = {}) => {
-  // Skip enrichment if we already have all required fields
+  // Allow business-level journaling when explicitly requested and no property context exists.
+  if (payload.business && payload.allowUnscoped === true && !payload.property) {
+    return payload;
+  }
+
+  // Skip enrichment if we already have all required property-scoped fields.
   if (payload.property && payload.landlord && payload.business) {
+    return payload;
+  }
+
+  if (!payload.property) {
     return payload;
   }
 

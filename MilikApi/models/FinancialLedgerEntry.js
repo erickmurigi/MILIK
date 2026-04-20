@@ -58,13 +58,13 @@ const FinancialLedgerEntrySchema = new mongoose.Schema(
     property: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Property",
-      required: true,
+      default: null,
       index: true,
     },
     landlord: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Landlord",
-      required: true,
+      default: null,
       index: true,
     },
     tenant: {

@@ -84,12 +84,29 @@ const resolveActorUserId = async (req, businessId) =>
     fallbackErrorMessage: "No valid company user could be resolved for voucher posting.",
   });
 
-const resolveVoucherLandlordContext = async ({ businessId, propertyId, landlordId = null }) =>
-  resolvePropertyAccountingContext({
+const resolveVoucherLandlordContext = async ({
+  businessId,
+  propertyId,
+  landlordId = null,
+  voucherCategory = "",
+} = {}) => {
+  if (!propertyId && !voucherRequiresProperty(voucherCategory)) {
+    return {
+      property: null,
+      propertyId: null,
+      businessId,
+      landlordId: null,
+      controlAccountId: null,
+      unscoped: true,
+    };
+  }
+
+  return resolvePropertyAccountingContext({
     propertyId,
     landlordId,
     businessId,
   });
+};
 
 const generateVoucherNo = async (businessId) => {
   const prefix = "PM";
@@ -130,6 +147,59 @@ const ensureLiabilityAccount = async ({ businessId, liabilityAccountId }) => {
 
   if (!account) {
     throw new Error("Selected liability posting account was not found for this business.");
+  }
+
+  return account;
+};
+
+const ensureExplicitDebitAccount = async ({ businessId, debitAccountId, voucherCategory }) => {
+  if (!debitAccountId || !isValidObjectId(debitAccountId)) {
+    throw new Error("A valid debit posting account is required for this voucher category.");
+  }
+
+  const account = await ChartOfAccount.findOne({
+    _id: debitAccountId,
+    business: businessId,
+    isPosting: { $ne: false },
+  }).lean();
+
+  if (!account) {
+    throw new Error("Selected debit posting account was not found for this business.");
+  }
+
+  const normalizedCategory = String(voucherCategory || "");
+  if (normalizedCategory === "petty_cash_float") {
+    if (account.type !== "asset" || !isCashbookLikeAccount(account)) {
+      throw new Error("Petty cash float vouchers must debit a petty-cash or cashbook asset account.");
+    }
+    return account;
+  }
+
+  if (account.type !== "expense") {
+    throw new Error("Selected debit posting account must be an expense account for this voucher category.");
+  }
+
+  return account;
+};
+
+const ensureSettlementAccount = async ({ businessId, settlementAccountId }) => {
+  if (!settlementAccountId || !isValidObjectId(settlementAccountId)) {
+    throw new Error("A valid settlement cashbook account is required to mark a voucher as paid.");
+  }
+
+  const account = await ChartOfAccount.findOne({
+    _id: settlementAccountId,
+    business: businessId,
+    isPosting: { $ne: false },
+    type: "asset",
+  }).lean();
+
+  if (!account) {
+    throw new Error("Selected settlement account was not found for this business.");
+  }
+
+  if (!isCashbookLikeAccount(account)) {
+    throw new Error("Settlement account must be a cash, bank, M-Pesa, wallet, till, or petty-cash asset account.");
   }
 
   return account;
@@ -258,6 +328,14 @@ const findAnyExpensePostingAccount = async (businessId) => {
 const resolveVoucherDebitAccount = async ({ voucher, businessId, accountingContext = null }) => {
   await ensureSystemChartOfAccounts(businessId);
 
+  if (voucherRequiresExplicitDebitAccount(voucher.category)) {
+    return ensureExplicitDebitAccount({
+      businessId,
+      debitAccountId: voucher.debitAccount,
+      voucherCategory: voucher.category,
+    });
+  }
+
   if (voucher.category === "deposit_refund") {
     return resolveLandlordRemittancePayableAccount(businessId);
   }
@@ -347,11 +425,37 @@ const resolveVoucherDebitAccount = async ({ voucher, businessId, accountingConte
   return account;
 };
 
+const LANDLORD_STATEMENT_CATEGORIES = new Set(["landlord_maintenance", "landlord_other"]);
+const PROPERTY_REQUIRED_CATEGORIES = new Set([
+  "landlord_maintenance",
+  "deposit_refund",
+  "landlord_other",
+  "manager_property",
+]);
+const EXPLICIT_DEBIT_ACCOUNT_CATEGORIES = new Set([
+  "manager_property",
+  "company_operational",
+  "petty_cash_float",
+  "petty_cash_expense",
+]);
+
 const getExpenseCategory = (voucherCategory) => {
   if (voucherCategory === "landlord_maintenance") return "maintenance";
   if (voucherCategory === "landlord_other") return "other";
   return null;
 };
+
+const voucherRequiresProperty = (voucherCategory) =>
+  PROPERTY_REQUIRED_CATEGORIES.has(String(voucherCategory || ""));
+
+const voucherRequiresExplicitDebitAccount = (voucherCategory) =>
+  EXPLICIT_DEBIT_ACCOUNT_CATEGORIES.has(String(voucherCategory || ""));
+
+const isCashbookLikeAccount = (account = {}) => {
+  const text = `${account?.name || ""} ${account?.group || ""} ${account?.subGroup || ""}`.toLowerCase();
+  return account?.type === "asset" && /cash|bank|m-?pesa|mobile|wallet|petty|till|collection/.test(text);
+};
+
 
 
 const syncLinkedProcessedStatementForVoucher = async ({ voucher, businessId = null } = {}) => {
@@ -378,12 +482,13 @@ const populateVoucherQuery = (query) =>
     .populate("reversedBy", "surname otherNames email")
     .populate("liabilityAccount", "code name type accountType nature accountNature")
     .populate("debitAccount", "code name type accountType nature accountNature")
+    .populate("settlementAccount", "code name type accountType nature accountNature group subGroup")
     .populate("expenseRecord")
     .populate("sourceRequisition", "requisitionNo referenceNo status title amount property linkedVoucher");
 
 const createExpenseRecordForVoucher = async (voucher, { statementDate = null } = {}) => {
   const expenseCategory = getExpenseCategory(voucher.category);
-  if (!expenseCategory) return null;
+  if (!expenseCategory || !LANDLORD_STATEMENT_CATEGORIES.has(String(voucher.category || ""))) return null;
 
   const effectiveDate = normalizeDate(resolveVoucherPostingDate({ voucher, statementDate }));
   const description = String(voucher.narration || voucher.reference || `Payment voucher ${voucher.voucherNo}`).trim();
@@ -534,7 +639,7 @@ const reverseVoucherLedgerEntries = async ({ voucher, userId, reason }) => {
     sourceTransactionId: String(voucher._id),
     reversalOf: null,
     status: "approved",
-  }).select("_id accountId journalGroupId");
+  }).select("_id accountId journalGroupId metadata");
 
   if (!originalEntries.length) return [];
 
@@ -584,10 +689,11 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
     };
   }
 
-  const accountingContext = await resolvePropertyAccountingContext({
-    propertyId: voucher.property,
+  const accountingContext = await resolveVoucherLandlordContext({
+    propertyId: voucher.property || null,
     landlordId: voucher.landlord || null,
     businessId: voucher.business,
+    voucherCategory: voucher.category,
   });
 
   const liabilityAccount = await ensureLiabilityAccount({
@@ -617,8 +723,9 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
   try {
     const debitLeg = await postEntry({
       business: accountingContext.businessId,
-      property: accountingContext.propertyId,
-      landlord: accountingContext.landlordId,
+      property: accountingContext.propertyId || null,
+      landlord: accountingContext.landlordId || null,
+      allowUnscoped: Boolean(accountingContext.unscoped),
       sourceTransactionType: "payment_voucher",
       sourceTransactionId: String(voucher._id),
       transactionDate: txDate,
@@ -649,8 +756,9 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
 
     const creditLeg = await postEntry({
       business: accountingContext.businessId,
-      property: accountingContext.propertyId,
-      landlord: accountingContext.landlordId,
+      property: accountingContext.propertyId || null,
+      landlord: accountingContext.landlordId || null,
+      allowUnscoped: Boolean(accountingContext.unscoped),
       sourceTransactionType: "payment_voucher",
       sourceTransactionId: String(voucher._id),
       transactionDate: txDate,
@@ -707,6 +815,130 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
   }
 };
 
+const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate = null }) => {
+  const existingSettlementEntries = await FinancialLedgerEntry.find({
+    business: voucher.business,
+    sourceTransactionType: "payment_voucher",
+    sourceTransactionId: String(voucher._id),
+    reversalOf: null,
+    status: "approved",
+    "metadata.postingRole": { $in: ["liability_settlement", "cashbook_outflow"] },
+  }).select("_id accountId journalGroupId metadata");
+
+  if (existingSettlementEntries.length > 0) {
+    return {
+      voucher,
+      entries: existingSettlementEntries,
+      journalGroupId: existingSettlementEntries[0]?.journalGroupId || null,
+      reused: true,
+    };
+  }
+
+  const liabilityAccount = await ensureLiabilityAccount({
+    businessId: voucher.business,
+    liabilityAccountId: voucher.liabilityAccount,
+  });
+
+  const settlementAccount = await ensureSettlementAccount({
+    businessId: voucher.business,
+    settlementAccountId: voucher.settlementAccount,
+  });
+
+  const accountingContext = await resolveVoucherLandlordContext({
+    propertyId: voucher.property || null,
+    landlordId: voucher.landlord || null,
+    businessId: voucher.business,
+    voucherCategory: voucher.category,
+  });
+
+  const txDate = normalizeDate(paidDate || voucher.paidDate || voucher.paidAt || new Date());
+  const { start, end } = buildStatementPeriod(txDate);
+  const journalGroupId = voucher.journalGroupId || new mongoose.Types.ObjectId();
+  const narration = String(voucher.narration || voucher.reference || `Payment voucher ${voucher.voucherNo}`).trim();
+  const amount = Math.abs(Number(voucher.amount || 0));
+
+  const debitLeg = await postEntry({
+    business: accountingContext.businessId,
+    property: accountingContext.propertyId || null,
+    landlord: accountingContext.landlordId || null,
+    allowUnscoped: Boolean(accountingContext.unscoped),
+    sourceTransactionType: "payment_voucher",
+    sourceTransactionId: String(voucher._id),
+    transactionDate: txDate,
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    category: voucher.category === "petty_cash_float" ? "ADJUSTMENT" : "EXPENSE_DEDUCTION",
+    amount,
+    direction: "debit",
+    accountId: liabilityAccount._id,
+    journalGroupId,
+    payer: "manager",
+    receiver: "vendor",
+    notes: narration,
+    metadata: {
+      voucherNo: voucher.voucherNo,
+      voucherCategory: voucher.category,
+      postingRole: "liability_settlement",
+      includeInLandlordStatement: false,
+    },
+    createdBy: actorUserId,
+    approvedBy: actorUserId,
+    approvedAt: new Date(),
+    status: "approved",
+  });
+
+  const creditLeg = await postEntry({
+    business: accountingContext.businessId,
+    property: accountingContext.propertyId || null,
+    landlord: accountingContext.landlordId || null,
+    allowUnscoped: Boolean(accountingContext.unscoped),
+    sourceTransactionType: "payment_voucher",
+    sourceTransactionId: String(voucher._id),
+    transactionDate: txDate,
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    category: voucher.category === "petty_cash_float" ? "ADJUSTMENT" : "EXPENSE_DEDUCTION",
+    amount,
+    direction: "credit",
+    accountId: settlementAccount._id,
+    journalGroupId,
+    payer: "manager",
+    receiver: "vendor",
+    notes: narration,
+    metadata: {
+      voucherNo: voucher.voucherNo,
+      voucherCategory: voucher.category,
+      postingRole: "cashbook_outflow",
+      includeInLandlordStatement: false,
+      offsetOfEntryId: String(debitLeg._id),
+    },
+    createdBy: actorUserId,
+    approvedBy: actorUserId,
+    approvedAt: new Date(),
+    status: "approved",
+  });
+
+  voucher.journalGroupId = journalGroupId;
+  voucher.ledgerEntries = Array.from(new Set([
+    ...(Array.isArray(voucher.ledgerEntries) ? voucher.ledgerEntries.map((entry) => String(entry)) : []),
+    String(debitLeg._id),
+    String(creditLeg._id),
+  ]));
+  await voucher.save();
+
+  await aggregateChartOfAccountBalances(voucher.business, [
+    String(liabilityAccount._id),
+    String(settlementAccount._id),
+  ]);
+
+  return {
+    voucher,
+    entries: [debitLeg, creditLeg],
+    journalGroupId,
+    reused: false,
+  };
+};
+
 export const createPaymentVoucher = async (req, res, next) => {
   try {
     const businessId = await resolveBusinessId(req);
@@ -714,8 +946,21 @@ export const createPaymentVoucher = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "User must have a company context" });
     }
 
-    if (!req.body?.property || !isValidObjectId(req.body.property)) {
-      return res.status(400).json({ success: false, message: "Property is required" });
+    const voucherCategory = String(req.body?.category || "").trim();
+    if (!voucherCategory) {
+      return res.status(400).json({ success: false, message: "Voucher category is required" });
+    }
+
+    if (voucherRequiresProperty(voucherCategory) && (!req.body?.property || !isValidObjectId(req.body.property))) {
+      return res.status(400).json({ success: false, message: "Property is required for this voucher category" });
+    }
+
+    if (!voucherRequiresProperty(voucherCategory) && req.body?.property && !isValidObjectId(req.body.property)) {
+      return res.status(400).json({ success: false, message: "Invalid property supplied" });
+    }
+
+    if (voucherRequiresExplicitDebitAccount(voucherCategory) && (!req.body?.debitAccount || !isValidObjectId(req.body.debitAccount))) {
+      return res.status(400).json({ success: false, message: "Debit posting account is required for this voucher category" });
     }
 
     if (!req.body?.liabilityAccount || !isValidObjectId(req.body.liabilityAccount)) {
@@ -730,21 +975,24 @@ export const createPaymentVoucher = async (req, res, next) => {
     const sourceRequisition = await resolveVoucherSourceRequisition({
       businessId,
       requisitionId: req.body?.sourceRequisition || null,
-      propertyId: req.body?.property,
+      propertyId: req.body?.property || null,
     });
 
     const voucherNo = await generateVoucherNo(businessId);
     const accountingContext = await resolveVoucherLandlordContext({
       businessId,
-      propertyId: req.body.property,
-      landlordId: req.body.landlord || null,
+      propertyId: req.body?.property || null,
+      landlordId: req.body?.landlord || null,
+      voucherCategory,
     });
 
     const payload = {
-      category: req.body.category,
-      property: req.body.property,
-      landlord: accountingContext.landlordId,
+      category: voucherCategory,
+      property: req.body?.property || null,
+      landlord: accountingContext.landlordId || null,
       liabilityAccount: req.body.liabilityAccount,
+      debitAccount: req.body?.debitAccount || null,
+      settlementAccount: req.body?.settlementAccount || null,
       amount,
       dueDate: req.body.dueDate,
       paidDate: req.body.paidDate || null,
@@ -786,6 +1034,9 @@ export const createPaymentVoucher = async (req, res, next) => {
       }
 
       await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: postingDate });
+      if (voucher.status === "paid") {
+        await ensureVoucherSettlementPosting({ voucher, actorUserId, paidDate: postingDate });
+      }
       await voucher.save();
     }
 
@@ -861,6 +1112,8 @@ export const updatePaymentVoucher = async (req, res, next) => {
       "property",
       "landlord",
       "liabilityAccount",
+      "debitAccount",
+      "settlementAccount",
       "amount",
       "dueDate",
       "paidDate",
@@ -895,7 +1148,24 @@ export const updatePaymentVoucher = async (req, res, next) => {
       payload.sourceRequisition = existing.sourceRequisition;
     }
 
-    const propertyId = payload.property || existing.property;
+    const effectiveCategory = payload.category || existing.category || "";
+    const propertyId = Object.prototype.hasOwnProperty.call(payload, "property")
+      ? payload.property || null
+      : existing.property || null;
+
+    if (voucherRequiresProperty(effectiveCategory) && !isValidObjectId(propertyId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Property is required for this voucher category.",
+      });
+    }
+
+    if (voucherRequiresExplicitDebitAccount(effectiveCategory) && !isValidObjectId(payload.debitAccount || existing.debitAccount || null)) {
+      return res.status(400).json({
+        success: false,
+        message: "Debit posting account is required for this voucher category.",
+      });
+    }
     const sourceRequisition = await resolveVoucherSourceRequisition({
       businessId: business,
       requisitionId: requestedSourceRequisitionId || null,
@@ -905,11 +1175,12 @@ export const updatePaymentVoucher = async (req, res, next) => {
 
     const accountingContext = await resolveVoucherLandlordContext({
       businessId: business,
-      propertyId,
+      propertyId: propertyId || null,
       landlordId: payload.landlord || existing.landlord || null,
+      voucherCategory: payload.category || existing.category || "",
     });
 
-    payload.landlord = accountingContext.landlordId;
+    payload.landlord = accountingContext.landlordId || null;
     payload.sourceRequisition = sourceRequisition?._id || existing.sourceRequisition || null;
 
     const updated = await populateVoucherQuery(
@@ -954,10 +1225,29 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
     const actorUserId = await resolveActorUserId(req, business);
 
     if (status === "draft") {
+      if (voucher.status !== "draft") {
+        return res.status(400).json({
+          success: false,
+          message: "Approved, paid, or reversed vouchers cannot be moved back to draft.",
+        });
+      }
       voucher.status = "draft";
     }
 
     if (status === "approved") {
+      if (voucher.status === "reversed") {
+        return res.status(400).json({
+          success: false,
+          message: "Reversed vouchers cannot be approved again.",
+        });
+      }
+      if (voucher.status === "paid") {
+        return res.status(400).json({
+          success: false,
+          message: "Paid vouchers are already fully processed.",
+        });
+      }
+
       const approvalDate = new Date();
       voucher.approvedAt = approvalDate;
       voucher.approvedBy = actorUserId;
@@ -973,6 +1263,13 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
         });
       }
 
+      if (!voucher.settlementAccount || !isValidObjectId(voucher.settlementAccount)) {
+        return res.status(400).json({
+          success: false,
+          message: "Select a settlement cashbook account on the voucher before marking it as paid.",
+        });
+      }
+
       const paidDate = normalizeDate(req.body?.paidDate || new Date());
       voucher.approvedAt = voucher.approvedAt || paidDate;
       voucher.approvedBy = voucher.approvedBy || actorUserId;
@@ -980,6 +1277,7 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
       voucher.paidBy = actorUserId;
       voucher.paidDate = paidDate;
       await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: voucher.approvedAt || paidDate });
+      await ensureVoucherSettlementPosting({ voucher, actorUserId, paidDate });
       voucher.status = "paid";
     }
 

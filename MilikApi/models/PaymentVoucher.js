@@ -5,7 +5,15 @@ const PaymentVoucherSchema = new mongoose.Schema(
     voucherNo: { type: String, required: true },
     category: {
       type: String,
-      enum: ["landlord_maintenance", "deposit_refund", "landlord_other"],
+      enum: [
+        "landlord_maintenance",
+        "deposit_refund",
+        "landlord_other",
+        "manager_property",
+        "company_operational",
+        "petty_cash_float",
+        "petty_cash_expense",
+      ],
       required: true,
     },
     status: {
@@ -13,7 +21,7 @@ const PaymentVoucherSchema = new mongoose.Schema(
       enum: ["draft", "approved", "paid", "reversed"],
       default: "draft",
     },
-    property: { type: mongoose.Schema.Types.ObjectId, ref: "Property", required: true },
+    property: { type: mongoose.Schema.Types.ObjectId, ref: "Property", default: null },
     landlord: { type: mongoose.Schema.Types.ObjectId, ref: "Landlord", default: null },
     amount: { type: Number, required: true, min: 0 },
     dueDate: { type: Date, required: true },
@@ -33,6 +41,11 @@ const PaymentVoucherSchema = new mongoose.Schema(
       default: null,
     },
     debitAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    settlementAccount: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ChartOfAccount",
       default: null,
