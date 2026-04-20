@@ -403,12 +403,30 @@ const Tenants = () => {
 
   const transformedTenants = useMemo(() => {
     return (Array.isArray(tenantsData) ? tenantsData : []).map((tenant) => {
-      const tenantLease = leaseByTenantId.get(normalizeId(tenant._id)) || null;
+      const tenantId = normalizeId(tenant._id);
+      const tenantLease = leaseByTenantId.get(tenantId) || null;
       const resolvedStartDate = tenantLease?.startDate || tenant.moveInDate;
       const resolvedEndDate = tenantLease?.endDate || tenant.moveOutDate;
       const expiryWarning = buildExpiryWarning({ tenant, lease: tenantLease });
       const balance = paymentsSnapshotReady ? calculateTenantBalance(tenant._id) : Number(tenant?.balance || 0);
       const tenantOperationalStatus = computeOperationalStatus({ tenant });
+      const leaseCount = (Array.isArray(leases) ? leases : []).filter(
+        (lease) => normalizeId(lease?.tenant?._id || lease?.tenant) === tenantId
+      ).length;
+      const invoiceCount = tenantInvoices.filter((invoice) => normalizeId(invoice?.tenant) === tenantId).length;
+      const invoiceNoteCount = tenantInvoiceNotes.filter((note) => normalizeId(note?.tenant) === tenantId).length;
+      const paymentCount = rentPayments.filter((payment) => normalizeId(payment?.tenant) === tenantId).length;
+      const hasBalance = Math.abs(Number(balance || 0)) > 0.009;
+      const canTerminate = tenantOperationalStatus === "active";
+      const canTransfer = tenantOperationalStatus === "active";
+      const canDelete = !canTerminate && !hasBalance && leaseCount === 0 && invoiceCount === 0 && invoiceNoteCount === 0 && paymentCount === 0;
+      const deleteBlockedReason = canTerminate
+        ? "This tenant is still active. Terminate the tenancy instead of deleting it."
+        : hasBalance
+        ? "This tenant still has an outstanding balance."
+        : leaseCount > 0 || invoiceCount > 0 || invoiceNoteCount > 0 || paymentCount > 0
+        ? "This tenant already has historical records and should remain protected."
+        : "";
 
       return {
         id: tenant._id,
@@ -430,14 +448,18 @@ const Tenants = () => {
           ? `Ksh ${Number(tenantLease.rentAmount).toLocaleString()}`
           : "-",
         balance,
-        hasBalance: Math.abs(Number(balance || 0)) > 0.009,
+        hasBalance,
         status: tenantOperationalStatus,
         phone: tenant.phone || "-",
         email: tenant.email || "-",
         expiryWarning,
+        canDelete,
+        canTerminate,
+        canTransfer,
+        deleteBlockedReason,
       };
     });
-  }, [tenantsData, units, properties, leaseByTenantId, calculateTenantBalance, paymentsSnapshotReady]);
+  }, [tenantsData, units, properties, leaseByTenantId, calculateTenantBalance, paymentsSnapshotReady, leases, tenantInvoices, tenantInvoiceNotes, rentPayments]);
 
   // ===== FILTER TENANTS =====
   const filteredTenants = useMemo(() => {
@@ -504,6 +526,14 @@ const Tenants = () => {
     [transformedTenants, selectedTenants]
   );
 
+  const selectedTenantRows = useMemo(
+    () => transformedTenants.filter((tenant) => selectedTenants.includes(tenant.id)),
+    [transformedTenants, selectedTenants]
+  );
+  const selectedDeletableTenants = useMemo(
+    () => selectedTenantRows.filter((tenant) => tenant.canDelete),
+    [selectedTenantRows]
+  );
 
   // ===== SELECTION HANDLERS =====
   const handleSelectTenant = (tenantId) => {
@@ -658,6 +688,10 @@ const handleTransferUnit = () => {
     toast.warning("Please select only one tenant to transfer");
     return;
   }
+  if (!selectedPrimaryTenant?.canTransfer) {
+    toast.warning("Only active tenants can be transferred to another unit.");
+    return;
+  }
 
   setTransferForm({
     tenantId: selectedTenants[0],
@@ -740,6 +774,10 @@ const confirmTransferUnit = async () => {
       toast.warning("Please select only one tenant to terminate");
       return;
     }
+    if (!selectedPrimaryTenant?.canTerminate) {
+      toast.warning("Only active tenants can be terminated from this list.");
+      return;
+    }
 
     setTerminationForm({
       tenantId: selectedTenants[0],
@@ -815,6 +853,10 @@ const confirmTransferUnit = async () => {
       toast.warning("Please select at least one tenant to delete");
       return;
     }
+    if (selectedDeletableTenants.length === 0) {
+      toast.warning("Selected tenants are protected because they are still active, have balances, or already have transaction history.");
+      return;
+    }
     setShowDeleteModal(true);
   };
 
@@ -826,13 +868,14 @@ const confirmTransferUnit = async () => {
     setIsDeleting(true);
     let successCount = 0;
     let failCount = 0;
+    const skippedCount = selectedTenantRows.length - selectedDeletableTenants.length;
 
-    for (const tenantId of selectedTenants) {
+    for (const tenant of selectedDeletableTenants) {
       try {
-        await dispatch(deleteTenant(tenantId)).unwrap();
+        await dispatch(deleteTenant(tenant.id)).unwrap();
         successCount++;
       } catch (error) {
-        console.error(`Failed to delete tenant ${tenantId}:`, error);
+        console.error(`Failed to delete tenant ${tenant.id}:`, error);
         failCount++;
       }
     }
@@ -845,6 +888,9 @@ const confirmTransferUnit = async () => {
 
     if (successCount > 0) {
       toast.success(`Successfully deleted ${successCount} tenant(s)`);
+    }
+    if (skippedCount > 0) {
+      toast.info(`${skippedCount} tenant(s) were skipped because they are still protected by active occupancy, balances, or history.`);
     }
     if (failCount > 0) {
       toast.error(`Failed to delete ${failCount} tenant(s)`);
@@ -1107,7 +1153,9 @@ const confirmTransferUnit = async () => {
                     {canUpdateTenant && (
                     <button
                       onClick={handleTransferUnit}
-                      className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
+                      disabled={selectedTenants.length !== 1 || !selectedPrimaryTenant?.canTransfer}
+                      className={`w-full text-left px-4 py-2 text-xs flex items-center gap-2 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTransfer ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
+                      title={selectedTenants.length === 1 && selectedPrimaryTenant?.canTransfer ? "Transfer selected tenant unit" : "Only one active tenant can be transferred at a time"}
                     >
                       <FaExchangeAlt size={12} />
                       <span>Transfer Tenant Unit</span>
@@ -1148,7 +1196,9 @@ const confirmTransferUnit = async () => {
                     {canUpdateTenant && (
                     <button
                       onClick={handleOpenTerminateTenant}
-                      className="w-full text-left px-4 py-2 text-xs hover:bg-amber-50 flex items-center gap-2 text-amber-700 border-t border-gray-200"
+                      disabled={selectedTenants.length !== 1 || !selectedPrimaryTenant?.canTerminate}
+                      className={`w-full text-left px-4 py-2 text-xs flex items-center gap-2 border-t border-gray-200 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTerminate ? "hover:bg-amber-50 text-amber-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
+                      title={selectedTenants.length === 1 && selectedPrimaryTenant?.canTerminate ? "Terminate selected tenant" : "Only one active tenant can be terminated at a time"}
                     >
                       <FaUserSlash size={12} />
                       <span>Terminate Tenant</span>
@@ -1167,7 +1217,9 @@ const confirmTransferUnit = async () => {
                     {canDeleteTenant && (
                     <button
                       onClick={handleDeleteSelectedTenants}
-                      className="w-full text-left px-4 py-2 text-xs hover:bg-red-50 flex items-center gap-2 text-red-600 border-t border-gray-200 font-semibold"
+                      disabled={selectedDeletableTenants.length === 0}
+                      className={`w-full text-left px-4 py-2 text-xs flex items-center gap-2 border-t border-gray-200 font-semibold ${selectedDeletableTenants.length > 0 ? "hover:bg-red-50 text-red-600" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
+                      title={selectedDeletableTenants.length > 0 ? "Delete selected unused tenant records" : "Selected tenants are protected because they are active or already have history"}
                     >
                       <FaTrash size={12} />
                       <span>Delete Selected Tenant(s)</span>
@@ -1519,8 +1571,9 @@ const confirmTransferUnit = async () => {
                                     setSelectedTenants([tenant.id]);
                                     setShowDeleteModal(true);
                                   }}
-            
-                                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white font-bold rounded text-xs transition-colors"
+                                  disabled={!tenant.canDelete}
+                                  title={tenant.canDelete ? "Delete unused tenant record" : tenant.deleteBlockedReason}
+                                  className={`px-2 py-1 text-white font-bold rounded text-xs transition-colors ${tenant.canDelete ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}
                                   >
                                     🗑️ Delete
                                   </button>
@@ -1773,31 +1826,34 @@ const confirmTransferUnit = async () => {
 
             <div className="p-6">
               <p className="text-gray-700 mb-4">
-                Are you sure you want to delete <strong>{selectedTenants.length}</strong> tenant(s)?
+                Delete <strong>{selectedDeletableTenants.length}</strong> eligible tenant record(s).
               </p>
               <p className="text-sm text-red-600 font-semibold">
-                ⚠️ This action cannot be undone!
+                ⚠️ Only unused tenant records will be deleted. Active or historical tenants stay protected.
               </p>
 
-              {selectedTenants.length > 0 && (
+              {selectedDeletableTenants.length > 0 && (
                 <div className="mt-4 p-3 bg-gray-50 rounded border border-gray-200">
-                  <p className="text-xs text-gray-600 mb-2">Tenants to be deleted:</p>
+                  <p className="text-xs text-gray-600 mb-2">Eligible tenants to be deleted:</p>
                   <ul className="text-xs text-gray-700 space-y-1 max-h-32 overflow-y-auto">
-                    {selectedTenants.slice(0, 10).map((tenantId) => {
-                      const tenant = transformedTenants.find((t) => t.id === tenantId);
-                      return tenant ? (
-                        <li key={tenantId} className="flex items-center gap-2">
-                          <span className="w-2 h-2 bg-red-500 rounded-full"></span>
-                          <span className="font-semibold">{tenant.tenantCode}</span> - {tenant.tenantName}
-                        </li>
-                      ) : null;
-                    })}
-                    {selectedTenants.length > 10 && (
+                    {selectedDeletableTenants.slice(0, 10).map((tenant) => (
+                      <li key={tenant.id} className="flex items-center gap-2">
+                        <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                        <span className="font-semibold">{tenant.tenantCode}</span> - {tenant.tenantName}
+                      </li>
+                    ))}
+                    {selectedDeletableTenants.length > 10 && (
                       <li className="text-gray-500 italic">
-                        ...and {selectedTenants.length - 10} more
+                        ...and {selectedDeletableTenants.length - 10} more
                       </li>
                     )}
                   </ul>
+                </div>
+              )}
+
+              {selectedTenantRows.length > selectedDeletableTenants.length && (
+                <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  {selectedTenantRows.length - selectedDeletableTenants.length} selected tenant(s) will be skipped because they are still active, have balances, or already have history.
                 </div>
               )}
             </div>
@@ -1812,7 +1868,7 @@ const confirmTransferUnit = async () => {
               </button>
               <button
                 onClick={confirmDeleteTenants}
-                disabled={!canDeleteTenant || isDeleting}
+                disabled={!canDeleteTenant || isDeleting || selectedDeletableTenants.length === 0}
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isDeleting ? (
@@ -1823,7 +1879,7 @@ const confirmTransferUnit = async () => {
                 ) : (
                   <>
                     <FaTrash size={14} />
-                    Delete {selectedTenants.length} Tenant(s)
+                    Delete {selectedDeletableTenants.length} Tenant(s)
                   </>
                 )}
               </button>

@@ -81,7 +81,7 @@ const TenantInvoiceSchema = new mongoose.Schema(
     bookingDate: {
       type: Date,
       default() {
-        return this.invoiceDate || new Date();
+        return this && this.invoiceDate ? this.invoiceDate : new Date();
       },
       index: true,
     },

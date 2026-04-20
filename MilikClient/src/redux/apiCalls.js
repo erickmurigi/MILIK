@@ -1121,7 +1121,7 @@ export const getTenantBalance = async (id) => {
 
 
 // Get all rent payments
-export const getRentPayments = async (dispatch, business, tenant = null, unit = null, month = null, year = null, paymentType = null) => {
+export const getRentPayments = async (dispatch, business, tenant = null, unit = null, month = null, year = null, paymentType = null, status = "active") => {
   dispatch(getRentPaymentsStart());
   try {
     let url = `/rent-payments?business=${business}`;
@@ -1130,12 +1130,42 @@ export const getRentPayments = async (dispatch, business, tenant = null, unit = 
     if (month) url += `&month=${month}`;
     if (year) url += `&year=${year}`;
     if (paymentType) url += `&paymentType=${paymentType}`;
+    if (status) url += `&status=${status}`;
     
     const res = await adminRequests.get(url);
     dispatch(getRentPaymentsSuccess(extractList(res.data)));
   } catch (err) {
     dispatch(getRentPaymentsFailure());
   }
+};
+
+export const listRentPaymentsPage = async (params = {}) => {
+  const effectiveParams = { ...(params || {}) };
+  if (effectiveParams.status === undefined || effectiveParams.status === null || effectiveParams.status === "") {
+    effectiveParams.status = "active";
+  }
+
+  const search = new URLSearchParams();
+  Object.entries(effectiveParams).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") {
+      search.append(key, value);
+    }
+  });
+
+  const query = search.toString();
+  const res = await adminRequests.get(`/rent-payments${query ? `?${query}` : ""}`);
+  const payload = res?.data;
+  const items = extractList(payload);
+  const pagination = payload?.pagination || {
+    page: 1,
+    limit: items.length || 0,
+    totalItems: items.length,
+    totalPages: 1,
+    hasPreviousPage: false,
+    hasNextPage: false,
+  };
+
+  return { items, pagination, raw: payload };
 };
 
 // Get single rent payment

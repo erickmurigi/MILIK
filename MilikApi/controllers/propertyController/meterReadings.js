@@ -8,6 +8,7 @@ import CompanySettings from "../../models/CompanySettings.js";
 import { createTenantInvoiceRecord } from "./tenantInvoices.js";
 import { resolvePropertyAccountingContext } from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { getAccessibleCompanyIds } from "../../utils/permissionControl.js";
 
 const PREVIOUS_READING_STATUSES = ["draft", "billed"];
 const DUPLICATE_BLOCKING_STATUSES = ["draft", "billed"];
@@ -41,6 +42,37 @@ const resolveBusinessId = (req) => {
   return null;
 };
 
+const ensureBusinessAccess = (req, businessId) => {
+  const normalizedBusinessId = String(businessId || "").trim();
+  if (!normalizedBusinessId) {
+    const error = new Error("Business context is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
+    return normalizedBusinessId;
+  }
+
+  const accessibleCompanies = getAccessibleCompanyIds(req.user || {});
+  const authenticatedCompanyId = String(req.user?.company?._id || req.user?.company || "").trim();
+
+  if (
+    normalizedBusinessId === authenticatedCompanyId ||
+    accessibleCompanies.includes(normalizedBusinessId)
+  ) {
+    return normalizedBusinessId;
+  }
+
+  const error = new Error("Not authorized to access records for this company.");
+  error.statusCode = 403;
+  throw error;
+};
+
+const ensureReadingAccess = (req, reading) =>
+  ensureBusinessAccess(req, String(reading?.business || ""));
+
+
 const resolveActorUserId = async (req, options = {}) => {
   const {
     businessId: explicitBusinessId = null,
@@ -66,7 +98,7 @@ const findActiveTenantForUnit = async ({ businessId, unitId }) => {
   if (!businessId || !unitId) return null;
 
   return Tenant.findOne({
-    business: businessId,
+    business: scopedBusinessId,
     unit: unitId,
     status: { $in: ACTIVE_TENANT_STATUSES },
   })
@@ -92,7 +124,7 @@ const resolveUtilityRate = async ({ businessId, unitDoc, utilityType, providedRa
   }
 
   const utilityDoc = await Utility.findOne({
-    business: businessId,
+    business: scopedBusinessId,
     name: { $regex: `^${String(utilityType || "").trim()}$`, $options: "i" },
     isActive: true,
   })
@@ -230,9 +262,7 @@ const checkDuplicateReading = async ({ businessId, unitId, utilityType, billingP
 
 const buildReadingPayload = async ({ req, existingReading = null }) => {
   const businessId = existingReading?.business ? String(existingReading.business) : resolveBusinessId(req);
-  if (!businessId) {
-    throw new Error("Business context is required.");
-  }
+  const scopedBusinessId = ensureBusinessAccess(req, businessId);
 
   const propertyId = req.body.property || existingReading?.property;
   const unitId = req.body.unit || existingReading?.unit;
@@ -252,7 +282,7 @@ const buildReadingPayload = async ({ req, existingReading = null }) => {
   }
 
   const { propertyDoc, unitDoc, tenantDoc } = await ensureReadingContext({
-    businessId,
+    businessId: scopedBusinessId,
     propertyId,
     unitId,
     tenantId: req.body.tenant || existingReading?.tenant || null,
@@ -264,7 +294,7 @@ const buildReadingPayload = async ({ req, existingReading = null }) => {
       : existingReading?.previousReading !== undefined && existingReading?.previousReading !== null
       ? existingReading.previousReading
       : await getPreviousReadingValue({
-          businessId,
+          businessId: scopedBusinessId,
           propertyId,
           unitId,
           utilityType,
@@ -283,7 +313,7 @@ const buildReadingPayload = async ({ req, existingReading = null }) => {
   });
 
   const rate = await resolveUtilityRate({
-    businessId,
+    businessId: scopedBusinessId,
     unitDoc,
     utilityType,
     providedRate: req.body.rate !== undefined ? req.body.rate : existingReading?.rate,
@@ -296,7 +326,7 @@ const buildReadingPayload = async ({ req, existingReading = null }) => {
       : calculatedAmount;
 
   return {
-    business: businessId,
+    business: scopedBusinessId,
     property: propertyDoc._id,
     unit: unitDoc._id,
     tenant: tenantDoc?._id || null,
@@ -405,10 +435,7 @@ const resolveBillableTenantForReading = async (reading) => {
 
 export const getMeterReadings = async (req, res, next) => {
   try {
-    const businessId = resolveBusinessId(req);
-    if (!businessId) {
-      return res.status(400).json({ message: "Business context is required." });
-    }
+    const businessId = ensureBusinessAccess(req, resolveBusinessId(req));
 
     const query = { business: businessId };
     if (req.query.property) query.property = req.query.property;
@@ -475,6 +502,8 @@ export const updateMeterReading = async (req, res, next) => {
       return res.status(404).json({ message: "Meter reading not found." });
     }
 
+    ensureReadingAccess(req, reading);
+
     if (reading.status !== "draft") {
       return res.status(400).json({ message: "Only draft meter readings can be edited." });
     }
@@ -515,6 +544,8 @@ export const deleteMeterReading = async (req, res, next) => {
     if (!reading) {
       return res.status(404).json({ message: "Meter reading not found." });
     }
+
+    ensureReadingAccess(req, reading);
 
     if (reading.status === "deleted") {
       return res.status(400).json({ message: "This meter reading has already been deleted." });
@@ -589,6 +620,8 @@ export const voidMeterReading = async (req, res, next) => {
       return res.status(404).json({ message: "Meter reading not found." });
     }
 
+    ensureReadingAccess(req, reading);
+
     if (reading.status === "deleted") {
       return res.status(400).json({ message: "Deleted meter readings cannot be voided." });
     }
@@ -627,6 +660,8 @@ export const billMeterReading = async (req, res, next) => {
     if (!reading) {
       return res.status(404).json({ message: "Meter reading not found." });
     }
+
+    ensureReadingAccess(req, reading);
 
     if (reading.status === "void") {
       return res.status(400).json({ message: "Voided meter readings cannot be billed." });

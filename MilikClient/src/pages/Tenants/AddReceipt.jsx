@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { createRentPayment, getRentPayments, getTenantInvoices, getChartOfAccounts } from "../../redux/apiCalls";
+import { createRentPayment, getTenantInvoices, getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -65,30 +65,6 @@ const getChargeTypeLabel = (chargeType = "rent") => {
   return "Rent";
 };
 
-const buildAppliedAmountsByInvoice = (payments = [], tenantId = "") => {
-  const appliedByInvoice = new Map();
-  const tenantIdStr = String(tenantId || "");
-
-  payments.forEach((payment) => {
-    const paymentTenantId = String(payment?.tenant?._id || payment?.tenant || "");
-    if (tenantIdStr && paymentTenantId !== tenantIdStr) return;
-    if (payment?.isConfirmed !== true) return;
-    if (payment?.isCancelled === true || payment?.isReversed === true || payment?.reversalOf) return;
-    if (payment?.ledgerType !== "receipts") return;
-    if (String(payment?.postingStatus || "").toLowerCase() === "reversed") return;
-
-    (Array.isArray(payment?.allocations) ? payment.allocations : []).forEach((allocation) => {
-      const invoiceId = String(allocation?.invoice || allocation?.invoiceId || "");
-      if (!invoiceId) return;
-      const amount = Number(allocation?.appliedAmount || 0);
-      if (!amount) return;
-      appliedByInvoice.set(invoiceId, Number(appliedByInvoice.get(invoiceId) || 0) + amount);
-    });
-  });
-
-  return appliedByInvoice;
-};
-
 const mapOutstandingInvoiceStatus = ({ rawStatus = "", outstanding = 0, paid = 0 }) => {
   const normalizedStatus = String(rawStatus || "").toLowerCase();
 
@@ -143,11 +119,9 @@ const AddReceipt = () => {
   const canSaveReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement");
   const rawProperties = useSelector((state) => state.property?.properties);
   const rawTenants = useSelector((state) => state.tenant?.tenants);
-  const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
 
   const properties = ensureArray(rawProperties);
   const tenants = ensureArray(rawTenants);
-  const rentPayments = ensureArray(rawRentPayments);
 
   const [formData, setFormData] = useState({
     propertyId: "",
@@ -178,7 +152,6 @@ const AddReceipt = () => {
         await Promise.all([
           dispatch(getProperties({ business: currentCompany._id })),
           dispatch(getTenants({ business: currentCompany._id })),
-          getRentPayments(dispatch, currentCompany._id),
         ]);
 
         const [invoiceRows, chartRows] = await Promise.all([
@@ -286,16 +259,12 @@ const AddReceipt = () => {
   const calculateTenantBalance = (tenantId) => {
     if (!tenantId) return { totalOwed: 0, totalPaid: 0, balance: 0 };
 
-    const appliedByInvoice = buildAppliedAmountsByInvoice(rentPayments, tenantId);
     const invoices = getCreatedInvoicesForTenant(tenantId);
 
     return invoices.reduce(
       (summary, inv) => {
         const billedAmount = Number((inv.netAmount ?? inv.adjustedAmount ?? inv.amount) || 0);
-        const paidAmount = Math.max(
-          0,
-          Number(inv?.appliedAmount ?? (appliedByInvoice.get(String(inv?._id || "")) || 0))
-        );
+        const paidAmount = Math.max(0, Number(inv?.appliedAmount || 0));
         const outstandingAmount = Math.max(
           0,
           Number(inv?.outstanding ?? Math.max(0, billedAmount - paidAmount))
@@ -321,15 +290,10 @@ const AddReceipt = () => {
         return aTime - bTime;
       });
 
-    const appliedByInvoice = buildAppliedAmountsByInvoice(rentPayments, tenantId);
-
     return invoices
       .map((inv) => {
         const billedAmount = Number((inv.netAmount ?? inv.adjustedAmount ?? inv.amount) || 0);
-        const paid = Math.min(
-          billedAmount,
-          Math.max(0, Number(inv?.appliedAmount ?? (appliedByInvoice.get(String(inv._id || "")) || 0)))
-        );
+        const paid = Math.min(billedAmount, Math.max(0, Number(inv?.appliedAmount || 0)));
         const outstanding = Math.max(0, Number(inv?.outstanding ?? Math.max(0, billedAmount - paid)));
         const invoiceDate = inv.invoiceDate ? new Date(inv.invoiceDate) : null;
         const periodLabel =
@@ -364,12 +328,12 @@ const AddReceipt = () => {
 
   const balanceSummary = useMemo(
     () => calculateTenantBalance(formData.tenantId),
-    [formData.tenantId, rentPayments, tenantInvoices]
+    [formData.tenantId, tenantInvoices]
   );
 
   const outstandingInvoices = useMemo(
     () => getOutstandingInvoices(formData.tenantId),
-    [formData.tenantId, rentPayments, tenantInvoices]
+    [formData.tenantId, tenantInvoices]
   );
 
   useEffect(() => {
@@ -547,6 +511,7 @@ const AddReceipt = () => {
         appliedAmount: Number(line.apply || 0),
       }));
 
+    const shouldUseManualAllocations = manualSelectionMode || priorityInvoiceKeys.length > 0;
     const payload = {
       tenant: formData.tenantId,
       unit: unitId,
@@ -566,8 +531,8 @@ const AddReceipt = () => {
       month: paymentDateObj.getMonth() + 1,
       year: paymentDateObj.getFullYear(),
       business: currentCompany._id,
-      allocations: manualAllocationRows,
-      allocationMode: "manual",
+      allocations: shouldUseManualAllocations ? manualAllocationRows : undefined,
+      allocationMode: shouldUseManualAllocations ? "manual" : undefined,
       metadata: prefilledCollectionId
         ? {
             mpesa: {

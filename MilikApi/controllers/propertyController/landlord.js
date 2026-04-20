@@ -65,6 +65,53 @@ const buildLandlordPropertyMatch = (landlord) => ({
   ],
 });
 
+const syncLinkedPropertyLandlordSnapshots = async ({
+  companyId,
+  landlordId,
+  previousName,
+  nextName,
+  nextContact,
+}) => {
+  if (!companyId || !landlordId) return;
+
+  const linkedProperties = await Property.find({
+    business: companyId,
+    $or: [
+      { "landlords.landlordId": landlordId },
+      ...(previousName ? [{ "landlords.name": previousName }] : []),
+    ],
+  });
+
+  if (!linkedProperties.length) return;
+
+  await Promise.all(
+    linkedProperties.map(async (property) => {
+      let changed = false;
+
+      property.landlords = (Array.isArray(property.landlords) ? property.landlords : []).map((entry) => {
+        const matchesById = entry?.landlordId && String(entry.landlordId) === String(landlordId);
+        const matchesByLegacyName = !entry?.landlordId && previousName && entry?.name === previousName;
+
+        if (!matchesById && !matchesByLegacyName) {
+          return entry;
+        }
+
+        changed = true;
+        return {
+          ...entry.toObject?.(),
+          landlordId: entry?.landlordId || landlordId,
+          name: nextName,
+          contact: nextContact,
+        };
+      });
+
+      if (changed) {
+        await property.save();
+      }
+    })
+  );
+};
+
 // Create landlord
 export const createLandlord = async (req, res, next) => {
   try {
@@ -413,11 +460,29 @@ export const updateLandlord = async (req, res, next) => {
       }
     }
 
+    const previousLandlordName = existingLandlord.landlordName;
     const updatedLandlord = await Landlord.findByIdAndUpdate(
       req.params.id,
       { $set: updateData },
       { new: true, runValidators: true }
     ).populate("company", "companyName");
+
+    if (
+      updatedLandlord &&
+      (
+        updateData.landlordName !== undefined ||
+        updateData.email !== undefined ||
+        updateData.phoneNumber !== undefined
+      )
+    ) {
+      await syncLinkedPropertyLandlordSnapshots({
+        companyId: existingLandlord.company,
+        landlordId: updatedLandlord._id,
+        previousName: previousLandlordName,
+        nextName: updatedLandlord.landlordName,
+        nextContact: updatedLandlord.email || updatedLandlord.phoneNumber || "",
+      });
+    }
 
     res.status(200).json({
       success: true,

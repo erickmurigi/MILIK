@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -13,14 +13,16 @@ import {
   FaEdit,
   FaTrash,
   FaPlus,
+  FaTimes,
+  FaReceipt,
+  FaMoneyBillWave,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits } from "../../redux/unitRedux";
-import { getRentPayments, getChartOfAccounts } from "../../redux/apiCalls";
+import { getChartOfAccounts } from "../../redux/apiCalls";
 import {
   createTenantInvoice,
   createTenantInvoicesBatch,
@@ -117,6 +119,37 @@ const escapeHtml = (value) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+const formatCurrency = (value = 0) => `KES ${Number(value || 0).toLocaleString()}`;
+
+const getInvoiceStatusBadgeClasses = (status = "") => {
+  const normalized = String(status || "").trim().toLowerCase();
+
+  if (normalized === "paid") return "bg-green-100 text-green-700";
+  if (normalized === "partially paid" || normalized === "partially_paid") return "bg-amber-100 text-amber-700";
+  if (normalized === "cancelled" || normalized === "reversed") return "bg-slate-100 text-slate-700";
+  return "bg-orange-100 text-orange-700";
+};
+
+
+const getInvoiceDaysOverdue = ({ dueDate, outstandingAmount = 0, status = "" } = {}) => {
+  if (!dueDate) return 0;
+  if (Number(outstandingAmount || 0) <= 0) return 0;
+
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+  if (["paid", "cancelled", "reversed"].includes(normalizedStatus)) return 0;
+
+  const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) return 0;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  due.setHours(0, 0, 0, 0);
+
+  const diff = today.getTime() - due.getTime();
+  if (diff <= 0) return 0;
+
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+};
 
 const ensureArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -438,27 +471,6 @@ const getBookingTaxSelection = (form = {}) => ({
   taxMode: form?.taxMode || "company_default",
 });
 
-const buildAppliedAmountsByInvoice = (payments = []) => {
-  const appliedByInvoice = new Map();
-
-  (Array.isArray(payments) ? payments : []).forEach((payment) => {
-    if (payment?.ledgerType !== "receipts") return;
-    if (payment?.isConfirmed !== true) return;
-    if (payment?.isCancelled === true || payment?.isReversed === true || payment?.reversalOf) return;
-    if (String(payment?.postingStatus || "").toLowerCase() === "reversed") return;
-
-    (Array.isArray(payment?.allocations) ? payment.allocations : []).forEach((allocation) => {
-      const invoiceId = String(allocation?.invoice || allocation?.invoiceId || "");
-      if (!invoiceId) return;
-      const amount = Number(allocation?.appliedAmount || 0);
-      if (!amount) return;
-      appliedByInvoice.set(invoiceId, Number(appliedByInvoice.get(invoiceId) || 0) + amount);
-    });
-  });
-
-  return appliedByInvoice;
-};
-
 const mapInvoiceStatusLabel = ({ rawStatus = "", outstanding = 0, appliedAmount = 0 }) => {
   const normalizedStatus = String(rawStatus || "").toLowerCase();
 
@@ -540,6 +552,126 @@ const buildJournalEntriesForInvoice = (invoice) => {
   ];
 };
 
+const buildInvoiceRows = ({ invoices = [], tenantLookup = {}, unitsFromStore = [], propertiesFromStore = [] }) => {
+  const sortedInvoices = [...(Array.isArray(invoices) ? invoices : [])].sort((a, b) => {
+    const aTime = a?.invoiceDate ? new Date(a.invoiceDate).getTime() : new Date(a?.createdAt || 0).getTime();
+    const bTime = b?.invoiceDate ? new Date(b.invoiceDate).getTime() : new Date(b?.createdAt || 0).getTime();
+    return aTime - bTime;
+  });
+
+  return sortedInvoices
+    .map((invoice, idx) => {
+      const invoiceTenantId = String(invoice?.tenant?._id || invoice?.tenant || "");
+      const tenant = tenantLookup[invoiceTenantId] || invoice?.tenant || {};
+      const invoiceAmount = Number((invoice?.adjustedAmount ?? invoice?.amount) || 0);
+      const resolvedAppliedAmount = Math.max(0, Number(invoice?.appliedAmount ?? 0));
+      const resolvedOutstanding = Math.max(
+        0,
+        Number(invoice?.outstanding ?? Math.max(0, invoiceAmount - resolvedAppliedAmount))
+      );
+      const rawStatus = String(invoice?.computedStatus || invoice?.status || "").toLowerCase();
+      const derivedStatus = mapInvoiceStatusLabel({
+        rawStatus,
+        outstanding: resolvedOutstanding,
+        appliedAmount: resolvedAppliedAmount,
+      });
+
+      const invoiceDate = invoice?.invoiceDate || invoice?.createdAt;
+      const parsedDate = invoiceDate ? new Date(invoiceDate) : new Date();
+      const month = parsedDate.getMonth();
+      const year = parsedDate.getFullYear();
+
+      const propertyName =
+        invoice?.property?.propertyName ||
+        invoice?.propertyName ||
+        resolveTenantPropertyName(tenant, unitsFromStore, propertiesFromStore);
+
+      const unitName =
+        invoice?.unit?.unitNumber ||
+        invoice?.unit?.unitName ||
+        invoice?.unitName ||
+        getUnitDisplayName(tenant);
+
+      const chargeType = getInvoiceChargeTypeKey({
+        category: invoice?.category,
+        metadata: invoice?.metadata || {},
+      });
+      const invoiceDocumentDateValue = invoice?.invoiceDate || invoice?.createdAt || null;
+      const invoiceDateValue = invoice?.bookingDate || invoiceDocumentDateValue || null;
+      const dueDateValue = invoice?.dueDate || null;
+
+      return {
+        key: `${invoice?._id || idx}`,
+        _id: invoice?._id,
+        id: invoice?.invoiceNumber || invoice?._id,
+        period: formatPeriodLabel(month, year),
+        invoiceDescription: deriveInvoiceDescription(invoice) || formatPeriodLabel(month, year),
+        storagePeriodKey: formatPeriodLabel(month, year),
+        chargeType,
+        chargeTypeLabel: getInvoiceChargeTypeLabel(chargeType),
+        tenantId: invoiceTenantId,
+        tenantName: invoice?.tenant?.name || getTenantDisplayName(tenant),
+        propertyName,
+        unitName,
+        amount: invoiceAmount,
+        appliedAmount: resolvedAppliedAmount,
+        outstandingAmount: resolvedOutstanding,
+        status: derivedStatus,
+        createdAt: invoice?.createdAt || invoice?.invoiceDate,
+        createdDate: formatDateDisplay(invoice?.createdAt || invoice?.invoiceDate),
+        invoiceDocumentDateValue,
+        invoiceDateValue,
+        invoiceDateLabel: formatDateDisplay(invoiceDateValue),
+        dueDateValue,
+        dueDateLabel: formatDateDisplay(dueDateValue),
+        receiptApplications: Array.isArray(invoice?.receiptApplications) ? invoice.receiptApplications : [],
+        originalInvoice: invoice,
+      };
+    })
+    .sort((a, b) => {
+      const aDate = a.invoiceDateValue ? new Date(a.invoiceDateValue).getTime() : a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bDate = b.invoiceDateValue ? new Date(b.invoiceDateValue).getTime() : b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bDate - aDate;
+    });
+};
+
+const buildInvoiceServerFilters = ({ filters = emptyFilters, propertiesFromStore = [], unitsFromStore = [], tenantId = "" }) => {
+  const selectedProperty =
+    filters?.property && filters.property !== "any"
+      ? propertiesFromStore.find((property) => property?.propertyName === filters.property)
+      : null;
+  const selectedPropertyId = selectedProperty?._id || "";
+
+  let scopedUnits = Array.isArray(unitsFromStore) ? unitsFromStore : [];
+  if (selectedPropertyId) {
+    scopedUnits = scopedUnits.filter((unit) => {
+      const unitPropertyId = unit?.property?._id || unit?.property || null;
+      return String(unitPropertyId || "") === String(selectedPropertyId);
+    });
+  }
+
+  const selectedUnit =
+    filters?.unit && filters.unit !== "any"
+      ? scopedUnits.find(
+          (unit) =>
+            (unit?.unitNumber || unit?.unitName || unit?.name || "") === filters.unit
+        ) ||
+        (Array.isArray(unitsFromStore) ? unitsFromStore : []).find(
+          (unit) => (unit?.unitNumber || unit?.unitName || unit?.name || "") === filters.unit
+        )
+      : null;
+
+  return {
+    status: filters?.status || "ACTIVE",
+    invoiceNumber: filters?.invoiceNo?.trim() || undefined,
+    tenantName: tenantId ? undefined : filters?.tenantName?.trim() || undefined,
+    propertyId: selectedPropertyId || undefined,
+    unitId: selectedUnit?._id || undefined,
+    fromDate: filters?.fromDate || undefined,
+    toDate: filters?.toDate || undefined,
+  };
+};
+
 const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const { id: tenantId } = useParams();
   const location = useLocation();
@@ -555,10 +687,20 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [bookingAction, setBookingAction] = useState("");
   const [showSingleBooking, setShowSingleBooking] = useState(false);
   const [showBatchBooking, setShowBatchBooking] = useState(false);
-  const [journalDrawerOpen, setJournalDrawerOpen] = useState(false);
-  const [journalContext, setJournalContext] = useState({});
-  const [journalLines, setJournalLines] = useState([]);
+  const [invoiceDetailOpen, setInvoiceDetailOpen] = useState(false);
+  const [activeInvoice, setActiveInvoice] = useState(null);
   const [tenantInvoicesFromApi, setTenantInvoicesFromApi] = useState([]);
+  const [invoiceListPagination, setInvoiceListPagination] = useState({
+    page: 1,
+    limit: ITEMS_PER_PAGE,
+    totalItems: 0,
+    totalPages: 1,
+  });
+  const [invoicePageSummary, setInvoicePageSummary] = useState({
+    pageItemCount: 0,
+    pageTotalAmount: 0,
+    pagePendingAmount: 0,
+  });
   const [invoiceRevenueAccounts, setInvoiceRevenueAccounts] = useState([]);
   const [deletingInvoiceIds, setDeletingInvoiceIds] = useState([]);
   const [submittingSingleBooking, setSubmittingSingleBooking] = useState(false);
@@ -603,8 +745,6 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const propertiesFromStore = useSelector((state) => state.property?.properties || []);
   const unitsFromStore = useSelector((state) => state.unit?.units || []);
   const tenantsFromStore = useMemo(() => ensureArray(rawTenantsFromStore), [rawTenantsFromStore]);
-  const rentPayments = useSelector((state) => state.rentPayment?.rentPayments || []);
-  const hasLoadedInitialDataRef = useRef(false);
   const [companyTaxConfig, setCompanyTaxConfig] = useState(null);
 
   const normalizedTaxConfig = useMemo(
@@ -623,7 +763,6 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
     dispatch(getTenants({ business: currentCompany._id }));
     dispatch(getProperties({ business: currentCompany._id }));
     dispatch(getUnits({ business: currentCompany._id }));
-    getRentPayments(dispatch, currentCompany._id);
   }, [dispatch, currentCompany?._id]);
 
   useEffect(() => {
@@ -751,36 +890,63 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
     loadInvoiceSupportData();
   }, [currentCompany?._id]);
 
+  const appliedServerFilters = useMemo(
+    () =>
+      buildInvoiceServerFilters({
+        filters: appliedFilters,
+        propertiesFromStore,
+        unitsFromStore,
+        tenantId,
+      }),
+    [appliedFilters, propertiesFromStore, unitsFromStore, tenantId]
+  );
+
   useEffect(() => {
-    if (!currentCompany?._id || tenantsFromStore.length === 0) return;
+    if (!currentCompany?._id) return;
 
     const loadInvoices = async () => {
       try {
-        let rows = [];
+        const payload = await getTenantInvoices({
+          tenantId,
+          business: currentCompany._id,
+          includeSnapshots: true,
+          paginate: true,
+          page: currentPage,
+          limit: ITEMS_PER_PAGE,
+          ...appliedServerFilters,
+        });
 
-        if (tenantId) {
-          rows = await getTenantInvoices({
-            tenantId,
-            business: currentCompany._id,
-            includeSnapshots: true,
-          });
-        } else {
-          rows = await getTenantInvoices({
-            business: currentCompany._id,
-            includeSnapshots: true,
-          });
-        }
-
-        setTenantInvoicesFromApi(Array.isArray(rows) ? rows : []);
-        hasLoadedInitialDataRef.current = true;
+        setTenantInvoicesFromApi(Array.isArray(payload?.data) ? payload.data : []);
+        setInvoiceListPagination({
+          page: Number(payload?.pagination?.page || currentPage || 1),
+          limit: Number(payload?.pagination?.limit || ITEMS_PER_PAGE),
+          totalItems: Number(payload?.pagination?.totalItems || 0),
+          totalPages: Number(payload?.pagination?.totalPages || 1),
+        });
+        setInvoicePageSummary({
+          pageItemCount: Number(payload?.summary?.pageItemCount || 0),
+          pageTotalAmount: Number(payload?.summary?.pageTotalAmount || 0),
+          pagePendingAmount: Number(payload?.summary?.pagePendingAmount || 0),
+        });
       } catch (error) {
         console.error("Failed to load tenant invoices:", error);
         setTenantInvoicesFromApi([]);
+        setInvoiceListPagination({
+          page: 1,
+          limit: ITEMS_PER_PAGE,
+          totalItems: 0,
+          totalPages: 1,
+        });
+        setInvoicePageSummary({
+          pageItemCount: 0,
+          pageTotalAmount: 0,
+          pagePendingAmount: 0,
+        });
       }
     };
 
     loadInvoices();
-  }, [currentCompany?._id, tenantsFromStore.length, tenantId, refreshTick]);
+  }, [currentCompany?._id, tenantId, refreshTick, currentPage, appliedServerFilters]);
 
   const uniqueProperties = useMemo(() => {
     return [
@@ -1038,147 +1204,28 @@ const getTenantPropertyId = (tenant) => {
     });
   }, [batchBookingForm, batchBookingScopeTenants, normalizedTaxConfig]);
 
-  const invoiceRows = useMemo(() => {
-    const appliedByInvoice = buildAppliedAmountsByInvoice(rentPayments);
+  const invoiceRows = useMemo(
+    () =>
+      buildInvoiceRows({
+        invoices: tenantInvoicesFromApi,
+        tenantLookup,
+        unitsFromStore,
+        propertiesFromStore,
+      }),
+    [tenantInvoicesFromApi, tenantLookup, unitsFromStore, propertiesFromStore]
+  );
 
-    const sortedInvoices = [...tenantInvoicesFromApi].sort((a, b) => {
-      const aTime = a?.invoiceDate ? new Date(a.invoiceDate).getTime() : new Date(a?.createdAt || 0).getTime();
-      const bTime = b?.invoiceDate ? new Date(b.invoiceDate).getTime() : new Date(b?.createdAt || 0).getTime();
-      return aTime - bTime;
-    });
+  const filteredInvoices = useMemo(
+    () => invoiceRows.filter((invoice) => !deletingInvoiceIds.includes(invoice._id)),
+    [invoiceRows, deletingInvoiceIds]
+  );
 
-    return sortedInvoices
-      .map((invoice, idx) => {
-        const invoiceTenantId = String(invoice?.tenant?._id || invoice?.tenant || "");
-        const tenant = tenantLookup[invoiceTenantId] || invoice?.tenant || {};
-        const invoiceAmount = Number((invoice?.adjustedAmount ?? invoice?.amount) || 0);
-        const fallbackAppliedAmount = Math.min(
-          invoiceAmount,
-          Math.max(0, Number(appliedByInvoice.get(String(invoice?._id || "")) || 0))
-        );
-        const resolvedAppliedAmount = Math.max(0, Number(invoice?.appliedAmount ?? fallbackAppliedAmount));
-        const resolvedOutstanding = Math.max(
-          0,
-          Number(invoice?.outstanding ?? Math.max(0, invoiceAmount - resolvedAppliedAmount))
-        );
-        const rawStatus = String(invoice?.computedStatus || invoice?.status || "").toLowerCase();
-        const derivedStatus = mapInvoiceStatusLabel({
-          rawStatus,
-          outstanding: resolvedOutstanding,
-          appliedAmount: resolvedAppliedAmount,
-        });
-
-        const invoiceDate = invoice?.invoiceDate || invoice?.createdAt;
-        const parsedDate = invoiceDate ? new Date(invoiceDate) : new Date();
-        const month = parsedDate.getMonth();
-        const year = parsedDate.getFullYear();
-
-        const propertyName =
-          invoice?.property?.propertyName ||
-          invoice?.propertyName ||
-          resolveTenantPropertyName(tenant, unitsFromStore, propertiesFromStore);
-
-        const unitName =
-          invoice?.unit?.unitNumber ||
-          invoice?.unit?.unitName ||
-          invoice?.unitName ||
-          getUnitDisplayName(tenant);
-
-        const chargeType = getInvoiceChargeTypeKey({
-          category: invoice?.category,
-          metadata: invoice?.metadata || {},
-        });
-        const invoiceDocumentDateValue = invoice?.invoiceDate || invoice?.createdAt || null;
-        const invoiceDateValue = invoice?.bookingDate || invoiceDocumentDateValue || null;
-        const dueDateValue = invoice?.dueDate || null;
-
-        return {
-          key: `${invoice?._id || idx}`,
-          _id: invoice?._id,
-          id: invoice?.invoiceNumber || invoice?._id,
-          period: formatPeriodLabel(month, year),
-          invoiceDescription: deriveInvoiceDescription(invoice) || formatPeriodLabel(month, year),
-          storagePeriodKey: formatPeriodLabel(month, year),
-          chargeType,
-          chargeTypeLabel: getInvoiceChargeTypeLabel(chargeType),
-          tenantId: invoiceTenantId,
-          tenantName: invoice?.tenant?.name || getTenantDisplayName(tenant),
-          propertyName,
-          unitName,
-          amount: invoiceAmount,
-          appliedAmount: resolvedAppliedAmount,
-          outstandingAmount: resolvedOutstanding,
-          status: derivedStatus,
-          createdAt: invoice?.createdAt || invoice?.invoiceDate,
-          createdDate: formatDateDisplay(invoice?.createdAt || invoice?.invoiceDate),
-          invoiceDocumentDateValue,
-          invoiceDateValue,
-          invoiceDateLabel: formatDateDisplay(invoiceDateValue),
-          dueDateValue,
-          dueDateLabel: formatDateDisplay(dueDateValue),
-          originalInvoice: invoice,
-        };
-      })
-      .sort((a, b) => {
-        const aDate = a.invoiceDateValue ? new Date(a.invoiceDateValue).getTime() : a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bDate = b.invoiceDateValue ? new Date(b.invoiceDateValue).getTime() : b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bDate - aDate;
-      });
-  }, [tenantInvoicesFromApi, rentPayments, tenantLookup, unitsFromStore, propertiesFromStore]);
-
-  const filteredInvoices = useMemo(() => {
-    return invoiceRows.filter((invoice) => {
-      if (deletingInvoiceIds.includes(invoice._id)) return false;
-      if (appliedFilters.status === "ACTIVE") {
-        if (["Cancelled", "Reversed"].includes(invoice.status)) return false;
-      } else if (appliedFilters.status === "Issued") {
-        if (!["Issued", "Partially Paid"].includes(invoice.status)) return false;
-      } else if (appliedFilters.status !== "ALL" && invoice.status !== appliedFilters.status) {
-        return false;
-      }
-      if (appliedFilters.property !== "any" && invoice.propertyName !== appliedFilters.property) return false;
-      if (appliedFilters.unit !== "any" && invoice.unitName !== appliedFilters.unit) return false;
-
-      if (
-        appliedFilters.tenantName &&
-        !invoice.tenantName.toLowerCase().includes(appliedFilters.tenantName.toLowerCase())
-      ) {
-        return false;
-      }
-
-      if (
-        appliedFilters.invoiceNo &&
-        !String(invoice.id).toLowerCase().includes(appliedFilters.invoiceNo.toLowerCase())
-      ) {
-        return false;
-      }
-
-      if (appliedFilters.fromDate || appliedFilters.toDate) {
-        if (!invoice.invoiceDateValue) return false;
-        const invoiceDate = new Date(invoice.invoiceDateValue);
-        if (Number.isNaN(invoiceDate.getTime())) return false;
-
-        if (appliedFilters.fromDate) {
-          const fromDate = new Date(`${appliedFilters.fromDate}T00:00:00`);
-          if (invoiceDate < fromDate) return false;
-        }
-
-        if (appliedFilters.toDate) {
-          const toDate = new Date(`${appliedFilters.toDate}T23:59:59`);
-          if (invoiceDate > toDate) return false;
-        }
-      }
-
-      return true;
-    });
-  }, [invoiceRows, appliedFilters, deletingInvoiceIds]);
-
-
-const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE));
-const safeCurrentPage = Math.min(currentPage, totalPages);
-const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-const endIndex = startIndex + ITEMS_PER_PAGE;
-const currentPageInvoices = filteredInvoices.slice(startIndex, endIndex);
+  const totalFilteredCount = Number(invoiceListPagination?.totalItems || 0);
+  const totalPages = Math.max(1, Number(invoiceListPagination?.totalPages || 1));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = totalFilteredCount === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = totalFilteredCount === 0 ? 0 : Math.min(startIndex + filteredInvoices.length, totalFilteredCount);
+  const currentPageInvoices = filteredInvoices;
 
 useEffect(() => {
   if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
@@ -1188,6 +1235,24 @@ const visibleInvoiceKeys = useMemo(
   () => currentPageInvoices.map((invoice) => invoice.key),
   [currentPageInvoices]
 );
+
+  useEffect(() => {
+    if (!invoiceDetailOpen || !activeInvoice?._id) return;
+
+    const refreshedInvoice = invoiceRows.find(
+      (invoice) => String(invoice?._id || "") === String(activeInvoice?._id || "")
+    );
+
+    if (!refreshedInvoice) {
+      setInvoiceDetailOpen(false);
+      setActiveInvoice(null);
+      return;
+    }
+
+    if (refreshedInvoice !== activeInvoice) {
+      setActiveInvoice(refreshedInvoice);
+    }
+  }, [invoiceDetailOpen, activeInvoice, invoiceRows]);
 
   useEffect(() => {
     if (filteredInvoices.length === 0) {
@@ -1200,10 +1265,8 @@ const visibleInvoiceKeys = useMemo(
     setSelectedInvoices((prev) => prev.filter((key) => visibleKeys.has(key)));
   }, [filteredInvoices]);
 
-  const totalAmount = filteredInvoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
-  const pendingAmount = filteredInvoices
-    .filter((inv) => ["Issued", "Partially Paid"].includes(inv.status))
-    .reduce((sum, inv) => sum + (Number(inv.outstandingAmount ?? inv.amount) || 0), 0);
+  const totalAmount = Number(invoicePageSummary?.pageTotalAmount || 0);
+  const pendingAmount = Number(invoicePageSummary?.pagePendingAmount || 0);
 
   const selectedCount = selectedInvoices.length;
   const canEdit = selectedCount === 1;
@@ -1216,6 +1279,137 @@ const visibleInvoiceKeys = useMemo(
   const companyPhone = currentCompany?.phone || currentCompany?.phoneNumber || currentCompany?.contactPhone || "";
   const companyEmail = currentCompany?.email || currentCompany?.companyEmail || currentCompany?.contactEmail || "";
   const companyAddress = currentCompany?.address || currentCompany?.postalAddress || currentCompany?.location || "";
+
+  const activeInvoiceSource = activeInvoice?.originalInvoice || {};
+  const activeInvoiceMetadata =
+    activeInvoiceSource?.metadata && typeof activeInvoiceSource.metadata === "object"
+      ? activeInvoiceSource.metadata
+      : {};
+  const activeInvoiceTaxSnapshot =
+    activeInvoiceSource?.taxSnapshot && typeof activeInvoiceSource.taxSnapshot === "object"
+      ? activeInvoiceSource.taxSnapshot
+      : {};
+  const activeInvoiceUtilityBreakdown = Array.isArray(activeInvoiceMetadata?.utilityBreakdown)
+    ? activeInvoiceMetadata.utilityBreakdown
+    : [];
+  const activeInvoiceNetAmount = Number(
+    activeInvoiceTaxSnapshot?.netAmount ??
+      activeInvoiceTaxSnapshot?.enteredAmount ??
+      activeInvoiceSource?.amount ??
+      activeInvoice?.amount ??
+      0
+  );
+  const activeInvoiceTaxAmount = Number(activeInvoiceTaxSnapshot?.taxAmount || 0);
+  const activeInvoiceGrossAmount = Number(
+    activeInvoiceTaxSnapshot?.grossAmount ??
+      activeInvoiceSource?.amount ??
+      activeInvoice?.amount ??
+      0
+  );
+  const activeInvoiceDaysOverdue = getInvoiceDaysOverdue({
+    dueDate: activeInvoice?.dueDateValue || activeInvoiceSource?.dueDate || null,
+    outstandingAmount: activeInvoice?.outstandingAmount,
+    status: activeInvoice?.status,
+  });
+  const activeInvoiceSettlementPercentage =
+    activeInvoiceGrossAmount > 0
+      ? Math.min(
+          100,
+          Math.max(0, (Number(activeInvoice?.appliedAmount || 0) / activeInvoiceGrossAmount) * 100)
+        )
+      : 0;
+  const activeInvoiceJournalLines = useMemo(
+    () => (activeInvoice ? buildJournalEntriesForInvoice(activeInvoice) : []),
+    [activeInvoice]
+  );
+  const activeInvoiceBreakdown = useMemo(() => {
+    if (!activeInvoice) return [];
+
+    const baseDescription =
+      activeInvoice?.invoiceDescription ||
+      deriveInvoiceDescription(activeInvoiceSource) ||
+      `${activeInvoice?.chargeTypeLabel || getInvoiceChargeTypeLabel(activeInvoice?.chargeType)} charge`;
+
+    if (activeInvoice?.chargeType === "combined" && activeInvoiceUtilityBreakdown.length > 0) {
+      const utilityTotal = activeInvoiceUtilityBreakdown.reduce(
+        (sum, item) => sum + Number(item?.amount || 0),
+        0
+      );
+      const rentAmount = Math.max(0, activeInvoiceNetAmount - utilityTotal);
+
+      return [
+        ...(rentAmount > 0
+          ? [
+              {
+                label: baseDescription,
+                amount: rentAmount,
+              },
+            ]
+          : []),
+        ...activeInvoiceUtilityBreakdown.map((item) => ({
+          label: `${item?.label || "Utility"}${item?.periodLabel ? ` (${item.periodLabel})` : ""}`,
+          amount: Number(item?.amount || 0),
+        })),
+      ].filter((item) => Number(item?.amount || 0) > 0);
+    }
+
+    return [
+      {
+        label: baseDescription,
+        amount: activeInvoiceNetAmount,
+      },
+    ];
+  }, [activeInvoice, activeInvoiceSource, activeInvoiceUtilityBreakdown, activeInvoiceNetAmount]);
+
+  const activeInvoiceReceiptApplications = useMemo(() => {
+    const rows = Array.isArray(activeInvoice?.receiptApplications)
+      ? activeInvoice.receiptApplications
+      : Array.isArray(activeInvoiceSource?.receiptApplications)
+      ? activeInvoiceSource.receiptApplications
+      : [];
+
+    return rows
+      .filter((row) => Number(row?.appliedAmount || 0) > 0)
+      .map((row, index) => ({
+        key: `${row?.receiptId || row?.receiptNumber || "receipt"}-${index}`,
+        receiptId: row?.receiptId || "",
+        receiptNumber: row?.receiptNumber || row?.referenceNumber || "Receipt",
+        receiptDate: row?.receiptDate || null,
+        paymentType: row?.paymentType || "rent",
+        chargeLabel: row?.chargeLabel || activeInvoice?.invoiceDescription || activeInvoice?.period || "Invoice application",
+        appliedAmount: Number(row?.appliedAmount || 0),
+        afterOutstanding: Number(row?.afterOutstanding || 0),
+      }))
+      .sort((a, b) => {
+        const aTime = a?.receiptDate ? new Date(a.receiptDate).getTime() : 0;
+        const bTime = b?.receiptDate ? new Date(b.receiptDate).getTime() : 0;
+        return aTime - bTime;
+      });
+  }, [activeInvoice, activeInvoiceSource]);
+
+
+  const canDeleteActiveInvoice =
+    Boolean(activeInvoice?._id) &&
+    canDeleteInvoice &&
+    !["paid", "partially_paid"].includes(String(activeInvoice?.status || "").toLowerCase());
+
+  const closeInvoiceDetail = () => {
+    setInvoiceDetailOpen(false);
+    setActiveInvoice(null);
+  };
+
+  useEffect(() => {
+    if (!invoiceDetailOpen) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        closeInvoiceDetail();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [invoiceDetailOpen]);
 
   const applySearch = () => {
     setAppliedFilters({ ...draftFilters });
@@ -1230,6 +1424,29 @@ const visibleInvoiceKeys = useMemo(
     setSelectedInvoices([]);
     setSelectAll(false);
     setCurrentPage(1);
+  };
+
+  const fetchAllFilteredInvoiceRows = async (filters = appliedFilters) => {
+    if (!currentCompany?._id) return [];
+
+    const invoices = await getTenantInvoices({
+      tenantId,
+      business: currentCompany._id,
+      includeSnapshots: true,
+      ...buildInvoiceServerFilters({
+        filters,
+        propertiesFromStore,
+        unitsFromStore,
+        tenantId,
+      }),
+    });
+
+    return buildInvoiceRows({
+      invoices,
+      tenantLookup,
+      unitsFromStore,
+      propertiesFromStore,
+    }).filter((invoice) => !deletingInvoiceIds.includes(invoice._id));
   };
 
   const toggleSelectAll = () => {
@@ -1557,18 +1774,8 @@ const visibleInvoiceKeys = useMemo(
 
   const handleViewInvoice = (invoice) => {
     if (!invoice) return;
-
-    setJournalContext({
-      transactionNumber: invoice.id,
-      date: invoice.createdDate || "-",
-      tenant: invoice.tenantName,
-      property: invoice.propertyName,
-      unit: invoice.unitName,
-      cashbook: "Tenant Receivables Control",
-    });
-
-    setJournalLines(buildJournalEntriesForInvoice(invoice));
-    setJournalDrawerOpen(true);
+    setActiveInvoice(invoice);
+    setInvoiceDetailOpen(true);
   };
 
   const handlePrintInvoice = (invoice) => {
@@ -1605,26 +1812,37 @@ const visibleInvoiceKeys = useMemo(
     toast.success(`Downloaded ${invoice.id}`);
   };
 
-  const handlePrintList = () => {
+  const handlePrintList = async () => {
     if (!canExportInvoice) {
       toast.warning("You do not have permission to print invoice lists");
       return;
     }
-    if (filteredInvoices.length === 0) {
+    if (totalFilteredCount === 0) {
       toast.warn("No invoices to print");
       return;
     }
 
-    const printWindow = openHtmlDocument(
-      "MILIK Rental Invoices List",
-      buildInvoiceListHtml(filteredInvoices)
-    );
-    if (!printWindow) return;
+    try {
+      const printableRows = await fetchAllFilteredInvoiceRows();
+      if (printableRows.length === 0) {
+        toast.warn("No invoices to print");
+        return;
+      }
 
-    setTimeout(() => {
-      printWindow.focus();
-      printWindow.print();
-    }, 500);
+      const printWindow = openHtmlDocument(
+        "MILIK Rental Invoices List",
+        buildInvoiceListHtml(printableRows)
+      );
+      if (!printWindow) return;
+
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 500);
+    } catch (error) {
+      console.error("Failed to prepare invoice list for printing:", error);
+      toast.error("Failed to prepare invoice list");
+    }
   };
 
   const findRevenueAccountId = (type) => {
@@ -2427,6 +2645,9 @@ const createInvoiceForTenant = async (
       await deleteTenantInvoice(invoice._id);
       window.dispatchEvent(new Event("invoicesUpdated"));
       setRefreshTick((prev) => prev + 1);
+      if (String(activeInvoice?._id || "") === String(invoice?._id || "")) {
+        closeInvoiceDetail();
+      }
       toast.success(`Invoice ${invoice.id} deleted successfully`);
     } catch (error) {
       toast.error(
@@ -2465,16 +2686,16 @@ const createInvoiceForTenant = async (
             <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
               <div className="rounded border border-blue-200 bg-blue-50 p-2.5">
                 <p className="text-[11px] font-semibold text-blue-600">Total Invoices</p>
-                <p className="text-xl font-bold leading-tight text-blue-900">{filteredInvoices.length}</p>
+                <p className="text-xl font-bold leading-tight text-blue-900">{totalFilteredCount}</p>
               </div>
               <div className="rounded border border-green-200 bg-green-50 p-2.5">
-                <p className="text-[11px] font-semibold text-green-600">Total Amount</p>
+                <p className="text-[11px] font-semibold text-green-600">Page Total</p>
                 <p className="text-xl font-bold leading-tight text-green-900">
                   KES {totalAmount.toLocaleString()}
                 </p>
               </div>
               <div className="rounded border border-orange-200 bg-orange-50 p-2.5">
-                <p className="text-[11px] font-semibold text-orange-600">Pending Amount</p>
+                <p className="text-[11px] font-semibold text-orange-600">Page Pending</p>
                 <p className="text-xl font-bold leading-tight text-orange-900">
                   KES {pendingAmount.toLocaleString()}
                 </p>
@@ -2622,9 +2843,9 @@ const createInvoiceForTenant = async (
 
                 <button
                   onClick={handlePrintList}
-                  disabled={!canExportInvoice || filteredInvoices.length === 0}
+                  disabled={!canExportInvoice || totalFilteredCount === 0}
                   className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    filteredInvoices.length > 0
+                    totalFilteredCount > 0
                       ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
                       : "bg-gray-400 cursor-not-allowed"
                   }`}
@@ -2681,7 +2902,7 @@ const createInvoiceForTenant = async (
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredInvoices.length === 0 ? (
+                  {totalFilteredCount === 0 ? (
                     <tr>
                       <td colSpan={tenantId ? "12" : "14"} className="px-4 py-8 text-center text-gray-500">
                         <FaFileInvoice className="mb-2 inline-block text-4xl text-gray-300" />
@@ -2697,7 +2918,7 @@ const createInvoiceForTenant = async (
                     currentPageInvoices.map((invoice, idx) => { const isSelected = selectedInvoices.includes(invoice.key); return (
                       <tr
                         key={invoice.key}
-                        className={`border-b border-slate-200 transition-colors ${
+                        className={`cursor-pointer border-b border-slate-200 transition-colors ${
                           isSelected
                             ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
                             : idx % 2 === 0
@@ -2800,14 +3021,14 @@ const createInvoiceForTenant = async (
 
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
               <p>
-                <span className="font-semibold">Showing:</span> {filteredInvoices.length === 0 ? 0 : startIndex + 1}
+                <span className="font-semibold">Showing:</span> {totalFilteredCount === 0 ? 0 : startIndex + 1}
                 {" - "}
-                {Math.min(endIndex, filteredInvoices.length)} of {filteredInvoices.length} invoice(s)
+                {endIndex} of {totalFilteredCount} invoice(s)
                 {appliedFilters.status !== "ACTIVE" && ` · Status: ${appliedFilters.status}`}
               </p>
               <p>
                 <span className="font-semibold">Selected:</span> {selectedCount}
-                {filteredInvoices.length > 0 && (
+                {totalFilteredCount > 0 && (
                   <>
                     {" · "}
                     <span className="font-semibold">Total:</span> KES {totalAmount.toLocaleString()}
@@ -3371,14 +3592,306 @@ const createInvoiceForTenant = async (
         </div>
       )}
 
-      <JournalEntriesDrawer
-        open={journalDrawerOpen}
-        onClose={() => setJournalDrawerOpen(false)}
-        title="Invoice Journal Entry"
-        sourceType="invoice"
-        context={journalContext}
-        lines={journalLines}
-      />
+      {invoiceDetailOpen && activeInvoice && (
+        <div className="fixed inset-0 z-[80]" onClick={closeInvoiceDetail}>
+          <button
+            type="button"
+            aria-label="Close invoice details"
+            onClick={closeInvoiceDetail}
+            className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+          />
+          <div className="absolute inset-y-0 right-0 flex w-full justify-end">
+            <div
+              className="relative flex h-full w-full max-w-[760px] flex-col border-l border-slate-200 bg-white shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114D3C] to-[#0B3B2E] px-5 py-4 text-white">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-white">
+                        <FaReceipt size={16} />
+                      </span>
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-100">
+                          Invoice Details
+                        </p>
+                        <h3 className="truncate text-lg font-bold">
+                          {activeInvoice.id}
+                        </h3>
+                      </div>
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${getInvoiceStatusBadgeClasses(
+                          activeInvoice.status
+                        )} bg-white/95`}
+                      >
+                        {activeInvoice.status}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm font-semibold text-white/95">
+                      {activeInvoice.invoiceDescription || activeInvoice.period}
+                    </p>
+                    <p className="mt-1 text-xs text-emerald-100">
+                      {activeInvoice.tenantName} · {activeInvoice.propertyName} · {activeInvoice.unitName}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={closeInvoiceDetail}
+                    className="rounded-xl border border-white/15 bg-white/10 p-2 text-white transition hover:bg-white/20"
+                    title="Close"
+                  >
+                    <FaTimes size={14} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3">
+                <button
+                  type="button"
+                  onClick={() => handlePrintInvoice(activeInvoice)}
+                  disabled={!canExportInvoice}
+                  className="inline-flex items-center gap-2 rounded-lg border border-purple-200 bg-white px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FaPrint size={12} />
+                  Print
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadInvoice(activeInvoice)}
+                  disabled={!canExportInvoice}
+                  className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-white px-3 py-2 text-xs font-semibold text-green-700 transition hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FaDownload size={12} />
+                  Download
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleViewTenantStatement(activeInvoice.tenantId)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-50"
+                >
+                  <FaArrowRight size={12} />
+                  Tenant Statement
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSingle(activeInvoice)}
+                  disabled={!canDeleteActiveInvoice}
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  title={
+                    canDeleteActiveInvoice
+                      ? "Delete invoice"
+                      : canDeleteInvoice
+                      ? "Paid invoices cannot be deleted from this screen"
+                      : "You do not have permission to delete invoices"
+                  }
+                >
+                  <FaTrash size={12} />
+                  Delete
+                </button>
+              </div>
+
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-slate-50 px-5 py-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-600">
+                      Gross Amount
+                    </p>
+                    <p className="mt-2 text-xl font-bold text-slate-900">
+                      {formatCurrency(activeInvoiceGrossAmount)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-500">Booked invoice total</p>
+                  </div>
+
+                  <div className="rounded-2xl border border-green-200 bg-white p-4 shadow-sm">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-green-600">
+                      Applied
+                    </p>
+                    <p className="mt-2 text-xl font-bold text-slate-900">
+                      {formatCurrency(activeInvoice?.appliedAmount || 0)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Settlement progress {activeInvoiceSettlementPercentage.toFixed(0)}%
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-orange-200 bg-white p-4 shadow-sm">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-orange-600">
+                      Outstanding
+                    </p>
+                    <p className="mt-2 text-xl font-bold text-slate-900">
+                      {formatCurrency(activeInvoice?.outstandingAmount || 0)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-500">Remaining to settle</p>
+                  </div>
+
+                  <div className="rounded-2xl border border-rose-200 bg-white p-4 shadow-sm">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-600">
+                      Due Pressure
+                    </p>
+                    <p className="mt-2 text-xl font-bold text-slate-900">
+                      {activeInvoiceDaysOverdue > 0 ? `${activeInvoiceDaysOverdue} day(s)` : "On time"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Based on due date and open balance
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">Settlement Progress</h4>
+                      <p className="text-xs text-slate-500">
+                        Quick visual on how much of this invoice has already been cleared.
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-600">
+                      {activeInvoiceSettlementPercentage.toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-[#0B3B2E] transition-all"
+                      style={{ width: `${activeInvoiceSettlementPercentage}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr,0.85fr]">
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="mb-3 flex items-center gap-2">
+                        <FaMoneyBillWave className="text-slate-500" size={14} />
+                        <h4 className="text-sm font-bold text-slate-900">Amount Breakdown</h4>
+                      </div>
+                      <div className="space-y-2">
+                        {activeInvoiceBreakdown.map((item, index) => (
+                          <div
+                            key={`${item.label}-${index}`}
+                            className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2"
+                          >
+                            <p className="text-xs font-semibold text-slate-700">{item.label}</p>
+                            <p className="text-xs font-bold text-slate-900">{formatCurrency(item.amount)}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+                          <p className="font-semibold uppercase tracking-wide text-slate-400">Net</p>
+                          <p className="mt-1 font-bold text-slate-900">{formatCurrency(activeInvoiceNetAmount)}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+                          <p className="font-semibold uppercase tracking-wide text-slate-400">Tax</p>
+                          <p className="mt-1 font-bold text-slate-900">{formatCurrency(activeInvoiceTaxAmount)}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+                          <p className="font-semibold uppercase tracking-wide text-slate-400">Gross</p>
+                          <p className="mt-1 font-bold text-slate-900">{formatCurrency(activeInvoiceGrossAmount)}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="mb-3 flex items-center gap-2">
+                        <FaFileInvoice className="text-slate-500" size={14} />
+                        <h4 className="text-sm font-bold text-slate-900">Journal Preview</h4>
+                      </div>
+                      <div className="overflow-hidden rounded-xl border border-slate-200">
+                        <table className="w-full text-xs">
+                          <thead className="bg-slate-100 text-slate-700">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-semibold">Account</th>
+                              <th className="px-3 py-2 text-right font-semibold">Debit</th>
+                              <th className="px-3 py-2 text-right font-semibold">Credit</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {activeInvoiceJournalLines.map((line, index) => (
+                              <tr key={`${line.accountCode}-${index}`} className="border-t border-slate-200">
+                                <td className="px-3 py-2">
+                                  <p className="font-semibold text-slate-900">
+                                    {line.accountCode} · {line.accountName}
+                                  </p>
+                                  <p className="mt-0.5 text-[11px] text-slate-500">{line.narration}</p>
+                                </td>
+                                <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                                  {line.debit ? formatCurrency(line.debit) : "-"}
+                                </td>
+                                <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                                  {line.credit ? formatCurrency(line.credit) : "-"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="mb-3 flex items-center gap-2">
+                        <FaReceipt className="text-slate-500" size={14} />
+                        <h4 className="text-sm font-bold text-slate-900">Receipt Applications</h4>
+                      </div>
+                      {activeInvoiceReceiptApplications.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-xs text-slate-600">
+                          No receipt has been applied to this invoice yet.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {activeInvoiceReceiptApplications.map((row) => (
+                            <div
+                              key={row.key}
+                              className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-slate-900">{row.receiptNumber}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">
+                                    {row.receiptDate ? formatDateDisplay(row.receiptDate) : "-"} · {String(row.paymentType || "receipt").replace(/_/g, " ")}
+                                  </p>
+                                  <p className="mt-1 text-[11px] text-slate-600">{row.chargeLabel}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs font-bold text-green-700">{formatCurrency(row.appliedAmount)}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">
+                                    Bal after {formatCurrency(row.afterOutstanding)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <h4 className="text-sm font-bold text-slate-900">Action Notes</h4>
+                      <ul className="mt-3 space-y-2 text-xs text-slate-700">
+                        <li className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+                          Use <span className="font-semibold">Tenant Statement</span> to review this invoice together with receipts, allocations, and downstream balance movement.
+                        </li>
+                        <li className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+                          Use <span className="font-semibold">Print</span> or <span className="font-semibold">Download</span> when you need the invoice in a shareable or auditable format.
+                        </li>
+                        <li className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+                          {canDeleteActiveInvoice
+                            ? "Delete remains available because this invoice is not settled from this screen."
+                            : "Delete is blocked here when the invoice is already paid or partially paid, or when you do not have permission."}
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

@@ -3,9 +3,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FaArrowRight, FaCoins, FaReceipt, FaSearch } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { getRentPayments } from "../../redux/apiCalls";
+import { listRentPaymentsPage } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
-import { getTenants } from "../../redux/tenantsRedux";
 
 const ITEMS_PER_PAGE = 50;
 const MILIK_GREEN = "bg-[#0B3B2E]";
@@ -16,9 +15,7 @@ const ensureArray = (value) => {
   if (Array.isArray(value?.data)) return value.data;
   if (Array.isArray(value?.items)) return value.items;
   if (Array.isArray(value?.rows)) return value.rows;
-  if (Array.isArray(value?.tenants)) return value.tenants;
   if (Array.isArray(value?.properties)) return value.properties;
-  if (Array.isArray(value?.rentPayments)) return value.rentPayments;
   return [];
 };
 
@@ -43,98 +40,195 @@ const getTenantName = (tenant) =>
   [tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ") ||
   "Unnamed Tenant";
 
-const getPropertyIdFromTenant = (tenant) =>
-  String(tenant?.property?._id || tenant?.property || tenant?.unit?.property?._id || tenant?.unit?.property || "");
+const getPropertyName = (payment) =>
+  payment?.unit?.property?.propertyName ||
+  payment?.tenant?.unit?.property?.propertyName ||
+  payment?.property?.propertyName ||
+  "-";
+
+const getPropertyId = (payment) =>
+  safeId(payment?.unit?.property || payment?.tenant?.unit?.property || payment?.property || "");
+
+const getUnitName = (payment) =>
+  payment?.unit?.unitNumber ||
+  payment?.tenant?.unit?.unitNumber ||
+  "-";
+
+const buildStatusParam = (statusFilter) => {
+  if (statusFilter === "confirmed") return "confirmed";
+  if (statusFilter === "unconfirmed") return "pending";
+  return "active";
+};
 
 const TenantPrepayments = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { currentCompany } = useSelector((state) => state.company || {});
-  const tenants = useSelector((state) => ensureArray(state.tenant?.tenants));
   const properties = useSelector((state) => ensureArray(state.property?.properties));
-  const receipts = useSelector((state) => ensureArray(state.rentPayment?.rentPayments));
 
   const [search, setSearch] = useState("");
   const [propertyFilter, setPropertyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [rows, setRows] = useState([]);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: ITEMS_PER_PAGE,
+    totalItems: 0,
+    totalPages: 1,
+    hasPreviousPage: false,
+    hasNextPage: false,
+  });
+  const [totals, setTotals] = useState({
+    rowCount: 0,
+    totalReceiptAmount: 0,
+    totalUnapplied: 0,
+    totalAllocated: 0,
+    confirmedRows: 0,
+  });
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-    dispatch(getTenants({ business: currentCompany._id }));
     dispatch(getProperties({ business: currentCompany._id }));
-    getRentPayments(dispatch, currentCompany._id);
   }, [currentCompany?._id, dispatch]);
-
-  const propertyMap = useMemo(
-    () => new Map(properties.map((item) => [String(item?._id || ""), item])),
-    [properties]
-  );
-
-  const rows = useMemo(() => {
-    return receipts
-      .filter((payment) => {
-        if (payment?.ledgerType !== "receipts") return false;
-        if (payment?.isCancelled === true || payment?.isReversed === true || payment?.reversalOf) return false;
-        if (String(payment?.postingStatus || "").toLowerCase() === "reversed") return false;
-        return Number(payment?.allocationSummary?.unapplied || 0) > 0;
-      })
-      .map((payment) => {
-        const tenantId = safeId(payment?.tenant);
-        const tenant = tenants.find((item) => safeId(item) === tenantId) || payment?.tenant || null;
-        const propertyId = getPropertyIdFromTenant(tenant);
-        const property = propertyMap.get(propertyId);
-        const allocatedAmount = Math.max(
-          0,
-          Math.abs(Number(payment?.amount || 0)) - Math.abs(Number(payment?.allocationSummary?.unapplied || 0))
-        );
-
-        return {
-          _id: payment?._id,
-          receipt: payment,
-          tenantId,
-          tenantName: getTenantName(tenant),
-          propertyId,
-          propertyName: property?.propertyName || tenant?.property?.propertyName || tenant?.unit?.property?.propertyName || "-",
-          unitName: tenant?.unit?.unitNumber || payment?.unit?.unitNumber || "-",
-          amount: Math.abs(Number(payment?.amount || 0)),
-          unappliedAmount: Math.abs(Number(payment?.allocationSummary?.unapplied || 0)),
-          allocatedAmount,
-          isConfirmed: payment?.isConfirmed === true,
-          paymentDate: payment?.paymentDate,
-          referenceNumber: payment?.referenceNumber || payment?.receiptNumber || "-",
-        };
-      })
-      .filter((row) => {
-        if (propertyFilter !== "all" && row.propertyId !== propertyFilter) return false;
-        if (statusFilter === "confirmed" && !row.isConfirmed) return false;
-        if (statusFilter === "unconfirmed" && row.isConfirmed) return false;
-        if (!search.trim()) return true;
-        const haystack = `${row.tenantName} ${row.propertyName} ${row.unitName} ${row.referenceNumber}`.toLowerCase();
-        return haystack.includes(search.trim().toLowerCase());
-      })
-      .sort((a, b) => new Date(b.paymentDate || 0).getTime() - new Date(a.paymentDate || 0).getTime());
-  }, [propertyFilter, propertyMap, receipts, search, statusFilter, tenants]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [search, propertyFilter, statusFilter]);
 
-  const totals = useMemo(() => {
-    const confirmedRows = rows.filter((row) => row.isConfirmed);
-    return {
-      rowCount: rows.length,
-      totalUnapplied: rows.reduce((sum, row) => sum + Number(row.unappliedAmount || 0), 0),
-      totalAllocated: rows.reduce((sum, row) => sum + Number(row.allocatedAmount || 0), 0),
-      lockedRows: confirmedRows.length,
-    };
-  }, [rows]);
+  useEffect(() => {
+    let isMounted = true;
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = rows.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const currentPageRows = rows.slice(startIndex, endIndex);
+    const loadRows = async () => {
+      if (!currentCompany?._id) {
+        if (!isMounted) return;
+        setRows([]);
+        setPagination({
+          page: 1,
+          limit: ITEMS_PER_PAGE,
+          totalItems: 0,
+          totalPages: 1,
+          hasPreviousPage: false,
+          hasNextPage: false,
+        });
+        setTotals({
+          rowCount: 0,
+          totalReceiptAmount: 0,
+          totalUnapplied: 0,
+          totalAllocated: 0,
+          confirmedRows: 0,
+        });
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const response = await listRentPaymentsPage({
+          business: currentCompany._id,
+          page: currentPage,
+          limit: ITEMS_PER_PAGE,
+          hasUnapplied: true,
+          includeTotals: true,
+          status: buildStatusParam(statusFilter),
+          property: propertyFilter !== "all" ? propertyFilter : undefined,
+          search: search.trim() || undefined,
+          tenantSearch: search.trim() || undefined,
+        });
+
+        if (!isMounted) return;
+
+        const items = Array.isArray(response?.items) ? response.items : [];
+        const summary = response?.raw?.summary || response?.summary || null;
+
+        const nextRows = items.map((payment) => {
+          const allocatedAmount = Math.max(
+            0,
+            Math.abs(Number(payment?.amount || 0)) - Math.abs(Number(payment?.allocationSummary?.unapplied || 0))
+          );
+
+          return {
+            _id: payment?._id,
+            receipt: payment,
+            tenantId: safeId(payment?.tenant),
+            tenantName: getTenantName(payment?.tenant),
+            propertyId: getPropertyId(payment),
+            propertyName: getPropertyName(payment),
+            unitName: getUnitName(payment),
+            amount: Math.abs(Number(payment?.amount || 0)),
+            unappliedAmount: Math.abs(Number(payment?.allocationSummary?.unapplied || 0)),
+            allocatedAmount,
+            isConfirmed: payment?.isConfirmed === true,
+            paymentDate: payment?.paymentDate,
+            referenceNumber: payment?.referenceNumber || payment?.receiptNumber || "-",
+          };
+        });
+
+        setRows(nextRows);
+        setPagination(
+          response?.pagination || {
+            page: currentPage,
+            limit: ITEMS_PER_PAGE,
+            totalItems: nextRows.length,
+            totalPages: Math.max(1, Math.ceil(nextRows.length / ITEMS_PER_PAGE)),
+            hasPreviousPage: currentPage > 1,
+            hasNextPage: false,
+          }
+        );
+        setTotals({
+          rowCount: Number(summary?.rowCount || response?.pagination?.totalItems || nextRows.length || 0),
+          totalReceiptAmount: Number(summary?.totalReceiptAmount || 0),
+          totalUnapplied: Number(summary?.totalUnapplied || 0),
+          totalAllocated: Number(summary?.totalAllocated || 0),
+          confirmedRows: Number(summary?.confirmedRows || nextRows.filter((row) => row.isConfirmed).length || 0),
+        });
+      } catch (error) {
+        if (!isMounted) return;
+        setRows([]);
+        setPagination({
+          page: 1,
+          limit: ITEMS_PER_PAGE,
+          totalItems: 0,
+          totalPages: 1,
+          hasPreviousPage: false,
+          hasNextPage: false,
+        });
+        setTotals({
+          rowCount: 0,
+          totalReceiptAmount: 0,
+          totalUnapplied: 0,
+          totalAllocated: 0,
+          confirmedRows: 0,
+        });
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadRows();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentCompany?._id, currentPage, propertyFilter, search, statusFilter]);
+
+  const propertyOptions = useMemo(
+    () =>
+      properties
+        .map((property) => ({
+          _id: safeId(property),
+          propertyName: property?.propertyName || property?.name || "Unnamed Property",
+        }))
+        .filter((property) => property._id),
+    [properties]
+  );
+
+  const totalPages = Math.max(1, Number(pagination?.totalPages || 1));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const showingStart = rows.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE + 1;
+  const showingEnd = rows.length === 0 ? 0 : showingStart + rows.length - 1;
 
   return (
     <DashboardLayout lockContentScroll>
@@ -146,7 +240,7 @@ const TenantPrepayments = () => {
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Receipting Workspace</p>
                 <h1 className="mt-0.5 text-xl font-black text-slate-900">Tenant Prepayments</h1>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  Review receipts with unapplied balance and route users into the supported allocation workflow without creating duplicate ledgers.
+                  Review receipts with unapplied balance using the server-filtered prepayment feed so allocation work stays fast, traceable, and safe for large businesses.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -160,7 +254,7 @@ const TenantPrepayments = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-5">
             <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Open Prepayments</p>
               <p className="mt-1 text-base font-black text-slate-900">{totals.rowCount}</p>
@@ -175,32 +269,36 @@ const TenantPrepayments = () => {
             </div>
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Confirmed Rows</p>
-              <p className="mt-1 text-base font-black text-blue-700">{totals.lockedRows}</p>
+              <p className="mt-1 text-base font-black text-blue-700">{totals.confirmedRows}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Receipt Value</p>
+              <p className="mt-1 text-base font-black text-slate-900">{formatMoney(totals.totalReceiptAmount)}</p>
             </div>
           </div>
 
           <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-3 lg:grid-cols-4">
                 <div className="relative lg:col-span-2">
                   <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search tenant, property, unit, reference"
-                    className="h-8 w-full px-3 py-1.5 pl-9 border border-slate-300 rounded-md text-xs"
+                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 pl-9 text-xs"
                   />
                 </div>
                 <div>
                   <select
                     value={propertyFilter}
                     onChange={(e) => setPropertyFilter(e.target.value)}
-                    className="h-8 w-full px-3 py-1.5 border border-slate-300 rounded-md text-xs"
+                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs"
                   >
                     <option value="all">All Properties</option>
-                    {properties.map((property) => (
+                    {propertyOptions.map((property) => (
                       <option key={property._id} value={property._id}>
-                        {property.propertyName || property.name || "Unnamed Property"}
+                        {property.propertyName}
                       </option>
                     ))}
                   </select>
@@ -209,9 +307,9 @@ const TenantPrepayments = () => {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="h-8 w-full px-3 py-1.5 border border-slate-300 rounded-md text-xs"
+                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs"
                   >
-                    <option value="all">All Statuses</option>
+                    <option value="all">All Active Prepayments</option>
                     <option value="confirmed">Confirmed Only</option>
                     <option value="unconfirmed">Unconfirmed Only</option>
                   </select>
@@ -221,7 +319,7 @@ const TenantPrepayments = () => {
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   onClick={() => navigate("/receipts/new")}
-                  className={`px-3 py-1.5 text-xs rounded-md text-white font-semibold flex items-center gap-2 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                 >
                   <FaReceipt /> New Receipt
                 </button>
@@ -231,7 +329,7 @@ const TenantPrepayments = () => {
                     setPropertyFilter("all");
                     setStatusFilter("all");
                   }}
-                  className="px-3 py-1.5 text-xs rounded-md bg-slate-500 hover:bg-slate-600 text-white font-semibold flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-md bg-slate-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
                 >
                   <FaCoins /> Reset Filters
                 </button>
@@ -255,14 +353,20 @@ const TenantPrepayments = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentPageRows.length === 0 ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="10" className="px-3 py-10 text-center text-slate-500">
+                        Loading prepayments...
+                      </td>
+                    </tr>
+                  ) : rows.length === 0 ? (
                     <tr>
                       <td colSpan="10" className="px-3 py-10 text-center text-slate-500">
                         No unapplied receipt balances matched the current filters.
                       </td>
                     </tr>
                   ) : (
-                    currentPageRows.map((row, index) => (
+                    rows.map((row, index) => (
                       <tr
                         key={row._id}
                         className={`border-b border-slate-200 ${index % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
@@ -277,7 +381,7 @@ const TenantPrepayments = () => {
                         <td className="px-3 py-2 text-right font-bold text-amber-700">{formatMoney(row.unappliedAmount)}</td>
                         <td className="px-3 py-2">
                           <span
-                            className={`inline-flex px-2 py-1 rounded text-[10px] font-semibold ${
+                            className={`inline-flex rounded px-2 py-1 text-[10px] font-semibold ${
                               row.isConfirmed ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
                             }`}
                           >
@@ -287,7 +391,7 @@ const TenantPrepayments = () => {
                         <td className="px-3 py-2 text-center">
                           <button
                             onClick={() => navigate(`/receipts?receipt=${row._id}`)}
-                            className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white inline-flex items-center gap-1"
+                            className="inline-flex items-center gap-1 rounded bg-indigo-600 px-2 py-1 text-white hover:bg-indigo-700"
                           >
                             <FaArrowRight size={11} /> Manage Allocation
                           </button>
@@ -301,15 +405,15 @@ const TenantPrepayments = () => {
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
               <p>
-                <span className="font-semibold">Showing:</span> {rows.length === 0 ? 0 : startIndex + 1}
+                <span className="font-semibold">Showing:</span> {showingStart}
                 {" - "}
-                {Math.min(endIndex, rows.length)} of {rows.length} prepayment row(s)
+                {showingEnd} of {pagination.totalItems || 0} prepayment row(s)
               </p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={safeCurrentPage === 1}
+                  disabled={!pagination.hasPreviousPage}
                   className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Previous
@@ -320,7 +424,7 @@ const TenantPrepayments = () => {
                 <button
                   type="button"
                   onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={safeCurrentPage === totalPages}
+                  disabled={!pagination.hasNextPage}
                   className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Next

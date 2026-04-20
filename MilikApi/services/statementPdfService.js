@@ -17,6 +17,9 @@ const formatCurrency = (value) =>
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
 
+const formatDepositMemoCurrency = (value) =>
+  formatCurrency(Math.abs(Number(value || 0)));
+
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString("en-GB") : "");
 
 const esc = (value = "") =>
@@ -502,6 +505,11 @@ export const generateStatementPdf = async (statementId, businessId) => {
   const depositMemo = workspace.depositMemo || {};
   const depositMemoRows = Array.isArray(depositMemo.rows) ? depositMemo.rows : [];
   const depositMemoTotals = depositMemo.totals || {};
+  const broughtForwardCreditApplications = workspace.broughtForwardCreditApplications || {};
+  const broughtForwardCreditApplicationRows = Array.isArray(broughtForwardCreditApplications.rows)
+    ? broughtForwardCreditApplications.rows
+    : [];
+  const broughtForwardCreditApplicationTotals = broughtForwardCreditApplications.totals || {};
   const printableAdditionsTotal = sumPrintableAmounts(additionRows);
   const printableDeductionsTotal = sumPrintableAmounts(expenseRows);
   const printableDirectToLandlordTotal = sumPrintableAmounts(directToLandlordRows);
@@ -573,6 +581,120 @@ export const generateStatementPdf = async (statementId, businessId) => {
     workspace.landlordLabel ||
     "Landlord";
 
+  const scheduleRowsHtml = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${esc(row.unit || row.unitNumber || "-")}</td>
+          <td>${esc(row.accountNo || "-")}</td>
+          <td>${esc(row.tenantName || "VACANT")}</td>
+          <td class="num">${formatCurrency(row.perMonth || 0)}</td>
+          <td class="num">${formatCurrency(row.openingBalance ?? row.balanceBF ?? 0)}</td>
+          <td class="num">${formatCurrency(row.invoicedRent || 0)}</td>
+          ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(row.invoicedTax || 0)}</td>` : ""}
+          ${utilityColumns
+            .map(
+              (column) =>
+                `<td class="num">${formatCurrency(
+                  getRowUtilityAmount(row, column.key, "invoiced")
+                )}</td>`
+            )
+            .join("")}
+          <td class="num">${formatCurrency(row.paidRent || row.rentPaid || 0)}</td>
+          ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(row.paidTax || 0)}</td>` : ""}
+          ${utilityColumns
+            .map(
+              (column) =>
+                `<td class="num">${formatCurrency(
+                  getRowUtilityAmount(row, column.key, "paid")
+                )}</td>`
+            )
+            .join("")}
+          <td class="num strong">${formatCurrency(row.closingBalance ?? row.balanceCF ?? 0)}</td>
+        </tr>
+      `
+    )
+    .join("");
+
+  const settlementSummaryRowsHtml = [
+    {
+      label: "Opening landlord settlement B/F",
+      value: formatCurrency(openingSettlementBalance),
+      tone: openingSettlementBalance < 0 ? "negative" : "",
+    },
+    {
+      label: esc(summaryBasisLabel),
+      value: formatCurrency(summaryBasisAmount),
+      tone: "",
+    },
+    ...(utilityPassThroughAmount > 0
+      ? [
+          {
+            label: esc(utilityPassThroughLabel),
+            value: formatCurrency(utilityPassThroughAmount),
+            tone: "",
+          },
+        ]
+      : []),
+    ...(invoiceVatPassThroughAmount > 0
+      ? [
+          {
+            label: esc(invoiceVatPassThroughLabel),
+            value: formatCurrency(invoiceVatPassThroughAmount),
+            tone: "",
+          },
+        ]
+      : []),
+    {
+      label: "Additions",
+      value: formatCurrency(additionsAmount),
+      tone: "",
+    },
+    {
+      label: "Expenses & other deductions",
+      value: formatCurrency(nonCommissionDeductions),
+      tone: "",
+    },
+    {
+      label: esc(commissionBaseLabel),
+      value: formatCurrency(commissionBaseAmount),
+      tone: "",
+    },
+    {
+      label: "Commission",
+      value: formatCurrency(commissionAmount),
+      tone: "",
+    },
+    ...(commissionTaxAmount > 0
+      ? [
+          {
+            label: "VAT on commission",
+            value: formatCurrency(commissionTaxAmount),
+            tone: "",
+          },
+        ]
+      : []),
+    {
+      label: "Direct to landlord collections (memo)",
+      value: formatCurrency(directToLandlordAmount),
+      tone: "",
+    },
+    {
+      label: esc(settlement.label),
+      value: formatCurrency(settlement.amount),
+      tone: settlement.isNegative ? "settlement-negative" : "settlement-positive",
+    },
+  ]
+    .map(
+      (item) => `
+        <tr class="${item.tone || ""}">
+          <td>${item.label}</td>
+          <td class="num">${item.value}</td>
+        </tr>
+      `
+    )
+    .join("");
+
   const html = `<!DOCTYPE html>
   <html>
     <head>
@@ -581,489 +703,637 @@ export const generateStatementPdf = async (statementId, businessId) => {
       <style>
         * { box-sizing: border-box; }
         body {
-          font-family: Arial, Helvetica, sans-serif;
           margin: 0;
           padding: 18px;
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: 11px;
           color: #0f172a;
           background: #ffffff;
-          font-size: 11px;
         }
-        .topbar {
-          background: linear-gradient(135deg, #0b3b2e 0%, #0f4c3a 100%);
-          color: #fff;
-          border-radius: 14px;
-          padding: 18px 20px;
+        .sheet {
+          width: 100%;
+        }
+        .hero {
+          border: 1px solid #dbe3ea;
+          border-radius: 18px;
+          overflow: hidden;
           margin-bottom: 14px;
         }
-        .brand-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 18px;
+        .hero-top {
+          background: linear-gradient(135deg, #0b3b2e 0%, #123f34 52%, #1e4d3f 100%);
+          color: white;
+          padding: 18px 20px;
         }
-        .brand-left {
-          display: flex;
-          align-items: flex-start;
-          gap: 14px;
-          min-width: 0;
+        .hero-grid {
+          display: table;
+          width: 100%;
+          border-spacing: 0;
+        }
+        .hero-left,
+        .hero-right {
+          display: table-cell;
+          vertical-align: top;
+        }
+        .hero-right {
+          width: 225px;
+          padding-left: 18px;
+        }
+        .brand {
+          display: table;
+          width: 100%;
+        }
+        .brand-logo-wrap,
+        .brand-copy {
+          display: table-cell;
+          vertical-align: top;
         }
         .brand-logo-wrap {
-          width: 78px;
-          height: 78px;
-          flex: 0 0 78px;
+          width: 84px;
+          padding-right: 14px;
         }
         .brand-logo,
         .brand-fallback {
-          width: 78px;
-          height: 78px;
-          border-radius: 16px;
-          background: rgba(255,255,255,0.08);
-          border: 1px solid rgba(255,255,255,0.25);
+          width: 72px;
+          height: 72px;
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.24);
+          background: rgba(255,255,255,0.10);
           object-fit: contain;
         }
         .brand-fallback {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 26px;
+          font-size: 24px;
           font-weight: 800;
           letter-spacing: 1px;
         }
-        .topbar h1 {
-          margin: 0 0 6px;
-          font-size: 24px;
-          letter-spacing: 0.5px;
-        }
-        .brand-slogan {
-          font-size: 12px;
-          font-weight: 600;
-          opacity: 0.92;
+        .eyebrow {
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 2px;
+          opacity: 0.82;
           margin-bottom: 6px;
         }
-        .brand-line {
-          line-height: 1.5;
-          font-size: 11px;
-          opacity: 0.96;
+        .brand-name {
+          margin: 0;
+          font-size: 24px;
+          line-height: 1.15;
         }
-        .statement-badge {
-          min-width: 230px;
-          border-radius: 12px;
-          background: rgba(255,255,255,0.1);
+        .brand-slogan {
+          margin-top: 5px;
+          font-size: 12px;
+          font-weight: 600;
+          color: rgba(255,255,255,0.92);
+        }
+        .brand-line {
+          margin-top: 4px;
+          font-size: 11px;
+          line-height: 1.5;
+          color: rgba(255,255,255,0.90);
+        }
+        .meta-card {
           border: 1px solid rgba(255,255,255,0.22);
+          background: rgba(255,255,255,0.10);
+          border-radius: 16px;
           padding: 12px 14px;
         }
-        .badge-title {
-          font-size: 13px;
-          font-weight: 800;
-          text-transform: uppercase;
-          letter-spacing: 1.4px;
-          margin-bottom: 8px;
-        }
-        .badge-meta {
+        .meta-row {
+          margin-top: 8px;
           font-size: 11px;
           line-height: 1.5;
         }
-        .title-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin: 8px 0 12px;
+        .hero-bottom {
+          background: #f8fafc;
+          padding: 14px 16px;
+          border-top: 1px solid #dbe3ea;
         }
-        .title-row h2 {
-          margin: 0;
-          font-size: 16px;
+        .top-cards {
+          display: table;
+          width: 100%;
+          border-spacing: 8px 0;
+          table-layout: fixed;
+          margin-left: -8px;
+          margin-right: -8px;
         }
-        .subtitle {
-          color: #64748b;
-          margin-top: 2px;
-          font-size: 11px;
+        .top-card {
+          display: table-cell;
+          vertical-align: top;
+          border: 1px solid #dbe3ea;
+          border-radius: 14px;
+          background: white;
+          padding: 11px 12px;
         }
-        .period {
-          font-size: 11px;
-          color: #475569;
-          margin-top: 4px;
-        }
-        .cards {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 10px;
-          margin-bottom: 14px;
-        }
-        .card {
-          border: 1px solid #cbd5d1;
-          border-radius: 10px;
-          padding: 10px 12px;
-          min-height: 64px;
-        }
-        .label {
+        .top-card .label {
           font-size: 10px;
           color: #64748b;
           text-transform: uppercase;
-          letter-spacing: 2px;
+          letter-spacing: 1.8px;
           margin-bottom: 6px;
         }
-        .value {
+        .top-card .value {
           font-size: 13px;
           font-weight: 700;
+          color: #0f172a;
+          line-height: 1.4;
+        }
+        .top-card .hint {
+          margin-top: 4px;
+          font-size: 10px;
+          color: #64748b;
+          line-height: 1.4;
         }
         .section {
           margin-top: 14px;
+          page-break-inside: avoid;
+        }
+        .section-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+          gap: 10px;
+          margin-bottom: 8px;
         }
         .section-title {
-          background: #0f4c3a;
-          color: white;
+          font-size: 14px;
           font-weight: 700;
-          border-radius: 8px 8px 0 0;
-          padding: 8px 12px;
-          text-transform: uppercase;
-          letter-spacing: 2px;
-          font-size: 11px;
+          color: #0f172a;
+          margin: 0;
         }
-        .box {
-          border: 1px solid #cbd5d1;
-          border-top: none;
-          border-radius: 0 0 8px 8px;
+        .section-desc {
+          margin: 3px 0 0;
+          font-size: 11px;
+          color: #64748b;
+        }
+        .card {
+          border: 1px solid #dbe3ea;
+          border-radius: 16px;
           overflow: hidden;
+          background: #ffffff;
+        }
+        .card-accent {
+          height: 4px;
+          background: linear-gradient(90deg, #0b3b2e 0%, #f59e0b 100%);
         }
         table {
           width: 100%;
           border-collapse: collapse;
         }
         th, td {
-          border: 1px solid #cbd5d1;
-          padding: 4px 6px;
+          border: 1px solid #dbe3ea;
+          padding: 6px 7px;
           vertical-align: top;
         }
         thead th {
-          background: #0f4c3a;
+          background: #0f3f34;
           color: white;
-          font-weight: 700;
           font-size: 10px;
-        }
-        tfoot td {
           font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        tbody tr:nth-child(even) td {
           background: #f8fafc;
         }
-        .num {
-          text-align: right;
-          white-space: nowrap;
+        tfoot td {
+          background: #eef2f7;
+          font-weight: 700;
         }
-        .center {
-          text-align: center;
+        .num { text-align: right; white-space: nowrap; }
+        .center { text-align: center; }
+        .strong { font-weight: 700; }
+        .muted { color: #64748b; }
+        .two-col {
+          display: table;
+          width: 100%;
+          border-spacing: 12px 0;
+          table-layout: fixed;
+          margin-left: -12px;
+          margin-right: -12px;
         }
-        .muted {
-          color: #64748b;
+        .col {
+          display: table-cell;
+          vertical-align: top;
+          width: 50%;
+          padding-left: 12px;
+          padding-right: 12px;
         }
-        .summary-wrap {
-          width: 340px;
-          margin-left: auto;
-          margin-top: 14px;
+        .summary-table td:first-child {
+          font-weight: 600;
+          color: #334155;
         }
-        .summary td:first-child {
-          background: #0f4c3a;
+        .summary-table td:last-child {
+          font-weight: 700;
+        }
+        .summary-table tr.negative td {
+          background: #fef2f2;
+          color: #b91c1c;
+        }
+        .summary-table tr.settlement-positive td {
+          background: #0f172a;
           color: white;
+          font-size: 12px;
           font-weight: 700;
         }
-        .summary td:last-child {
+        .summary-table tr.settlement-negative td {
+          background: #fef2f2;
+          color: #b91c1c;
+          font-size: 12px;
           font-weight: 700;
-          width: 100px;
+        }
+        .stack {
+          padding: 10px 12px 12px;
+        }
+        .item-list {
+          display: grid;
+          gap: 8px;
+          padding: 10px 12px 12px;
+        }
+        .item {
+          border: 1px solid #e2e8f0;
+          background: #f8fafc;
+          border-radius: 12px;
+          padding: 9px 10px;
+        }
+        .item-title {
+          font-size: 11px;
+          font-weight: 700;
+          color: #0f172a;
+          margin: 0 0 3px;
+        }
+        .item-sub {
+          font-size: 10px;
+          color: #64748b;
+          line-height: 1.45;
+          margin: 0;
+        }
+        .item-amount {
+          float: right;
+          font-size: 11px;
+          font-weight: 700;
+          color: #0f172a;
+          margin-left: 8px;
+        }
+        .metric-strip {
+          display: table;
+          width: 100%;
+          border-spacing: 8px 0;
+          table-layout: fixed;
+          margin-top: 10px;
+          margin-left: -8px;
+          margin-right: -8px;
+        }
+        .metric {
+          display: table-cell;
+          vertical-align: top;
+          border: 1px solid #dbe3ea;
+          border-radius: 14px;
+          background: #f8fafc;
+          padding: 10px 12px;
+        }
+        .metric .label {
+          font-size: 10px;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          margin-bottom: 4px;
+        }
+        .metric .value {
+          font-size: 13px;
+          font-weight: 700;
+        }
+        .footnote {
+          margin-top: 10px;
+          font-size: 10px;
+          color: #64748b;
         }
       </style>
     </head>
     <body>
-      <div class="topbar">
-        <div class="brand-row">
-          <div class="brand-left">
-            <div class="brand-logo-wrap">
-              ${
-                businessLogo
-                  ? `<img src="${esc(businessLogo)}" alt="${esc(businessName)} logo" class="brand-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />`
-                  : ``
-              }
-              <div class="brand-fallback" ${
-                businessLogo ? `style="display:none;"` : ``
-              }>M</div>
-            </div>
-            <div>
-              <h1>${esc(businessName)}</h1>
-              <div class="brand-slogan">${esc(businessSlogan)}</div>
-              ${
-                businessPostalAddress
-                  ? `<div class="brand-line">${esc(businessPostalAddress)}</div>`
-                  : ""
-              }
-              ${
-                businessLocation
-                  ? `<div class="brand-line">${esc(businessLocation)}</div>`
-                  : ""
-              }
-              <div class="brand-line">
-                ${businessPhone ? `TEL: ${esc(businessPhone)}` : ""}
-                ${businessPhone && businessEmail ? ` &nbsp;|&nbsp; ` : ""}
-                ${businessEmail ? `EMAIL: ${esc(businessEmail)}` : ""}
+      <div class="sheet">
+        <div class="hero">
+          <div class="hero-top">
+            <div class="hero-grid">
+              <div class="hero-left">
+                <div class="brand">
+                  <div class="brand-logo-wrap">
+                    ${
+                      businessLogo
+                        ? `<img src="${esc(businessLogo)}" alt="${esc(businessName)} logo" class="brand-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />`
+                        : ``
+                    }
+                    <div class="brand-fallback" ${businessLogo ? `style="display:none;"` : ``}>M</div>
+                  </div>
+                  <div class="brand-copy">
+                    <div class="eyebrow">MILIK landlord statement</div>
+                    <h1 class="brand-name">${esc(businessName)}</h1>
+                    <div class="brand-slogan">${esc(businessSlogan)}</div>
+                    ${businessPostalAddress ? `<div class="brand-line">${esc(businessPostalAddress)}</div>` : ""}
+                    ${businessLocation ? `<div class="brand-line">${esc(businessLocation)}</div>` : ""}
+                    <div class="brand-line">
+                      ${businessPhone ? `TEL: ${esc(businessPhone)}` : ""}
+                      ${businessPhone && businessEmail ? ` &nbsp;|&nbsp; ` : ""}
+                      ${businessEmail ? `EMAIL: ${esc(businessEmail)}` : ""}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="hero-right">
+                <div class="meta-card">
+                  <div class="eyebrow">Statement meta</div>
+                  <div class="meta-row"><strong>Statement #</strong><br />${esc(statement.statementNumber || "")}</div>
+                  <div class="meta-row"><strong>Period</strong><br />${formatDate(statement.periodStart)} - ${formatDate(statement.periodEnd)}</div>
+                  <div class="meta-row"><strong>Generated</strong><br />${formatDate(new Date())}</div>
+                </div>
               </div>
             </div>
           </div>
-          <div class="statement-badge">
-            <div class="badge-title">Landlord Statement</div>
-            <div class="badge-meta">Statement #: ${esc(statement.statementNumber || "")}</div>
-            <div class="badge-meta">Period: ${formatDate(statement.periodStart)} - ${formatDate(statement.periodEnd)}</div>
+          <div class="hero-bottom">
+            <div class="top-cards">
+              <div class="top-card">
+                <div class="label">Property</div>
+                <div class="value">${esc(propertyName)}</div>
+                <div class="hint">Property account statement</div>
+              </div>
+              <div class="top-card">
+                <div class="label">Landlord</div>
+                <div class="value">${esc(landlordName)}</div>
+                <div class="hint">Linked statement beneficiary</div>
+              </div>
+              <div class="top-card">
+                <div class="label">Settlement</div>
+                <div class="value">${esc(settlement.label)}</div>
+                <div class="hint">${formatCurrency(settlement.amount)}</div>
+              </div>
+              <div class="top-card">
+                <div class="label">Statement type</div>
+                <div class="value">${esc(String(statement?.metadata?.statementType || statement?.metadata?.workspace?.statementType || "provisional").toUpperCase())}</div>
+                <div class="hint">Preview and PDF parity</div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="title-row">
-        <div>
-          <h2>Property Account Statement</h2>
-          <div class="subtitle">Professional landlord schedule and settlement summary</div>
-        </div>
-        <div class="period">Generated: ${formatDate(new Date())}</div>
-      </div>
-
-      <div class="cards">
-        <div class="card">
-          <div class="label">Property</div>
-          <div class="value">${esc(propertyName)}</div>
-        </div>
-        <div class="card">
-          <div class="label">Landlord</div>
-          <div class="value">${esc(landlordName)}</div>
-        </div>
-        <div class="card">
-          <div class="label">Statement No.</div>
-          <div class="value">${esc(statement.statementNumber || "")}</div>
-        </div>
-        <div class="card">
-          <div class="label">Settlement</div>
-          <div class="value">${esc(settlement.label)} ${formatCurrency(
-            settlement.amount
-          )}</div>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">Statement Schedule</div>
-        <div class="box">
-          <table>
-            <thead>
-              <tr>
-                <th rowspan="2">Unit</th>
-                <th rowspan="2">A/c No.</th>
-                <th rowspan="2">Tenant / Resident</th>
-                <th rowspan="2" class="num">Per Month</th>
-                <th rowspan="2" class="num">Balance B/F</th>
-                <th colspan="${(hasInvoiceVatColumn ? 2 : 1) + utilityColumns.length}" class="center">Amount Invoiced</th>
-                <th colspan="${(hasInvoiceVatColumn ? 2 : 1) + utilityColumns.length}" class="center">Amount Paid</th>
-                <th rowspan="2" class="num">Balance C/F</th>
-              </tr>
-              <tr>
-                <th class="num">Rent</th>
-                ${hasInvoiceVatColumn ? `<th class="num">VAT</th>` : ""}
-                ${utilityColumns
-                  .map((column) => `<th class="num">${esc(column.label)}</th>`)
-                  .join("")}
-                <th class="num">Rent</th>
-                ${hasInvoiceVatColumn ? `<th class="num">VAT</th>` : ""}
-                ${utilityColumns
-                  .map((column) => `<th class="num">${esc(column.label)}</th>`)
-                  .join("")}
-              </tr>
-            </thead>
-            <tbody>
-              ${rows.map((row) => `
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Statement schedule</h2>
+              <p class="section-desc">Compact tenant schedule showing brought-forward balance, current billing, collections, and closing position.</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-accent"></div>
+            <table>
+              <thead>
                 <tr>
-                  <td>${esc(row.unit || row.unitNumber || "-")}</td>
-                  <td>${esc(row.accountNo || "-")}</td>
-                  <td>${esc(row.tenantName || "VACANT")}</td>
-                  <td class="num">${formatCurrency(row.perMonth || 0)}</td>
-                  <td class="num">${formatCurrency(row.openingBalance ?? row.balanceBF ?? 0)}</td>
-                  <td class="num">${formatCurrency(row.invoicedRent || 0)}</td>
-                  ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(row.invoicedTax || 0)}</td>` : ""}
-                  ${utilityColumns
-                    .map(
-                      (column) =>
-                        `<td class="num">${formatCurrency(
-                          getRowUtilityAmount(row, column.key, "invoiced")
-                        )}</td>`
-                    )
-                    .join("")}
-                  <td class="num">${formatCurrency(row.paidRent || row.rentPaid || 0)}</td>
-                  ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(row.paidTax || 0)}</td>` : ""}
-                  ${utilityColumns
-                    .map(
-                      (column) =>
-                        `<td class="num">${formatCurrency(
-                          getRowUtilityAmount(row, column.key, "paid")
-                        )}</td>`
-                    )
-                    .join("")}
-                  <td class="num">${formatCurrency(row.closingBalance ?? row.balanceCF ?? 0)}</td>
+                  <th rowspan="2">Unit</th>
+                  <th rowspan="2">A/c No.</th>
+                  <th rowspan="2">Tenant / Resident</th>
+                  <th rowspan="2" class="num">Per Month</th>
+                  <th rowspan="2" class="num">Balance B/F</th>
+                  <th colspan="${(hasInvoiceVatColumn ? 2 : 1) + utilityColumns.length}" class="center">Amount Invoiced</th>
+                  <th colspan="${(hasInvoiceVatColumn ? 2 : 1) + utilityColumns.length}" class="center">Amount Paid</th>
+                  <th rowspan="2" class="num">Balance C/F</th>
                 </tr>
-              `).join("")}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td colspan="3" class="num">Total</td>
-                <td class="num">${formatCurrency(totals.perMonth)}</td>
-                <td class="num">${formatCurrency(totals.openingBalance)}</td>
-                <td class="num">${formatCurrency(totals.invoicedRent)}</td>
-                ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.invoicedTax || summary.totalInvoiceVatInvoiced || 0)}</td>` : ""}
-                ${utilityColumns
-                  .map(
-                    (column) =>
-                      `<td class="num">${formatCurrency(
-                        Number(
-                          (Array.isArray(totals.utilities) ? totals.utilities : utilityColumns).find(
-                            (item) => item.key === column.key
-                          )?.invoiced || column.invoiced || 0
+                <tr>
+                  <th class="num">Rent</th>
+                  ${hasInvoiceVatColumn ? `<th class="num">VAT</th>` : ""}
+                  ${utilityColumns.map((column) => `<th class="num">${esc(column.label)}</th>`).join("")}
+                  <th class="num">Rent</th>
+                  ${hasInvoiceVatColumn ? `<th class="num">VAT</th>` : ""}
+                  ${utilityColumns.map((column) => `<th class="num">${esc(column.label)}</th>`).join("")}
+                </tr>
+              </thead>
+              <tbody>
+                ${scheduleRowsHtml || `<tr><td colspan="${8 + (hasInvoiceVatColumn ? 2 : 0) + utilityColumns.length * 2}" class="center muted">No tenant or unit rows were generated for this period.</td></tr>`}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="3" class="num">Total</td>
+                  <td class="num">${formatCurrency(totals.perMonth)}</td>
+                  <td class="num">${formatCurrency(totals.openingBalance)}</td>
+                  <td class="num">${formatCurrency(totals.invoicedRent)}</td>
+                  ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.invoicedTax || summary.totalInvoiceVatInvoiced || 0)}</td>` : ""}
+                  ${utilityColumns
+                    .map(
+                      (column) =>
+                        `<td class="num">${formatCurrency(
+                          Number(
+                            (Array.isArray(totals.utilities) ? totals.utilities : utilityColumns).find(
+                              (item) => item.key === column.key
+                            )?.invoiced || column.invoiced || 0
+                          )
+                        )}</td>`
+                    )
+                    .join("")}
+                  <td class="num">${formatCurrency(totals.paidRent)}</td>
+                  ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.paidTax || totalInvoiceVatReceived || 0)}</td>` : ""}
+                  ${utilityColumns
+                    .map(
+                      (column) =>
+                        `<td class="num">${formatCurrency(
+                          Number(
+                            (Array.isArray(totals.utilities) ? totals.utilities : utilityColumns).find(
+                              (item) => item.key === column.key
+                            )?.paid || column.paid || 0
+                          )
+                        )}</td>`
+                    )
+                    .join("")}
+                  <td class="num">${formatCurrency(totals.closingBalance)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="metric-strip">
+            <div class="metric">
+              <div class="label">Opening balance</div>
+              <div class="value">${formatCurrency(summary.openingBalance || totals.openingBalance || 0)}</div>
+            </div>
+            <div class="metric">
+              <div class="label">Closing balance</div>
+              <div class="value">${formatCurrency(summary.closingBalance || totals.closingBalance || 0)}</div>
+            </div>
+            <div class="metric">
+              <div class="label">Unapplied tenant credits</div>
+              <div class="value">${formatCurrency(summary.unappliedPayments || 0)}</div>
+            </div>
+            <div class="metric">
+              <div class="label">Settlement</div>
+              <div class="value">${formatCurrency(settlement.amount)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="two-col">
+            <div class="col">
+              <div class="card">
+                <div class="card-accent"></div>
+                <div class="stack">
+                  <div class="section-header" style="margin-bottom:10px;">
+                    <div>
+                      <h2 class="section-title">Settlement waterfall</h2>
+                      <p class="section-desc">The same stored summary used by the draft workspace.</p>
+                    </div>
+                  </div>
+                  <table class="summary-table">
+                    <tbody>
+                      ${settlementSummaryRowsHtml}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="card" style="margin-top:12px;">
+                <div class="card-accent"></div>
+                <div class="stack">
+                  <div class="section-header" style="margin-bottom:8px;">
+                    <div>
+                      <h2 class="section-title">Additions</h2>
+                      <p class="section-desc">Current-period additions carried into the landlord settlement.</p>
+                    </div>
+                  </div>
+                  <table>
+                    <thead>
+                      <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
+                    </thead>
+                    <tbody>${renderSimpleRows(additionRows, "No additions posted in this period")}</tbody>
+                    <tfoot>
+                      <tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(additionsAmount)}</td></tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              <div class="card" style="margin-top:12px;">
+                <div class="card-accent"></div>
+                <div class="stack">
+                  <div class="section-header" style="margin-bottom:8px;">
+                    <div>
+                      <h2 class="section-title">Expenses & deductions</h2>
+                      <p class="section-desc">Non-commission deductions plus any commission deductions configured for the statement.</p>
+                    </div>
+                  </div>
+                  <table>
+                    <thead>
+                      <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
+                    </thead>
+                    <tbody>${renderSimpleRows(expenseRows, "No expenses or deductions posted in this period")}</tbody>
+                    <tfoot>
+                      <tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(nonCommissionDeductions + commissionGrossAmount)}</td></tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="col">
+              ${broughtForwardCreditApplicationRows.length > 0 ? `
+              <div class="card">
+                <div class="card-accent"></div>
+                <div class="stack">
+                  <div class="section-header" style="margin-bottom:8px;">
+                    <div>
+                      <h2 class="section-title">B/F credits applied</h2>
+                      <p class="section-desc">Prior-period credit used on current-period charge positions without duplicate cash recognition.</p>
+                    </div>
+                  </div>
+                  <table>
+                    <thead>
+                      <tr><th>Receipt</th><th>Applied to</th><th class="num">Amount</th></tr>
+                    </thead>
+                    <tbody>
+                      ${broughtForwardCreditApplicationRows
+                        .map(
+                          (row) => `
+                            <tr>
+                              <td>${esc(row.receiptReference || row.description || "B/F credit")}</td>
+                              <td>${esc(row.chargeReference || row.description || "Applied charge")}</td>
+                              <td class="num">${formatCurrency(row.amount || 0)}</td>
+                            </tr>`
                         )
-                      )}</td>`
-                  )
-                  .join("")}
-                <td class="num">${formatCurrency(totals.paidRent)}</td>
-                ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.paidTax || totalInvoiceVatReceived || 0)}</td>` : ""}
-                ${utilityColumns
-                  .map(
-                    (column) =>
-                      `<td class="num">${formatCurrency(
-                        Number(
-                          (Array.isArray(totals.utilities) ? totals.utilities : utilityColumns).find(
-                            (item) => item.key === column.key
-                          )?.paid || column.paid || 0
+                        .join("")}
+                    </tbody>
+                    <tfoot>
+                      <tr><td colspan="2" class="num">Total applied</td><td class="num">${formatCurrency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</td></tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+              ` : ""}
+
+              <div class="card" style="margin-top:${broughtForwardCreditApplicationRows.length > 0 ? "12px" : "0"};">
+                <div class="card-accent"></div>
+                <div class="stack">
+                  <div class="section-header" style="margin-bottom:8px;">
+                    <div>
+                      <h2 class="section-title">Direct to landlord collections</h2>
+                      <p class="section-desc">Memo-only direct receipts that stay visible without distorting manager cash settlement.</p>
+                    </div>
+                  </div>
+                  <table>
+                    <thead>
+                      <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
+                    </thead>
+                    <tbody>${renderSimpleRows(directToLandlordRows, "No direct-to-landlord collections posted in this period")}</tbody>
+                    <tfoot>
+                      <tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(directToLandlordAmount)}</td></tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              ${depositMemoRows.length > 0 ? `
+              <div class="card" style="margin-top:12px;">
+                <div class="card-accent"></div>
+                <div class="stack">
+                  <div class="section-header" style="margin-bottom:8px;">
+                    <div>
+                      <h2 class="section-title">Deposit memorandum</h2>
+                      <p class="section-desc">Displayed as positive memorandum balances for readability and excluded from settlement.</p>
+                    </div>
+                  </div>
+                  <table>
+                    <thead>
+                      <tr><th>Holder</th><th class="num">Opening</th><th class="num">Billed / Adj.</th><th class="num">Received</th><th class="num">Closing</th></tr>
+                    </thead>
+                    <tbody>
+                      ${depositMemoRows
+                        .map(
+                          (row) => `
+                            <tr>
+                              <td>${esc(row.label)}</td>
+                              <td class="num">${formatDepositMemoCurrency(row.openingBalance)}</td>
+                              <td class="num">${formatDepositMemoCurrency(row.billed)}</td>
+                              <td class="num">${formatDepositMemoCurrency(row.received)}</td>
+                              <td class="num">${formatDepositMemoCurrency(row.closingBalance)}</td>
+                            </tr>`
                         )
-                      )}</td>`
-                  )
-                  .join("")}
-                <td class="num">${formatCurrency(totals.closingBalance)}</td>
-              </tr>
-            </tfoot>
-          </table>
+                        .join("")}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td class="num">Total</td>
+                        <td class="num">${formatDepositMemoCurrency(depositMemoTotals.openingBalance || 0)}</td>
+                        <td class="num">${formatDepositMemoCurrency(depositMemoTotals.billed || 0)}</td>
+                        <td class="num">${formatDepositMemoCurrency(depositMemoTotals.received || 0)}</td>
+                        <td class="num">${formatDepositMemoCurrency(depositMemoTotals.closingBalance || 0)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+              ` : ""}
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="section">
-        <div class="section-title">Additions</div>
-        <div class="box">
-          <table>
-            <thead>
-              <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
-            </thead>
-            <tbody>${renderSimpleRows(additionRows, "No additions posted in this period")}</tbody>
-            <tfoot>
-              <tr>
-                <td colspan="2" class="num">Total</td>
-                <td class="num">${formatCurrency(additionsAmount)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">Expenses & Deductions</div>
-        <div class="box">
-          <table>
-            <thead>
-              <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
-            </thead>
-            <tbody>${renderSimpleRows(expenseRows, "No expenses or deductions posted in this period")}</tbody>
-            <tfoot>
-              <tr>
-                <td colspan="2" class="num">Total</td>
-                <td class="num">${formatCurrency(nonCommissionDeductions + commissionGrossAmount)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-
-      ${depositMemoRows.length > 0 ? `
-      <div class="section">
-        <div class="section-title">Deposit Memorandum (Excluded from Settlement)</div>
-        <div class="box">
-          <table>
-            <thead>
-              <tr><th>Holder</th><th class="num">Opening</th><th class="num">Billed / Adj.</th><th class="num">Received</th><th class="num">Closing</th></tr>
-            </thead>
-            <tbody>
-              ${depositMemoRows
-                .map((row) => `
-                  <tr>
-                    <td>${esc(row.label)}</td>
-                    <td class="num">${formatCurrency(row.openingBalance)}</td>
-                    <td class="num">${formatCurrency(row.billed)}</td>
-                    <td class="num">${formatCurrency(row.received)}</td>
-                    <td class="num">${formatCurrency(row.closingBalance)}</td>
-                  </tr>` )
-                .join("")}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td class="num">Total</td>
-                <td class="num">${formatCurrency(depositMemoTotals.openingBalance || 0)}</td>
-                <td class="num">${formatCurrency(depositMemoTotals.billed || 0)}</td>
-                <td class="num">${formatCurrency(depositMemoTotals.received || 0)}</td>
-                <td class="num">${formatCurrency(depositMemoTotals.closingBalance || 0)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-      ` : ""}
-
-      <div class="section">
-        <div class="section-title">Direct to Landlord Collections</div>
-        <div class="box">
-          <table>
-            <thead>
-              <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
-            </thead>
-            <tbody>${renderSimpleRows(
-              directToLandlordRows,
-              "No direct-to-landlord collections posted in this period"
-            )}</tbody>
-            <tfoot>
-              <tr>
-                <td colspan="2" class="num">Total</td>
-                <td class="num">${formatCurrency(
-                  directToLandlordAmount
-                )}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-
-      <div class="summary-wrap">
-        <table class="summary">
-          <tr><td>Opening landlord settlement B/F</td><td class="num">${formatCurrency(openingSettlementBalance)}</td></tr>
-          <tr><td>${esc(summaryBasisLabel)}</td><td class="num">${formatCurrency(summaryBasisAmount)}</td></tr>
-          ${
-            utilityPassThroughAmount > 0
-              ? `<tr><td>${esc(utilityPassThroughLabel)}</td><td class="num">${formatCurrency(utilityPassThroughAmount)}</td></tr>`
-              : ""
-          }
-          ${
-            invoiceVatPassThroughAmount > 0
-              ? `<tr><td>${esc(invoiceVatPassThroughLabel)}</td><td class="num">${formatCurrency(invoiceVatPassThroughAmount)}</td></tr>`
-              : ""
-          }
-          <tr><td>Additions</td><td class="num">${formatCurrency(additionsAmount)}</td></tr>
-          <tr><td>Expenses & other deductions</td><td class="num">${formatCurrency(nonCommissionDeductions)}</td></tr>
-          <tr><td>${esc(commissionBaseLabel)}</td><td class="num">${formatCurrency(commissionBaseAmount)}</td></tr>
-          <tr><td>Commission</td><td class="num">${formatCurrency(commissionAmount)}</td></tr>
-          ${
-            commissionTaxAmount > 0
-              ? `<tr><td>VAT on commission</td><td class="num">${formatCurrency(commissionTaxAmount)}</td></tr>`
-              : ""
-          }
-          <tr><td>Direct to landlord collections (memo)</td><td class="num">${formatCurrency(directToLandlordAmount)}</td></tr>
-          <tr><td>${esc(settlement.label)}</td><td class="num">${formatCurrency(settlement.amount)}</td></tr>
-        </table>
+        <div class="footnote">Generated from MILIK statement workspace. Preview and PDF are intended to remain visually compact while preserving the same statement totals and traceability sections.</div>
       </div>
     </body>
   </html>`;
-
     await acquirePdfRenderSlot();
     try {
       const browser = await getBrowser();

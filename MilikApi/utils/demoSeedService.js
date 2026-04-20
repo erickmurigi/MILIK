@@ -8,6 +8,8 @@ import Maintenance from "../models/Maintenance.js";
 import LandlordStatement from "../models/LandlordStatement.js";
 import LandlordStatementLine from "../models/LandlordStatementLine.js";
 import ProcessedStatement from "../models/ProcessedStatement.js";
+import LandlordStandingOrder from "../models/LandlordStandingOrder.js";
+import LandlordAdvancement from "../models/LandlordAdvancement.js";
 import TenantInvoice from "../models/TenantInvoice.js";
 import RentPayment from "../models/RentPayment.js";
 import PaymentVoucher from "../models/PaymentVoucher.js";
@@ -20,6 +22,10 @@ import { ensurePropertyControlAccount } from "../services/propertyAccountingServ
 const DEMO_TAG = "MILIK_DEMO_SEED_V2";
 const DEMO_WORKSPACE_NAME = "MILIK DEMO WORKSPACE";
 const DEMO_WORKSPACE_EMAIL = "demo.workspace@milik.local";
+const DEMO_PROFILES = {
+  PROPERTY_MANAGER: "property_manager",
+  SELF_MANAGING_LANDLORD: "self_managing_landlord",
+};
 
 const SAMPLE_DATA = {
   landlords: [
@@ -164,8 +170,18 @@ function round2(value) {
   return Number(Number(value || 0).toFixed(2));
 }
 
+function resolveDemoProfile(value = "") {
+  return String(value || "").trim().toLowerCase() === DEMO_PROFILES.SELF_MANAGING_LANDLORD
+    ? DEMO_PROFILES.SELF_MANAGING_LANDLORD
+    : DEMO_PROFILES.PROPERTY_MANAGER;
+}
+
 function getCurrentSeedYear() {
   return new Date().getFullYear();
+}
+
+function getExpectedDemoPropertyCount(companyId, demoProfile = DEMO_PROFILES.PROPERTY_MANAGER) {
+  return buildCompanyScopedSampleData(companyId, demoProfile).properties.length;
 }
 
 function buildDemoCalendar() {
@@ -649,7 +665,142 @@ function buildSunriseStatement(propertyData, calendar) {
   };
 }
 
-function buildCompanyScopedSampleData(companyId) {
+
+function buildSelfManagingLandlordStatement(baseStatement, propertyData) {
+  const additions = round2(
+    (baseStatement?.workspace?.additionRows || []).reduce((sum, row) => sum + Number(row?.amount || 0), 0)
+  );
+  const expenses = round2(baseStatement?.totalExpenses || 0);
+  const rentReceived = round2(baseStatement?.totalRentReceived || 0);
+  const utilityAmount = round2(baseStatement?.workspace?.summary?.utilityPassThroughAmount || 0);
+  const netStatement = round2(rentReceived + additions - expenses);
+
+  return {
+    ...baseStatement,
+    commissionPercentage: 0,
+    commissionAmount: 0,
+    netAmountDue: netStatement,
+    netAfterExpenses: netStatement,
+    status: "paid",
+    amountPaid: netStatement,
+    workspace: {
+      ...(baseStatement?.workspace || {}),
+      landlordLabel: propertyData.landlordCode,
+      directToLandlordRows: [],
+      summary: {
+        ...(baseStatement?.workspace?.summary || {}),
+        settlementBasisLabel: "Collections received",
+        settlementBasisAmount: rentReceived,
+        utilityPassThroughLabel: "Utilities billed",
+        utilityPassThroughAmount: utilityAmount,
+        commissionBaseLabel: "Platform deductions",
+        commissionBaseAmount: 0,
+        commissionAmount: 0,
+        nonCommissionDeductions: expenses,
+        totalExpenses: expenses,
+        directToLandlordCollections: 0,
+        additions,
+        openingSettlementBalance: 0,
+        settlementLabel: "Net cash after expenses",
+        netStatement,
+      },
+    },
+  };
+}
+
+function buildStandingOrderPlans(propertyData, calendar, demoProfile) {
+  if (demoProfile !== DEMO_PROFILES.SELF_MANAGING_LANDLORD) return [];
+
+  return [
+    {
+      referenceNo: `DSO-${propertyData.propertyCode}-001`,
+      title: `${propertyData.propertyName} caretaker retainer`,
+      amount: propertyData.propertyCode.startsWith("DGV") ? 6000 : 4500,
+      frequency: "monthly",
+      dayOfMonth: 3,
+      startDate: calendar.mar1,
+      endDate: null,
+      paymentMethod: propertyData.propertyCode.startsWith("DGV") ? "mpesa" : "bank_transfer",
+      destination: propertyData.propertyCode.startsWith("DGV")
+        ? { mobileNumber: "+254711222333", accountName: "Site Caretaker" }
+        : { accountName: "CleanEdge Services", accountNumber: "0012457890", bankName: "KCB" },
+      narration: `${propertyData.propertyName} scheduled operational payout`,
+      status: "active",
+      nextRunDate: calendar.currentMonthDue,
+      runHistory:
+        propertyData.propertyCode.startsWith("DGV")
+          ? [
+              {
+                runDate: calendar.apr6,
+                dueDate: calendar.apr4,
+                periodStart: calendar.apr1,
+                periodEnd: addDays(calendar.apr1, 29),
+                periodKey: `${calendar.year}-04`,
+                periodLabel: "Apr " + calendar.year,
+                amount: 6000,
+                note: "Demo standing order run already processed.",
+                referenceNo: `DSOR-${propertyData.propertyCode}-APR`,
+                processedBy: null,
+              },
+            ]
+          : [],
+    },
+  ];
+}
+
+function buildAdvancementPlans(propertyData, calendar, demoProfile) {
+  if (demoProfile !== DEMO_PROFILES.SELF_MANAGING_LANDLORD || !propertyData.propertyCode.startsWith("DGV")) {
+    return [];
+  }
+
+  return [
+    {
+      referenceNo: `DADV-${propertyData.propertyCode}-001`,
+      title: "Roof waterproofing advance",
+      advanceType: "future_recoverable",
+      amount: 18000,
+      interestRate: 0,
+      interestType: "simple_flat",
+      scheduledInterestTotal: 0,
+      totalRecoverableAmount: 18000,
+      recoveredAmount: 6000,
+      interestRecoveredAmount: 0,
+      balanceOutstanding: 12000,
+      frequency: "monthly",
+      dayOfMonth: 10,
+      disbursementDate: calendar.mar8,
+      startDate: calendar.apr1,
+      periodMonths: 3,
+      gracePeriodMonths: 0,
+      endDate: addDays(calendar.currentMonthStart, 60),
+      paymentMethod: "bank_transfer",
+      status: "recovering",
+      narration: `${propertyData.propertyName} advance recoverable from future property cashflows.`,
+      submittedAt: calendar.mar8,
+      approvedAt: calendar.mar8,
+      disbursedAt: calendar.mar8,
+      recoveryHistory: [
+        {
+          processedAt: calendar.apr10,
+          dueDate: calendar.apr10,
+          periodStart: calendar.apr1,
+          periodEnd: addDays(calendar.apr1, 29),
+          periodKey: `${calendar.year}-04`,
+          periodLabel: `Apr ${calendar.year}`,
+          amount: 6000,
+          principalAmount: 6000,
+          interestAmount: 0,
+          note: "First scheduled recovery already captured in the demo workspace.",
+          referenceNo: `DADVREC-${propertyData.propertyCode}-APR`,
+          processedBy: null,
+        },
+      ],
+    },
+  ];
+}
+
+function buildCompanyScopedSampleData(companyId, demoProfile = DEMO_PROFILES.PROPERTY_MANAGER) {
+  const resolvedProfile = resolveDemoProfile(demoProfile);
   const seedKey = getCompanySeedKey(companyId);
   const calendar = buildDemoCalendar();
 
@@ -679,6 +830,8 @@ function buildCompanyScopedSampleData(companyId) {
             tenantCode: suffixValue(tenant.tenantCode, seedKey),
             idNumber: `DMO-TN-${seedKey}-${tenantNo}`,
             phone: `+254711${seedKey.replace(/[^0-9]/g, "").padEnd(6, "0").slice(0, 4)}${String(tenantIndex + 1).padStart(3, "0")}`,
+            depositHeldBy:
+              resolvedProfile === DEMO_PROFILES.SELF_MANAGING_LANDLORD ? "Landlord" : "Management Company",
           };
         })
       : [];
@@ -689,12 +842,25 @@ function buildCompanyScopedSampleData(companyId) {
       lrNumber: suffixValue(item.lrNumber, seedKey),
       landlordCode,
       tenants,
+      tenantsPaysTo:
+        resolvedProfile === DEMO_PROFILES.SELF_MANAGING_LANDLORD ? "landlord" : item.tenantsPaysTo,
+      depositHeldBy:
+        resolvedProfile === DEMO_PROFILES.SELF_MANAGING_LANDLORD ? "landlord" : item.depositHeldBy,
+      commissionPercentage:
+        resolvedProfile === DEMO_PROFILES.SELF_MANAGING_LANDLORD ? 0 : item.commissionPercentage,
+      commissionRecognitionBasis: item.commissionRecognitionBasis,
+      commissionPaymentMode: item.commissionPaymentMode,
     };
 
-    const statement =
+    const baseStatement =
       item.propertyCode === "DGV01"
         ? buildGreenviewStatement(propertyData, calendar)
         : buildSunriseStatement(propertyData, calendar);
+
+    const statement =
+      resolvedProfile === DEMO_PROFILES.SELF_MANAGING_LANDLORD
+        ? buildSelfManagingLandlordStatement(baseStatement, propertyData)
+        : baseStatement;
 
     return {
       ...propertyData,
@@ -703,7 +869,13 @@ function buildCompanyScopedSampleData(companyId) {
         statementNumber: suffixValue(statement.statementNumber, seedKey),
       },
       invoicePlans: buildInvoicePlans(propertyData, calendar),
-      paymentPlans: buildPaymentPlans(propertyData, calendar),
+      paymentPlans: buildPaymentPlans(propertyData, calendar).map((plan, planIndex) => ({
+        ...plan,
+        paidDirectToLandlord:
+          resolvedProfile === DEMO_PROFILES.SELF_MANAGING_LANDLORD
+            ? Boolean(plan.paidDirectToLandlord || planIndex === 0)
+            : false,
+      })),
       leasePlans: [
         {
           unitNumber: tenants[0]?.unitNumber,
@@ -758,6 +930,8 @@ function buildCompanyScopedSampleData(companyId) {
                 scheduledDate: calendar.maintenanceInProgress,
               },
             ],
+      standingOrderPlans: buildStandingOrderPlans(propertyData, calendar, resolvedProfile),
+      advancementPlans: buildAdvancementPlans(propertyData, calendar, resolvedProfile),
     };
   });
 
@@ -765,8 +939,10 @@ function buildCompanyScopedSampleData(companyId) {
     calendar,
     landlords,
     properties,
+    demoProfile: resolvedProfile,
   };
 }
+
 
 function computeReceiptBreakdown(allocations = [], fallbackAmount = 0) {
   const breakdown = {
@@ -924,7 +1100,7 @@ async function upsertTenant(companyId, property, unit, payload, calendar) {
         balance: payload.balance,
         status: "active",
         depositAmount: unit.deposit,
-        depositHeldBy: "Management Company",
+        depositHeldBy: payload.depositHeldBy || (property?.depositHeldBy === "landlord" ? "Landlord" : "Management Company"),
         paymentMethod: payload.paymentMethod,
         leaseType: "fixed",
         moveInDate: toDate(payload.moveInDate),
@@ -990,8 +1166,9 @@ async function seedInvoicesAndPayments({
           category: plan.category,
           amount: plan.amount,
           description: plan.description,
-          invoiceDate: plan.invoiceDate,
-          dueDate: plan.dueDate,
+          invoiceDate: toDate(plan.invoiceDate),
+          bookingDate: toDate(plan.bookingDate || plan.invoiceDate),
+          dueDate: toDate(plan.dueDate),
           status: plan.status,
           createdBy: userId,
           chartAccount: chartAccount._id,
@@ -1000,7 +1177,10 @@ async function seedInvoicesAndPayments({
           metadata: {
             demoSeedTag: DEMO_TAG,
             includeInLandlordStatement: true,
+            depositHeldBy: plan.depositHeldBy || property.depositHeldBy || null,
+            demoProfile: property.tenantsPaysTo === "landlord" ? DEMO_PROFILES.SELF_MANAGING_LANDLORD : DEMO_PROFILES.PROPERTY_MANAGER,
           },
+          depositHeldBy: plan.depositHeldBy || property.depositHeldBy || null,
         },
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
@@ -1018,28 +1198,31 @@ async function seedInvoicesAndPayments({
     const tenant = tenantsByUnit[plan.unitNumber];
     if (!tenant) continue;
 
-    const allocations = (Array.isArray(plan.allocations) ? plan.allocations : [])
-      .map((allocation) => {
-        const invoice = invoicesByKey[allocation.invoiceKey];
-        if (!invoice) return null;
-        const appliedAmount = round2(allocation.appliedAmount);
-        const invoiceAmount = round2(invoice.amount);
+    const allocations = (Array.isArray(plan.allocations) ? plan.allocations : []).reduce((items, allocation) => {
+      if (!allocation || typeof allocation !== "object") return items;
 
-        return {
-          invoice: invoice._id,
-          invoiceNumber: invoice.invoiceNumber,
-          category: invoice.category,
-          priorityGroup: invoice.category === "RENT_CHARGE" ? "rent" : "utilities",
-          utilityType: invoice.category === "UTILITY_CHARGE" ? allocation.utilityType || "Utility" : "",
-          appliedAmount,
-          beforeOutstanding: invoiceAmount,
-          afterOutstanding: Math.max(0, invoiceAmount - appliedAmount),
-          invoiceDate: invoice.invoiceDate,
-          dueDate: invoice.dueDate,
-          description: invoice.description,
-        };
-      })
-      .filter(Boolean);
+      const invoice = allocation.invoiceKey ? invoicesByKey[allocation.invoiceKey] : null;
+      if (!invoice?._id) return items;
+
+      const appliedAmount = round2(allocation.appliedAmount);
+      const invoiceAmount = round2(invoice.amount);
+
+      items.push({
+        invoice: invoice._id,
+        invoiceNumber: invoice.invoiceNumber || "",
+        category: invoice.category || "",
+        priorityGroup: invoice.category === "RENT_CHARGE" ? "rent" : "utilities",
+        utilityType: invoice.category === "UTILITY_CHARGE" ? allocation.utilityType || "Utility" : "",
+        appliedAmount,
+        beforeOutstanding: invoiceAmount,
+        afterOutstanding: Math.max(0, invoiceAmount - appliedAmount),
+        invoiceDate: invoice?.invoiceDate || invoice?.createdAt || plan.receiptDate || null,
+        dueDate: invoice?.dueDate || plan.receiptDate || null,
+        description: invoice?.description || "",
+      });
+
+      return items;
+    }, []);
 
     const payment = await RentPayment.findOneAndUpdate(
       { business: companyId, referenceNumber: plan.referenceNumber },
@@ -1060,7 +1243,7 @@ async function seedInvoicesAndPayments({
           confirmedAt: plan.isConfirmed ? plan.receiptDate : null,
           paymentMethod: plan.paymentMethod,
           cashbook: "Bank Accounts",
-          paidDirectToLandlord: false,
+          paidDirectToLandlord: Boolean(plan.paidDirectToLandlord),
           receiptNumber: plan.receiptNumber,
           month: plan.receiptDate.getMonth() + 1,
           year: plan.receiptDate.getFullYear(),
@@ -1069,8 +1252,11 @@ async function seedInvoicesAndPayments({
           allocationSummary: computeAllocationSummary(allocations, plan.amount),
           business: companyId,
           postingStatus: plan.postingStatus || "posted",
+          ledgerMode: plan.ledgerMode || (plan.paidDirectToLandlord ? "off_ledger" : "on_ledger"),
           metadata: {
             demoSeedTag: DEMO_TAG,
+            depositHeldBy: plan.depositHeldBy || property.depositHeldBy || null,
+            demoProfile: property.tenantsPaysTo === "landlord" ? DEMO_PROFILES.SELF_MANAGING_LANDLORD : DEMO_PROFILES.PROPERTY_MANAGER,
           },
         },
       },
@@ -1086,7 +1272,7 @@ async function seedInvoicesAndPayments({
   return invoicesByKey;
 }
 
-async function createStatementSnapshot({ companyId, property, landlord, statement, userId }) {
+async function createStatementSnapshot({ companyId, property, landlord, statement, userId, demoProfile = DEMO_PROFILES.PROPERTY_MANAGER }) {
   const entryCount =
     (statement?.workspace?.rows?.length || 0) +
     (statement?.workspace?.additionRows?.length || 0) +
@@ -1122,6 +1308,7 @@ async function createStatementSnapshot({ companyId, property, landlord, statemen
     notes: `${DEMO_TAG} approved statement snapshot`,
     metadata: {
       seedTag: DEMO_TAG,
+      demoProfile: resolveDemoProfile(demoProfile),
       workspace: statement.workspace || {},
     },
   });
@@ -1260,12 +1447,23 @@ async function upsertDraftVoucher({ companyId, property, landlord, dueDate }) {
 }
 
 async function upsertLease(companyId, tenant, unit, plan) {
+  const agreementNumber = String(
+    plan?.agreementNumber ||
+      `DAGR-${String(tenant?.tenantCode || tenant?._id || "TENANT").replace(/\s+/g, "").toUpperCase()}-${String(
+        unit?.unitNumber || unit?._id || "UNIT"
+      )
+        .replace(/\s+/g, "")
+        .toUpperCase()}`
+  ).trim();
+
   return Lease.findOneAndUpdate(
     { business: companyId, tenant: tenant._id, unit: unit._id },
     {
       $set: {
+        agreementNumber,
         tenant: tenant._id,
         unit: unit._id,
+        landlord: tenant?.landlord || null,
         startDate: plan.startDate,
         endDate: plan.endDate,
         rentAmount: plan.rentAmount,
@@ -1527,15 +1725,253 @@ async function seedReportLedgerEntries({ companyId, property, landlord, userId, 
 }
 
 
-async function getExistingDemoSeedSummary(companyId) {
+async function seedLandlordStandingOrders({ companyId, property, landlord, userId, standingOrderPlans = [] }) {
+  if (!Array.isArray(standingOrderPlans) || standingOrderPlans.length === 0) return [];
+
+  const bankAccount = await findSystemAccountByCode(companyId, "1110");
+  const mpesaAccount = await findSystemAccountByCode(companyId, "1130");
+  const rows = [];
+
+  for (const plan of standingOrderPlans) {
+    const cashbook = String(plan.paymentMethod || "").toLowerCase() === "mpesa" ? mpesaAccount : bankAccount;
+    const doc = await LandlordStandingOrder.findOneAndUpdate(
+      { business: companyId, referenceNo: plan.referenceNo },
+      {
+        $set: {
+          business: companyId,
+          landlord: landlord._id,
+          property: property._id,
+          title: plan.title,
+          amount: plan.amount,
+          frequency: plan.frequency || "monthly",
+          dayOfMonth: plan.dayOfMonth || 5,
+          startDate: toDate(plan.startDate),
+          endDate: plan.endDate ? toDate(plan.endDate) : null,
+          paymentMethod: plan.paymentMethod || "bank_transfer",
+          cashbook: cashbook?._id || null,
+          destination: plan.destination || {},
+          narration: plan.narration || "",
+          status: plan.status || "active",
+          nextRunDate: plan.nextRunDate ? toDate(plan.nextRunDate) : null,
+          lastRunDate: Array.isArray(plan.runHistory) && plan.runHistory.length ? toDate(plan.runHistory[0].runDate) : null,
+          createdBy: userId,
+          updatedBy: userId,
+          notes: `${DEMO_TAG} standing order seed`,
+          referenceNo: plan.referenceNo,
+          standingOrderNo: plan.referenceNo,
+          runHistory: Array.isArray(plan.runHistory) ? plan.runHistory : [],
+          totalRuns: Array.isArray(plan.runHistory) ? plan.runHistory.filter((row) => !row?.cancelledAt).length : 0,
+          totalProcessedAmount: round2(
+            (Array.isArray(plan.runHistory) ? plan.runHistory : []).reduce((sum, row) => sum + Number(row?.amount || 0), 0)
+          ),
+          lastRunAt: Array.isArray(plan.runHistory) && plan.runHistory.length ? toDate(plan.runHistory[0].runDate) : null,
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    rows.push(doc);
+  }
+
+  return rows;
+}
+
+async function seedLandlordAdvancements({ companyId, property, landlord, userId, advancementPlans = [] }) {
+  if (!Array.isArray(advancementPlans) || advancementPlans.length === 0) return [];
+
+  const bankAccount = await findSystemAccountByCode(companyId, "1110");
+  const rows = [];
+
+  for (const plan of advancementPlans) {
+    const doc = await LandlordAdvancement.findOneAndUpdate(
+      { business: companyId, referenceNo: plan.referenceNo },
+      {
+        $set: {
+          business: companyId,
+          landlord: landlord._id,
+          property: property._id,
+          advanceType: plan.advanceType || "future_recoverable",
+          title: plan.title,
+          referenceNo: plan.referenceNo,
+          amount: plan.amount,
+          interestRate: plan.interestRate || 0,
+          interestType: plan.interestType || "simple_flat",
+          scheduledInterestTotal: plan.scheduledInterestTotal || 0,
+          interestRecoveredAmount: plan.interestRecoveredAmount || 0,
+          totalRecoverableAmount: plan.totalRecoverableAmount || plan.amount,
+          recoveredAmount: plan.recoveredAmount || 0,
+          balanceOutstanding: plan.balanceOutstanding || Math.max(Number(plan.amount || 0) - Number(plan.recoveredAmount || 0), 0),
+          payableSnapshotAmount: 0,
+          payableAvailableAtDisbursement: 0,
+          payableBalanceAfterDisbursement: 0,
+          frequency: plan.frequency || "monthly",
+          dayOfMonth: plan.dayOfMonth || 5,
+          disbursementDate: toDate(plan.disbursementDate),
+          startDate: toDate(plan.startDate),
+          periodMonths: plan.periodMonths || null,
+          gracePeriodMonths: plan.gracePeriodMonths || 0,
+          endDate: plan.endDate ? toDate(plan.endDate) : null,
+          paymentMethod: plan.paymentMethod || "bank_transfer",
+          cashbook: bankAccount?._id || null,
+          status: plan.status || "recovering",
+          narration: plan.narration || "",
+          notes: `${DEMO_TAG} advancement seed`,
+          submittedAt: plan.submittedAt ? toDate(plan.submittedAt) : null,
+          submittedBy: userId,
+          approvedAt: plan.approvedAt ? toDate(plan.approvedAt) : null,
+          approvedBy: userId,
+          disbursedAt: plan.disbursedAt ? toDate(plan.disbursedAt) : null,
+          createdBy: userId,
+          updatedBy: userId,
+          recoveryHistory: Array.isArray(plan.recoveryHistory) ? plan.recoveryHistory : [],
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    rows.push(doc);
+  }
+
+  return rows;
+}
+
+async function getDemoWorkspaceSeedValidation(companyId, demoProfile = DEMO_PROFILES.PROPERTY_MANAGER) {
+  const resolvedProfile = resolveDemoProfile(demoProfile);
+  const expectedProperties = getExpectedDemoPropertyCount(companyId, resolvedProfile);
+
+  const [
+    seededInvoices,
+    seededPayments,
+    seededPropertiesCount,
+    seededStatementsCount,
+    seededLandlordsCount,
+  ] = await Promise.all([
+    TenantInvoice.find({
+      business: companyId,
+      "metadata.demoSeedTag": DEMO_TAG,
+      "metadata.demoProfile": resolvedProfile,
+    })
+      .select("_id invoiceNumber invoiceDate createdAt")
+      .lean(),
+    RentPayment.find({
+      business: companyId,
+      "metadata.demoSeedTag": DEMO_TAG,
+      "metadata.demoProfile": resolvedProfile,
+    })
+      .select("_id referenceNumber receiptNumber allocations")
+      .lean(),
+    Property.countDocuments({ business: companyId }).catch(() => 0),
+    LandlordStatement.countDocuments({
+      business: companyId,
+      "metadata.seedTag": DEMO_TAG,
+      "metadata.demoProfile": resolvedProfile,
+    }).catch(() => 0),
+    Landlord.countDocuments({ company: companyId }).catch(() => 0),
+  ]);
+
+  if (seededInvoices.length < expectedProperties) {
+    return {
+      valid: false,
+      reason: `Expected seeded invoices for ${resolvedProfile}, found ${seededInvoices.length}.`,
+    };
+  }
+
+  const invoiceIds = [];
+  for (const payment of seededPayments) {
+    const allocations = Array.isArray(payment?.allocations) ? payment.allocations : [];
+    for (const allocation of allocations) {
+      if (allocation?.invoice) {
+        invoiceIds.push(String(allocation.invoice));
+      }
+      if (allocation?.invoice && !allocation?.invoiceDate) {
+        return {
+          valid: false,
+          reason: `Seeded receipt ${payment?.receiptNumber || payment?.referenceNumber || payment?._id} has an allocation without invoiceDate.`,
+        };
+      }
+    }
+  }
+
+  const uniqueInvoiceIds = [...new Set(invoiceIds.filter(Boolean))];
+  if (uniqueInvoiceIds.length > 0) {
+    const linkedInvoices = await TenantInvoice.find({
+      business: companyId,
+      _id: { $in: uniqueInvoiceIds },
+    })
+      .select("_id invoiceDate createdAt")
+      .lean();
+
+    const linkedInvoiceMap = new Map(linkedInvoices.map((invoice) => [String(invoice._id), invoice]));
+
+    for (const payment of seededPayments) {
+      const allocations = Array.isArray(payment?.allocations) ? payment.allocations : [];
+      for (const allocation of allocations) {
+        if (!allocation?.invoice) continue;
+
+        const linkedInvoice = linkedInvoiceMap.get(String(allocation.invoice));
+        if (!linkedInvoice) {
+          return {
+            valid: false,
+            reason: `Seeded receipt ${payment?.receiptNumber || payment?.referenceNumber || payment?._id} references a missing invoice allocation.`,
+          };
+        }
+
+        if (!linkedInvoice?.invoiceDate && !linkedInvoice?.createdAt && !allocation?.invoiceDate) {
+          return {
+            valid: false,
+            reason: `Seeded receipt ${payment?.receiptNumber || payment?.referenceNumber || payment?._id} references an invoice without a usable invoiceDate.`,
+          };
+        }
+      }
+    }
+  }
+
+  if (seededPropertiesCount < expectedProperties) {
+    return {
+      valid: false,
+      reason: `Expected ${expectedProperties} demo properties, found ${seededPropertiesCount}.`,
+    };
+  }
+
+  if (seededStatementsCount < expectedProperties) {
+    return {
+      valid: false,
+      reason: `Expected ${expectedProperties} landlord statements, found ${seededStatementsCount}.`,
+    };
+  }
+
+  if (seededLandlordsCount <= 0) {
+    return {
+      valid: false,
+      reason: "No demo landlords found in the demo workspace.",
+    };
+  }
+
+  return {
+    valid: true,
+    reason: null,
+  };
+}
+
+async function getExistingDemoSeedSummary(companyId, demoProfile = DEMO_PROFILES.PROPERTY_MANAGER) {
+  const resolvedProfile = resolveDemoProfile(demoProfile);
   const existingSeed = await LandlordStatement.findOne({
     business: companyId,
     "metadata.seedTag": DEMO_TAG,
+    "metadata.demoProfile": resolvedProfile,
   })
     .select("_id")
     .lean();
 
   if (!existingSeed) return null;
+
+  const seededInvoice = await TenantInvoice.findOne({
+    business: companyId,
+    "metadata.demoSeedTag": DEMO_TAG,
+    "metadata.demoProfile": resolvedProfile,
+  })
+    .select("_id invoiceDate createdAt")
+    .lean();
+
+  if (!seededInvoice?._id) return null;
 
   const [
     landlords,
@@ -1546,6 +1982,8 @@ async function getExistingDemoSeedSummary(companyId) {
     maintenanceRequests,
     processedStatements,
     vouchers,
+    standingOrders,
+    advancements,
   ] = await Promise.all([
     Landlord.countDocuments({ company: companyId, notes: new RegExp(DEMO_TAG, "i") }).catch(() => 0),
     Property.countDocuments({ business: companyId, notes: new RegExp(DEMO_TAG, "i") }).catch(() => 0),
@@ -1555,6 +1993,8 @@ async function getExistingDemoSeedSummary(companyId) {
     Maintenance.countDocuments({ business: companyId }).catch(() => 0),
     ProcessedStatement.countDocuments({ business: companyId }).catch(() => 0),
     PaymentVoucher.countDocuments({ business: companyId }).catch(() => 0),
+    LandlordStandingOrder.countDocuments({ business: companyId }).catch(() => 0),
+    LandlordAdvancement.countDocuments({ business: companyId }).catch(() => 0),
   ]);
 
   const propertyResults = await ProcessedStatement.find({ business: companyId })
@@ -1573,6 +2013,9 @@ async function getExistingDemoSeedSummary(companyId) {
     maintenanceRequests,
     processedStatements,
     vouchers,
+    standingOrders,
+    advancements,
+    demoProfile: resolvedProfile,
     propertyResults: propertyResults.map((item) => ({
       propertyId: item.property || null,
       propertyCode: null,
@@ -1593,8 +2036,14 @@ async function resetDemoWorkspaceSeedData(companyId) {
     TenantInvoice.deleteMany({ business: companyId }),
     RentPayment.deleteMany({ business: companyId }),
     PaymentVoucher.deleteMany({ business: companyId }),
+    LandlordStandingOrder.deleteMany({ business: companyId }),
+    LandlordAdvancement.deleteMany({ business: companyId }),
     Lease.deleteMany({ business: companyId }),
     Maintenance.deleteMany({ business: companyId }),
+    Tenant.deleteMany({ business: companyId }),
+    Unit.deleteMany({ business: companyId }),
+    Property.deleteMany({ business: companyId }),
+    Landlord.deleteMany({ company: companyId }),
   ]);
 }
 
@@ -1620,21 +2069,8 @@ async function assertDemoWorkspaceCompany(companyId) {
   return company;
 }
 
-export async function ensureDemoWorkspaceSeed({ companyId, userId }) {
-  if (!companyId) throw new Error("companyId is required to seed demo workspace data");
-  if (!userId) throw new Error("userId is required to seed demo workspace data");
-
-  await assertDemoWorkspaceCompany(companyId);
-  await ensureSystemChartOfAccounts(companyId);
-
-  const existingSeedSummary = await getExistingDemoSeedSummary(companyId);
-  if (existingSeedSummary) {
-    return existingSeedSummary;
-  }
-
-  await resetDemoWorkspaceSeedData(companyId);
-
-  const scopedSampleData = buildCompanyScopedSampleData(companyId);
+async function runDemoWorkspaceSeed({ companyId, userId, resolvedProfile }) {
+  const scopedSampleData = buildCompanyScopedSampleData(companyId, resolvedProfile);
   const landlordsByCode = {};
 
   for (const landlordData of scopedSampleData.landlords) {
@@ -1647,6 +2083,8 @@ export async function ensureDemoWorkspaceSeed({ companyId, userId }) {
   const allMaintenances = [];
   const allLeases = [];
   const allVouchers = [];
+  const allStandingOrders = [];
+  const allAdvancements = [];
 
   for (const propertyData of scopedSampleData.properties) {
     const landlord = landlordsByCode[propertyData.landlordCode];
@@ -1707,6 +2145,7 @@ export async function ensureDemoWorkspaceSeed({ companyId, userId }) {
       landlord,
       statement: propertyData.statement,
       userId,
+      demoProfile: resolvedProfile,
     });
 
     const processedStatement = await upsertProcessedStatement({
@@ -1733,12 +2172,30 @@ export async function ensureDemoWorkspaceSeed({ companyId, userId }) {
       dueDate: scopedSampleData.calendar.voucherDueSoon,
     });
 
+    const standingOrders = await seedLandlordStandingOrders({
+      companyId,
+      property,
+      landlord,
+      userId,
+      standingOrderPlans: propertyData.standingOrderPlans,
+    });
+
+    const advancements = await seedLandlordAdvancements({
+      companyId,
+      property,
+      landlord,
+      userId,
+      advancementPlans: propertyData.advancementPlans,
+    });
+
     const propertyLeases = await Lease.find({ business: companyId, unit: { $in: Object.values(unitsByNumber).map((item) => item._id) } }).lean();
     const propertyMaintenances = await Maintenance.find({ business: companyId, unit: { $in: Object.values(unitsByNumber).map((item) => item._id) } }).lean();
     allLeases.push(...propertyLeases);
     allMaintenances.push(...propertyMaintenances);
     if (approvedVoucher) allVouchers.push(approvedVoucher);
     if (draftVoucher) allVouchers.push(draftVoucher);
+    allStandingOrders.push(...standingOrders);
+    allAdvancements.push(...advancements);
 
     propertyResults.push({
       propertyId: property._id,
@@ -1747,6 +2204,8 @@ export async function ensureDemoWorkspaceSeed({ companyId, userId }) {
       processedStatementId: processedStatement?._id || null,
       approvedVoucherId: approvedVoucher?._id || null,
       draftVoucherId: draftVoucher?._id || null,
+      standingOrderIds: standingOrders.map((item) => item?._id).filter(Boolean),
+      advancementIds: advancements.map((item) => item?._id).filter(Boolean),
     });
   }
 
@@ -1777,8 +2236,60 @@ export async function ensureDemoWorkspaceSeed({ companyId, userId }) {
     maintenanceRequests: allMaintenances.length,
     processedStatements: scopedSampleData.properties.length,
     vouchers: allVouchers.length,
+    standingOrders: allStandingOrders.length,
+    advancements: allAdvancements.length,
+    demoProfile: resolvedProfile,
     propertyResults,
   };
+}
+
+export async function ensureDemoWorkspaceSeed({
+  companyId,
+  userId,
+  demoProfile = DEMO_PROFILES.PROPERTY_MANAGER,
+  forceReseed = false,
+}) {
+  if (!companyId) throw new Error("companyId is required to seed demo workspace data");
+  if (!userId) throw new Error("userId is required to seed demo workspace data");
+
+  await assertDemoWorkspaceCompany(companyId);
+  await ensureSystemChartOfAccounts(companyId);
+
+  const resolvedProfile = resolveDemoProfile(demoProfile);
+
+  if (!forceReseed) {
+    const existingSeedSummary = await getExistingDemoSeedSummary(companyId, resolvedProfile);
+    if (existingSeedSummary) {
+      const validation = await getDemoWorkspaceSeedValidation(companyId, resolvedProfile);
+      if (validation?.valid) {
+        return existingSeedSummary;
+      }
+
+      console.warn(
+        `Demo workspace seed for ${resolvedProfile} failed integrity validation. Rebuilding workspace. ${validation?.reason || ""}`.trim()
+      );
+    }
+  }
+
+  await resetDemoWorkspaceSeedData(companyId);
+
+  try {
+    const seededWorkspace = await runDemoWorkspaceSeed({ companyId, userId, resolvedProfile });
+    const validation = await getDemoWorkspaceSeedValidation(companyId, resolvedProfile);
+    if (!validation?.valid) {
+      throw new Error(validation?.reason || "Demo workspace seed validation failed after rebuild.");
+    }
+    return seededWorkspace;
+  } catch (error) {
+    console.warn("Demo seed failed on first attempt. Resetting workspace and retrying once.", error);
+    await resetDemoWorkspaceSeedData(companyId);
+    const seededWorkspace = await runDemoWorkspaceSeed({ companyId, userId, resolvedProfile });
+    const validation = await getDemoWorkspaceSeedValidation(companyId, resolvedProfile);
+    if (!validation?.valid) {
+      throw new Error(validation?.reason || "Demo workspace seed validation failed after retry.");
+    }
+    return seededWorkspace;
+  }
 }
 
 export default ensureDemoWorkspaceSeed;

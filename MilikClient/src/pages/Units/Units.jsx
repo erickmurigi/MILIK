@@ -250,6 +250,19 @@ const Units = () => {
         unit.tenant?.name ||
         unit.tenantName ||
         "-";
+      const rawStatus = (unit.status || "vacant").toLowerCase();
+      const hasLiveTenant = Boolean(unit.currentTenant?._id || unit.currentTenant?.name);
+      const normalizedStatus = hasLiveTenant && rawStatus !== "archived" ? "occupied" : rawStatus;
+      const hasCurrentOccupant = normalizedStatus === "occupied" || hasLiveTenant;
+      const hasTenantHistory = Boolean(unit.lastTenant?._id || unit.lastTenant?.name || unit.tenant?._id || unit.tenant?.name);
+      const canArchive = normalizedStatus !== "archived" && !hasCurrentOccupant;
+      const canRestore = normalizedStatus === "archived" && !hasCurrentOccupant;
+      const canDelete = !hasCurrentOccupant && !hasTenantHistory;
+      const blockedReason = hasCurrentOccupant
+        ? "This unit is still occupied by a live tenant."
+        : hasTenantHistory
+        ? "This unit already has tenant history and should stay protected."
+        : "";
       
       return {
         id: unit._id,
@@ -264,9 +277,13 @@ const Units = () => {
         marketRent: formatRentAmount(unit.rent),
         currentRent: formatRentAmount(unit.rent),
         unitType: unit.unitType || "N/A",
-        status: (unit.status || "vacant").toLowerCase(),
+        status: normalizedStatus,
         vacantFrom: unit.vacantSince ? new Date(unit.vacantSince).toLocaleDateString() : "-",
         propertyId: propertyId,
+        canArchive,
+        canRestore,
+        canDelete,
+        blockedReason,
       };
     });
   }, [unitsData, properties]);
@@ -434,24 +451,52 @@ const Units = () => {
   const selectedCount = selectedUnits.length;
   const canEdit = selectedCount === 1;
 
+  const selectedUnitRows = useMemo(
+    () => transformedUnits.filter((unit) => selectedUnits.includes(unit.id)),
+    [transformedUnits, selectedUnits]
+  );
+  const selectedArchivableUnits = useMemo(
+    () => selectedUnitRows.filter((unit) => unit.canArchive),
+    [selectedUnitRows]
+  );
+  const selectedRestorableUnits = useMemo(
+    () => selectedUnitRows.filter((unit) => unit.canRestore),
+    [selectedUnitRows]
+  );
+  const selectedDeletableUnits = useMemo(
+    () => selectedUnitRows.filter((unit) => unit.canDelete),
+    [selectedUnitRows]
+  );
+
   // CRUD Actions
   const archiveSelected = async () => {
     setActionMenuOpen(false);
     if (selectedCount === 0) return;
 
+    if (selectedArchivableUnits.length === 0) {
+      toast.warning("Only non-archived, non-occupied units can be archived from this list.");
+      return;
+    }
+
+    const archiveCount = selectedArchivableUnits.length;
+    const skippedCount = selectedUnitRows.length - archiveCount;
+
     setConfirmDialog({
       isOpen: true,
       title: "Archive Units",
-      message: `Are you sure you want to archive ${selectedCount} selected unit(s)? You can restore them later.`,
+      message:
+        skippedCount > 0
+          ? `Archive ${archiveCount} eligible unit(s). ${skippedCount} selected unit(s) will be skipped because they are already archived or still occupied.`
+          : `Are you sure you want to archive ${archiveCount} selected unit(s)? You can restore them later.`,
       confirmText: "Archive",
       isDangerous: false,
       onConfirm: async () => {
         try {
-          for (const unitId of selectedUnits) {
+          for (const unit of selectedArchivableUnits) {
             // eslint-disable-next-line no-await-in-loop
             await dispatch(
               updateUnit({
-                id: unitId,
+                id: unit.id,
                 unitData: {
                   status: "archived",
                   isVacant: true,
@@ -464,7 +509,10 @@ const Units = () => {
           await dispatch(getUnits({ business: currentCompany._id }));
           setSelectedUnits([]);
           setSelectAll(false);
-          toast.success(`${selectedCount} unit(s) archived successfully`);
+          toast.success(`${archiveCount} unit(s) archived successfully`);
+          if (skippedCount > 0) {
+            toast.info(`${skippedCount} unit(s) were skipped because they are not archivable from this list.`);
+          }
         } catch (error) {
           const msg = error?.message || error?.data?.message || "Error archiving units";
           toast.error(msg);
@@ -479,19 +527,30 @@ const Units = () => {
     setActionMenuOpen(false);
     if (selectedCount === 0) return;
 
+    if (selectedRestorableUnits.length === 0) {
+      toast.warning("Select archived units to restore them back to vacant status.");
+      return;
+    }
+
+    const restoreCount = selectedRestorableUnits.length;
+    const skippedCount = selectedUnitRows.length - restoreCount;
+
     setConfirmDialog({
       isOpen: true,
       title: "Restore Units",
-      message: `Are you sure you want to restore ${selectedCount} selected unit(s)?`,
+      message:
+        skippedCount > 0
+          ? `Restore ${restoreCount} archived unit(s). ${skippedCount} selected unit(s) will be skipped because they are not archived.`
+          : `Are you sure you want to restore ${restoreCount} selected unit(s)?`,
       confirmText: "Restore",
       isDangerous: false,
       onConfirm: async () => {
         try {
-          for (const unitId of selectedUnits) {
+          for (const unit of selectedRestorableUnits) {
             // eslint-disable-next-line no-await-in-loop
             await dispatch(
               updateUnit({
-                id: unitId,
+                id: unit.id,
                 unitData: {
                   status: "vacant",
                   isVacant: true,
@@ -504,7 +563,10 @@ const Units = () => {
           await dispatch(getUnits({ business: currentCompany._id }));
           setSelectedUnits([]);
           setSelectAll(false);
-          toast.success(`${selectedCount} unit(s) restored successfully`);
+          toast.success(`${restoreCount} unit(s) restored successfully`);
+          if (skippedCount > 0) {
+            toast.info(`${skippedCount} unit(s) were skipped because they are not archived.`);
+          }
         } catch (error) {
           const msg = error?.message || error?.data?.message || "Error restoring units";
           toast.error(msg);
@@ -518,22 +580,36 @@ const Units = () => {
   const deleteSelected = async () => {
     if (selectedCount === 0) return;
 
+    if (selectedDeletableUnits.length === 0) {
+      toast.warning("Selected units are protected because they are occupied or already carry tenant history.");
+      return;
+    }
+
+    const deleteCount = selectedDeletableUnits.length;
+    const skippedCount = selectedUnitRows.length - deleteCount;
+
     setConfirmDialog({
       isOpen: true,
       title: "Delete Units",
-      message: `Are you sure you want to delete ${selectedCount} selected unit(s)? This action cannot be undone.`,
+      message:
+        skippedCount > 0
+          ? `Delete ${deleteCount} eligible unit(s). ${skippedCount} selected unit(s) will be skipped because they are occupied or already have tenant history.`
+          : `Are you sure you want to delete ${deleteCount} selected unit(s)? This action cannot be undone.`,
       confirmText: "Delete",
       isDangerous: true,
       onConfirm: async () => {
         try {
-          for (const unitId of selectedUnits) {
+          for (const unit of selectedDeletableUnits) {
             // eslint-disable-next-line no-await-in-loop
-            await dispatch(deleteUnit(unitId)).unwrap();
+            await dispatch(deleteUnit(unit.id)).unwrap();
           }
           await dispatch(getUnits({ business: currentCompany._id }));
           setSelectedUnits([]);
           setSelectAll(false);
-          toast.success(`${selectedCount} unit(s) deleted successfully`);
+          toast.success(`${deleteCount} unit(s) deleted successfully`);
+          if (skippedCount > 0) {
+            toast.info(`${skippedCount} unit(s) were skipped because they are still protected.`);
+          }
         } catch (error) {
           const msg = error?.message || error?.data?.message || "Error deleting units";
           toast.error(msg);
@@ -863,14 +939,18 @@ const Units = () => {
                   <div className="absolute mt-1 right-0 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
                     <button
                       onClick={archiveSelected}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"
+                      disabled={selectedArchivableUnits.length === 0}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
+                      title={selectedArchivableUnits.length > 0 ? "Archive eligible selected units" : "Only non-archived, non-occupied units can be archived"}
                     >
                       <FaArchive className="text-xs text-gray-700" />
                       Archive
                     </button>
                     <button
                       onClick={restoreSelected}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"
+                      disabled={selectedRestorableUnits.length === 0}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
+                      title={selectedRestorableUnits.length > 0 ? "Restore archived selected units" : "Select archived units to restore"}
                     >
                       <FaUndo className="text-xs text-gray-700" />
                       Restore
@@ -881,11 +961,11 @@ const Units = () => {
 
               <button
                 onClick={deleteSelected}
-                disabled={selectedCount === 0}
+                disabled={selectedCount === 0 || selectedDeletableUnits.length === 0}
                 className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"
+                  selectedCount > 0 && selectedDeletableUnits.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"
                 }`}
-                title={selectedCount ? "Delete selected units" : "Select unit(s) to delete"}
+                title={selectedCount === 0 ? "Select unit(s) to delete" : selectedDeletableUnits.length > 0 ? "Delete selected units with no occupancy or tenant history" : "Selected units are protected because they are occupied or have tenant history"}
               >
                 <FaTrash className="text-xs" />
                 Delete {selectedCount > 0 ? `(${selectedCount})` : ""}

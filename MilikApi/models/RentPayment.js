@@ -183,6 +183,12 @@ const RentPaymentSchema = new mongoose.Schema(
         category: { type: String, default: "" },
         priorityGroup: { type: String, default: "" },
         utilityType: { type: String, default: "" },
+        depositHeldBy: { type: String, default: "" },
+        invoiceLedgerMode: { type: String, default: "" },
+        metadata: {
+          type: mongoose.Schema.Types.Mixed,
+          default: {},
+        },
         appliedAmount: { type: Number, default: 0 },
         beforeOutstanding: { type: Number, default: 0 },
         afterOutstanding: { type: Number, default: 0 },
@@ -265,6 +271,10 @@ RentPaymentSchema.index({ business: 1, isConfirmed: 1, ledgerType: 1 });
 RentPaymentSchema.index({ business: 1, tenant: 1, paymentDate: -1 });
 RentPaymentSchema.index({ "allocations.invoice": 1 });
 RentPaymentSchema.index({ business: 1, unit: 1, paymentDate: -1 });
+RentPaymentSchema.index({ business: 1, ledgerType: 1, isCancelled: 1, isReversed: 1, paymentDate: -1 });
+RentPaymentSchema.index({ business: 1, postingStatus: 1, paymentDate: -1 });
+RentPaymentSchema.index({ business: 1, ledgerType: 1, isCancelled: 1, isReversed: 1, "allocationSummary.unapplied": 1, paymentDate: -1 });
+RentPaymentSchema.index({ business: 1, reversalOf: 1, isCancelled: 1, isReversed: 1, isConfirmed: 1, paymentDate: -1 });
 RentPaymentSchema.index({ year: -1, month: -1 });
 
 RentPaymentSchema.index(

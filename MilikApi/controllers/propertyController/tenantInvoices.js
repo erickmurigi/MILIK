@@ -56,6 +56,11 @@ const resolveTenantOperationalStatus = ({ tenant = null, invoiceSnapshots = [] }
 
 const escapeRegExp = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
+
+const isDuplicateKeyError = (error) =>
+  Boolean(error) &&
+  (error?.code === 11000 || error?.name === "MongoServerError" || /E11000 duplicate key/i.test(String(error?.message || "")));
+
 const resolveDepositHolderLabel = ({ requestedValue = null, tenantValue = null, propertyValue = null, companyMode = "" } = {}) => {
   const normalizeHolder = (value = "") => {
     const normalized = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -616,14 +621,7 @@ const buildNoteStatementRow = (noteDoc) => {
   };
 };
 
-const recomputeTenantBalance = async (tenantId, businessId) => {
-  if (!tenantId || !businessId) return;
-
-  const { invoiceSnapshots = [], receiptAllocations = [] } = await computeTenantInvoiceSnapshots({
-    businessId,
-    tenantId,
-  });
-
+const summarizeTenantSnapshotState = ({ invoiceSnapshots = [], receiptAllocations = [] } = {}) => {
   const outstandingInvoices = invoiceSnapshots.reduce(
     (sum, snapshot) => sum + Math.max(0, Number(snapshot?.outstanding || 0)),
     0
@@ -634,16 +632,52 @@ const recomputeTenantBalance = async (tenantId, businessId) => {
     0
   );
 
-  const balance = round2(outstandingInvoices - unappliedReceipts);
+  return {
+    outstandingInvoices: round2(outstandingInvoices),
+    unappliedReceipts: round2(unappliedReceipts),
+    balance: round2(outstandingInvoices - unappliedReceipts),
+  };
+};
+
+const buildInvoiceStatusBulkOps = (invoiceSnapshots = []) =>
+  invoiceSnapshots
+    .filter((snapshot) => snapshot.computedStatus && snapshot.computedStatus !== snapshot.status)
+    .map((snapshot) => ({
+      updateOne: {
+        filter: { _id: snapshot._id },
+        update: { $set: { status: snapshot.computedStatus } },
+      },
+    }));
+
+const applyTenantBalanceAndStatus = async ({
+  businessId,
+  tenantId,
+  invoiceSnapshots = [],
+  receiptAllocations = [],
+}) => {
+  const summary = summarizeTenantSnapshotState({ invoiceSnapshots, receiptAllocations });
+
+  if (!businessId || !tenantId) {
+    return {
+      tenant: null,
+      resolvedStatus: "",
+      ...summary,
+    };
+  }
 
   const tenant = await Tenant.findOne({ _id: tenantId, business: businessId })
     .select("status")
     .lean();
-  if (!tenant) return;
+  if (!tenant) {
+    return {
+      tenant: null,
+      resolvedStatus: "",
+      ...summary,
+    };
+  }
 
   const resolvedStatus = resolveTenantOperationalStatus({ tenant, invoiceSnapshots });
-
-  const updateFields = { balance };
+  const updateFields = { balance: summary.balance };
   if (resolvedStatus && resolvedStatus !== safeLower(tenant.status || "")) {
     updateFields.status = resolvedStatus;
   }
@@ -653,6 +687,32 @@ const recomputeTenantBalance = async (tenantId, businessId) => {
     { $set: updateFields },
     { new: true }
   );
+
+  return {
+    tenant,
+    resolvedStatus,
+    ...summary,
+  };
+};
+
+const recomputeTenantBalance = async (tenantId, businessId, options = {}) => {
+  if (!tenantId || !businessId) return;
+
+  const snapshotBundle =
+    options?.snapshotBundle ||
+    (await computeTenantInvoiceSnapshots({
+      businessId,
+      tenantId,
+    }));
+
+  const { invoiceSnapshots = [], receiptAllocations = [] } = snapshotBundle;
+
+  await applyTenantBalanceAndStatus({
+    businessId,
+    tenantId,
+    invoiceSnapshots,
+    receiptAllocations,
+  });
 };
 
 const getInvoicePriorityGroup = (invoice = {}) => {
@@ -948,18 +1008,6 @@ const normalizeStoredAllocationRows = ({ receipt, invoiceMap = new Map() }) => {
   return rows;
 };
 
-const applyAllocationRowsToSnapshots = (rows = [], invoiceMap = new Map()) => {
-  rows.forEach((row) => {
-    const snapshot = invoiceMap.get(String(row.invoice || ""));
-    if (!snapshot) return;
-    const appliedAmount = Math.abs(Number(row.appliedAmount || 0));
-    if (appliedAmount <= 0) return;
-
-    snapshot.applied = Number(snapshot.applied || 0) + appliedAmount;
-    snapshot.outstanding = Math.max(0, Number(snapshot.amount || 0) - snapshot.applied);
-  });
-};
-
 const buildSortedInvoiceSnapshots = (invoices = []) =>
   invoices
     .filter(isInvoiceActiveForAllocation)
@@ -985,6 +1033,46 @@ const buildSortedInvoiceSnapshots = (invoices = []) =>
       return String(a._id).localeCompare(String(b._id));
     });
 
+const TENANT_SNAPSHOT_INVOICE_FIELDS = [
+  "_id",
+  "tenant",
+  "amount",
+  "invoiceNumber",
+  "category",
+  "metadata",
+  "status",
+  "postingStatus",
+  "invoiceDate",
+  "dueDate",
+  "createdAt",
+  "ledgerMode",
+  "description",
+  "depositHeldBy",
+].join(" ");
+
+const TENANT_SNAPSHOT_RECEIPT_FIELDS = [
+  "_id",
+  "tenant",
+  "amount",
+  "receiptNumber",
+  "referenceNumber",
+  "paymentType",
+  "paymentDate",
+  "createdAt",
+  "metadata",
+  "allocations",
+].join(" ");
+
+const TENANT_SNAPSHOT_NOTE_FIELDS = [
+  "_id",
+  "tenant",
+  "sourceInvoice",
+  "noteType",
+  "amount",
+  "noteDate",
+  "createdAt",
+].join(" ");
+
 const getActiveReceiptsForTenant = async ({ businessId, tenantId, asOfDate = null }) =>
   RentPayment.find({
     business: businessId,
@@ -996,6 +1084,7 @@ const getActiveReceiptsForTenant = async ({ businessId, tenantId, asOfDate = nul
     reversalOf: null,
     ...buildAsOfDateFilter("paymentDate", asOfDate),
   })
+    .select(TENANT_SNAPSHOT_RECEIPT_FIELDS)
     .sort({ paymentDate: 1, createdAt: 1, _id: 1 })
     .lean();
 
@@ -1006,6 +1095,7 @@ const getActiveInvoicesForTenant = async ({ businessId, tenantId, asOfDate = nul
     status: { $nin: ["cancelled", "reversed"] },
     ...buildAsOfDateFilter("invoiceDate", asOfDate),
   })
+    .select(TENANT_SNAPSHOT_INVOICE_FIELDS)
     .sort({ dueDate: 1, invoiceDate: 1, createdAt: 1, _id: 1 })
     .lean();
 
@@ -1024,6 +1114,7 @@ const getActiveInvoicesForTenants = async ({ businessId, tenantIds = [], asOfDat
     ...buildAsOfDateFilter("invoiceDate", asOfDate),
     ...(extraQuery && typeof extraQuery === "object" ? extraQuery : {}),
   })
+    .select(TENANT_SNAPSHOT_INVOICE_FIELDS)
     .sort({ tenant: 1, dueDate: 1, invoiceDate: 1, createdAt: 1, _id: 1 })
     .lean();
 };
@@ -1047,6 +1138,7 @@ const getActiveReceiptsForTenants = async ({ businessId, tenantIds = [], asOfDat
     ...buildAsOfDateFilter("paymentDate", asOfDate),
     ...(extraQuery && typeof extraQuery === "object" ? extraQuery : {}),
   })
+    .select(TENANT_SNAPSHOT_RECEIPT_FIELDS)
     .sort({ tenant: 1, paymentDate: 1, createdAt: 1, _id: 1 })
     .lean();
 };
@@ -1067,6 +1159,7 @@ const getActiveNotesForTenants = async ({ businessId, tenantIds = [], asOfDate =
     ...buildAsOfDateFilter("noteDate", asOfDate),
     ...(extraQuery && typeof extraQuery === "object" ? extraQuery : {}),
   })
+    .select(TENANT_SNAPSHOT_NOTE_FIELDS)
     .sort({ tenant: 1, noteDate: 1, createdAt: 1, _id: 1 })
     .lean();
 };
@@ -1099,23 +1192,16 @@ const buildTenantSnapshotBundle = ({ invoices = [], receipts = [], notes = [] })
   const receiptAllocations = [];
 
   for (const receipt of receipts) {
-    const liveInvoiceMap = new Map(invoiceSnapshots.map((snapshot) => [String(snapshot._id), snapshot]));
-
-    const storedRows = normalizeStoredAllocationRows({
+    let rows = normalizeStoredAllocationRows({
       receipt,
-      invoiceMap: liveInvoiceMap,
+      invoiceMap,
     });
 
-    let rows = storedRows;
     if (rows.length === 0) {
       rows = buildLegacyReceiptAllocations({
         receipt,
         invoiceSnapshots,
       });
-    }
-
-    if (storedRows.length === 0) {
-      applyAllocationRowsToSnapshots(rows, invoiceMap);
     }
 
     const allocatedAmount = rows.reduce((sum, row) => sum + Number(row.appliedAmount || 0), 0);
@@ -1190,26 +1276,56 @@ const computeTenantInvoiceSnapshots = async ({ businessId, tenantId, asOfDate = 
   return buildTenantSnapshotBundle({ invoices, receipts, notes });
 };
 
-const recomputeInvoiceStatusesForTenant = async ({ businessId, tenantId }) => {
+const recomputeInvoiceStatusesForTenant = async ({ businessId, tenantId, snapshotBundle = null }) => {
   if (!businessId || !tenantId) return [];
 
-  const { invoiceSnapshots } = await computeTenantInvoiceSnapshots({ businessId, tenantId });
+  const { invoiceSnapshots = [] } =
+    snapshotBundle || (await computeTenantInvoiceSnapshots({ businessId, tenantId }));
   if (invoiceSnapshots.length === 0) return [];
 
-  const bulkOps = invoiceSnapshots
-    .filter((snapshot) => snapshot.computedStatus && snapshot.computedStatus !== snapshot.status)
-    .map((snapshot) => ({
-      updateOne: {
-        filter: { _id: snapshot._id },
-        update: { $set: { status: snapshot.computedStatus } },
-      },
-    }));
+  const bulkOps = buildInvoiceStatusBulkOps(invoiceSnapshots);
 
   if (bulkOps.length > 0) {
     await TenantInvoice.bulkWrite(bulkOps, { ordered: false });
   }
 
   return invoiceSnapshots;
+};
+
+const recomputeTenantFinancialState = async ({ businessId, tenantId }) => {
+  if (!businessId || !tenantId) {
+    return {
+      invoiceSnapshots: [],
+      receiptAllocations: [],
+      notes: [],
+      outstandingInvoices: 0,
+      unappliedReceipts: 0,
+      balance: 0,
+      resolvedStatus: "",
+      statusUpdateCount: 0,
+    };
+  }
+
+  const snapshotBundle = await computeTenantInvoiceSnapshots({ businessId, tenantId });
+  const { invoiceSnapshots = [], receiptAllocations = [] } = snapshotBundle;
+  const bulkOps = buildInvoiceStatusBulkOps(invoiceSnapshots);
+
+  if (bulkOps.length > 0) {
+    await TenantInvoice.bulkWrite(bulkOps, { ordered: false });
+  }
+
+  const tenantState = await applyTenantBalanceAndStatus({
+    businessId,
+    tenantId,
+    invoiceSnapshots,
+    receiptAllocations,
+  });
+
+  return {
+    ...snapshotBundle,
+    ...tenantState,
+    statusUpdateCount: bulkOps.length,
+  };
 };
 
 const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount }) => {
@@ -1722,77 +1838,319 @@ export const getTakeOnBalances = async (req, res) => {
   }
 };
 
+const normalizePositiveInteger = (value, fallback, { min = 1, max = 200 } = {}) => {
+  const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+};
+
+const buildInvoiceDateRangeQuery = ({ fromDate = null, toDate = null } = {}) => {
+  const range = {};
+
+  if (fromDate) {
+    const start = new Date(`${String(fromDate).trim()}T00:00:00`);
+    if (!Number.isNaN(start.getTime())) {
+      range.$gte = start;
+    }
+  }
+
+  if (toDate) {
+    const end = new Date(`${String(toDate).trim()}T23:59:59.999`);
+    if (!Number.isNaN(end.getTime())) {
+      range.$lte = end;
+    }
+  }
+
+  if (!Object.keys(range).length) return {};
+
+  return {
+    $or: [
+      { bookingDate: range },
+      { bookingDate: { $exists: false }, invoiceDate: range },
+      { bookingDate: null, invoiceDate: range },
+    ],
+  };
+};
+
+const buildTenantInvoiceListQuery = async ({ businessId, requestQuery = {} }) => {
+  const {
+    tenant,
+    status,
+    category,
+    propertyId,
+    property,
+    unitId,
+    unit,
+    invoiceNumber,
+    invoiceNo,
+    tenantName,
+    fromDate,
+    toDate,
+  } = requestQuery || {};
+
+  const query = { business: businessId };
+  const explicitTenantId = isValidObjectId(tenant) ? String(tenant) : null;
+
+  if (explicitTenantId) {
+    query.tenant = explicitTenantId;
+  }
+
+  const normalizedStatus = String(status || "").trim();
+  if (normalizedStatus) {
+    if (normalizedStatus === "ACTIVE") {
+      query.status = { $nin: ["cancelled", "reversed"] };
+    } else if (normalizedStatus === "Issued") {
+      query.status = { $in: ["pending", "partially_paid"] };
+    } else {
+      query.status = safeLower(normalizedStatus);
+    }
+  }
+
+  if (category) {
+    query.category = String(category).toUpperCase();
+  }
+
+  const resolvedPropertyId = isValidObjectId(propertyId) ? String(propertyId) : isValidObjectId(property) ? String(property) : null;
+  if (resolvedPropertyId) {
+    query.property = resolvedPropertyId;
+  }
+
+  const resolvedUnitId = isValidObjectId(unitId) ? String(unitId) : isValidObjectId(unit) ? String(unit) : null;
+  if (resolvedUnitId) {
+    query.unit = resolvedUnitId;
+  }
+
+  const invoiceSearchValue = String(invoiceNumber || invoiceNo || "").trim();
+  if (invoiceSearchValue) {
+    query.invoiceNumber = { $regex: escapeRegExp(invoiceSearchValue), $options: "i" };
+  }
+
+  const tenantSearchValue = String(tenantName || "").trim();
+  if (tenantSearchValue) {
+    const tenantRegex = new RegExp(escapeRegExp(tenantSearchValue), "i");
+    const matchingTenants = await Tenant.find({
+      business: businessId,
+      $or: [
+        { name: tenantRegex },
+        { tenantName: tenantRegex },
+        { firstName: tenantRegex },
+        { lastName: tenantRegex },
+      ],
+    })
+      .select("_id")
+      .limit(1000)
+      .lean();
+
+    const matchingTenantIds = matchingTenants.map((doc) => String(doc?._id || "")).filter(Boolean);
+    if (!matchingTenantIds.length) {
+      return { query: null, empty: true };
+    }
+
+    if (explicitTenantId && !matchingTenantIds.includes(explicitTenantId)) {
+      return { query: null, empty: true };
+    }
+
+    query.tenant = explicitTenantId || { $in: matchingTenantIds };
+  }
+
+  Object.assign(query, buildInvoiceDateRangeQuery({ fromDate, toDate }));
+
+  return { query, empty: false };
+};
+
+const buildTenantInvoiceListPayload = ({
+  items = [],
+  paginate = false,
+  page = 1,
+  limit = 50,
+  totalItems = 0,
+  summary = {},
+}) => {
+  if (!paginate) {
+    return items;
+  }
+
+  return {
+    data: items,
+    pagination: {
+      page,
+      limit,
+      totalItems,
+      totalPages: Math.max(1, Math.ceil(Number(totalItems || 0) / Math.max(1, Number(limit || 1)))),
+    },
+    summary,
+  };
+};
+
 export const getTenantInvoicesList = async (req, res) => {
   try {
-    const { tenant, business, status, category } = req.query;
+    const { business } = req.query;
     const includeSnapshots = ["1", "true", "yes"].includes(String(req.query?.includeSnapshots || "").trim().toLowerCase());
+    const paginate = ["1", "true", "yes"].includes(String(req.query?.paginate || "").trim().toLowerCase()) || Boolean(req.query?.page || req.query?.limit);
+    const page = normalizePositiveInteger(req.query?.page, 1, { min: 1, max: 100000 });
+    const limit = normalizePositiveInteger(req.query?.limit, 50, { min: 1, max: 200 });
+    const skip = (page - 1) * limit;
     const businessId = ensureBusinessAccess(req, resolveAuthorizedBusinessId(req, business));
 
-    const query = { business: businessId };
-    if (tenant) query.tenant = tenant;
-    if (status) query.status = status;
-    if (category) query.category = String(category).toUpperCase();
+    const { query, empty } = await buildTenantInvoiceListQuery({
+      businessId,
+      requestQuery: req.query || {},
+    });
 
-    const invoices = await TenantInvoice.find(query)
-      .sort({ invoiceDate: 1, createdAt: 1 })
+    if (empty || !query) {
+      return res.status(200).json(
+        buildTenantInvoiceListPayload({
+          items: [],
+          paginate,
+          page,
+          limit,
+          totalItems: 0,
+          summary: {
+            pageItemCount: 0,
+            pageTotalAmount: 0,
+            pagePendingAmount: 0,
+          },
+        })
+      );
+    }
+
+    const invoiceQuery = TenantInvoice.find(query)
+      .sort(paginate ? { bookingDate: -1, invoiceDate: -1, createdAt: -1, _id: -1 } : { invoiceDate: 1, createdAt: 1 })
       .populate("tenant", "name tenantName firstName lastName")
       .populate("unit", "unitNumber name unitName")
       .populate("property", "propertyName name")
-      .populate("chartAccount", "code name type");
+      .populate("chartAccount", "code name type")
+      .lean();
+
+    if (paginate) {
+      invoiceQuery.skip(skip).limit(limit);
+    }
+
+    const [invoices, totalItems] = await Promise.all([
+      invoiceQuery,
+      paginate ? TenantInvoice.countDocuments(query) : Promise.resolve(0),
+    ]);
 
     const invoiceIds = invoices.map((invoice) => invoice._id);
     const notes =
       invoiceIds.length > 0
         ? await TenantInvoiceNote.find({
+            business: businessId,
             sourceInvoice: { $in: invoiceIds },
             status: { $nin: ["cancelled", "reversed"] },
-          }).lean()
+          })
+            .select("sourceInvoice noteType amount")
+            .lean()
         : [];
 
-    const adjustedInvoices = attachNoteTotalsToInvoices(
-      invoices.map((invoice) => (typeof invoice.toObject === "function" ? invoice.toObject() : invoice)),
-      notes
-    );
+    const adjustedInvoices = attachNoteTotalsToInvoices(invoices, notes);
 
-    if (!includeSnapshots || adjustedInvoices.length === 0) {
-      return res.status(200).json(adjustedInvoices);
+    let hydratedInvoices = adjustedInvoices;
+
+    if (includeSnapshots && adjustedInvoices.length > 0) {
+      const tenantIds = [...new Set(
+        adjustedInvoices
+          .map((invoice) => normalizeEntityId(invoice?.tenant))
+          .filter(Boolean)
+      )];
+
+      const snapshotMap = await computeTenantInvoiceSnapshotsBatch({
+        businessId,
+        tenantIds,
+      });
+
+      const snapshotByInvoiceId = new Map();
+      const receiptApplicationsByInvoiceId = new Map();
+
+      snapshotMap.forEach(({ invoiceSnapshots = [], receiptAllocations = [] }) => {
+        invoiceSnapshots.forEach((snapshot) => {
+          snapshotByInvoiceId.set(String(snapshot._id), snapshot);
+        });
+
+        receiptAllocations.forEach((receiptAllocation) => {
+          const receiptId = String(receiptAllocation?.receiptId || "");
+          const receiptNumber =
+            receiptAllocation?.receiptNumber ||
+            receiptAllocation?.referenceNumber ||
+            "";
+          const receiptDate = receiptAllocation?.paymentDate || null;
+          const paymentType = receiptAllocation?.paymentType || "rent";
+          const rows = Array.isArray(receiptAllocation?.rows) ? receiptAllocation.rows : [];
+
+          rows.forEach((row) => {
+            const invoiceId = String(row?.invoice || row?.invoiceId || "");
+            const appliedAmount = round2(Number(row?.appliedAmount || 0));
+            if (!invoiceId || appliedAmount <= 0) return;
+
+            const current = receiptApplicationsByInvoiceId.get(invoiceId) || [];
+            current.push({
+              receiptId,
+              receiptNumber,
+              receiptDate,
+              paymentType,
+              appliedAmount,
+              afterOutstanding: round2(Number(row?.afterOutstanding || 0)),
+              chargeLabel:
+                row?.description ||
+                row?.utilityType ||
+                row?.invoiceNumber ||
+                "",
+            });
+            receiptApplicationsByInvoiceId.set(invoiceId, current);
+          });
+        });
+      });
+
+      hydratedInvoices = adjustedInvoices.map((invoice) => {
+        const snapshot = snapshotByInvoiceId.get(String(invoice._id));
+        if (!snapshot) return invoice;
+
+        const receiptApplications = (receiptApplicationsByInvoiceId.get(String(invoice._id)) || [])
+          .slice()
+          .sort((a, b) => {
+            const aTime = a?.receiptDate ? new Date(a.receiptDate).getTime() : 0;
+            const bTime = b?.receiptDate ? new Date(b.receiptDate).getTime() : 0;
+            return aTime - bTime;
+          });
+
+        return {
+          ...invoice,
+          appliedAmount: round2(Number(snapshot.applied || 0)),
+          outstanding: round2(Number(snapshot.outstanding || 0)),
+          remainingCreditableAmount: round2(Number(snapshot.remainingCreditableAmount || 0)),
+          computedStatus: snapshot.computedStatus || invoice.status,
+          receiptApplications,
+        };
+      });
     }
 
-    const tenantIds = [...new Set(
-      adjustedInvoices
-        .map((invoice) => normalizeEntityId(invoice?.tenant))
-        .filter(Boolean)
-    )];
+    const summary = {
+      pageItemCount: hydratedInvoices.length,
+      pageTotalAmount: round2(
+        hydratedInvoices.reduce((sum, invoice) => sum + Number(invoice?.adjustedAmount ?? invoice?.amount ?? 0), 0)
+      ),
+      pagePendingAmount: round2(
+        hydratedInvoices.reduce((sum, invoice) => {
+          const normalizedStatus = String(invoice?.computedStatus || invoice?.status || "").toLowerCase();
+          if (!["pending", "partially_paid"].includes(normalizedStatus)) return sum;
+          return sum + Number(invoice?.outstanding ?? invoice?.adjustedAmount ?? invoice?.amount ?? 0);
+        }, 0)
+      ),
+    };
 
-    const snapshotMap = await computeTenantInvoiceSnapshotsBatch({
-      businessId,
-      tenantIds,
-    });
-
-    const snapshotByInvoiceId = new Map();
-    snapshotMap.forEach(({ invoiceSnapshots = [] }) => {
-      invoiceSnapshots.forEach((snapshot) => {
-        snapshotByInvoiceId.set(String(snapshot._id), snapshot);
-      });
-    });
-
-    const hydratedInvoices = adjustedInvoices.map((invoice) => {
-      const snapshot = snapshotByInvoiceId.get(String(invoice._id));
-      if (!snapshot) return invoice;
-
-      return {
-        ...invoice,
-        appliedAmount: round2(Number(snapshot.applied || 0)),
-        outstanding: round2(Number(snapshot.outstanding || 0)),
-        remainingCreditableAmount: round2(Number(snapshot.remainingCreditableAmount || 0)),
-        computedStatus: snapshot.computedStatus || invoice.status,
-      };
-    });
-
-    return res.status(200).json(hydratedInvoices);
+    return res.status(200).json(
+      buildTenantInvoiceListPayload({
+        items: hydratedInvoices,
+        paginate,
+        page,
+        limit,
+        totalItems: paginate ? totalItems : hydratedInvoices.length,
+        summary,
+      })
+    );
   } catch (err) {
     console.error("Failed to fetch tenant invoices:", err);
-    return res.status(500).json({ error: "Failed to fetch tenant invoices" });
+    return res.status(err?.statusCode || 500).json({ error: err?.message || "Failed to fetch tenant invoices" });
   }
 };
 
@@ -2018,8 +2376,7 @@ export const createTenantInvoiceNote = async (req, res) => {
       posting.entries.map((entry) => entry.accountId)
     );
 
-    await recomputeTenantBalance(note.tenant, note.business);
-    await recomputeInvoiceStatusesForTenant({
+    await recomputeTenantFinancialState({
       businessId: note.business,
       tenantId: note.tenant,
     });
@@ -2148,8 +2505,7 @@ export const reverseTenantInvoiceNote = async (req, res) => {
       await aggregateChartOfAccountBalances(note.business, touchedAccountIds);
     }
 
-    await recomputeTenantBalance(note.tenant, note.business);
-    await recomputeInvoiceStatusesForTenant({
+    await recomputeTenantFinancialState({
       businessId: note.business,
       tenantId: note.tenant,
     });
@@ -2491,30 +2847,49 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     },
   });
 
-  const invoice = await TenantInvoice.create({
-    business: businessId,
-    property: accountingContext.propertyId,
-    landlord: accountingContext.landlordId,
-    tenant,
-    unit,
-    invoiceNumber: normalizedInvoiceNumber,
-    category: normalizedCategory,
-    amount: taxSnapshot.grossAmount,
-    description: description || "",
-    invoiceDate: normalizedInvoiceDate,
-    bookingDate: normalizedBookingDate,
-    dueDate: normalizedDueDate,
-    status: "pending",
-    createdBy: actorUserId,
-    chartAccount: postingAccount._id,
-    depositHeldBy,
-    ledgerMode,
-    postingStatus: "unposted",
-    postingError: null,
-    ledgerEntries: [],
-    metadata: normalizedMetadata,
-    taxSnapshot,
-  });
+  let invoice;
+  try {
+    invoice = await TenantInvoice.create({
+      business: businessId,
+      property: accountingContext.propertyId,
+      landlord: accountingContext.landlordId,
+      tenant,
+      unit,
+      invoiceNumber: normalizedInvoiceNumber,
+      category: normalizedCategory,
+      amount: taxSnapshot.grossAmount,
+      description: description || "",
+      invoiceDate: normalizedInvoiceDate,
+      bookingDate: normalizedBookingDate,
+      dueDate: normalizedDueDate,
+      status: "pending",
+      createdBy: actorUserId,
+      chartAccount: postingAccount._id,
+      depositHeldBy,
+      ledgerMode,
+      postingStatus: "unposted",
+      postingError: null,
+      ledgerEntries: [],
+      metadata: normalizedMetadata,
+      taxSnapshot,
+    });
+  } catch (createError) {
+    if (isDuplicateKeyError(createError)) {
+      const duplicateMessage =
+        normalizedCategory === "LATE_PENALTY_CHARGE" &&
+        normalizedMetadata?.penaltyRuleId &&
+        normalizedMetadata?.penaltySourceInvoiceId &&
+        normalizedMetadata?.penaltyPeriodKey
+          ? "A late penalty invoice already exists for this source invoice in the selected billing period."
+          : "Invoice number already exists for this business. Please retry or use a unique number.";
+
+      const error = new Error(duplicateMessage);
+      error.statusCode = 409;
+      throw error;
+    }
+
+    throw createError;
+  }
 
   if (["RENT_CHARGE", "UTILITY_CHARGE"].includes(normalizedCategory) && batchContext?.monthlyInvoiceCache) {
     const nextCachedInvoices = [
@@ -2546,8 +2921,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
         };
       }
 
-      await recomputeTenantBalance(invoice.tenant, invoice.business);
-      await recomputeInvoiceStatusesForTenant({
+      await recomputeTenantFinancialState({
         businessId: invoice.business,
         tenantId: invoice.tenant,
       });
@@ -2589,7 +2963,10 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
       touchedAccountIds
     );
 
-    await recomputeTenantBalance(invoice.tenant, invoice.business);
+    await recomputeTenantFinancialState({
+      businessId: invoice.business,
+      tenantId: invoice.tenant,
+    });
 
     const populated = await TenantInvoice.findById(invoice._id)
       .populate("chartAccount", "code name type")
@@ -2828,8 +3205,7 @@ export const updateTakeOnBalance = async (req, res) => {
       }
     }
 
-    await recomputeTenantBalance(invoice.tenant, invoice.business);
-    await recomputeInvoiceStatusesForTenant({
+    await recomputeTenantFinancialState({
       businessId: invoice.business,
       tenantId: invoice.tenant,
     });
@@ -3051,8 +3427,7 @@ export const createTenantInvoicesBatch = async (req, res) => {
         ? runTasksInChunks(
             Array.from(touchedTenantIds),
             async (tenantId) => {
-              await recomputeTenantBalance(tenantId, businessId);
-              await recomputeInvoiceStatusesForTenant({ businessId, tenantId });
+              await recomputeTenantFinancialState({ businessId, tenantId });
             },
             12
           )
@@ -3220,8 +3595,7 @@ export const deleteTenantInvoice = async (req, res) => {
         null,
         `Invoice ${invoice.invoiceNumber || invoice._id} was permanently deleted`
       );
-      await recomputeTenantBalance(invoice.tenant, invoice.business);
-      await recomputeInvoiceStatusesForTenant({
+      await recomputeTenantFinancialState({
         businessId: invoice.business,
         tenantId: invoice.tenant,
       });
@@ -3306,8 +3680,7 @@ export const deleteTenantInvoice = async (req, res) => {
       `Invoice ${invoice.invoiceNumber || invoice._id} was ${cancellationStatus}`
     );
 
-    await recomputeTenantBalance(invoice.tenant, invoice.business);
-    await recomputeInvoiceStatusesForTenant({
+    await recomputeTenantFinancialState({
       businessId: invoice.business,
       tenantId: invoice.tenant,
     });
@@ -3339,6 +3712,7 @@ export {
   resolveActorUserId,
   resolveTenantOperationalStatus,
   recomputeTenantBalance,
+  recomputeTenantFinancialState,
   getInvoicePriorityGroup,
   getInvoiceUtilityType,
   computeTenantInvoiceSnapshots,

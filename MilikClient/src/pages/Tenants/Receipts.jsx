@@ -350,6 +350,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const [allocationLoading, setAllocationLoading] = useState(false);
   const [allocationSaving, setAllocationSaving] = useState(false);
   const [allocationRules, setAllocationRules] = useState({
+    appendOnlyUnappliedForConfirmed: false,
     lockedUnappliedForConfirmed: false,
     lockedAllocatedTotal: 0,
     currentUnapplied: 0,
@@ -1229,6 +1230,7 @@ const visibleReceiptIds = useMemo(
     setAllocationLines([]);
     setAllocationReason("");
     setAllocationRules({
+      appendOnlyUnappliedForConfirmed: false,
       lockedUnappliedForConfirmed: false,
       lockedAllocatedTotal: 0,
       currentUnapplied: 0,
@@ -1248,6 +1250,7 @@ const visibleReceiptIds = useMemo(
       const currentAllocations = Array.isArray(workspace?.currentAllocations) ? workspace.currentAllocations : [];
       setAllocationOptions(options);
       setAllocationRules(workspace?.rules || {
+        appendOnlyUnappliedForConfirmed: false,
         lockedUnappliedForConfirmed: false,
         lockedAllocatedTotal: 0,
         currentUnapplied: 0,
@@ -1288,6 +1291,8 @@ const visibleReceiptIds = useMemo(
     [allocationOptions]
   );
 
+  const isAppendOnlyAllocationMode = allocationRules?.appendOnlyUnappliedForConfirmed === true;
+
   const allocationComputed = useMemo(() => {
     const rows = allocationLines
       .map((line, index) => {
@@ -1298,24 +1303,35 @@ const visibleReceiptIds = useMemo(
           invoiceId: String(line?.invoiceId || ""),
           appliedAmount: Number.isFinite(amount) ? amount : 0,
           option: option || null,
+          lockedFloor: Math.max(0, Number(option?.currentAllocation || 0)),
         };
       })
       .filter((row) => row.invoiceId && row.appliedAmount > 0);
 
     const totalAllocated = rows.reduce((sum, row) => sum + Number(row.appliedAmount || 0), 0);
     const receiptAmount = Math.abs(Number(allocationTarget?.amount || 0));
-    const editableCap = allocationRules?.lockedUnappliedForConfirmed
+    const lockedBaseTotal = isAppendOnlyAllocationMode
+      ? Number(allocationRules?.lockedAllocatedTotal || 0)
+      : 0;
+    const editableCap = isAppendOnlyAllocationMode
+      ? Number(allocationRules?.currentUnapplied || 0)
+      : allocationRules?.lockedUnappliedForConfirmed
       ? Number(allocationRules?.lockedAllocatedTotal || 0)
       : receiptAmount;
+    const totalAdded = isAppendOnlyAllocationMode
+      ? Math.max(0, totalAllocated - lockedBaseTotal)
+      : totalAllocated;
 
     return {
       rows,
       receiptAmount,
       totalAllocated,
+      lockedBaseTotal,
+      totalAdded,
       editableCap,
-      remaining: Math.max(0, editableCap - totalAllocated),
+      remaining: Math.max(0, editableCap - totalAdded),
     };
-  }, [allocationLines, allocationOptionMap, allocationTarget, allocationRules]);
+  }, [allocationLines, allocationOptionMap, allocationTarget, allocationRules, isAppendOnlyAllocationMode]);
 
   const addAllocationLine = useCallback(() => {
     setAllocationLines((prev) => [...prev, { invoiceId: "", appliedAmount: 0 }]);
@@ -1323,16 +1339,28 @@ const visibleReceiptIds = useMemo(
 
   const removeAllocationLine = useCallback((index) => {
     setAllocationLines((prev) => {
+      const currentLine = prev[index] || {};
+      const currentOption = allocationOptionMap.get(String(currentLine?.invoiceId || ""));
+      const lockedFloor = Math.max(0, Number(currentOption?.currentAllocation || 0));
+      if (isAppendOnlyAllocationMode && lockedFloor > 0) {
+        toast.error("Already applied lines on a confirmed receipt are locked. Only the remaining unapplied balance can be added from this workspace.");
+        return prev;
+      }
       const next = prev.filter((_, currentIndex) => currentIndex !== index);
       return next.length > 0 ? next : [{ invoiceId: "", appliedAmount: 0 }];
     });
-  }, []);
+  }, [allocationOptionMap, isAppendOnlyAllocationMode]);
 
   const updateAllocationLine = useCallback((index, key, value) => {
     setAllocationLines((prev) =>
       prev.map((line, currentIndex) => {
         if (currentIndex !== index) return line;
         if (key === "invoiceId") {
+          const currentOption = allocationOptionMap.get(String(line?.invoiceId || ""));
+          const lockedFloor = Math.max(0, Number(currentOption?.currentAllocation || 0));
+          if (isAppendOnlyAllocationMode && lockedFloor > 0) {
+            return line;
+          }
           const option = allocationOptionMap.get(String(value || ""));
           const suggestedAmount = option
             ? Math.min(Number(option.currentAllocation || 0) || Number(option.maxAllocatable || 0) || 0, Number(option.maxAllocatable || 0) || 0)
@@ -1343,16 +1371,23 @@ const visibleReceiptIds = useMemo(
             appliedAmount: option ? suggestedAmount : 0,
           };
         }
-        const numericValue = Math.max(0, Number(value || 0));
+        const currentOption = allocationOptionMap.get(String(line?.invoiceId || ""));
+        const lockedFloor = isAppendOnlyAllocationMode ? Math.max(0, Number(currentOption?.currentAllocation || 0)) : 0;
+        const numericValue = Math.max(lockedFloor, Number(value || 0));
         return {
           ...line,
-          [key]: Number.isFinite(numericValue) ? numericValue : 0,
+          [key]: Number.isFinite(numericValue) ? numericValue : lockedFloor,
         };
       })
     );
-  }, [allocationOptionMap]);
+  }, [allocationOptionMap, isAppendOnlyAllocationMode]);
 
   const handleMoveToPrepayment = useCallback(() => {
+    if (isAppendOnlyAllocationMode) {
+      toast.error("This confirmed receipt is in append-only mode. Its existing allocations stay locked, and only the remaining unapplied balance can be applied to open bills.");
+      return;
+    }
+
     if (allocationRules?.lockedUnappliedForConfirmed && Number(allocationRules?.lockedAllocatedTotal || 0) > 0) {
       toast.error("This posted receipt cannot move its locked allocated amount into prepayment from this workspace.");
       return;
@@ -1361,14 +1396,9 @@ const visibleReceiptIds = useMemo(
     setAllocationLines([{ invoiceId: "", appliedAmount: 0 }]);
     setAllocationReason((prev) => prev || "Moved receipt allocation to prepayment / unapplied balance.");
     toast.info("Receipt is now staged as unapplied / prepayment. Click Save Allocation to confirm.");
-  }, [allocationRules]);
+  }, [allocationRules, isAppendOnlyAllocationMode]);
 
   const handleAutoAllocate = useCallback(() => {
-    const editableCap = allocationRules?.lockedUnappliedForConfirmed
-      ? Number(allocationRules?.lockedAllocatedTotal || 0)
-      : Math.abs(Number(allocationTarget?.amount || 0));
-
-    let remaining = Math.max(0, editableCap);
     const ordered = [...allocationOptions].sort((a, b) => {
       const aDue = a?.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
       const bDue = b?.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
@@ -1379,6 +1409,48 @@ const visibleReceiptIds = useMemo(
       return String(a?.invoiceNumber || "").localeCompare(String(b?.invoiceNumber || ""));
     });
 
+    if (isAppendOnlyAllocationMode) {
+      let remaining = Math.max(0, Number(allocationRules?.currentUnapplied || 0));
+      const nextMap = new Map();
+
+      ordered.forEach((option) => {
+        const invoiceId = String(option?.invoiceId || "");
+        if (!invoiceId) return;
+        const currentAllocation = Math.max(0, Number(option?.currentAllocation || 0));
+        if (currentAllocation > 0) {
+          nextMap.set(invoiceId, {
+            invoiceId,
+            appliedAmount: currentAllocation,
+          });
+        }
+      });
+
+      ordered.forEach((option) => {
+        if (remaining <= 0) return;
+        const invoiceId = String(option?.invoiceId || "");
+        if (!invoiceId) return;
+        const currentAllocation = Math.max(0, Number(option?.currentAllocation || 0));
+        const maxAllocatable = Math.max(0, Number(option?.maxAllocatable || 0));
+        const availableExtra = Math.max(0, maxAllocatable - currentAllocation);
+        if (availableExtra <= 0) return;
+        const extraApplied = Math.min(availableExtra, remaining);
+        if (extraApplied <= 0) return;
+        nextMap.set(invoiceId, {
+          invoiceId,
+          appliedAmount: currentAllocation + extraApplied,
+        });
+        remaining -= extraApplied;
+      });
+
+      const nextLines = ordered
+        .map((option) => nextMap.get(String(option?.invoiceId || "")))
+        .filter((line) => line && Number(line.appliedAmount || 0) > 0);
+
+      setAllocationLines(nextLines.length > 0 ? nextLines : [{ invoiceId: "", appliedAmount: 0 }]);
+      return;
+    }
+
+    let remaining = Math.max(0, Math.abs(Number(allocationTarget?.amount || 0)));
     const nextLines = [];
     ordered.forEach((option) => {
       if (remaining <= 0) return;
@@ -1394,7 +1466,7 @@ const visibleReceiptIds = useMemo(
     });
 
     setAllocationLines(nextLines.length > 0 ? nextLines : [{ invoiceId: "", appliedAmount: 0 }]);
-  }, [allocationOptions, allocationRules, allocationTarget]);
+  }, [allocationOptions, allocationRules, allocationTarget, isAppendOnlyAllocationMode]);
 
   const handleSaveAllocations = useCallback(async () => {
     if (!allocationTarget?._id) return;
@@ -2356,7 +2428,7 @@ const visibleReceiptIds = useMemo(
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-500">Receipt Allocation Workspace</p>
                 <h3 className="mt-1 text-lg font-bold text-slate-900">{allocationTarget?.receiptNumber || allocationTarget?.referenceNumber || "Receipt"}</h3>
-                <p className="mt-1 text-sm text-slate-600">Move this receipt across specific tenant bills without rewriting the posted receipt journal.</p>
+                <p className="mt-1 text-sm text-slate-600">Review and control how this receipt settles tenant bills. Confirmed receipts keep their posted base allocations locked, but any remaining unapplied balance can still be applied safely.</p>
               </div>
               <button onClick={closeAllocationDrawer} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-white hover:text-slate-800">
                 <FaTimes />
@@ -2374,26 +2446,39 @@ const visibleReceiptIds = useMemo(
                       <p className="mt-1 text-lg font-bold text-slate-900">{formatMoney(allocationComputed.receiptAmount)}</p>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Editable Allocation</p>
+                      <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">{isAppendOnlyAllocationMode ? "Available New Allocation" : "Editable Allocation"}</p>
                       <p className="mt-1 text-lg font-bold text-slate-900">{formatMoney(allocationComputed.editableCap)}</p>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Remaining</p>
+                      <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">{isAppendOnlyAllocationMode ? "Remaining Unapplied" : "Remaining"}</p>
                       <p className={`mt-1 text-lg font-bold ${allocationComputed.remaining > 0.009 ? "text-amber-600" : "text-emerald-700"}`}>
                         {formatMoney(allocationComputed.remaining)}
                       </p>
                     </div>
                   </div>
 
-                  {allocationRules?.lockedUnappliedForConfirmed && (
+                  {isAppendOnlyAllocationMode && (
+                    <div className="mx-4 mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                      <div className="flex items-start gap-3">
+                        <FaInfoCircle className="mt-0.5 shrink-0" />
+                        <div>
+                          <p className="font-bold">This confirmed receipt is running in append-only prepayment mode.</p>
+                          <p className="mt-1">
+                            The already applied portion of <strong>{formatMoney(allocationRules?.lockedAllocatedTotal || 0)}</strong> stays locked. You can safely apply the remaining unapplied balance of <strong>{formatMoney(allocationRules?.currentUnapplied || 0)}</strong> to open bills without reversing the original receipt.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {allocationRules?.lockedUnappliedForConfirmed && !isAppendOnlyAllocationMode && (
                     <div className="mx-4 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                       <div className="flex items-start gap-3">
                         <FaInfoCircle className="mt-0.5 shrink-0" />
                         <div>
-                          <p className="font-bold">This posted receipt is running in protected mode.</p>
+                          <p className="font-bold">This posted receipt is fully locked.</p>
                           <p className="mt-1">
-                            Only the already allocated portion of <strong>{formatMoney(allocationRules?.lockedAllocatedTotal || 0)}</strong> can be redistributed in Phase 1.
-                            The unapplied portion of <strong>{formatMoney(allocationRules?.currentUnapplied || 0)}</strong> stays locked so the ledger posting remains untouched.
+                            It has no remaining unapplied balance to move. Reverse and recreate it if the posted meaning needs to change.
                           </p>
                         </div>
                       </div>
@@ -2404,7 +2489,7 @@ const visibleReceiptIds = useMemo(
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <h4 className="text-sm font-bold text-slate-900">Allocation Lines</h4>
-                        <p className="text-xs text-slate-500">Target exact invoices, utilities, penalties, or deposit charges for this receipt.</p>
+                        <p className="text-xs text-slate-500">Target exact invoices, utilities, penalties, or deposit charges for this receipt. Confirmed receipts can add only from their remaining unapplied balance.</p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <button
@@ -2433,6 +2518,8 @@ const visibleReceiptIds = useMemo(
                         const lineInvoiceId = String(line?.invoiceId || "");
                         const option = allocationOptionMap.get(lineInvoiceId);
                         const maxForLine = Number(option?.maxAllocatable || 0);
+                        const lockedFloor = Math.max(0, Number(option?.currentAllocation || 0));
+                        const isLockedBaseLine = isAppendOnlyAllocationMode && lockedFloor > 0;
                         return (
                           <div key={`${lineInvoiceId || "line"}-${index}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70">
                             <div className="hidden border-b border-slate-200 bg-slate-100/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 md:grid md:grid-cols-[minmax(0,1.55fr)_120px_140px_96px] md:gap-3">
@@ -2447,7 +2534,8 @@ const visibleReceiptIds = useMemo(
                                 <select
                                   value={lineInvoiceId}
                                   onChange={(e) => updateAllocationLine(index, "invoiceId", e.target.value)}
-                                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none md:mt-0"
+                                  disabled={isLockedBaseLine}
+                                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 md:mt-0"
                                 >
                                   <option value="">Select bill to allocate</option>
                                   {allocationOptions.map((invoice) => {
@@ -2465,7 +2553,7 @@ const visibleReceiptIds = useMemo(
                                 <label className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 md:hidden">Amount</label>
                                 <input
                                   type="number"
-                                  min="0"
+                                  min={isLockedBaseLine ? lockedFloor : 0}
                                   step="0.01"
                                   value={line?.appliedAmount || ""}
                                   onChange={(e) => updateAllocationLine(index, "appliedAmount", e.target.value)}
@@ -2476,14 +2564,15 @@ const visibleReceiptIds = useMemo(
                               <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 md:hidden">Available</p>
                                 <p className="text-sm font-bold text-slate-900">{formatMoney(maxForLine)}</p>
-                                <p className="text-[11px] text-slate-500">Current {formatMoney(option?.currentAllocation || 0)}</p>
+                                <p className="text-[11px] text-slate-500">Current {formatMoney(option?.currentAllocation || 0)}{isLockedBaseLine ? " · locked base" : ""}</p>
                               </div>
                               <div className="flex items-end">
                                 <button
                                   onClick={() => removeAllocationLine(index)}
-                                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                                  disabled={isLockedBaseLine}
+                                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                  <FaMinusCircle /> Remove
+                                  <FaMinusCircle /> {isLockedBaseLine ? "Locked" : "Remove"}
                                 </button>
                               </div>
                             </div>

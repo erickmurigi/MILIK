@@ -106,6 +106,42 @@ const getInvoiceRecognitionDate = (invoice = {}) =>
 
 const getInvoiceStatementDate = (invoice = {}) => getInvoiceRecognitionDate(invoice);
 
+const isSameCalendarDay = (left, right) => {
+  const leftDate = left ? new Date(left) : null;
+  const rightDate = right ? new Date(right) : null;
+  if (!leftDate || !rightDate) return false;
+  if (Number.isNaN(leftDate.getTime()) || Number.isNaN(rightDate.getTime())) return false;
+  return (
+    leftDate.getFullYear() === rightDate.getFullYear() &&
+    leftDate.getMonth() === rightDate.getMonth() &&
+    leftDate.getDate() === rightDate.getDate()
+  );
+};
+
+const resolveSameDayRecognitionDate = (datedValue = null, auditValue = null) => {
+  const primaryDate = datedValue ? new Date(datedValue) : null;
+  const auditDate = auditValue ? new Date(auditValue) : null;
+
+  if (primaryDate && !Number.isNaN(primaryDate.getTime())) {
+    if (auditDate && !Number.isNaN(auditDate.getTime()) && isSameCalendarDay(primaryDate, auditDate)) {
+      return auditDate.getTime() > primaryDate.getTime() ? auditDate : primaryDate;
+    }
+    return primaryDate;
+  }
+
+  if (auditDate && !Number.isNaN(auditDate.getTime())) return auditDate;
+  return null;
+};
+
+const getNoteStatementDate = (note = {}) =>
+  resolveSameDayRecognitionDate(note?.noteDate || null, note?.createdAt || note?.updatedAt || null);
+
+const getReceiptStatementDate = (receipt = {}) =>
+  resolveSameDayRecognitionDate(
+    receipt?.paymentDate || null,
+    receipt?.confirmedAt || receipt?.recordDate || receipt?.createdAt || null
+  );
+
 const capDateToNow = (value) => {
   const date = toDate(value);
   const now = new Date();
@@ -701,6 +737,180 @@ const getReceiptSummaryAmount = (receipt = {}, key = "") => {
   return round2(Number(summary[key] || 0) * sign);
 };
 
+const getReceiptAllocationStatementImpact = ({
+  allocationRow = {},
+  sourceInvoice = null,
+  row = null,
+}) => {
+  const fallbackAmount = round2(Number(allocationRow?.appliedAmount || 0));
+  if (fallbackAmount === 0) {
+    return {
+      rentAmount: 0,
+      utilityAmount: 0,
+      utilities: [],
+      taxAmount: 0,
+      depositAmount: 0,
+      statementRelevantAmount: 0,
+      statementCategory: "",
+      isStatementRelevant: false,
+    };
+  }
+
+  const combinedSplit = getCombinedReceiptAllocationSplit({ allocationRow, sourceInvoice, row });
+  if (combinedSplit) {
+    const rentAmount = round2(Number(combinedSplit.rentAmount || 0));
+    const utilityAmount = round2(Number(combinedSplit.utilityAmount || 0));
+    const taxAmount = round2(Number(combinedSplit.taxAmount || 0));
+    const statementRelevantAmount = round2(rentAmount + utilityAmount + taxAmount);
+
+    return {
+      rentAmount,
+      utilityAmount,
+      utilities: Array.isArray(combinedSplit.utilities) ? combinedSplit.utilities : [],
+      taxAmount,
+      depositAmount: 0,
+      statementRelevantAmount,
+      statementCategory: statementRelevantAmount !== 0 ? "rent" : "",
+      isStatementRelevant: statementRelevantAmount !== 0,
+    };
+  }
+
+  const sourceCategory = String(sourceInvoice?.category || "").toUpperCase();
+  if (sourceCategory === "DEPOSIT_CHARGE") {
+    return {
+      rentAmount: 0,
+      utilityAmount: 0,
+      utilities: [],
+      taxAmount: 0,
+      depositAmount: fallbackAmount,
+      statementRelevantAmount: 0,
+      statementCategory: "deposit",
+      isStatementRelevant: false,
+    };
+  }
+
+  const sourceTaxSplit = sourceInvoice
+    ? getInvoiceTaxSplit({
+        amount: sourceInvoice?.amount || 0,
+        taxSnapshot: sourceInvoice?.taxSnapshot || {},
+      })
+    : {
+        grossAmount: Math.abs(fallbackAmount),
+        netAmount: Math.abs(fallbackAmount),
+        taxAmount: 0,
+      };
+
+  const appliedTaxSplit = splitAppliedAmountBetweenBaseAndTax({
+    appliedAmount: Math.abs(fallbackAmount),
+    grossAmount: sourceTaxSplit.grossAmount || Math.abs(fallbackAmount),
+    taxAmount: sourceTaxSplit.taxAmount || 0,
+  });
+
+  const signedBaseApplied = Math.sign(fallbackAmount || 1) * Number(appliedTaxSplit.baseApplied || 0);
+  const signedTaxApplied = Math.sign(fallbackAmount || 1) * Number(appliedTaxSplit.taxApplied || 0);
+
+  if (sourceCategory === "RENT_CHARGE") {
+    const rentAmount = round2(signedBaseApplied);
+    const taxAmount = round2(signedTaxApplied);
+    return {
+      rentAmount,
+      utilityAmount: 0,
+      utilities: [],
+      taxAmount,
+      depositAmount: 0,
+      statementRelevantAmount: round2(rentAmount + taxAmount),
+      statementCategory: "rent",
+      isStatementRelevant: rentAmount !== 0 || taxAmount !== 0,
+    };
+  }
+
+  if (sourceCategory === "UTILITY_CHARGE") {
+    const utilityAmount = round2(signedBaseApplied);
+    const taxAmount = round2(signedTaxApplied);
+    const utilityIdentity = resolveUtilityIdentity(
+      allocationRow?.utilityType || allocationRow?.description || sourceInvoice?.description || "",
+      {
+        utilityType: allocationRow?.utilityType || sourceInvoice?.metadata?.utilityType || "",
+        meterUtilityType:
+          allocationRow?.utilityType || sourceInvoice?.metadata?.meterUtilityType || "",
+        statementUtilityType:
+          allocationRow?.utilityType || sourceInvoice?.metadata?.statementUtilityType || "",
+      },
+      row
+    );
+
+    return {
+      rentAmount: 0,
+      utilityAmount,
+      utilities:
+        utilityAmount !== 0
+          ? [{
+              key: utilityIdentity.key,
+              label: utilityIdentity.label,
+              amount: utilityAmount,
+            }]
+          : [],
+      taxAmount,
+      depositAmount: 0,
+      statementRelevantAmount: round2(utilityAmount + taxAmount),
+      statementCategory: "utility",
+      isStatementRelevant: utilityAmount !== 0 || taxAmount !== 0,
+    };
+  }
+
+  const priorityGroup = String(allocationRow?.priorityGroup || "other").toLowerCase();
+  if (priorityGroup === "rent") {
+    return {
+      rentAmount: fallbackAmount,
+      utilityAmount: 0,
+      utilities: [],
+      taxAmount: 0,
+      depositAmount: 0,
+      statementRelevantAmount: fallbackAmount,
+      statementCategory: "rent",
+      isStatementRelevant: fallbackAmount !== 0,
+    };
+  }
+
+  if (priorityGroup === "utility") {
+    const utilityIdentity = resolveUtilityIdentity(
+      allocationRow?.utilityType || allocationRow?.description || "",
+      {
+        utilityType: allocationRow?.utilityType || "",
+        meterUtilityType: allocationRow?.utilityType || "",
+        statementUtilityType: allocationRow?.utilityType || "",
+      },
+      row
+    );
+
+    return {
+      rentAmount: 0,
+      utilityAmount: fallbackAmount,
+      utilities: [{
+        key: utilityIdentity.key,
+        label: utilityIdentity.label,
+        amount: fallbackAmount,
+      }],
+      taxAmount: 0,
+      depositAmount: 0,
+      statementRelevantAmount: fallbackAmount,
+      statementCategory: "utility",
+      isStatementRelevant: fallbackAmount !== 0,
+    };
+  }
+
+  return {
+    rentAmount: 0,
+    utilityAmount: 0,
+    utilities: [],
+    taxAmount: 0,
+    depositAmount: 0,
+    statementRelevantAmount: 0,
+    statementCategory: "",
+    isStatementRelevant: false,
+  };
+};
+
 const getEffectiveDepositReceiptAmount = (receipt = {}) => {
   const summarized = getReceiptSummaryAmount(receipt, "deposit");
   if (Math.abs(summarized) > 0) return summarized;
@@ -969,12 +1179,9 @@ export const generateLandlordStatement = async ({
   const [
     invoicesBefore,
     invoicesInPeriod,
-    notesBefore,
-    notesInPeriod,
-    receiptsBefore,
-    receiptsInPeriod,
-    depositReceiptsBefore,
-    depositReceiptsInPeriod,
+    notesForStatementWindow,
+    standardReceiptsForStatementWindow,
+    depositReceiptsForStatementWindow,
     expensesInPeriod,
     vouchersInPeriod,
     statementAdjustments,
@@ -1004,25 +1211,15 @@ export const generateLandlordStatement = async ({
     TenantInvoiceNote.find({
       property: propertyObjectId,
       business: businessObjectId,
-      noteDate: { $lt: periodStart },
       status: { $nin: ["cancelled", "reversed"] },
       postingStatus: { $nin: ["failed", "reversed"] },
+      $or: [
+        { noteDate: { $lte: periodEnd } },
+        { createdAt: { $lte: periodEnd } },
+      ],
     })
       .select(
-        "_id tenant unit category amount description noteDate noteNumber noteType metadata sourceInvoice"
-      )
-      .populate("sourceInvoice", "_id invoiceNumber category description metadata taxSnapshot depositHeldBy")
-      .lean(),
-
-    TenantInvoiceNote.find({
-      property: propertyObjectId,
-      business: businessObjectId,
-      noteDate: { $gte: periodStart, $lte: periodEnd },
-      status: { $nin: ["cancelled", "reversed"] },
-      postingStatus: { $nin: ["failed", "reversed"] },
-    })
-      .select(
-        "_id tenant unit category amount description noteDate noteNumber noteType metadata sourceInvoice"
+        "_id tenant unit category amount description noteDate noteNumber noteType metadata sourceInvoice createdAt updatedAt"
       )
       .populate("sourceInvoice", "_id invoiceNumber category description metadata taxSnapshot depositHeldBy")
       .lean(),
@@ -1030,64 +1227,42 @@ export const generateLandlordStatement = async ({
     RentPayment.find({
       business: businessObjectId,
       unit: { $in: unitIds },
-      paymentDate: { $lt: periodStart },
       isConfirmed: true,
       isCancelled: { $ne: true },
       isReversed: { $ne: true },
       reversalOf: null,
       isCancellationEntry: { $ne: true },
       paymentType: { $in: ["rent", "utility"] },
+      $or: [
+        { paymentDate: { $lte: periodEnd } },
+        { confirmedAt: { $lte: periodEnd } },
+        { recordDate: { $lte: periodEnd } },
+        { createdAt: { $lte: periodEnd } },
+      ],
     })
       .select(
-        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber breakdown utilities allocations allocationSummary"
+        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber breakdown utilities allocations allocationSummary metadata confirmedAt recordDate createdAt"
       )
       .lean(),
 
     RentPayment.find({
       business: businessObjectId,
       unit: { $in: unitIds },
-      paymentDate: { $gte: periodStart, $lte: periodEnd },
-      isConfirmed: true,
-      isCancelled: { $ne: true },
-      isReversed: { $ne: true },
-      reversalOf: null,
-      isCancellationEntry: { $ne: true },
-      paymentType: { $in: ["rent", "utility"] },
-    })
-      .select(
-        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber breakdown utilities allocations allocationSummary metadata"
-      )
-      .lean(),
-
-    RentPayment.find({
-      business: businessObjectId,
-      unit: { $in: unitIds },
-      paymentDate: { $lt: periodStart },
       isConfirmed: true,
       isCancelled: { $ne: true },
       isReversed: { $ne: true },
       reversalOf: null,
       isCancellationEntry: { $ne: true },
       paymentType: "deposit",
+      $or: [
+        { paymentDate: { $lte: periodEnd } },
+        { confirmedAt: { $lte: periodEnd } },
+        { recordDate: { $lte: periodEnd } },
+        { createdAt: { $lte: periodEnd } },
+      ],
     })
       .select(
-        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber allocations allocationSummary metadata depositHeldBy ledgerMode"
-      )
-      .lean(),
-
-    RentPayment.find({
-      business: businessObjectId,
-      unit: { $in: unitIds },
-      paymentDate: { $gte: periodStart, $lte: periodEnd },
-      isConfirmed: true,
-      isCancelled: { $ne: true },
-      isReversed: { $ne: true },
-      reversalOf: null,
-      isCancellationEntry: { $ne: true },
-      paymentType: "deposit",
-    })
-      .select(
-        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber allocations allocationSummary metadata depositHeldBy ledgerMode"
+        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber allocations allocationSummary metadata depositHeldBy ledgerMode confirmedAt recordDate createdAt"
       )
       .lean(),
 
@@ -1145,6 +1320,49 @@ export const generateLandlordStatement = async ({
     const key = String(tenant.unit);
     if (!tenantsByUnit.has(key)) tenantsByUnit.set(key, []);
     tenantsByUnit.get(key).push(tenant);
+  });
+
+
+  const notesBefore = [];
+  const notesInPeriod = [];
+  (Array.isArray(notesForStatementWindow) ? notesForStatementWindow : []).forEach((note) => {
+    const recognitionDate = getNoteStatementDate(note);
+    if (!recognitionDate || Number.isNaN(new Date(recognitionDate).getTime())) return;
+
+    const recognitionTime = new Date(recognitionDate).getTime();
+    if (recognitionTime < periodStart.getTime()) {
+      notesBefore.push(note);
+    } else if (recognitionTime <= periodEnd.getTime()) {
+      notesInPeriod.push(note);
+    }
+  });
+
+  const receiptsBefore = [];
+  const receiptsInPeriod = [];
+  (Array.isArray(standardReceiptsForStatementWindow) ? standardReceiptsForStatementWindow : []).forEach((receipt) => {
+    const recognitionDate = getReceiptStatementDate(receipt);
+    if (!recognitionDate || Number.isNaN(new Date(recognitionDate).getTime())) return;
+
+    const recognitionTime = new Date(recognitionDate).getTime();
+    if (recognitionTime < periodStart.getTime()) {
+      receiptsBefore.push(receipt);
+    } else if (recognitionTime <= periodEnd.getTime()) {
+      receiptsInPeriod.push(receipt);
+    }
+  });
+
+  const depositReceiptsBefore = [];
+  const depositReceiptsInPeriod = [];
+  (Array.isArray(depositReceiptsForStatementWindow) ? depositReceiptsForStatementWindow : []).forEach((receipt) => {
+    const recognitionDate = getReceiptStatementDate(receipt);
+    if (!recognitionDate || Number.isNaN(new Date(recognitionDate).getTime())) return;
+
+    const recognitionTime = new Date(recognitionDate).getTime();
+    if (recognitionTime < periodStart.getTime()) {
+      depositReceiptsBefore.push(receipt);
+    } else if (recognitionTime <= periodEnd.getTime()) {
+      depositReceiptsInPeriod.push(receipt);
+    }
   });
 
   const rowsMap = new Map();
@@ -1383,6 +1601,14 @@ export const generateLandlordStatement = async ({
     );
   };
 
+  const broughtForwardCreditApplicationRows = [];
+  const broughtForwardCreditApplicationTotals = {
+    totalApplied: 0,
+    rentApplied: 0,
+    utilityApplied: 0,
+    taxApplied: 0,
+  };
+
   for (const invoice of invoicesBefore) {
     if (!shouldIncludeInvoiceInLandlordStatement(invoice)) continue;
 
@@ -1426,27 +1652,76 @@ export const generateLandlordStatement = async ({
   for (const receipt of receiptsBefore) {
     const row = ensureRow(receipt.tenant, receipt.unit);
     const allocationRows = getReceiptAllocationRows(receipt);
+    const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
 
     if (allocationRows.length > 0) {
-      let broughtForwardReduction = 0;
+      let broughtForwardReduction = round2(unappliedAllocated);
       allocationRows.forEach((allocationRow) => {
         const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-        const combinedSplit = getCombinedReceiptAllocationSplit({ allocationRow, sourceInvoice, row });
-        if (combinedSplit) {
-          broughtForwardReduction += Number(combinedSplit.rentAmount || 0) + Number(combinedSplit.utilityAmount || 0);
-          return;
-        }
+        const impact = getReceiptAllocationStatementImpact({
+          allocationRow,
+          sourceInvoice,
+          row,
+        });
 
-        const priorityGroup = String(allocationRow?.priorityGroup || "other").toLowerCase();
-        if (priorityGroup === "rent" || priorityGroup === "utility") {
-          broughtForwardReduction += Number(allocationRow?.appliedAmount || 0);
+        broughtForwardReduction = round2(
+          broughtForwardReduction + Number(impact.statementRelevantAmount || 0)
+        );
+
+        const sourceInvoiceDate = sourceInvoice ? getInvoiceStatementDate(sourceInvoice) : null;
+        const sourceInvoiceTime = sourceInvoiceDate ? new Date(sourceInvoiceDate).getTime() : Number.NaN;
+        const sourceInCurrentPeriod =
+          Number.isFinite(sourceInvoiceTime) &&
+          sourceInvoiceTime >= periodStart.getTime() &&
+          sourceInvoiceTime <= periodEnd.getTime();
+
+        if (sourceInCurrentPeriod && Math.abs(Number(impact.statementRelevantAmount || 0)) > 0) {
+          const grossAppliedAmount = round2(Math.abs(Number(allocationRow?.appliedAmount || 0)));
+          const rentApplied = round2(Math.abs(Number(impact.rentAmount || 0)));
+          const utilityApplied = round2(Math.abs(Number(impact.utilityAmount || 0)));
+          const taxApplied = round2(Math.abs(Number(impact.taxAmount || 0)));
+
+          const receiptReference =
+            receipt.receiptNumber || receipt.referenceNumber || String(receipt._id || "");
+          const appliedDocumentReference =
+            sourceInvoice?.invoiceNumber || allocationRow?.invoiceNumber || allocationRow?.description || "Charge";
+
+          broughtForwardCreditApplicationRows.push({
+            date: getReceiptStatementDate(receipt) || receipt.paymentDate,
+            receiptDate: receipt.paymentDate,
+            chargeDate: sourceInvoiceDate,
+            description: `B/F credit ${receiptReference} applied to ${appliedDocumentReference} - ${row.tenantName}`,
+            amount: grossAppliedAmount,
+            rentApplied,
+            utilityApplied,
+            taxApplied,
+            category: impact.statementCategory || "credit_application",
+            tenantName: row.tenantName,
+            unit: row.unit,
+            receiptReference,
+            chargeReference: appliedDocumentReference,
+            sourceId: `${String(receipt._id || "")}:${String(sourceInvoice?._id || allocationRow?.invoice || allocationRow?.invoiceId || "")}`,
+          });
+
+          broughtForwardCreditApplicationTotals.totalApplied = round2(
+            broughtForwardCreditApplicationTotals.totalApplied + grossAppliedAmount
+          );
+          broughtForwardCreditApplicationTotals.rentApplied = round2(
+            broughtForwardCreditApplicationTotals.rentApplied + rentApplied
+          );
+          broughtForwardCreditApplicationTotals.utilityApplied = round2(
+            broughtForwardCreditApplicationTotals.utilityApplied + utilityApplied
+          );
+          broughtForwardCreditApplicationTotals.taxApplied = round2(
+            broughtForwardCreditApplicationTotals.taxApplied + taxApplied
+          );
         }
       });
-      row.balanceBF -= round2(broughtForwardReduction);
+      row.balanceBF = round2(row.balanceBF - broughtForwardReduction);
       continue;
     }
 
-    row.balanceBF -= Number(receipt.amount || 0);
+    row.balanceBF = round2(row.balanceBF - Number(receipt.amount || 0));
   }
 
   for (const invoice of invoicesInPeriod) {
@@ -1573,7 +1848,7 @@ export const generateLandlordStatement = async ({
     pushEntry({
       tenantId: note.tenant,
       unitId: note.unit,
-      transactionDate: note.noteDate,
+      transactionDate: getNoteStatementDate(note) || note.noteDate,
       category: note.category,
       amount: Math.abs(amount),
       direction: amount >= 0 ? "credit" : "debit",
@@ -1630,68 +1905,32 @@ export const generateLandlordStatement = async ({
 
     if (allocationRows.length > 0) {
       allocationRows.forEach((allocationRow) => {
-        const priorityGroup = String(allocationRow?.priorityGroup || "other").toLowerCase();
         const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
-        const combinedSplit = getCombinedReceiptAllocationSplit({ allocationRow, sourceInvoice, row });
-
-        if (combinedSplit) {
-          rentAllocated = round2(rentAllocated + Number(combinedSplit.rentAmount || 0));
-          utilityAllocated = round2(utilityAllocated + Number(combinedSplit.utilityAmount || 0));
-          taxAllocated = round2(taxAllocated + Number(combinedSplit.taxAmount || 0));
-          (combinedSplit.utilities || []).forEach((item) => {
-            applyUtility(
-              row,
-              "receipt",
-              Number(item.amount || 0),
-              item.label || allocationRow?.description || receipt.description || "",
-              {
-                utilityType: item.label,
-                meterUtilityType: item.label,
-                statementUtilityType: item.label,
-              }
-            );
-          });
-          return;
-        }
-
-        const appliedAmount = Number(allocationRow?.appliedAmount || 0);
-        const sourceTaxSplit = sourceInvoice
-          ? getInvoiceTaxSplit({
-              amount: sourceInvoice?.amount || 0,
-              taxSnapshot: sourceInvoice?.taxSnapshot || {},
-            })
-          : { grossAmount: Math.abs(appliedAmount), netAmount: Math.abs(appliedAmount), taxAmount: 0 };
-        const appliedTaxSplit = splitAppliedAmountBetweenBaseAndTax({
-          appliedAmount: Math.abs(appliedAmount),
-          grossAmount: sourceTaxSplit.grossAmount || Math.abs(appliedAmount),
-          taxAmount: sourceTaxSplit.taxAmount || 0,
+        const impact = getReceiptAllocationStatementImpact({
+          allocationRow,
+          sourceInvoice,
+          row,
         });
-        const signedBaseApplied = Math.sign(appliedAmount || 1) * Number(appliedTaxSplit.baseApplied || 0);
-        const signedTaxApplied = Math.sign(appliedAmount || 1) * Number(appliedTaxSplit.taxApplied || 0);
 
-        if (signedTaxApplied !== 0) {
-          taxAllocated = round2(taxAllocated + signedTaxApplied);
-        }
+        if (!impact.isStatementRelevant) return;
 
-        if (priorityGroup === "rent") {
-          rentAllocated = round2(rentAllocated + signedBaseApplied);
-          return;
-        }
+        rentAllocated = round2(rentAllocated + Number(impact.rentAmount || 0));
+        utilityAllocated = round2(utilityAllocated + Number(impact.utilityAmount || 0));
+        taxAllocated = round2(taxAllocated + Number(impact.taxAmount || 0));
 
-        if (priorityGroup === "utility") {
-          const utilityAmount = signedBaseApplied;
-          utilityAllocated = round2(utilityAllocated + utilityAmount);
+        (Array.isArray(impact.utilities) ? impact.utilities : []).forEach((item) => {
           applyUtility(
             row,
             "receipt",
-            utilityAmount,
-            allocationRow?.utilityType || allocationRow?.description || receipt.description || "",
+            Number(item.amount || 0),
+            item.label || allocationRow?.description || receipt.description || "",
             {
-              utilityType: allocationRow?.utilityType || "",
-              meterUtilityType: allocationRow?.utilityType || "",
+              utilityType: item.label,
+              meterUtilityType: item.label,
+              statementUtilityType: item.label,
             }
           );
-        }
+        });
       });
     } else {
       rentAllocated = getReceiptSummaryAmount(receipt, "rent");
@@ -1746,6 +1985,7 @@ export const generateLandlordStatement = async ({
     }
 
     if (
+      allocationRows.length === 0 &&
       rentAllocated === 0 &&
       utilityAllocated === 0 &&
       depositAllocated === 0 &&
@@ -1755,6 +1995,7 @@ export const generateLandlordStatement = async ({
       if (receipt.paidDirectToLandlord) totalRentReceivedLandlord += amount;
       else totalRentReceivedManager += amount;
     } else if (
+      allocationRows.length === 0 &&
       rentAllocated === 0 &&
       utilityAllocated === 0 &&
       depositAllocated === 0 &&
@@ -1800,7 +2041,7 @@ export const generateLandlordStatement = async ({
     pushEntry({
       tenantId: receipt.tenant,
       unitId: receipt.unit,
-      transactionDate: receipt.paymentDate,
+      transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
       category: receiptEntryCategory,
       amount: Math.abs(amount),
       direction: amount >= 0 ? "credit" : "debit",
@@ -1829,7 +2070,7 @@ export const generateLandlordStatement = async ({
       pushEntry({
         tenantId: receipt.tenant,
         unitId: receipt.unit,
-        transactionDate: receipt.paymentDate,
+        transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
         category: "ADJUSTMENT",
         amount: Math.abs(amount),
         direction: amount >= 0 ? "debit" : "credit",
@@ -1869,14 +2110,14 @@ export const generateLandlordStatement = async ({
 
     totalAdditions = round2(totalAdditions + amount);
     additionRows.push({
-      date: receipt.paymentDate,
+      date: getReceiptStatementDate(receipt) || receipt.paymentDate,
       description: additionDescription,
       amount,
       category: "deposit_remittance",
       sourceId,
     });
     pushDepositSettlementRow({
-      date: receipt.paymentDate,
+      date: getReceiptStatementDate(receipt) || receipt.paymentDate,
       description: additionDescription,
       amount,
       effect: "addition",
@@ -1888,7 +2129,7 @@ export const generateLandlordStatement = async ({
     pushEntry({
       tenantId: receipt.tenant,
       unitId: receipt.unit,
-      transactionDate: receipt.paymentDate,
+      transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
       category: "ADJUSTMENT",
       amount,
       direction: "credit",
@@ -1907,14 +2148,14 @@ export const generateLandlordStatement = async ({
       const offsetDescription = `Offset for landlord-direct deposit receipt - ${row.tenantName}`;
       totalExtraDeductions = round2(totalExtraDeductions + amount);
       extraDeductionRows.push({
-        date: receipt.paymentDate,
+        date: getReceiptStatementDate(receipt) || receipt.paymentDate,
         description: offsetDescription,
         amount,
         category: "deposit_direct_offset",
         sourceId: `${sourceId}-offset`,
       });
       pushDepositSettlementRow({
-        date: receipt.paymentDate,
+        date: getReceiptStatementDate(receipt) || receipt.paymentDate,
         description: offsetDescription,
         amount,
         effect: "offset",
@@ -1926,7 +2167,7 @@ export const generateLandlordStatement = async ({
       pushEntry({
         tenantId: receipt.tenant,
         unitId: receipt.unit,
-        transactionDate: receipt.paymentDate,
+        transactionDate: getReceiptStatementDate(receipt) || receipt.paymentDate,
         category: "ADJUSTMENT",
         amount,
         direction: "debit",
@@ -2557,6 +2798,17 @@ export const generateLandlordStatement = async ({
         netImpact: depositSettlementNet,
       },
     },
+    broughtForwardCreditApplications: {
+      rows: broughtForwardCreditApplicationRows.sort(
+        (a, b) => new Date(a.chargeDate || a.date || 0) - new Date(b.chargeDate || b.date || 0)
+      ),
+      totals: {
+        totalApplied: round2(broughtForwardCreditApplicationTotals.totalApplied),
+        rentApplied: round2(broughtForwardCreditApplicationTotals.rentApplied),
+        utilityApplied: round2(broughtForwardCreditApplicationTotals.utilityApplied),
+        taxApplied: round2(broughtForwardCreditApplicationTotals.taxApplied),
+      },
+    },
     rowCount: tenantRows.length,
     summary: {
       openingBalance: totalBalanceBF,
@@ -2626,6 +2878,10 @@ export const generateLandlordStatement = async ({
       depositSettlementAdditions: round2(depositSettlementTotals.additions),
       depositSettlementOffsets: round2(depositSettlementTotals.offsets),
       depositSettlementNet,
+      broughtForwardCreditsApplied: round2(broughtForwardCreditApplicationTotals.totalApplied),
+      broughtForwardCreditsAppliedRent: round2(broughtForwardCreditApplicationTotals.rentApplied),
+      broughtForwardCreditsAppliedUtility: round2(broughtForwardCreditApplicationTotals.utilityApplied),
+      broughtForwardCreditsAppliedTax: round2(broughtForwardCreditApplicationTotals.taxApplied),
       commissionPercentage: commissionPct,
       commissionBasis: recognitionBasis,
       commissionBaseAmount: round2(commissionBase),

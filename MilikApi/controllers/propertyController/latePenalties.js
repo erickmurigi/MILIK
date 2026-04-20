@@ -5,7 +5,7 @@ import TenantInvoice from "../../models/TenantInvoice.js";
 import Property from "../../models/Property.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
-import { createTenantInvoiceRecord, resolveActorUserId, computeTenantInvoiceSnapshots, recomputeTenantBalance, recomputeInvoiceStatusesForTenant } from "./tenantInvoices.js";
+import { createTenantInvoiceRecord, resolveActorUserId, computeTenantInvoiceSnapshots, computeTenantInvoiceSnapshotsBatch, recomputeTenantFinancialState } from "./tenantInvoices.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { getAccessibleCompanyIds } from "../../utils/permissionControl.js";
@@ -220,11 +220,52 @@ const buildCandidateRows = async ({ businessId, rule, runDate }) => {
     periodKey,
   });
 
+  const tenantIds = [
+    ...new Set(
+      invoices
+        .map((invoice) => String(invoice?.tenant?._id || invoice?.tenant || ""))
+        .filter(Boolean)
+    ),
+  ];
+  const snapshotMap = await computeTenantInvoiceSnapshotsBatch({
+    businessId,
+    tenantIds,
+    asOfDate: runAt,
+  });
+  const outstandingByInvoiceId = new Map();
+  snapshotMap.forEach(({ invoiceSnapshots = [] }) => {
+    invoiceSnapshots.forEach((snapshot) => {
+      outstandingByInvoiceId.set(String(snapshot._id), round2(Number(snapshot.outstanding || 0)));
+    });
+  });
+
+  const duplicatePenaltyInvoices = invoices.length
+    ? await TenantInvoice.find({
+        business: businessId,
+        category: "LATE_PENALTY_CHARGE",
+        status: { $nin: ["cancelled", "reversed"] },
+        "metadata.penaltyRuleId": String(rule._id),
+        "metadata.penaltySourceInvoiceId": {
+          $in: invoices.map((invoice) => String(invoice._id)),
+        },
+        "metadata.penaltyPeriodKey": periodKey,
+      })
+        .select("_id invoiceNumber amount metadata.penaltySourceInvoiceId")
+        .lean()
+    : [];
+  const duplicatePenaltyInvoiceMap = new Map(
+    duplicatePenaltyInvoices
+      .map((invoice) => [String(invoice?.metadata?.penaltySourceInvoiceId || ""), invoice])
+      .filter(([sourceInvoiceId]) => sourceInvoiceId)
+  );
+
   const rows = [];
 
   for (const invoice of invoices) {
     const property = invoice?.property || {};
-    const outstandingBalance = await getOutstandingBalance(invoice, runAt);
+    const outstandingBalance = outstandingByInvoiceId.has(String(invoice._id))
+      ? outstandingByInvoiceId.get(String(invoice._id))
+      : await getOutstandingBalance(invoice, runAt);
     const dueDate = normalizeDate(invoice?.dueDate || invoice?.invoiceDate || runAt);
     const overdueDays = Math.max(0, Math.floor((runAt.getTime() - startOfDay(dueDate).getTime()) / (24 * 60 * 60 * 1000)));
     const afterGrace = Math.max(0, overdueDays - Number(rule?.graceDays || 0));
@@ -248,17 +289,7 @@ const buildCandidateRows = async ({ businessId, rule, runDate }) => {
 
     let duplicatePenaltyInvoice = null;
     if (!skippedReason) {
-      duplicatePenaltyInvoice = await TenantInvoice.findOne({
-        business: businessId,
-        category: "LATE_PENALTY_CHARGE",
-        status: { $nin: ["cancelled", "reversed"] },
-        "metadata.penaltyRuleId": String(rule._id),
-        "metadata.penaltySourceInvoiceId": String(invoice._id),
-        "metadata.penaltyPeriodKey": periodKey,
-      })
-        .select("_id invoiceNumber amount")
-        .lean();
-
+      duplicatePenaltyInvoice = duplicatePenaltyInvoiceMap.get(String(invoice._id)) || null;
       if (duplicatePenaltyInvoice?._id) skippedReason = `Duplicate already exists (${duplicatePenaltyInvoice.invoiceNumber})`;
     }
 
@@ -937,8 +968,7 @@ export const reverseLatePenalty = async (req, res) => {
           };
           await penaltyInvoice.save();
 
-          await recomputeTenantBalance(penaltyInvoice.tenant, penaltyInvoice.business);
-          await recomputeInvoiceStatusesForTenant({
+          await recomputeTenantFinancialState({
             businessId: penaltyInvoice.business,
             tenantId: penaltyInvoice.tenant,
           });
@@ -1035,8 +1065,7 @@ export const deleteLatePenalty = async (req, res) => {
 
       if (!["cancelled", "reversed"].includes(String(penaltyInvoice.status || "").toLowerCase())) {
         await TenantInvoice.deleteOne({ _id: penaltyInvoice._id, business: businessId });
-        await recomputeTenantBalance(penaltyInvoice.tenant, penaltyInvoice.business);
-        await recomputeInvoiceStatusesForTenant({
+        await recomputeTenantFinancialState({
           businessId: penaltyInvoice.business,
           tenantId: penaltyInvoice.tenant,
         });

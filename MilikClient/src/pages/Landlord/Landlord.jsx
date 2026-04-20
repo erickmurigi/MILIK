@@ -282,6 +282,34 @@ const Landlords = () => {
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentLandlords = filteredLandlords.slice(startIndex, endIndex);
 
+  const countLinkedProperties = (landlord = {}) =>
+    Number(landlord?.activeProperties || 0) + Number(landlord?.archivedProperties || 0);
+
+  const selectedLandlordRows = useMemo(
+    () => landlords.filter((landlord) => selectedLandlords.includes(landlord._id)),
+    [landlords, selectedLandlords]
+  );
+
+  const selectedDeletableLandlords = useMemo(
+    () => selectedLandlordRows.filter((landlord) => countLinkedProperties(landlord) === 0),
+    [selectedLandlordRows]
+  );
+
+  const selectedProtectedLandlords = useMemo(
+    () => selectedLandlordRows.filter((landlord) => countLinkedProperties(landlord) > 0),
+    [selectedLandlordRows]
+  );
+
+  const selectedArchivableLandlords = useMemo(
+    () => selectedLandlordRows.filter((landlord) => String(landlord.status || "Active") !== "Archived"),
+    [selectedLandlordRows]
+  );
+
+  const selectedRestorableLandlords = useMemo(
+    () => selectedLandlordRows.filter((landlord) => String(landlord.status || "Active") === "Archived"),
+    [selectedLandlordRows]
+  );
+
   // Ensure currentPage doesn't exceed totalPages after filtering
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
@@ -356,21 +384,44 @@ const Landlords = () => {
   // Delete selected landlords
   const deleteSelected = async () => {
     if (selectedLandlords.length === 0) return;
-    
-    const isSingleDelete = selectedLandlords.length === 1;
+
+    if (selectedDeletableLandlords.length === 0) {
+      const protectedCount = selectedProtectedLandlords.length;
+      setConfirmDialog({
+        isOpen: true,
+        title: "Delete Blocked",
+        message:
+          protectedCount === 1
+            ? "The selected landlord is linked to existing properties, so deletion is blocked. Archive the landlord instead if you want to hide it from active operations."
+            : `All ${protectedCount} selected landlords are linked to existing properties, so deletion is blocked. Archive them instead if you want to hide them from active operations.`,
+        confirmText: "OK",
+        cancelText: "Close",
+        isDangerous: false,
+        onConfirm: () => setConfirmDialog((prev) => ({ ...prev, isOpen: false })),
+      });
+      return;
+    }
+
+    const deleteCount = selectedDeletableLandlords.length;
+    const skippedCount = selectedProtectedLandlords.length;
+    const isSingleDelete = deleteCount === 1;
+
     setConfirmDialog({
       isOpen: true,
       title: isSingleDelete ? "Delete Landlord" : "Delete Landlords",
-      message: isSingleDelete
-        ? "Are you sure you want to delete this landlord? This action cannot be undone."
-        : `Are you sure you want to delete ${selectedLandlords.length} landlords? This action cannot be undone.`,
+      message:
+        skippedCount > 0
+          ? `Delete ${deleteCount} landlord(s) with no linked properties. ${skippedCount} selected landlord(s) will be skipped because they still manage or own properties.`
+          : isSingleDelete
+          ? "Are you sure you want to delete this landlord? This action cannot be undone."
+          : `Are you sure you want to delete ${deleteCount} landlords? This action cannot be undone.`,
       confirmText: "Delete",
       cancelText: "Cancel",
       isDangerous: true,
       onConfirm: async () => {
         try {
-          for (const id of selectedLandlords) {
-            await dispatch(deleteLandlord(id));
+          for (const landlord of selectedDeletableLandlords) {
+            await dispatch(deleteLandlord(landlord._id));
           }
           await dispatch(
             getLandlords(
@@ -382,12 +433,22 @@ const Landlords = () => {
           setSelectedLandlords([]);
           setSelectAll(false);
           setCurrentPage(1);
-          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-          toast.success(
-            selectedRows.length === 1
-              ? "Landlord deleted successfully."
-              : `${selectedRows.length} landlords deleted successfully.`
-          );
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+
+          if (deleteCount > 0) {
+            toast.success(
+              deleteCount === 1
+                ? "Landlord deleted successfully."
+                : `${deleteCount} landlords deleted successfully.`
+            );
+          }
+          if (skippedCount > 0) {
+            toast.info(
+              skippedCount === 1
+                ? "1 landlord was skipped because it still has linked properties."
+                : `${skippedCount} landlords were skipped because they still have linked properties.`
+            );
+          }
         } catch (err) {
           console.error('Delete error:', err);
           setConfirmDialog({
@@ -408,10 +469,7 @@ const Landlords = () => {
     if (selectedLandlords.length === 0) return;
     setActionMenuOpen(false);
 
-    const selectedRows = landlords.filter((l) => selectedLandlords.includes(l._id));
-    const toArchive = selectedRows.filter((l) => String(l.status || "Active") !== "Archived");
-
-    if (toArchive.length === 0) {
+    if (selectedArchivableLandlords.length === 0) {
       setConfirmDialog({
         isOpen: true,
         title: "Nothing to Archive",
@@ -426,17 +484,17 @@ const Landlords = () => {
 
     setConfirmDialog({
       isOpen: true,
-      title: toArchive.length === 1 ? "Archive Landlord" : "Archive Landlords",
+      title: selectedArchivableLandlords.length === 1 ? "Archive Landlord" : "Archive Landlords",
       message:
-        toArchive.length === 1
+        selectedArchivableLandlords.length === 1
           ? "Are you sure you want to archive this landlord?"
-          : `Are you sure you want to archive ${toArchive.length} landlords?`,
+          : `Are you sure you want to archive ${selectedArchivableLandlords.length} landlords?`,
       confirmText: "Archive",
       cancelText: "Cancel",
       isDangerous: false,
       onConfirm: async () => {
         try {
-          for (const landlord of toArchive) {
+          for (const landlord of selectedArchivableLandlords) {
             await dispatch(updateLandlord(landlord._id, { status: "Archived" }));
           }
           await dispatch(
@@ -450,9 +508,9 @@ const Landlords = () => {
           setSelectAll(false);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
           toast.success(
-            toArchive.length === 1
+            selectedArchivableLandlords.length === 1
               ? "Landlord archived successfully."
-              : `${toArchive.length} landlords archived successfully.`
+              : `${selectedArchivableLandlords.length} landlords archived successfully.`
           );
         } catch (err) {
           console.error("Archive error:", err);
@@ -474,10 +532,7 @@ const Landlords = () => {
     if (selectedLandlords.length === 0) return;
     setActionMenuOpen(false);
 
-    const selectedRows = landlords.filter((l) => selectedLandlords.includes(l._id));
-    const toRestore = selectedRows.filter((l) => String(l.status || "Active") === "Archived");
-
-    if (toRestore.length === 0) {
+    if (selectedRestorableLandlords.length === 0) {
       setConfirmDialog({
         isOpen: true,
         title: "Nothing to Restore",
@@ -492,17 +547,17 @@ const Landlords = () => {
 
     setConfirmDialog({
       isOpen: true,
-      title: toRestore.length === 1 ? "Restore Landlord" : "Restore Landlords",
+      title: selectedRestorableLandlords.length === 1 ? "Restore Landlord" : "Restore Landlords",
       message:
-        toRestore.length === 1
+        selectedRestorableLandlords.length === 1
           ? "Are you sure you want to restore this landlord?"
-          : `Are you sure you want to restore ${toRestore.length} landlords?`,
+          : `Are you sure you want to restore ${selectedRestorableLandlords.length} landlords?`,
       confirmText: "Restore",
       cancelText: "Cancel",
       isDangerous: false,
       onConfirm: async () => {
         try {
-          for (const landlord of toRestore) {
+          for (const landlord of selectedRestorableLandlords) {
             await dispatch(updateLandlord(landlord._id, { status: "Active" }));
           }
           await dispatch(
@@ -516,9 +571,9 @@ const Landlords = () => {
           setSelectAll(false);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
           toast.success(
-            toRestore.length === 1
+            selectedRestorableLandlords.length === 1
               ? "Landlord restored successfully."
-              : `${toRestore.length} landlords restored successfully.`
+              : `${selectedRestorableLandlords.length} landlords restored successfully.`
           );
         } catch (err) {
           console.error("Restore error:", err);
@@ -845,14 +900,18 @@ const Landlords = () => {
                   <div className="absolute mt-1 right-0 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
                     <button
                       onClick={archiveSelected}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"
+                      disabled={selectedArchivableLandlords.length === 0}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
+                      title={selectedArchivableLandlords.length > 0 ? "Archive selected landlords" : "All selected landlords are already archived"}
                     >
                       <FaArchive className="text-xs text-gray-700" />
                       Archive
                     </button>
                     <button
                       onClick={restoreSelected}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"
+                      disabled={selectedRestorableLandlords.length === 0}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
+                      title={selectedRestorableLandlords.length > 0 ? "Restore selected landlords" : "Select archived landlords to restore"}
                     >
                       <FaUndo className="text-xs text-gray-700" />
                       Restore
@@ -876,11 +935,11 @@ const Landlords = () => {
               {/* Delete */}
               <button
                 onClick={deleteSelected}
-                disabled={selectedCount === 0}
+                disabled={selectedCount === 0 || selectedDeletableLandlords.length === 0}
                 className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"
+                  selectedCount > 0 && selectedDeletableLandlords.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"
                 }`}
-                title={selectedCount ? "Delete selected landlord(s)" : "Select landlord(s) to delete"}
+                title={selectedCount === 0 ? "Select landlord(s) to delete" : selectedDeletableLandlords.length > 0 ? "Delete selected landlord(s) with no linked properties" : "Selected landlords still have linked properties and cannot be deleted"}
               >
                 <FaTrash className="text-xs" />
                 Delete

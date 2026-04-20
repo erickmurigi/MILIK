@@ -40,9 +40,9 @@ const roleCards = {
   },
   landlord: {
     title: "Landlord",
-    subtitle: "Request guided preview",
+    subtitle: "Instant landlord demo access",
     icon: FaHome,
-    badge: "Statement-quality walkthrough",
+    badge: "Self-managing landlord workspace",
   },
 };
 
@@ -60,13 +60,13 @@ function getRoleCopy(role) {
   if (role === "landlord") {
     return {
       helperText:
-        "Request a guided preview focused on statement quality, visibility, and the owner-facing reporting experience your property manager can deliver.",
-      submitLabel: "Request landlord preview",
-      highlightTitle: "What happens next",
+        "Fill the short form once and enter the dedicated self-managing landlord demo workspace immediately. The environment is read-only, safe to inspect, and your email access link can be used again while the demo stays active.",
+      submitLabel: "Enter landlord demo",
+      highlightTitle: "Inside the landlord workspace",
       highlights: [
-        "We receive your request immediately.",
-        "Your preview is kept separate from live company workspaces.",
-        "We can tailor the follow-up around statements and reporting.",
+        "Landlord-mode navigation, properties and tenants are already prepared.",
+        "Statements, advancements and standing orders are ready to inspect.",
+        "Your session stays separate from live companies and production data.",
       ],
     };
   }
@@ -233,9 +233,9 @@ const FreeTrialModal = ({ isOpen, onClose, initialRole = "property_manager" }) =
 
       setSuccessMessage(
         data?.message ||
-          "Your request has been received successfully. We will follow up with the next guided preview steps."
+          "Your demo workspace is ready. Use the same email link again while your access remains active."
       );
-      toast.success("Request received successfully.");
+      toast.success(data?.demoAvailable ? "Demo workspace ready." : "Request received successfully.");
     } catch (submitError) {
       const message = submitError?.message || "Network error. Please try again.";
       setError(message);

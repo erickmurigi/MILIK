@@ -49,7 +49,23 @@ export const createTenantInvoicesBatch = async ({ business = null, items = [] } 
 };
 
 // Get tenant invoices
-export const getTenantInvoices = async ({ tenantId, business, status, category, includeSnapshots = false } = {}) => {
+export const getTenantInvoices = async ({
+  tenantId,
+  business,
+  status,
+  category,
+  includeSnapshots = false,
+  paginate = false,
+  page,
+  limit,
+  invoiceNumber,
+  invoiceNo,
+  tenantName,
+  propertyId,
+  unitId,
+  fromDate,
+  toDate,
+} = {}) => {
   const params = new URLSearchParams();
 
   if (tenantId) params.append("tenant", tenantId);
@@ -57,10 +73,39 @@ export const getTenantInvoices = async ({ tenantId, business, status, category, 
   if (status) params.append("status", status);
   if (category) params.append("category", category);
   if (includeSnapshots) params.append("includeSnapshots", "1");
+  if (paginate) params.append("paginate", "1");
+  if (page) params.append("page", String(page));
+  if (limit) params.append("limit", String(limit));
+  if (invoiceNumber) params.append("invoiceNumber", invoiceNumber);
+  if (invoiceNo) params.append("invoiceNo", invoiceNo);
+  if (tenantName) params.append("tenantName", tenantName);
+  if (propertyId) params.append("propertyId", propertyId);
+  if (unitId) params.append("unitId", unitId);
+  if (fromDate) params.append("fromDate", fromDate);
+  if (toDate) params.append("toDate", toDate);
 
   const query = params.toString();
   const res = await adminRequests.get(`/tenant-invoices${query ? `?${query}` : ""}`);
-  return res.data;
+  const payload = res.data;
+
+  if (paginate) {
+    const items = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+    const pagination = payload?.pagination && typeof payload.pagination === "object" ? payload.pagination : {
+      page: Number(page || 1),
+      limit: Number(limit || items.length || 1),
+      totalItems: items.length,
+      totalPages: 1,
+    };
+    const summary = payload?.summary && typeof payload.summary === "object" ? payload.summary : {};
+
+    return {
+      data: items,
+      pagination,
+      summary,
+    };
+  }
+
+  return Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
 };
 
 // Delete tenant invoice

@@ -72,7 +72,7 @@ const features = [
 const steps = [
   {
     title: "1. Request demo access",
-    description: "Fill the form, choose your role, and property managers enter the guided workspace instantly.",
+    description: "Fill the form, choose your role, and enter the guided workspace instantly.",
   },
   {
     title: "2. Explore real workflows",
@@ -95,7 +95,7 @@ const faqs = [
   },
   {
     question: "How long does the demo last?",
-    answer: "Property manager demo access lasts for 3 days from the moment the workspace is activated.",
+    answer: "Demo access lasts for 3 days from the moment the workspace is activated.",
   },
 ];
 
@@ -125,43 +125,43 @@ const erpSnapshots = [
 
 const pricingTiers = [
   {
-    label: "Starter",
-    units: "Up to 50 units",
-    price: "KES 2,500",
-    helper: "Best for smaller portfolios that need disciplined billing, receipting and landlord reporting.",
-    cta: "Get Started",
+    label: "Launch",
+    units: "Up to 60 units",
+    price: "KES 3,500",
+    meta: "/ month",
+    helper:
+      "An early-adopter price for smaller teams that need disciplined billing, receipts, landlord workflows and credible reports.",
+    cta: "Get free trial",
     featured: false,
   },
   {
     label: "Growth",
-    units: "51–250 units",
-    price: "KES 4,500",
-    helper: "A strong fit for growing teams that want tighter operational visibility without leaving the browser.",
-    cta: "Request Demo",
+    units: "61 to 250 units",
+    price: "KES 7,500",
+    meta: "/ month",
+    helper:
+      "Best starting commercial tier for active property managers who want an affordable but serious ERP step-up.",
+    cta: "Request demo",
     featured: true,
   },
   {
-    label: "Scale",
-    units: "251–500 units",
-    price: "KES 8,000",
-    helper: "For firms running heavier monthly billing and landlord reporting volumes across multiple properties.",
-    cta: "Request Demo",
+    label: "Portfolio Plus",
+    units: "251 to 800 units",
+    price: "KES 9,000",
+    meta: "/ month",
+    helper:
+      "Designed for firms with heavier monthly operations, more users, deeper reporting and landlord processing volume.",
+    cta: "Talk to sales",
     featured: false,
   },
   {
     label: "Enterprise",
-    units: "501–1000 units",
-    price: "KES 10,000",
-    helper: "Built for wider portfolios that need stronger controls, workflow consistency and reporting confidence.",
-    cta: "Talk to Sales",
-    featured: false,
-  },
-  {
-    label: "Large Portfolio",
-    units: "1001–10000 units",
-    price: "Request Quote",
-    helper: "Get a tailored commercial setup when your operation needs deeper onboarding and portfolio-specific planning.",
-    cta: "Request Quote",
+    units: "801+ units",
+    price: "Custom",
+    meta: "pricing",
+    helper:
+      "Use tailored commercial terms when onboarding needs, workflow complexity and support expectations are broader.",
+    cta: "Request quote",
     featured: false,
   },
 ];
@@ -218,53 +218,60 @@ function HeroWorkspaceVisual() {
           Live dashboard and landlord statement
         </div>
 
-        <div className="hero-device-shell">
-          <div className="hero-device-frame">
-            <div className="hero-device-topbar">
-              <div className="hero-device-controls">
-                <span />
-                <span />
-                <span />
+        <div className="hero-visual-grid">
+          <div className="hero-device-column">
+            <div className="hero-proof-chip hero-proof-chip-top">Desktop workspace</div>
+
+            <div className="hero-device-shell">
+              <div className="hero-device-frame">
+                <div className="hero-device-topbar">
+                  <div className="hero-device-controls">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <div className="hero-device-title">MILIK operations desk</div>
+                </div>
+
+                <div className="hero-device-screen">
+                  <img
+                    src={heroDashboardImage}
+                    alt="Milik dashboard preview"
+                    className="hero-device-screen-image"
+                    loading="eager"
+                  />
+                </div>
               </div>
-              <div className="hero-device-title">MILIK operations desk</div>
+
+              <div className="hero-device-base">
+                <span className="hero-device-base-strip" />
+              </div>
             </div>
 
-            <div className="hero-device-screen">
-              <img
-                src={heroDashboardImage}
-                alt="Milik dashboard preview"
-                className="hero-device-screen-image"
-                loading="eager"
-              />
-            </div>
+            <div className="hero-proof-chip hero-proof-chip-bottom">Dashboard, collections and statements</div>
           </div>
 
-          <div className="hero-device-base">
-            <span className="hero-device-base-strip" />
+          <div className="hero-proof-column">
+            <div className="hero-proof-card">
+              <div className="hero-proof-card-header">
+                <div>
+                  <p className="hero-proof-eyebrow">Landlord reporting proof</p>
+                  <h3 className="hero-proof-title">Statement ready for review and remittance</h3>
+                </div>
+                <div className="hero-proof-status">Live sample</div>
+              </div>
+
+              <div className="hero-proof-paper">
+                <img
+                  src={heroStatementImage}
+                  alt="Landlord statement preview"
+                  className="hero-proof-paper-image"
+                  loading="eager"
+                />
+              </div>
+            </div>
           </div>
         </div>
-
-        <div className="hero-proof-card">
-          <div className="hero-proof-card-header">
-            <div>
-              <p className="hero-proof-eyebrow">Landlord reporting proof</p>
-              <h3 className="hero-proof-title">Statement ready for review and remittance</h3>
-            </div>
-            <div className="hero-proof-status">Live sample</div>
-          </div>
-
-          <div className="hero-proof-paper">
-            <img
-              src={heroStatementImage}
-              alt="Landlord statement preview"
-              className="hero-proof-paper-image"
-              loading="eager"
-            />
-          </div>
-        </div>
-
-        <div className="hero-proof-chip hero-proof-chip-top">Desktop workspace</div>
-        <div className="hero-proof-chip hero-proof-chip-bottom">Dashboard, collections and statements</div>
       </div>
     </div>
   );
@@ -490,16 +497,16 @@ function Home() {
         <div className="hero-gridlines" aria-hidden="true" />
         <div className="hero-orb hero-orb-left" aria-hidden="true" />
         <div className="hero-orb hero-orb-right" aria-hidden="true" />
-        <div className="mx-auto grid max-w-[1500px] gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:items-center xl:gap-20 lg:px-8 lg:py-24">
-          <div className="relative z-10">
+        <div className="mx-auto grid max-w-[1720px] gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[0.94fr_1.06fr] lg:items-center xl:gap-16 2xl:gap-20 lg:px-8 xl:px-10 2xl:px-14 lg:py-20">
+          <div className="relative z-10 max-w-[760px]">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#0B3B2E]/10 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.28em] text-[#0B3B2E] shadow-sm">
-              <FaBolt className="text-[#FF8C00]" /> Built for confident property operations
+              <FaBolt className="text-[#FF8C00]" /> Built for managers and landlords
             </div>
-            <h1 className="mt-6 max-w-3xl text-4xl font-extrabold leading-tight text-slate-950 sm:text-5xl lg:text-6xl">
-              Property Management System for managers who need control over portfolios, collections and reporting.
+            <h1 className="mt-6 max-w-4xl text-4xl font-extrabold leading-[0.98] tracking-[-0.04em] text-slate-950 sm:text-5xl lg:text-[4.7rem] xl:text-[5.2rem]">
+              Property management ERP for teams that need control over portfolios, landlords, collections and reporting.
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-              Milik gives property teams one serious workspace for portfolio control, tenant billing, owner reporting and finance execution without the confusion of scattered tools.
+            <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-600 xl:text-[1.15rem]">
+              Milik gives property managers and self-managing landlords one serious workspace for portfolio control, billing, receipting, statements and finance execution without the confusion of scattered tools.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -576,13 +583,13 @@ function Home() {
           <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
             <FaUserFriends className="text-2xl text-[#FF8C00]" />
             <h3 className="mt-4 text-xl font-extrabold text-slate-900">Landlord</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Request a guided preview so you can inspect the statement quality and reporting experience you will receive.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Explore the self-managing landlord demo workspace with statements, remittances, advancements and reporting flows.</p>
             <button
               type="button"
               onClick={() => openTrialModal("landlord")}
               className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#0B3B2E] px-5 py-3 text-sm font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E] hover:text-white"
             >
-              Request Preview
+              Enter Demo
               <FaArrowRight />
             </button>
           </div>
@@ -766,7 +773,7 @@ function Home() {
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Ready to explore?</p>
               <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Open the guided demo and show your team what Milik feels like.</h2>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
-                Start with the property manager workspace now. Landlord-specific access is already being prepared for the next phase.
+                Start with the property manager workspace or the self-managing landlord workspace. Both demo experiences are available now.
               </p>
             </div>
             <div className="flex flex-col gap-4 sm:flex-row lg:justify-end">

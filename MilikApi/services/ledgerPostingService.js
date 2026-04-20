@@ -52,8 +52,9 @@ const enrichPayloadFromProperty = async (payload = {}) => {
   };
 };
 
-export const postEntry = async (payload) => {
-  const resolvedPayload = await enrichPayloadFromProperty(payload);
+export const postEntry = async (payload = {}) => {
+  const { session = null, ...entryPayload } = payload || {};
+  const resolvedPayload = await enrichPayloadFromProperty(entryPayload);
   validatePayload(resolvedPayload);
 
   const normalizedAmount = Math.abs(Number(resolvedPayload.amount || 0));
@@ -75,15 +76,15 @@ export const postEntry = async (payload) => {
     status: resolvedPayload.status || "approved",
   });
 
-  return entry.save();
+  return entry.save(session ? { session } : undefined);
 };
 
-export const postReversal = async ({ entryId, reason, userId }) => {
+export const postReversal = async ({ entryId, reason, userId, session = null }) => {
   if (!entryId || !userId) {
     throw new Error("postReversal requires entryId and userId");
   }
 
-  const originalEntry = await FinancialLedgerEntry.findById(entryId);
+  const originalEntry = await FinancialLedgerEntry.findById(entryId).session(session || null);
   if (!originalEntry) {
     throw new Error("Ledger entry not found");
   }
@@ -95,6 +96,7 @@ export const postReversal = async ({ entryId, reason, userId }) => {
   const reversalDirection = flipDirection(originalEntry.direction);
 
   const reversalEntry = await postEntry({
+    session,
     business: originalEntry.business,
     property: originalEntry.property,
     landlord: originalEntry.landlord,
@@ -132,7 +134,7 @@ export const postReversal = async ({ entryId, reason, userId }) => {
 
   originalEntry.status = "reversed";
   originalEntry.reversedByEntry = reversalEntry._id;
-  await originalEntry.save();
+  await originalEntry.save(session ? { session } : undefined);
 
   return {
     originalEntry,
@@ -140,7 +142,7 @@ export const postReversal = async ({ entryId, reason, userId }) => {
   };
 };
 
-export const postCorrection = async ({ entryId, correctedPayload, reason, userId }) => {
+export const postCorrection = async ({ entryId, correctedPayload, reason, userId, session = null }) => {
   if (!entryId || !correctedPayload || !userId) {
     throw new Error("postCorrection requires entryId, correctedPayload, and userId");
   }
@@ -149,6 +151,7 @@ export const postCorrection = async ({ entryId, correctedPayload, reason, userId
     entryId,
     reason: reason || "Correction reversal",
     userId,
+    session,
   });
 
   const correctedEntryPayload = {
@@ -179,7 +182,10 @@ export const postCorrection = async ({ entryId, correctedPayload, reason, userId
     status: correctedPayload.status || "approved",
   };
 
-  const correctedEntry = await postEntry(correctedEntryPayload);
+  const correctedEntry = await postEntry({
+    ...correctedEntryPayload,
+    session,
+  });
 
   return {
     originalEntry,

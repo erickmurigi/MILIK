@@ -11,7 +11,7 @@ import { postEntry, postReversal } from "../../services/ledgerPostingService.js"
 import {
   computeTenantInvoiceSnapshots,
   recomputeInvoiceStatusesForTenant,
-  recomputeTenantBalance as recomputeSharedTenantBalance,
+  recomputeTenantFinancialState,
 } from "./tenantInvoices.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { resolveLandlordRemittancePayableAccount } from "../../services/propertyAccountingService.js";
@@ -33,6 +33,17 @@ const populateReceiptQuery = (query) =>
     .populate("confirmedBy", "surname otherNames email")
     .populate("reversedBy", "surname otherNames email")
     .populate("ledgerEntries");
+
+const populateReceiptListQuery = (query) =>
+  query
+    .populate("tenant", "name email phone unit business")
+    .populate({
+      path: "unit",
+      select: "unitNumber property business",
+      populate: { path: "property", select: "propertyName propertyCode business" },
+    })
+    .populate("confirmedBy", "surname otherNames email")
+    .populate("reversedBy", "surname otherNames email");
 
 const safeLower = (value = "") => String(value || "").trim().toLowerCase();
 
@@ -67,9 +78,9 @@ const buildResolvedDepositMetadata = ({ tenant = null, property = null, metadata
   const hasDepositPortion = safeLower(paymentType) === "deposit" || Number(allocationData?.allocationSummary?.deposit || 0) > 0;
   const candidateHolder =
     normalizeDepositHolder(nextMetadata?.depositHeldBy) ||
+    normalizeDepositHolder(resolvedFromAllocations) ||
     normalizeDepositHolder(tenant?.depositHeldBy) ||
     normalizeDepositHolder(property?.depositHeldBy) ||
-    normalizeDepositHolder(resolvedFromAllocations) ||
     (hasDepositPortion ? "manager" : "");
 
   if (!candidateHolder) {
@@ -566,6 +577,88 @@ const getPrimaryPaymentTypeFromAllocations = (payment) => {
   return String(payment?.paymentType || "rent").toLowerCase();
 };
 
+const getNormalizedAllocationSummary = (summary = {}) => ({
+  rent: round2(Number(summary?.rent || 0)),
+  deposit: round2(Number(summary?.deposit || 0)),
+  utility: round2(Number(summary?.utility || 0)),
+  latePenalty: round2(Number(summary?.latePenalty || 0)),
+  debitNote: round2(Number(summary?.debitNote || 0)),
+  other: round2(Number(summary?.other || 0)),
+  unapplied: round2(Number(summary?.unapplied || 0)),
+});
+
+const hasStoredAllocationSnapshot = (payment = {}) => {
+  const rows = getReceiptAllocationRows(payment);
+  if (rows.length > 0) return true;
+
+  const summary = getNormalizedAllocationSummary(payment?.allocationSummary);
+  return (
+    Number(summary.rent || 0) > 0 ||
+    Number(summary.deposit || 0) > 0 ||
+    Number(summary.utility || 0) > 0 ||
+    Number(summary.latePenalty || 0) > 0 ||
+    Number(summary.debitNote || 0) > 0 ||
+    Number(summary.other || 0) > 0 ||
+    Number(summary.unapplied || 0) > 0
+  );
+};
+
+const getNormalizedReceiptBreakdown = (breakdown = {}, fallbackTotal = 0) => ({
+  rent: round2(Number(breakdown?.rent || 0)),
+  utilities: Array.isArray(breakdown?.utilities)
+    ? breakdown.utilities.map((utility) => ({
+        utility: utility?.utility || null,
+        name: utility?.name || "",
+        amount: round2(Number(utility?.amount || 0)),
+        billingCycle: utility?.billingCycle || "",
+      }))
+    : [],
+  total: round2(Number(breakdown?.total || fallbackTotal || 0)),
+});
+
+const buildStoredReceiptAllocationData = (payment = {}) => {
+  const receiptAmount = round2(Math.abs(Number(payment?.amount || 0)));
+  const rows = getReceiptAllocationRows(payment).map((row) => ({
+    invoice: row?.invoice || row?.invoiceId || null,
+    invoiceNumber: row?.invoiceNumber || "",
+    category: row?.category || "",
+    priorityGroup: row?.priorityGroup || "other",
+    utilityType: row?.utilityType || "",
+    depositHeldBy: row?.depositHeldBy || "",
+    invoiceLedgerMode: row?.invoiceLedgerMode || row?.ledgerMode || "",
+    metadata: row?.metadata && typeof row.metadata === "object" ? { ...row.metadata } : {},
+    appliedAmount: round2(Math.abs(Number(row?.appliedAmount || 0))),
+    beforeOutstanding: round2(Math.abs(Number(row?.beforeOutstanding || 0))),
+    afterOutstanding: round2(Math.abs(Number(row?.afterOutstanding || 0))),
+    invoiceDate: row?.invoiceDate || null,
+    dueDate: row?.dueDate || null,
+    description: row?.description || "",
+  }));
+
+  if (rows.length > 0) {
+    const summarized = summarizeAllocationRows({
+      rows,
+      receiptAmount,
+      metadata: getPaymentMetadata(payment),
+      paymentTypeOverride: payment?.paymentType || "",
+    });
+
+    return {
+      allocations: rows,
+      allocationSummary: summarized.allocationSummary,
+      breakdown: summarized.breakdown,
+      primaryPaymentType: summarized.primaryPaymentType,
+    };
+  }
+
+  return {
+    allocations: [],
+    allocationSummary: getNormalizedAllocationSummary(payment?.allocationSummary),
+    breakdown: getNormalizedReceiptBreakdown(payment?.breakdown, receiptAmount),
+    primaryPaymentType: getPrimaryPaymentTypeFromAllocations(payment),
+  };
+};
+
 const shouldIncludeInLandlordStatement = (payment) => {
   if (isTakeOnBalanceReceipt(payment)) return false;
   const summary = payment?.allocationSummary || {};
@@ -889,13 +982,16 @@ const summarizeAllocationRows = ({ rows = [], receiptAmount = 0, metadata = {}, 
 
 const buildReceiptAllocationWorkspace = async (payment) => {
   if (!payment?.business || !payment?.tenant) {
+    const initialUnapplied = round2(Math.abs(Number(payment?.allocationSummary?.unapplied || 0)));
+    const initialPostedConfirmed = Boolean(payment?.isConfirmed && payment?.postingStatus === "posted");
     return {
       receiptAmount: round2(Math.abs(Number(payment?.amount || 0))),
       invoiceOptions: [],
       currentRows: [],
       lockedAllocatedTotal: 0,
-      currentUnapplied: round2(Math.abs(Number(payment?.allocationSummary?.unapplied || 0))),
-      lockedUnappliedForConfirmed: Boolean(payment?.isConfirmed && payment?.postingStatus === "posted"),
+      currentUnapplied: initialUnapplied,
+      appendOnlyUnappliedForConfirmed: initialPostedConfirmed && initialUnapplied > 0.009,
+      lockedUnappliedForConfirmed: initialPostedConfirmed && initialUnapplied <= 0.009,
     };
   }
 
@@ -969,7 +1065,8 @@ const buildReceiptAllocationWorkspace = async (payment) => {
     currentRows,
     lockedAllocatedTotal,
     currentUnapplied,
-    lockedUnappliedForConfirmed: isPostedConfirmed,
+    appendOnlyUnappliedForConfirmed: isPostedConfirmed && currentUnapplied > 0.009,
+    lockedUnappliedForConfirmed: isPostedConfirmed && currentUnapplied <= 0.009,
   };
 };
 
@@ -994,7 +1091,47 @@ const buildManualReceiptAllocationData = async ({ payment, requestedAllocations 
     throw error;
   }
 
-  if (workspace.lockedUnappliedForConfirmed) {
+  const existingLockedByInvoice = new Map();
+  (Array.isArray(workspace.currentRows) ? workspace.currentRows : []).forEach((row) => {
+    const invoiceId = String(row?.invoice || row?.invoiceId || "").trim();
+    if (!invoiceId) return;
+    existingLockedByInvoice.set(
+      invoiceId,
+      round2(Number(existingLockedByInvoice.get(invoiceId) || 0) + Number(row?.appliedAmount || 0))
+    );
+  });
+
+  const isPostedConfirmed = Boolean(payment?.isConfirmed && payment?.postingStatus === "posted");
+  if (isPostedConfirmed) {
+    for (const [invoiceId, lockedAmount] of existingLockedByInvoice.entries()) {
+      const requestedAmount = round2(Number(mergedRequested.get(invoiceId) || 0));
+      if (requestedAmount + 0.009 < lockedAmount) {
+        const lockedLabel = invoiceOptionMap.get(invoiceId)?.invoiceNumber || invoiceId;
+        const error = new Error(
+          `Confirmed receipt allocations already applied to ${lockedLabel} are locked at KES ${lockedAmount.toLocaleString()}. Only the remaining unapplied balance can be allocated from this workspace.`
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+
+    const appendableTotal = round2(Math.max(0, Number(workspace.currentUnapplied || 0)));
+    const addedTotal = round2(requestedTotal - Number(workspace.lockedAllocatedTotal || 0));
+
+    if (addedTotal < -0.009) {
+      const error = new Error("Confirmed receipt allocations cannot be reduced from this workspace. Reverse and recreate instead.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (addedTotal > appendableTotal + 0.009) {
+      const error = new Error(
+        `This confirmed receipt only has KES ${appendableTotal.toLocaleString()} of unapplied balance available for new allocation.`
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+  } else if (workspace.lockedUnappliedForConfirmed) {
     if (Math.abs(requestedTotal - Number(workspace.lockedAllocatedTotal || 0)) > 0.009) {
       const error = new Error(
         `This posted receipt can only reallocate its already allocated amount of KES ${Number(workspace.lockedAllocatedTotal || 0).toLocaleString()}. Its unapplied portion is locked to protect ledger integrity.`
@@ -1072,7 +1209,7 @@ const buildManualReceiptAllocationData = async ({ payment, requestedAllocations 
 };
 
 const recomputeTenantBalance = async (tenantId, businessId) =>
-  recomputeSharedTenantBalance(tenantId, businessId);
+  recomputeTenantFinancialState({ businessId, tenantId });
 
 const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
   const amount = Math.abs(Number(payment.amount || 0));
@@ -1400,6 +1537,230 @@ const reverseAllLedgerEntriesForPayment = async (payment, userId, reason) => {
   return reversalResults;
 };
 
+const rollbackFailedReceiptPosting = async ({ payment, actorId, reason = "" }) => {
+  if (!payment?._id || !payment?.business) return [];
+
+  try {
+    const reversalEntries = await reverseAllLedgerEntriesForPayment(
+      payment,
+      actorId || null,
+      reason || "Auto-reversal of incomplete receipt posting"
+    );
+
+    const touchedAccountIds = reversalEntries
+      .map((entry) => entry?.accountId)
+      .filter(Boolean);
+
+    if (touchedAccountIds.length > 0) {
+      await aggregateChartOfAccountBalances(payment.business, touchedAccountIds);
+    }
+
+    return reversalEntries;
+  } catch (rollbackError) {
+    console.error("Receipt posting rollback failed:", rollbackError);
+    return [];
+  }
+};
+
+const rollbackPostedAllocationReleaseEntries = async ({ entryIds = [], actorId = null, reason = "" }) => {
+  const normalizedEntryIds = [...new Set((Array.isArray(entryIds) ? entryIds : []).filter(Boolean).map(String))];
+  if (!normalizedEntryIds.length || !actorId) return [];
+
+  const reversalEntries = [];
+  for (const entryId of normalizedEntryIds) {
+    try {
+      const result = await postReversal({
+        entryId,
+        reason: reason || "Auto-reversal of incomplete unapplied receipt release",
+        userId: actorId,
+      });
+      if (result?.reversalEntry) reversalEntries.push(result.reversalEntry);
+    } catch (rollbackError) {
+      console.error("Failed to rollback unapplied release ledger entry:", rollbackError);
+    }
+  }
+
+  return reversalEntries;
+};
+
+const postReceiptUnappliedAllocationReleaseJournal = async ({
+  payment,
+  releaseRows = [],
+  actorId,
+  reason = "",
+  session = null,
+}) => {
+  const rows = Array.isArray(releaseRows)
+    ? releaseRows
+        .map((row) => ({
+          ...row,
+          appliedAmount: round2(Math.abs(Number(row?.appliedAmount || 0))),
+        }))
+        .filter((row) => row?.invoice && Number(row?.appliedAmount || 0) > 0)
+    : [];
+
+  if (!rows.length) {
+    return { journalGroupId: null, entries: [], touchedAccountIds: [] };
+  }
+
+  if (!actorId) {
+    throw new Error("A valid actor is required to release confirmed receipt prepayments into tenant charges.");
+  }
+
+  const releaseTotal = round2(rows.reduce((sum, row) => sum + Number(row?.appliedAmount || 0), 0));
+  if (releaseTotal <= 0) {
+    return { journalGroupId: null, entries: [], touchedAccountIds: [] };
+  }
+
+  const { propertyId, landlordId } = await resolvePropertyAndLandlord(payment);
+  const receiver = payment?.paidDirectToLandlord ? "landlord" : "manager";
+  const transactionDate = new Date();
+  const { start, end } = getStatementPeriodFromPayment({
+    ...payment,
+    paymentDate: transactionDate,
+  });
+  const journalGroupId = new mongoose.Types.ObjectId();
+  const releaseAccount = await resolveUnallocatedReceiptsLiabilityAccount(payment.business);
+  const grouped = new Map();
+
+  rows.forEach((row) => {
+    const key = getReceiptPostingBucketFromAllocationRow(row);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  });
+
+  const postingGroups = [];
+  ["rent", "deposit", "deposit_landlord", "utility", "late_penalty", "debit_note", "other"].forEach((key) => {
+    const groupedRows = grouped.get(key) || [];
+    const total = round2(groupedRows.reduce((sum, row) => sum + Number(row?.appliedAmount || 0), 0));
+    if (total > 0) postingGroups.push({ key, total, rows: groupedRows });
+  });
+
+  const createdEntries = [];
+  const touchedAccountIds = new Set();
+
+  const createEntries = async () => {
+    const debitLeg = await postEntry({
+      session,
+      business: payment.business,
+      property: propertyId,
+      landlord: landlordId,
+      tenant: payment.tenant || null,
+      unit: payment.unit || null,
+      sourceTransactionType: "rent_payment",
+      sourceTransactionId: String(payment._id),
+      transactionDate,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "ADJUSTMENT",
+      amount: releaseTotal,
+      direction: "debit",
+      debit: releaseTotal,
+      credit: 0,
+      accountId: releaseAccount._id,
+      journalGroupId,
+      payer: "tenant",
+      receiver,
+      notes: `Apply unapplied balance from receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+      metadata: {
+        includeInLandlordStatement: false,
+        includeInCategoryTotals: false,
+        postingRole: "tenant_advance_release",
+        paymentType: getPrimaryPaymentTypeFromAllocations(payment),
+        paymentMethod: payment.paymentMethod,
+        cashbook: payment?.paidDirectToLandlord ? null : payment.cashbook || "",
+        paidDirectToLandlord: !!payment.paidDirectToLandlord,
+        ledgerType: "receipts",
+        receiptNumber: payment.receiptNumber || null,
+        referenceNumber: payment.referenceNumber || null,
+        allocationRelease: true,
+        releaseReason: reason || "Apply unapplied receipt balance to tenant charges",
+        releasedAmount: releaseTotal,
+        allocations: rows,
+      },
+      createdBy: actorId,
+      approvedBy: actorId,
+      approvedAt: new Date(),
+      status: "approved",
+    });
+
+    createdEntries.push(debitLeg);
+    if (debitLeg?.accountId) touchedAccountIds.add(String(debitLeg.accountId));
+
+    for (const group of postingGroups) {
+      const creditAccount = await resolveCreditAccountForAllocationGroup(payment.business, group.key);
+      const leg = await postEntry({
+        session,
+        business: payment.business,
+        property: propertyId,
+        landlord: landlordId,
+        tenant: payment.tenant || null,
+        unit: payment.unit || null,
+        sourceTransactionType: "rent_payment",
+        sourceTransactionId: String(payment._id),
+        transactionDate,
+        statementPeriodStart: start,
+        statementPeriodEnd: end,
+        category: "ADJUSTMENT",
+        amount: group.total,
+        direction: "credit",
+        debit: 0,
+        credit: group.total,
+        accountId: creditAccount._id,
+        journalGroupId,
+        payer: "tenant",
+        receiver,
+        notes: `Release unapplied balance from receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+        metadata: {
+          includeInLandlordStatement: false,
+          includeInCategoryTotals: false,
+          postingRole: `tenant_advance_release_${String(group.key || 'other').toLowerCase()}`,
+          paymentType: getPrimaryPaymentTypeFromAllocations(payment),
+          paymentMethod: payment.paymentMethod,
+          cashbook: payment?.paidDirectToLandlord ? null : payment.cashbook || "",
+          paidDirectToLandlord: !!payment.paidDirectToLandlord,
+          ledgerType: "receipts",
+          receiptNumber: payment.receiptNumber || null,
+          referenceNumber: payment.referenceNumber || null,
+          allocationGroup: group.key,
+          allocationRelease: true,
+          releaseReason: reason || "Apply unapplied receipt balance to tenant charges",
+          releasedAmount: group.total,
+          allocations: group.rows,
+        },
+        createdBy: actorId,
+        approvedBy: actorId,
+        approvedAt: new Date(),
+        status: "approved",
+      });
+
+      createdEntries.push(leg);
+      if (leg?.accountId) touchedAccountIds.add(String(leg.accountId));
+    }
+  };
+
+  if (session) {
+    await createEntries();
+  } else {
+    try {
+      await createEntries();
+    } catch (postingError) {
+      await rollbackPostedAllocationReleaseEntries({
+        entryIds: createdEntries.map((entry) => entry?._id).filter(Boolean),
+        actorId,
+        reason: `Auto-reversal of incomplete unapplied release for receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+      });
+      throw postingError;
+    }
+  }
+
+  return {
+    journalGroupId,
+    entries: createdEntries,
+    touchedAccountIds: [...touchedAccountIds],
+  };
+};
+
 export const createPayment = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -1443,8 +1804,8 @@ export const createPayment = async (req, res, next) => {
       });
     }
 
-    const metadata = req.body?.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {};
-    const isTakeOnCredit = isTakeOnCreditReceipt({ metadata });
+    const baseMetadata = req.body?.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {};
+    const isTakeOnCredit = isTakeOnCreditReceipt({ metadata: baseMetadata });
     const isConfirmedOnCreate = req.body?.isConfirmed === true;
     const isDirectToLandlord = req.body?.paidDirectToLandlord === true;
     const refNumber = String(req.body?.referenceNumber || "").trim();
@@ -1516,6 +1877,10 @@ export const createPayment = async (req, res, next) => {
     const useManualAllocations =
       String(req.body?.allocationMode || "").trim().toLowerCase() === "manual" ||
       Array.isArray(req.body?.allocations);
+    const metadata = {
+      ...baseMetadata,
+      allocationMode: useManualAllocations ? "manual" : "auto",
+    };
 
     const allocationData = useManualAllocations
       ? await buildManualReceiptAllocationData({
@@ -1584,10 +1949,6 @@ export const createPayment = async (req, res, next) => {
           : await postReceiptJournal(savedPayment, actorUserId);
 
         await recomputeTenantBalance(savedPayment.tenant, savedPayment.business);
-        await recomputeInvoiceStatusesForTenant({
-          businessId: savedPayment.business,
-          tenantId: savedPayment.tenant,
-        });
 
         if (posting.entries?.length) {
           await aggregateChartOfAccountBalances(
@@ -1596,6 +1957,12 @@ export const createPayment = async (req, res, next) => {
           );
         }
       } catch (postingError) {
+        const rollbackEntries = await rollbackFailedReceiptPosting({
+          payment: savedPayment,
+          actorId: actorUserId,
+          reason: `Auto-reversal of incomplete posting for receipt ${savedPayment.receiptNumber || savedPayment.referenceNumber || savedPayment._id}`,
+        });
+
         await RentPayment.findByIdAndUpdate(savedPayment._id, {
           $set: {
             isConfirmed: false,
@@ -1603,8 +1970,23 @@ export const createPayment = async (req, res, next) => {
             confirmedAt: null,
             postingStatus: "failed",
             postingError: postingError.message || "Ledger posting failed on create",
+            journalGroupId: null,
+            ledgerEntries: [],
           },
         });
+
+        try {
+          await recomputeTenantBalance(savedPayment.tenant, savedPayment.business);
+
+          if (rollbackEntries.length > 0) {
+            await aggregateChartOfAccountBalances(
+              savedPayment.business,
+              rollbackEntries.map((entry) => entry?.accountId).filter(Boolean)
+            );
+          }
+        } catch (recoveryError) {
+          console.error("Failed to recompute receipt state after create-posting rollback:", recoveryError);
+        }
 
         return res.status(500).json({
           success: false,
@@ -1641,7 +2023,25 @@ export const createPayment = async (req, res, next) => {
 };
 
 export const getPayments = async (req, res, next) => {
-  const { tenant, unit, month, year, paymentType, ledger } = req.query;
+  const {
+    tenant,
+    unit,
+    month,
+    year,
+    paymentType,
+    ledger,
+    page,
+    limit,
+    property,
+    status,
+    from,
+    to,
+    search,
+    tenantSearch,
+    paidDirectToLandlord,
+    hasUnapplied,
+    includeTotals,
+  } = req.query;
 
   try {
     const business = resolveBusinessId(req);
@@ -1653,23 +2053,245 @@ export const getPayments = async (req, res, next) => {
       });
     }
 
+    const requestedStatus =
+      status === undefined || status === null || String(status).trim() === "" ? "active" : status;
+    const normalizedStatus = safeLower(requestedStatus);
+    const wantsPagedResponse = [
+      page,
+      limit,
+      property,
+      status,
+      from,
+      to,
+      search,
+      tenantSearch,
+      paidDirectToLandlord,
+      hasUnapplied,
+      includeTotals,
+    ].some((value) => value !== undefined && value !== null && String(value).trim() !== "");
+
     const filter = {
       business,
       ledgerType: "receipts",
+      $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     };
 
-    if (tenant) filter.tenant = tenant;
-    if (unit) filter.unit = unit;
+    if (tenant) {
+      if (isValidObjectId(tenant)) {
+        filter.tenant = tenant;
+      } else {
+        const matchedTenants = await Tenant.find({
+          business,
+          name: { $regex: new RegExp(`^${escapeRegExp(String(tenant))}$`, "i") },
+        })
+          .select("_id")
+          .lean();
+        filter.tenant = { $in: matchedTenants.map((row) => row._id) };
+      }
+    }
+
+    let scopedPropertyIds = [];
+    if (property) {
+      const propertyQuery = { business };
+      if (isValidObjectId(property)) {
+        propertyQuery._id = property;
+      } else {
+        propertyQuery.propertyName = {
+          $regex: new RegExp(`^${escapeRegExp(String(property))}$`, "i"),
+        };
+      }
+      const matchedProperties = await Property.find(propertyQuery).select("_id").lean();
+      scopedPropertyIds = matchedProperties.map((row) => row._id);
+      if (scopedPropertyIds.length === 0) {
+        return res.status(200).json(
+          wantsPagedResponse
+            ? {
+                items: [],
+                pagination: {
+                  page: Math.max(1, Number.parseInt(page || "1", 10) || 1),
+                  limit: Math.max(1, Number.parseInt(limit || "50", 10) || 50),
+                  totalItems: 0,
+                  totalPages: 1,
+                  hasPreviousPage: false,
+                  hasNextPage: false,
+                },
+              }
+            : []
+        );
+      }
+    }
+
+    if (unit || scopedPropertyIds.length > 0) {
+      const unitQuery = { business };
+      if (scopedPropertyIds.length > 0) {
+        unitQuery.property = { $in: scopedPropertyIds };
+      }
+      if (unit) {
+        if (isValidObjectId(unit)) {
+          unitQuery._id = unit;
+        } else {
+          unitQuery.unitNumber = {
+            $regex: new RegExp(`^${escapeRegExp(String(unit))}$`, "i"),
+          };
+        }
+      }
+      const matchedUnits = await Unit.find(unitQuery).select("_id").lean();
+      filter.unit = { $in: matchedUnits.map((row) => row._id) };
+    }
+
     if (month) filter.month = parseInt(month, 10);
     if (year) filter.year = parseInt(year, 10);
     if (paymentType) filter.paymentType = paymentType;
     if (ledger && ledger === "receipts") filter.ledgerType = "receipts";
+    if (paidDirectToLandlord !== undefined && paidDirectToLandlord !== "") {
+      filter.paidDirectToLandlord = String(paidDirectToLandlord).toLowerCase() === "true";
+    }
+    if (String(hasUnapplied || "").toLowerCase() === "true") {
+      filter["allocationSummary.unapplied"] = { $gt: 0 };
+    }
 
-    const payments = await populateReceiptQuery(
-      RentPayment.find(filter).sort({ paymentDate: -1, createdAt: -1 })
+    if (from || to) {
+      const paymentDate = {};
+      if (from) {
+        const fromDate = new Date(from);
+        if (!Number.isNaN(fromDate.getTime())) {
+          fromDate.setHours(0, 0, 0, 0);
+          paymentDate.$gte = fromDate;
+        }
+      }
+      if (to) {
+        const toDate = new Date(to);
+        if (!Number.isNaN(toDate.getTime())) {
+          toDate.setHours(23, 59, 59, 999);
+          paymentDate.$lte = toDate;
+        }
+      }
+      if (Object.keys(paymentDate).length > 0) {
+        filter.paymentDate = paymentDate;
+      }
+    }
+
+    if (["active", "confirmed", "pending", "failed"].includes(normalizedStatus)) {
+      filter.isCancelled = { $ne: true };
+      filter.isReversed = { $ne: true };
+    }
+
+    if (normalizedStatus === "active") {
+      filter.postingStatus = { $ne: "failed" };
+    } else if (normalizedStatus === "confirmed") {
+      filter.isConfirmed = true;
+      filter.postingStatus = { $ne: "failed" };
+    } else if (normalizedStatus === "pending") {
+      filter.isConfirmed = { $ne: true };
+      filter.postingStatus = { $ne: "failed" };
+    } else if (normalizedStatus === "failed") {
+      filter.postingStatus = "failed";
+    } else if (normalizedStatus === "reversed") {
+      filter.isCancelled = { $ne: true };
+      filter.isReversed = true;
+    }
+
+    const searchRegex = search ? new RegExp(escapeRegExp(String(search)), "i") : null;
+    const tenantSearchRegex = tenantSearch ? new RegExp(escapeRegExp(String(tenantSearch)), "i") : null;
+    const tenantIdsForSearch = [];
+
+    if (tenantSearchRegex || searchRegex) {
+      const tenantOr = [];
+      if (tenantSearchRegex) tenantOr.push({ name: tenantSearchRegex });
+      if (searchRegex) tenantOr.push({ name: searchRegex });
+      if (tenantOr.length > 0) {
+        const matchedTenants = await Tenant.find({ business, $or: tenantOr }).select("_id").lean();
+        tenantIdsForSearch.push(...matchedTenants.map((row) => row._id));
+      }
+    }
+
+    const orFilters = [];
+    if (searchRegex) {
+      orFilters.push({ receiptNumber: searchRegex });
+      orFilters.push({ referenceNumber: searchRegex });
+      orFilters.push({ description: searchRegex });
+    }
+    if (tenantIdsForSearch.length > 0) {
+      orFilters.push({ tenant: { $in: tenantIdsForSearch } });
+    }
+    if (orFilters.length > 0) {
+      filter.$and = [...(Array.isArray(filter.$and) ? filter.$and : []), { $or: orFilters }];
+    }
+
+    const query = RentPayment.find(filter).sort({ paymentDate: -1, createdAt: -1 });
+
+    if (!wantsPagedResponse) {
+      const payments = await populateReceiptListQuery(query);
+      return res.status(200).json(payments);
+    }
+
+    const parsedPage = Math.max(1, Number.parseInt(page || "1", 10) || 1);
+    const parsedLimit = Math.min(200, Math.max(1, Number.parseInt(limit || "50", 10) || 50));
+    const totalItems = await RentPayment.countDocuments(filter);
+    const totalPages = Math.max(1, Math.ceil(totalItems / parsedLimit));
+    const safePage = Math.min(parsedPage, totalPages);
+    const items = await populateReceiptListQuery(
+      query.skip((safePage - 1) * parsedLimit).limit(parsedLimit)
     );
 
-    return res.status(200).json(payments);
+    let summary = null;
+    if (String(includeTotals || "").toLowerCase() === "true") {
+      const aggregateFilter = {
+        ...filter,
+        business: isValidObjectId(business) ? new mongoose.Types.ObjectId(String(business)) : business,
+      };
+
+      const [totalsRow] = await RentPayment.aggregate([
+        { $match: aggregateFilter },
+        {
+          $group: {
+            _id: null,
+            rowCount: { $sum: 1 },
+            totalReceiptAmount: { $sum: { $abs: { $ifNull: ["$amount", 0] } } },
+            totalUnapplied: { $sum: { $abs: { $ifNull: ["$allocationSummary.unapplied", 0] } } },
+            totalAllocated: {
+              $sum: {
+                $max: [
+                  0,
+                  {
+                    $subtract: [
+                      { $abs: { $ifNull: ["$amount", 0] } },
+                      { $abs: { $ifNull: ["$allocationSummary.unapplied", 0] } },
+                    ],
+                  },
+                ],
+              },
+            },
+            confirmedRows: {
+              $sum: {
+                $cond: [{ $eq: ["$isConfirmed", true] }, 1, 0],
+              },
+            },
+          },
+        },
+      ]);
+
+      summary = {
+        rowCount: Number(totalsRow?.rowCount || 0),
+        totalReceiptAmount: round2(Number(totalsRow?.totalReceiptAmount || 0)),
+        totalUnapplied: round2(Number(totalsRow?.totalUnapplied || 0)),
+        totalAllocated: round2(Number(totalsRow?.totalAllocated || 0)),
+        confirmedRows: Number(totalsRow?.confirmedRows || 0),
+      };
+    }
+
+    return res.status(200).json({
+      items,
+      pagination: {
+        page: safePage,
+        limit: parsedLimit,
+        totalItems,
+        totalPages,
+        hasPreviousPage: safePage > 1,
+        hasNextPage: safePage < totalPages,
+      },
+      summary,
+    });
   } catch (err) {
     return next(err);
   }
@@ -1719,6 +2341,7 @@ export const getPaymentAllocationOptions = async (req, res, next) => {
         isConfirmed: payment.isConfirmed === true,
         postingStatus: payment.postingStatus || "unposted",
         rules: {
+          appendOnlyUnappliedForConfirmed: workspace.appendOnlyUnappliedForConfirmed === true,
           lockedUnappliedForConfirmed: workspace.lockedUnappliedForConfirmed,
           lockedAllocatedTotal: round2(workspace.lockedAllocatedTotal || 0),
           currentUnapplied: round2(workspace.currentUnapplied || 0),
@@ -1755,6 +2378,19 @@ export const updatePaymentAllocations = async (req, res, next) => {
       });
     }
 
+    const hasPostedLedger =
+      String(payment.postingStatus || "").toLowerCase() === "posted" ||
+      (Array.isArray(payment.ledgerEntries) && payment.ledgerEntries.length > 0);
+    const isPostedConfirmed = payment.isConfirmed === true && hasPostedLedger;
+
+    if (payment.isConfirmed === true && !isPostedConfirmed) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Confirmed receipts with incomplete posting state cannot be reallocated directly. Reverse and recreate instead.",
+      });
+    }
+
     const allocationData = await buildManualReceiptAllocationData({
       payment,
       requestedAllocations: req.body?.allocations,
@@ -1763,8 +2399,12 @@ export const updatePaymentAllocations = async (req, res, next) => {
     const previousAllocations = Array.isArray(payment.allocations) ? payment.allocations : [];
     const previousSummary = payment.allocationSummary || {};
     const previousType = payment.paymentType || "rent";
+    const previousBreakdown = payment.breakdown || {};
+    const previousMetadata = payment.metadata && typeof payment.metadata === "object" ? { ...payment.metadata } : {};
+    const previousLedgerEntries = Array.isArray(payment.ledgerEntries) ? [...payment.ledgerEntries] : [];
     const nextMetadata = {
       ...(payment.metadata && typeof payment.metadata === "object" ? payment.metadata : {}),
+      allocationMode: "manual",
     };
     const history = Array.isArray(nextMetadata.allocationHistory) ? nextMetadata.allocationHistory : [];
 
@@ -1811,23 +2451,175 @@ export const updatePaymentAllocations = async (req, res, next) => {
       allocationData,
     });
 
-    payment.allocations = depositContext.allocations;
-    payment.allocationSummary = allocationData.allocationSummary;
-    payment.breakdown = allocationData.breakdown;
-    payment.paymentType = allocationData.primaryPaymentType;
-    payment.metadata = depositContext.metadata;
-    await payment.save();
-
-    await recomputeInvoiceStatusesForTenant({
-      businessId: payment.business,
-      tenantId: payment.tenant,
+    const previousByInvoice = new Map();
+    previousAllocations.forEach((row) => {
+      const invoiceId = String(row?.invoice || row?.invoiceId || "").trim();
+      if (!invoiceId) return;
+      previousByInvoice.set(invoiceId, round2(Number(previousByInvoice.get(invoiceId) || 0) + Number(row?.appliedAmount || 0)));
     });
+
+    const releaseRows = (Array.isArray(depositContext.allocations) ? depositContext.allocations : [])
+      .map((row) => {
+        const invoiceId = String(row?.invoice || row?.invoiceId || "").trim();
+        if (!invoiceId) return null;
+        const previousAmount = round2(Number(previousByInvoice.get(invoiceId) || 0));
+        const nextAmount = round2(Number(row?.appliedAmount || 0));
+        const delta = round2(nextAmount - previousAmount);
+        if (delta <= 0.009) return null;
+        return {
+          ...row,
+          invoice: invoiceId,
+          appliedAmount: delta,
+        };
+      })
+      .filter(Boolean);
+    const releaseTotal = round2(releaseRows.reduce((sum, row) => sum + Number(row?.appliedAmount || 0), 0));
+
+    if (isPostedConfirmed && releaseTotal > 0 && !actorUserId) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid user is required to apply confirmed receipt prepayments to tenant charges.",
+      });
+    }
+
+    if (isPostedConfirmed && releaseTotal <= 0 && JSON.stringify(previousAllocations) === JSON.stringify(depositContext.allocations)) {
+      const populatedNoop = await populateReceiptQuery(RentPayment.findById(payment._id));
+      return res.status(200).json({
+        success: true,
+        data: populatedNoop,
+        message: "Receipt allocations already match the saved state.",
+      });
+    }
+
+    const applyNextState = () => {
+      payment.allocations = depositContext.allocations;
+      payment.allocationSummary = allocationData.allocationSummary;
+      payment.breakdown = allocationData.breakdown;
+      payment.paymentType = allocationData.primaryPaymentType;
+      payment.metadata = depositContext.metadata;
+    };
+
+    const restorePreviousState = () => {
+      payment.allocations = previousAllocations;
+      payment.allocationSummary = previousSummary;
+      payment.breakdown = previousBreakdown;
+      payment.paymentType = previousType;
+      payment.metadata = previousMetadata;
+      payment.ledgerEntries = previousLedgerEntries;
+    };
+
+    let releasePosting = { journalGroupId: null, entries: [], touchedAccountIds: [] };
+
+    const persistChanges = async (session = null) => {
+      applyNextState();
+
+      if (isPostedConfirmed && releaseTotal > 0) {
+        releasePosting = await postReceiptUnappliedAllocationReleaseJournal({
+          payment,
+          releaseRows,
+          actorId: actorUserId,
+          reason:
+            String(req.body?.reason || "").trim() ||
+            "Apply confirmed receipt unapplied balance to open tenant charges",
+          session,
+        });
+
+        const priorLedgerEntryIds = previousLedgerEntries.map((entry) => String(entry?._id || entry));
+        const nextLedgerEntries = [
+          ...previousLedgerEntries,
+          ...releasePosting.entries.filter(Boolean).map((entry) => entry?._id).filter(Boolean),
+        ];
+        payment.ledgerEntries = nextLedgerEntries.filter(
+          (value, index, arr) => arr.findIndex((item) => String(item?._id || item) === String(value?._id || value)) === index
+        );
+
+        const releaseHistory = Array.isArray(payment?.metadata?.allocationReleaseHistory)
+          ? payment.metadata.allocationReleaseHistory
+          : [];
+        releaseHistory.push({
+          releasedAt: new Date(),
+          releasedBy: actorUserId,
+          reason:
+            String(req.body?.reason || "").trim() ||
+            "Apply confirmed receipt unapplied balance to open tenant charges",
+          releasedAmount: releaseTotal,
+          journalGroupId: releasePosting.journalGroupId,
+          allocations: releaseRows,
+        });
+        payment.metadata = {
+          ...(payment.metadata && typeof payment.metadata === "object" ? payment.metadata : {}),
+          allocationReleaseHistory: releaseHistory.slice(-25),
+          lastAllocationReleaseAt: new Date(),
+          lastAllocationReleaseAmount: releaseTotal,
+        };
+        if (actorUserId) payment.metadata.lastAllocationReleaseBy = actorUserId;
+      }
+
+      await payment.save(session ? { session } : undefined);
+    };
+
+    let session = null;
+    let usedTransaction = false;
+    try {
+      try {
+        session = await mongoose.startSession();
+      } catch (sessionError) {
+        session = null;
+      }
+
+      if (session) {
+        try {
+          await session.withTransaction(async () => {
+            usedTransaction = true;
+            await persistChanges(session);
+          });
+        } catch (transactionError) {
+          const message = String(transactionError?.message || "").toLowerCase();
+          const canFallback =
+            !usedTransaction &&
+            (message.includes("transaction numbers are only allowed") ||
+              message.includes("replica set") ||
+              message.includes("sharded cluster") ||
+              message.includes("transactions are not supported"));
+
+          if (canFallback) {
+            await persistChanges(null);
+          } else {
+            throw transactionError;
+          }
+        }
+      } else {
+        await persistChanges(null);
+      }
+    } catch (persistError) {
+      if (!usedTransaction && releasePosting.entries?.length > 0 && actorUserId) {
+        await rollbackPostedAllocationReleaseEntries({
+          entryIds: releasePosting.entries.map((entry) => entry?._id).filter(Boolean),
+          actorId: actorUserId,
+          reason: `Auto-reversal of failed unapplied allocation release for receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+        });
+      }
+      restorePreviousState();
+      throw persistError;
+    } finally {
+      if (session) {
+        await session.endSession().catch(() => {});
+      }
+    }
+
+    await recomputeTenantBalance(payment.tenant, payment.business);
+
+    if (releasePosting.touchedAccountIds?.length > 0) {
+      await aggregateChartOfAccountBalances(payment.business, releasePosting.touchedAccountIds);
+    }
 
     const populated = await populateReceiptQuery(RentPayment.findById(payment._id));
     return res.status(200).json({
       success: true,
       data: populated,
-      message: "Receipt allocations updated successfully.",
+      message: isPostedConfirmed && releaseTotal > 0
+        ? "Confirmed receipt unapplied balance allocated successfully."
+        : "Receipt allocations updated successfully.",
     });
   } catch (err) {
     return next(err);
@@ -1879,10 +2671,21 @@ export const updatePayment = async (req, res, next) => {
       });
     }
 
-    const metadata = req.body?.metadata && typeof req.body.metadata === "object"
+    const incomingMetadata = req.body?.metadata && typeof req.body.metadata === "object"
       ? req.body.metadata
       : getPaymentMetadata(payment);
-    const isTakeOnCredit = isTakeOnCreditReceipt({ metadata });
+    const requestedConfirmedValue = Object.prototype.hasOwnProperty.call(req.body || {}, "isConfirmed")
+      ? req.body?.isConfirmed === true
+      : null;
+
+    if (requestedConfirmedValue !== null && requestedConfirmedValue !== Boolean(payment.isConfirmed)) {
+      return res.status(400).json({
+        success: false,
+        message: "Receipt confirmation state cannot be changed through edit. Use the confirm/unconfirm actions instead.",
+      });
+    }
+
+    const isTakeOnCredit = isTakeOnCreditReceipt({ metadata: incomingMetadata });
     const isDirectToLandlord = req.body?.paidDirectToLandlord === true;
     const normalizedCashbook = isDirectToLandlord || isTakeOnCredit
       ? ""
@@ -1935,7 +2738,7 @@ export const updatePayment = async (req, res, next) => {
       });
     }
 
-    const isConfirmedAfterUpdate = req.body?.isConfirmed ?? payment.isConfirmed;
+    const isConfirmedAfterUpdate = Boolean(payment.isConfirmed);
     if (isTakeOnCredit && !isConfirmedAfterUpdate) {
       return res.status(400).json({
         success: false,
@@ -1946,6 +2749,10 @@ export const updatePayment = async (req, res, next) => {
     const useManualAllocations =
       String(req.body?.allocationMode || "").trim().toLowerCase() === "manual" ||
       Array.isArray(req.body?.allocations);
+    const metadata = {
+      ...incomingMetadata,
+      allocationMode: useManualAllocations ? "manual" : "auto",
+    };
 
     const allocationData = useManualAllocations
       ? await buildManualReceiptAllocationData({
@@ -2008,6 +2815,7 @@ export const updatePayment = async (req, res, next) => {
     delete safeUpdate.reversalOf;
     delete safeUpdate.confirmedBy;
     delete safeUpdate.confirmedAt;
+    delete safeUpdate.isConfirmed;
 
     const updatedPayment = await populateReceiptQuery(
       RentPayment.findByIdAndUpdate(req.params.id, { $set: safeUpdate }, { new: true })
@@ -2054,6 +2862,18 @@ export const confirmPayment = async (req, res, next) => {
       return res.status(200).json(populated);
     }
 
+    if (
+      existingPayment.isCancelled ||
+      existingPayment.isReversed ||
+      existingPayment.reversalOf ||
+      String(existingPayment.postingStatus || "").toLowerCase() === "reversed"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Cancelled or reversed receipts cannot be confirmed.",
+      });
+    }
+
     let actorUserId;
     try {
       actorUserId = await resolveActorUserId({
@@ -2066,15 +2886,17 @@ export const confirmPayment = async (req, res, next) => {
     }
 
     const confirmationMetadata = getPaymentMetadata(existingPayment);
-    const allocationData = await buildReceiptAllocationData({
-      businessId: existingPayment.business,
-      tenantId: existingPayment.tenant,
-      amount: existingPayment.amount,
-      paymentTypeOverride: isTakeOnCreditReceipt(existingPayment)
-        ? confirmationMetadata?.paymentType || existingPayment.paymentType || ""
-        : "",
-      metadata: confirmationMetadata,
-    });
+    const allocationData = hasStoredAllocationSnapshot(existingPayment)
+      ? buildStoredReceiptAllocationData(existingPayment)
+      : await buildReceiptAllocationData({
+          businessId: existingPayment.business,
+          tenantId: existingPayment.tenant,
+          amount: existingPayment.amount,
+          paymentTypeOverride: isTakeOnCreditReceipt(existingPayment)
+            ? confirmationMetadata?.paymentType || existingPayment.paymentType || ""
+            : "",
+          metadata: confirmationMetadata,
+        });
 
     const linkedTenant = await Tenant.findOne({ _id: existingPayment.tenant, business: existingPayment.business }).select("_id depositHeldBy").lean();
     const linkedUnit = existingPayment.unit
@@ -2110,10 +2932,6 @@ export const confirmPayment = async (req, res, next) => {
         : await postReceiptJournal(existingPayment, actorUserId);
 
       await recomputeTenantBalance(existingPayment.tenant, existingPayment.business);
-      await recomputeInvoiceStatusesForTenant({
-        businessId: existingPayment.business,
-        tenantId: existingPayment.tenant,
-      });
 
       if (posting.entries?.length) {
         await aggregateChartOfAccountBalances(
@@ -2122,12 +2940,33 @@ export const confirmPayment = async (req, res, next) => {
         );
       }
     } catch (postingError) {
+      const rollbackEntries = await rollbackFailedReceiptPosting({
+        payment: existingPayment,
+        actorId: actorUserId,
+        reason: `Auto-reversal of incomplete posting for receipt ${existingPayment.receiptNumber || existingPayment.referenceNumber || existingPayment._id}`,
+      });
+
       existingPayment.isConfirmed = false;
       existingPayment.confirmedBy = null;
       existingPayment.confirmedAt = null;
       existingPayment.postingStatus = "failed";
       existingPayment.postingError = postingError.message || "Ledger posting failed on confirm";
+      existingPayment.journalGroupId = null;
+      existingPayment.ledgerEntries = [];
       await existingPayment.save();
+
+      try {
+        await recomputeTenantBalance(existingPayment.tenant, existingPayment.business);
+
+        if (rollbackEntries.length > 0) {
+          await aggregateChartOfAccountBalances(
+            existingPayment.business,
+            rollbackEntries.map((entry) => entry?.accountId).filter(Boolean)
+          );
+        }
+      } catch (recoveryError) {
+        console.error("Failed to recompute receipt state after confirm-posting rollback:", recoveryError);
+      }
 
       return res.status(500).json({
         success: false,
@@ -2180,10 +3019,6 @@ export const unconfirmPayment = async (req, res, next) => {
     await payment.save();
 
     await recomputeTenantBalance(payment.tenant, payment.business);
-    await recomputeInvoiceStatusesForTenant({
-      businessId: payment.business,
-      tenantId: payment.tenant,
-    });
 
     return res.status(200).json({
       success: true,
@@ -2207,7 +3042,22 @@ export const deletePayment = async (req, res, next) => {
       });
     }
 
-    if (payment.isConfirmed || payment.postingStatus === "posted") {
+    if (!payment || payment.ledgerType !== "receipts") {
+      return res.status(404).json({ success: false, message: "Receipt not found." });
+    }
+
+    if (payment.isCancelled || payment.isReversed || payment.reversalOf) {
+      return res.status(400).json({
+        success: false,
+        message: "Reversed or cancelled receipts remain in the audit trail and cannot be deleted.",
+      });
+    }
+
+    if (
+      payment.isConfirmed ||
+      payment.postingStatus === "posted" ||
+      (Array.isArray(payment.ledgerEntries) && payment.ledgerEntries.length > 0)
+    ) {
       return res.status(400).json({
         success: false,
         message: "Cannot delete a confirmed/posted receipt. Reverse it instead.",
@@ -2240,42 +3090,60 @@ export const getPaymentSummary = async (req, res, next) => {
       });
     }
 
-    const filter = {
-      business: scopedBusiness,
+    const matchStage = {
+      business: new mongoose.Types.ObjectId(String(scopedBusiness)),
       ledgerType: "receipts",
       isConfirmed: true,
       isCancelled: { $ne: true },
+      isReversed: { $ne: true },
+      $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     };
 
-    if (month) filter.month = parseInt(month, 10);
-    if (year) filter.year = parseInt(year, 10);
+    if (month) matchStage.month = parseInt(month, 10);
+    if (year) matchStage.year = parseInt(year, 10);
 
-    const payments = await RentPayment.find(filter);
+    const [summary] = await RentPayment.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: null,
+          totalPayments: { $sum: 1 },
+          rent: { $sum: { $ifNull: ["$allocationSummary.rent", 0] } },
+          deposits: { $sum: { $ifNull: ["$allocationSummary.deposit", 0] } },
+          utilities: { $sum: { $ifNull: ["$allocationSummary.utility", 0] } },
+          lateFees: { $sum: { $ifNull: ["$allocationSummary.latePenalty", 0] } },
+          debitNotes: { $sum: { $ifNull: ["$allocationSummary.debitNote", 0] } },
+          other: { $sum: { $ifNull: ["$allocationSummary.other", 0] } },
+          unapplied: { $sum: { $ifNull: ["$allocationSummary.unapplied", 0] } },
+        },
+      },
+    ]);
 
-    const totalRent = payments
-      .filter((p) => p.paymentType === "rent")
-      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-    const totalDeposits = payments
-      .filter((p) => p.paymentType === "deposit")
-      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-    const totalUtilities = payments
-      .filter((p) => p.paymentType === "utility")
-      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-    const totalLateFees = payments
-      .filter((p) => p.paymentType === "late_fee")
-      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const totals = {
+      rent: Number(summary?.rent || 0),
+      deposits: Number(summary?.deposits || 0),
+      utilities: Number(summary?.utilities || 0),
+      lateFees: Number(summary?.lateFees || 0),
+      other: Number(summary?.debitNotes || 0) + Number(summary?.other || 0),
+      unapplied: Number(summary?.unapplied || 0),
+    };
 
     return res.status(200).json({
-      totalPayments: payments.length,
-      totalAmount: totalRent + totalDeposits + totalUtilities + totalLateFees,
+      totalPayments: Number(summary?.totalPayments || 0),
+      totalAmount:
+        Number(totals.rent || 0) +
+        Number(totals.deposits || 0) +
+        Number(totals.utilities || 0) +
+        Number(totals.lateFees || 0) +
+        Number(totals.other || 0) +
+        Number(totals.unapplied || 0),
       breakdown: {
-        rent: totalRent,
-        deposits: totalDeposits,
-        utilities: totalUtilities,
-        lateFees: totalLateFees,
+        rent: round2(totals.rent),
+        deposits: round2(totals.deposits),
+        utilities: round2(totals.utilities),
+        lateFees: round2(totals.lateFees),
+        other: round2(totals.other),
+        unapplied: round2(totals.unapplied),
       },
       month: month || "All",
       year: year || "All",
@@ -2301,6 +3169,13 @@ export const reversePayment = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: "Only confirmed receipts can be reversed.",
+      });
+    }
+
+    if (payment.isCancelled || payment.reversalOf) {
+      return res.status(400).json({
+        success: false,
+        message: "Only original confirmed receipts can be reversed.",
       });
     }
 
@@ -2383,10 +3258,6 @@ export const reversePayment = async (req, res, next) => {
       await reversalEntry.save();
 
       await recomputeTenantBalance(payment.tenant, payment.business);
-      await recomputeInvoiceStatusesForTenant({
-        businessId: payment.business,
-        tenantId: payment.tenant,
-      });
 
       const touchedAccountIds = reversalEntries
         .map((entry) => entry?.accountId)

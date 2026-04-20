@@ -21,6 +21,8 @@ const currency = (value) =>
     minimumFractionDigits: 2,
   }).format(Number(value || 0));
 
+const depositMemoCurrency = (value) => currency(Math.abs(Number(value || 0)));
+
 const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -538,6 +540,11 @@ const Statements = () => {
     ? depositSettlement.rows
     : [];
   const depositSettlementTotals = depositSettlement?.totals || {};
+  const broughtForwardCreditApplications = workspace?.broughtForwardCreditApplications || {};
+  const broughtForwardCreditApplicationRows = Array.isArray(broughtForwardCreditApplications?.rows)
+    ? broughtForwardCreditApplications.rows
+    : [];
+  const broughtForwardCreditApplicationTotals = broughtForwardCreditApplications?.totals || {};
   const totals = workspace?.totals || {};
   const expenseRows = workspace?.expenseRows || workspace?.deductionRows || [];
   const additionRows = workspace?.additionRows || [];
@@ -720,7 +727,8 @@ const Statements = () => {
     nonDepositAdditionRows.length > 0 ||
     directToLandlordRows.length > 0 ||
     depositSettlementRows.length > 0 ||
-    depositMemoRows.length > 0;
+    depositMemoRows.length > 0 ||
+    broughtForwardCreditApplicationRows.length > 0;
   const hasInvoiceVatColumn = useMemo(
     () =>
       Number(summary?.totalInvoiceVatInvoiced || 0) > 0 ||
@@ -1545,11 +1553,76 @@ const Statements = () => {
                         </div>
                       )}
 
-                      {depositMemoRows.length > 0 && (
+                      {broughtForwardCreditApplicationRows.length > 0 && (
                         <div>
                           <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                            Brought Forward Credits Applied
+                          </h4>
+                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            <div className="rounded-lg bg-sky-50 px-4 py-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
+                                Total applied
+                              </p>
+                              <p className="mt-2 text-lg font-semibold text-sky-900">
+                                {currency(broughtForwardCreditApplicationTotals.totalApplied || 0)}
+                              </p>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 px-4 py-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                                Rent portion
+                              </p>
+                              <p className="mt-2 text-lg font-semibold text-slate-900">
+                                {currency(broughtForwardCreditApplicationTotals.rentApplied || 0)}
+                              </p>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 px-4 py-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                                Utility portion
+                              </p>
+                              <p className="mt-2 text-lg font-semibold text-slate-900">
+                                {currency(broughtForwardCreditApplicationTotals.utilityApplied || 0)}
+                              </p>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 px-4 py-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                                VAT portion
+                              </p>
+                              <p className="mt-2 text-lg font-semibold text-slate-900">
+                                {currency(broughtForwardCreditApplicationTotals.taxApplied || 0)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 space-y-2">
+                            {broughtForwardCreditApplicationRows.map((item, index) => (
+                              <div key={`bf-credit-${index}`} className="rounded-lg bg-sky-50/60 px-4 py-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-slate-700">
+                                      {item.description || "Brought forward credit applied"}
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      Receipt {item.receiptReference || "-"}
+                                      {item.chargeReference ? ` • Applied to ${item.chargeReference}` : ""}
+                                      {item.unit ? ` • Unit ${item.unit}` : ""}
+                                    </p>
+                                  </div>
+                                  <span className="font-medium text-sky-900">{currency(item.amount)}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {depositMemoRows.length > 0 && (
+                        <div>
+                          <h4 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-600">
                             Deposit Memorandum
                           </h4>
+                          <p className="mb-3 text-xs text-slate-500">
+                            Displayed as memorandum balances. Held deposit positions are shown as positive values for readability and remain excluded from settlement.
+                          </p>
                           <div className="overflow-x-auto rounded-xl border border-slate-200">
                             <table className="min-w-full divide-y divide-slate-200 text-sm">
                               <thead className="bg-slate-50">
@@ -1565,18 +1638,18 @@ const Statements = () => {
                                 {depositMemoRows.map((item, index) => (
                                   <tr key={`deposit-memo-${index}`}>
                                     <td className="px-4 py-3 text-slate-700">{item.label || item.key || "Deposit memo"}</td>
-                                    <td className="px-4 py-3 text-right text-slate-700">{currency(item.openingBalance)}</td>
-                                    <td className="px-4 py-3 text-right text-slate-700">{currency(item.billed)}</td>
-                                    <td className="px-4 py-3 text-right text-slate-700">{currency(item.received)}</td>
-                                    <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(item.closingBalance)}</td>
+                                    <td className="px-4 py-3 text-right text-slate-700">{depositMemoCurrency(item.openingBalance)}</td>
+                                    <td className="px-4 py-3 text-right text-slate-700">{depositMemoCurrency(item.billed)}</td>
+                                    <td className="px-4 py-3 text-right text-slate-700">{depositMemoCurrency(item.received)}</td>
+                                    <td className="px-4 py-3 text-right font-medium text-slate-900">{depositMemoCurrency(item.closingBalance)}</td>
                                   </tr>
                                 ))}
                                 <tr className="bg-slate-50">
                                   <td className="px-4 py-3 font-semibold text-slate-700">Total</td>
-                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(depositMemoTotals.openingBalance)}</td>
-                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(depositMemoTotals.billed)}</td>
-                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(depositMemoTotals.received)}</td>
-                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(depositMemoTotals.closingBalance)}</td>
+                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{depositMemoCurrency(depositMemoTotals.openingBalance)}</td>
+                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{depositMemoCurrency(depositMemoTotals.billed)}</td>
+                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{depositMemoCurrency(depositMemoTotals.received)}</td>
+                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{depositMemoCurrency(depositMemoTotals.closingBalance)}</td>
                                 </tr>
                               </tbody>
                             </table>

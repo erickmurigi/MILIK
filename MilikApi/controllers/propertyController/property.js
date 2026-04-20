@@ -74,18 +74,35 @@ const validatePropertyLandlords = async (businessId, landlords = []) => {
     return;
   }
 
+  const uniqueLandlordIds = Array.from(new Set(landlordIds.map((id) => String(id))));
+  if (uniqueLandlordIds.length !== landlordIds.length) {
+    const error = new Error("The same landlord cannot be linked to the property more than once.");
+    error.statusCode = 400;
+    throw error;
+  }
+
   const linkedLandlords = await Landlord.find({
-    _id: { $in: landlordIds },
+    _id: { $in: uniqueLandlordIds },
     company: businessId,
   })
-    .select("_id")
+    .select("_id status")
     .lean();
 
   const linkedIds = new Set(linkedLandlords.map((item) => String(item._id)));
-  const hasMismatch = landlordIds.some((id) => !linkedIds.has(String(id)));
+  const hasMismatch = uniqueLandlordIds.some((id) => !linkedIds.has(String(id)));
 
   if (hasMismatch) {
     const error = new Error("One or more selected landlords do not belong to this company.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const archivedLandlord = linkedLandlords.find(
+    (item) => String(item?.status || "").trim().toLowerCase() === "archived"
+  );
+
+  if (archivedLandlord) {
+    const error = new Error("Archived landlords cannot be linked to a property. Restore the landlord first.");
     error.statusCode = 400;
     throw error;
   }
@@ -1256,8 +1273,9 @@ export const getPropertyTenants = async (req, res, next) => {
     }
 
     const units = await Unit.find({ property: req.params.id }).distinct("_id");
-    const tenants = await Tenant.find({ unit: { $in: units } })
-      .populate("unit", "unitNumber rent");
+    const tenants = await Tenant.find({
+      $or: [{ unit: { $in: units } }, { additionalUnits: { $in: units } }],
+    }).populate("unit", "unitNumber rent");
 
     res.status(200).json(tenants);
   } catch (err) {

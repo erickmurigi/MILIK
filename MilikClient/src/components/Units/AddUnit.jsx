@@ -525,12 +525,24 @@ const AddUnit = () => {
     { value: "commercial", label: "Commercial" },
   ];
 
-  const statusOptions = [
-    { value: "vacant", label: "Vacant" },
-    { value: "occupied", label: "Occupied" },
-    { value: "maintenance", label: "Maintenance" },
-    { value: "reserved", label: "Reserved" },
-  ];
+  const statusOptions = useMemo(() => {
+    const baseOptions = [
+      { value: "vacant", label: "Vacant" },
+      { value: "maintenance", label: "Maintenance" },
+      { value: "reserved", label: "Reserved" },
+    ];
+
+    if (isEditMode && formData.status === "occupied") {
+      return [
+        { value: "vacant", label: "Vacant" },
+        { value: "occupied", label: "Occupied" },
+        { value: "maintenance", label: "Maintenance" },
+        { value: "reserved", label: "Reserved" },
+      ];
+    }
+
+    return baseOptions;
+  }, [formData.status, isEditMode]);
 
   return (
     <DashboardLayout>

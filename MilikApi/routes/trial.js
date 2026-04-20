@@ -11,10 +11,35 @@ import { attachAuthCookie } from "../utils/authCookie.js";
 
 const router = express.Router();
 const DEMO_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
-const DEMO_COMPANY_NAME = "MILIK DEMO WORKSPACE";
-const DEMO_COMPANY_EMAIL = "demo.workspace@milik.local";
-const DEMO_COMPANY_NAME_REGEX = /^milik\s+demo\s+workspace$/i;
 const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
+const DEMO_WORKSPACE_PROFILES = {
+  property_manager: {
+    role: "property_manager",
+    seedProfile: "property_manager",
+    envCompanyId: "DEMO_COMPANY_ID",
+    companyName: "MILIK DEMO WORKSPACE",
+    companyCode: "MLKDM",
+    email: "demo.workspace@milik.local",
+    phoneNo: "+254700000999",
+    companyMode: "property_manager",
+    slogan: "Guided property manager demo workspace",
+    responseMessage: "Property manager demo workspace ready",
+    resumeMessage: "Welcome back. Resuming your remaining property manager demo time.",
+  },
+  landlord: {
+    role: "landlord",
+    seedProfile: "self_managing_landlord",
+    envCompanyId: "LANDLORD_DEMO_COMPANY_ID",
+    companyName: "MILIK DEMO - SELF MANAGING LANDLORD",
+    companyCode: "MLKLD",
+    email: "demo.landlord.workspace@milik.local",
+    phoneNo: "+254700000998",
+    companyMode: "self_managing_landlord",
+    slogan: "Read-only self-managing landlord demo workspace",
+    responseMessage: "Self-managing landlord demo workspace ready",
+    resumeMessage: "Welcome back. Resuming your remaining landlord demo time.",
+  },
+};
 
 function env(name, fallback = "") {
   return String(process.env[name] || fallback).trim();
@@ -38,6 +63,14 @@ function normalizeText(value = "") {
 
 function isValidEmail(value = "") {
   return /^\S+@\S+\.\S+$/.test(String(value || "").trim());
+}
+
+function resolveDemoRole(value = "") {
+  return String(value || "").trim().toLowerCase() === "landlord" ? "landlord" : "property_manager";
+}
+
+function getDemoWorkspaceProfile(role = "property_manager") {
+  return DEMO_WORKSPACE_PROFILES[resolveDemoRole(role)] || DEMO_WORKSPACE_PROFILES.property_manager;
 }
 
 function toISOStringOrNull(value) {
@@ -74,7 +107,7 @@ function issueDemoToken(user, companyId, role, remainingMs) {
   );
 }
 
-function issueTrialAccessToken(trialRequest, remainingMs) {
+function issueTrialAccessToken(trialRequest, remainingMs, demoRole = "property_manager") {
   const expiresInSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
 
   return jwt.sign(
@@ -82,6 +115,7 @@ function issueTrialAccessToken(trialRequest, remainingMs) {
       trialRequestId: trialRequest?._id,
       email: trialRequest?.email,
       purpose: "trial_demo_access",
+      demoRole: resolveDemoRole(demoRole),
     },
     getJWTSecret(),
     { expiresIn: expiresInSeconds }
@@ -96,11 +130,14 @@ function verifyTrialAccessToken(accessToken) {
   return payload;
 }
 
-function buildDemoCompanyPayload() {
+
+function buildDemoCompanyPayload(role = "property_manager") {
   const fiscalYear = new Date().getFullYear();
+  const profile = getDemoWorkspaceProfile(role);
+
   return {
-    companyName: DEMO_COMPANY_NAME,
-    companyCode: "MLKDM",
+    companyName: profile.companyName,
+    companyCode: profile.companyCode,
     postalAddress: "Nairobi, Kenya",
     country: "Kenya",
     town: "Nairobi",
@@ -109,8 +146,10 @@ function buildDemoCompanyPayload() {
     fiscalStartMonth: "January",
     fiscalStartYear: fiscalYear,
     operationPeriodType: "Monthly",
-    email: DEMO_COMPANY_EMAIL,
-    phoneNo: "+254700000999",
+    email: profile.email,
+    phoneNo: profile.phoneNo,
+    slogan: profile.slogan,
+    companyMode: profile.companyMode,
     isActive: true,
     accountActive: true,
     accountStatus: "Active",
@@ -126,31 +165,37 @@ function buildDemoCompanyPayload() {
 async function loadCompanyForClient(companyId) {
   const company = await Company.findById(companyId)
     .select(
-      "companyName companyCode baseCurrency logo country town email phoneNo slogan modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus isDemoWorkspace"
+      "companyName companyCode baseCurrency logo country town email phoneNo slogan modules companyMode fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus isDemoWorkspace"
     )
     .lean();
 
   return company ? serializeCompanyForClient(company) : null;
 }
 
-function getDemoWorkspaceFilter() {
-  return { isDemoWorkspace: true };
+
+function getDemoWorkspaceFilter(role = "property_manager") {
+  const profile = getDemoWorkspaceProfile(role);
+  return {
+    isDemoWorkspace: true,
+    email: profile.email,
+  };
 }
 
-async function resolveDemoCompany() {
-  const configuredId = env("DEMO_COMPANY_ID");
-  const demoPayload = buildDemoCompanyPayload();
+async function resolveDemoCompany(role = "property_manager") {
+  const profile = getDemoWorkspaceProfile(role);
+  const configuredId = env(profile.envCompanyId);
+  const demoPayload = buildDemoCompanyPayload(profile.role);
 
   if (configuredId) {
     const configuredCompany = await Company.findById(configuredId).lean();
 
     if (!configuredCompany) {
-      throw new Error("Configured DEMO_COMPANY_ID was not found");
+      throw new Error(`Configured ${profile.envCompanyId} was not found`);
     }
 
     if (!configuredCompany.isDemoWorkspace) {
       throw new Error(
-        "Configured DEMO_COMPANY_ID must reference a dedicated demo workspace company with isDemoWorkspace=true"
+        `Configured ${profile.envCompanyId} must reference a dedicated demo workspace company with isDemoWorkspace=true`
       );
     }
 
@@ -163,7 +208,7 @@ async function resolveDemoCompany() {
     return Company.findById(configuredId).lean();
   }
 
-  const existingDemoCompany = await Company.findOne(getDemoWorkspaceFilter())
+  const existingDemoCompany = await Company.findOne(getDemoWorkspaceFilter(profile.role))
     .sort({ updatedAt: -1, createdAt: -1 })
     .lean();
 
@@ -186,8 +231,9 @@ async function resolveDemoCompany() {
   return Company.findById(createdDemoCompany._id).lean();
 }
 
-async function getOrCreateDemoUser(companyId) {
-  const demoEmail = `demo.pm.${companyId}@milik.local`;
+async function getOrCreateDemoUser(companyId, role = "property_manager") {
+  const resolvedRole = resolveDemoRole(role);
+  const demoEmail = `demo.${resolvedRole === "landlord" ? "landlord" : "pm"}.${companyId}@milik.local`;
   let user = await User.findOne({ company: companyId, email: demoEmail }).populate(
     "company",
     "companyName baseCurrency isDemoWorkspace modules"
@@ -195,8 +241,8 @@ async function getOrCreateDemoUser(companyId) {
 
   if (!user) {
     user = await User.create({
-      surname: "Demo",
-      otherNames: "Visitor",
+      surname: resolvedRole === "landlord" ? "Landlord" : "Demo",
+      otherNames: resolvedRole === "landlord" ? "Preview" : "Visitor",
       idNumber: `DEMO-${String(companyId).slice(-8).toUpperCase()}`,
       gender: "Other",
       postalAddress: "Demo Workspace",
@@ -317,7 +363,7 @@ async function dispatchTrialRequestNotification(trial, { shouldNotify = true } =
   }
 }
 
-async function dispatchDemoAccessEmail(trial, { demoExpiresAt, resumedDemo = false } = {}) {
+async function dispatchDemoAccessEmail(trial, { demoExpiresAt, resumedDemo = false, demoRole = null } = {}) {
   const remainingMs = getRemainingDemoMs(demoExpiresAt);
   if (remainingMs <= 0) {
     return {
@@ -328,7 +374,7 @@ async function dispatchDemoAccessEmail(trial, { demoExpiresAt, resumedDemo = fal
     };
   }
 
-  const accessToken = issueTrialAccessToken(trial, remainingMs);
+  const accessToken = issueTrialAccessToken(trial, remainingMs, demoRole || trial?.role || "property_manager");
 
   try {
     const result = await sendTrialAccessEmail({
@@ -355,6 +401,7 @@ async function dispatchDemoAccessEmail(trial, { demoExpiresAt, resumedDemo = fal
   }
 }
 
+
 async function buildActiveDemoSession({ trial, now = new Date(), roleOverride = null } = {}) {
   const persistedDemoExpiresAt = trial?.demoExpiresAt ? new Date(trial.demoExpiresAt) : null;
   const hasPersistedDemoWindow =
@@ -378,8 +425,19 @@ async function buildActiveDemoSession({ trial, now = new Date(), roleOverride = 
     };
   }
 
+  const requestedRole = resolveDemoRole(roleOverride || trial?.role || "property_manager");
+  const profile = getDemoWorkspaceProfile(requestedRole);
   const demoCompanyId = trial?.demoCompany;
-  const demoCompany = demoCompanyId ? await Company.findById(demoCompanyId).lean() : await resolveDemoCompany();
+  let demoCompany = demoCompanyId ? await Company.findById(demoCompanyId).lean() : null;
+
+  const companyMatchesRole =
+    demoCompany?._id &&
+    normalizeEmail(demoCompany?.email) === normalizeEmail(profile.email);
+
+  if (!companyMatchesRole) {
+    demoCompany = await resolveDemoCompany(requestedRole);
+  }
+
   if (!demoCompany?._id) {
     return {
       hasDemoWindow: true,
@@ -389,20 +447,22 @@ async function buildActiveDemoSession({ trial, now = new Date(), roleOverride = 
     };
   }
 
-  const demoUser = await getOrCreateDemoUser(demoCompany._id);
-  const demoSeed = await ensureDemoWorkspaceSeed({
+  const demoUser = await getOrCreateDemoUser(demoCompany._id, requestedRole);
+  const demoSeed = await seedDemoWorkspaceSafely({
     companyId: demoCompany._id,
     userId: demoUser._id,
+    demoProfile: profile.seedProfile,
   });
   const serializedCompany = await loadCompanyForClient(demoCompany._id);
   const remainingMs = getRemainingDemoMs(persistedDemoExpiresAt, now);
-  const token = issueDemoToken(demoUser, demoCompany._id, roleOverride || trial.role || "property_manager", remainingMs);
+  const token = issueDemoToken(demoUser, demoCompany._id, requestedRole, remainingMs);
 
   await TrialRequest.findByIdAndUpdate(trial._id, {
     $set: {
       status: "demo_started",
       demoTokenIssued: true,
       demoCompany: demoCompany._id,
+      role: requestedRole,
     },
   });
 
@@ -416,10 +476,27 @@ async function buildActiveDemoSession({ trial, now = new Date(), roleOverride = 
     user: buildDemoResponseUser(
       demoUser,
       serializedCompany,
-      roleOverride || trial.role || "property_manager",
+      requestedRole,
       persistedDemoExpiresAt.toISOString()
     ),
   };
+}
+
+async function seedDemoWorkspaceSafely({ companyId, userId, demoProfile }) {
+  try {
+    return await ensureDemoWorkspaceSeed({
+      companyId,
+      userId,
+      demoProfile,
+    });
+  } catch (_initialError) {
+    return ensureDemoWorkspaceSeed({
+      companyId,
+      userId,
+      demoProfile,
+      forceReseed: true,
+    });
+  }
 }
 
 
@@ -475,27 +552,13 @@ router.post("/", async (req, res) => {
 
     const persistedDemoExpiresAt = trial.demoExpiresAt ? new Date(trial.demoExpiresAt) : null;
     const hasActiveDemoWindow =
-      role === "property_manager" &&
       persistedDemoExpiresAt instanceof Date &&
       !Number.isNaN(persistedDemoExpiresAt.getTime()) &&
       persistedDemoExpiresAt.getTime() > now.getTime();
 
     const emailNotification = await dispatchTrialRequestNotification(trial, {
-      shouldNotify: !(role === "property_manager" && hasActiveDemoWindow),
+      shouldNotify: !hasActiveDemoWindow,
     });
-
-    if (role !== "property_manager") {
-      return res.status(201).json({
-        success: true,
-        demoAvailable: false,
-        resumedDemo: false,
-        demoExpired: false,
-        message:
-          "Thanks. Your landlord preview request has been received. We will contact you with the landlord-facing walkthrough shortly.",
-        trialRequestId: trial._id,
-        emailNotification,
-      });
-    }
 
     const activeDemoSession = await buildActiveDemoSession({
       trial,
@@ -533,6 +596,7 @@ router.post("/", async (req, res) => {
       const accessEmailNotification = await dispatchDemoAccessEmail(trial, {
         demoExpiresAt: activeDemoSession.demoExpiresAt,
         resumedDemo: true,
+        demoRole: role,
       });
 
       attachAuthCookie(res, activeDemoSession.token);
@@ -542,7 +606,7 @@ router.post("/", async (req, res) => {
         demoAvailable: true,
         resumedDemo: true,
         demoExpired: false,
-        message: "Welcome back. Resuming your remaining demo time.",
+        message: getDemoWorkspaceProfile(role).resumeMessage,
         redirectTo: "/dashboard",
         token: activeDemoSession.token,
         user: activeDemoSession.user,
@@ -554,7 +618,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const demoCompany = await resolveDemoCompany();
+    const demoCompany = await resolveDemoCompany(role);
     if (!demoCompany?._id) {
       return res.status(201).json({
         success: true,
@@ -568,10 +632,11 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const demoUser = await getOrCreateDemoUser(demoCompany._id);
-    const demoSeed = await ensureDemoWorkspaceSeed({
+    const demoUser = await getOrCreateDemoUser(demoCompany._id, role);
+    const demoSeed = await seedDemoWorkspaceSafely({
       companyId: demoCompany._id,
       userId: demoUser._id,
+      demoProfile: getDemoWorkspaceProfile(role).seedProfile,
     });
     const serializedCompany = await loadCompanyForClient(demoCompany._id);
     const demoExpiresAt = new Date(now.getTime() + DEMO_DURATION_MS);
@@ -598,6 +663,7 @@ router.post("/", async (req, res) => {
     const accessEmailNotification = await dispatchDemoAccessEmail(trial, {
       demoExpiresAt,
       resumedDemo: false,
+      demoRole: role,
     });
 
     attachAuthCookie(res, token);
@@ -607,7 +673,7 @@ router.post("/", async (req, res) => {
       demoAvailable: true,
       resumedDemo: false,
       demoExpired: false,
-      message: "Demo workspace ready",
+      message: getDemoWorkspaceProfile(role).responseMessage,
       redirectTo: "/dashboard",
       token,
       user: buildDemoResponseUser(demoUser, serializedCompany, role, demoExpiresAt.toISOString()),
@@ -655,7 +721,7 @@ router.post("/access", async (req, res) => {
     const activeDemoSession = await buildActiveDemoSession({
       trial,
       now,
-      roleOverride: "property_manager",
+      roleOverride: payload?.demoRole || trial?.role || "property_manager",
     });
 
     if (!activeDemoSession.hasDemoWindow || activeDemoSession.unavailable) {
@@ -684,7 +750,7 @@ router.post("/access", async (req, res) => {
       demoAvailable: true,
       resumedDemo: true,
       demoExpired: false,
-      message: "Welcome back. Resuming your remaining demo time.",
+      message: getDemoWorkspaceProfile(payload?.demoRole || trial?.role || "property_manager").resumeMessage,
       redirectTo: "/dashboard",
       token: activeDemoSession.token,
       user: activeDemoSession.user,

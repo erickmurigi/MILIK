@@ -57,6 +57,12 @@ const normalizeMoney = (value, fallback = 0) => {
   return Number.isFinite(numeric) ? numeric : fallback;
 };
 
+const resolvePrimaryLandlordIdFromProperty = (property = null) => {
+  const landlords = Array.isArray(property?.landlords) ? property.landlords : [];
+  const primary = landlords.find((entry) => entry?.isPrimary && entry?.landlordId) || landlords[0] || null;
+  return normalizeObjectId(primary?.landlordId || null);
+};
+
 const addDays = (dateValue, days) => {
   const date = new Date(dateValue);
   if (Number.isNaN(date.getTime())) return null;
@@ -90,8 +96,8 @@ const populateLeaseQuery = (query) =>
   query
     .populate("tenant", "name tenantCode email phone idNumber leaseType moveInDate moveOutDate status")
     .populate("unit", "unitNumber unitName property rent status")
-    .populate("unit.property", "propertyName propertyCode name address landlord")
-    .populate("landlord", "name fullName landlordCode phone");
+    .populate("unit.property", "propertyName propertyCode name address landlords")
+    .populate("landlord", "landlordName landlordCode phoneNumber email");
 
 const buildAgreementNumber = async (businessId) => {
   const year = new Date().getFullYear();
@@ -120,7 +126,7 @@ const ensureTenantAndUnitMatchBusiness = async ({ businessId, tenantId, unitId }
   }
 
   const unit = await Unit.findOne({ _id: unitId, business: businessId })
-    .populate("property", "landlord propertyName propertyCode name")
+    .populate("property", "landlords propertyName propertyCode name")
     .lean();
   if (!unit) {
     return { error: "Unit not found for the selected company." };
@@ -218,7 +224,10 @@ const sanitizeLeasePayload = async ({ req, payload = {}, existingLease = null } 
     agreementNumber: agreementNumber || (existingLease?.agreementNumber || (await buildAgreementNumber(businessId))),
     tenant: tenantId,
     unit: unitId,
-    landlord: normalizeObjectId(payload.landlord || existingLease?.landlord || unit?.property?.landlord) || null,
+    landlord:
+      normalizeObjectId(
+        payload.landlord || existingLease?.landlord || resolvePrimaryLandlordIdFromProperty(unit?.property)
+      ) || null,
     leaseType: normalizeLeaseType(payload.leaseType, existingLease?.leaseType || tenant?.leaseType || "fixed"),
     startDate,
     endDate,
