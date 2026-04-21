@@ -81,6 +81,76 @@ const safeId = (value) => {
 
 const buildPeriodKey = (year, month) => `${year}-${String(Number(month) + 1).padStart(2, "0")}`;
 
+const normalizeBillingPeriodKey = (value = "") =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+
+const BILLING_PERIOD_ALIASES = {
+  monthly: "monthly",
+  quarter: "quarterly",
+  quarterly: "quarterly",
+  annually: "annual",
+  annual: "annual",
+  yearly: "annual",
+  semi_annual: "semi_annual",
+  semiannual: "semi_annual",
+  semi_annually: "semi_annual",
+  biannual: "semi_annual",
+  bi_annually: "semi_annual",
+  bi_monthly: "bi_monthly",
+  bimonthly: "bi_monthly",
+};
+
+const canonicalBillingPeriodKey = (value = "") => {
+  const normalized = normalizeBillingPeriodKey(value);
+  return BILLING_PERIOD_ALIASES[normalized] || normalized || "monthly";
+};
+
+const normalizeBillingPeriods = (settings = null) => {
+  const source = Array.isArray(settings?.billingPeriods) ? settings.billingPeriods : [];
+  const normalized = source
+    .filter((item) => item?.isActive !== false)
+    .map((item) => ({
+      key: canonicalBillingPeriodKey(item?.key || item?.name || "monthly"),
+      name: String(item?.name || "Billing Period").trim() || "Billing Period",
+      durationInMonths: Math.max(1, Number(item?.durationInMonths || 1)),
+    }))
+    .filter((item, index, arr) => item.key && arr.findIndex((entry) => entry.key === item.key) === index);
+
+  return normalized.length > 0 ? normalized : [{ key: "monthly", name: "Monthly", durationInMonths: 1 }];
+};
+
+const addMonthsPreservingDay = (dateValue, monthsToAdd = 1) => {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  const originalDay = date.getDate();
+  const next = new Date(date.getFullYear(), date.getMonth() + Number(monthsToAdd || 0), 1);
+  const maxDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(originalDay, maxDay));
+  next.setHours(date.getHours(), date.getMinutes(), date.getSeconds(), date.getMilliseconds());
+  return next;
+};
+
+const buildScheduleLabel = ({ startDate, endDate, billingPeriod }) => {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "-";
+  if (Number(billingPeriod?.durationInMonths || 1) <= 1) {
+    return start.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+  }
+  return `${start.toLocaleDateString("en-US", { month: "short", year: "2-digit" })} - ${end.toLocaleDateString("en-US", { month: "short", year: "2-digit" })}`;
+};
+
+const buildSchedulePeriodKey = ({ startDate, billingPeriodKey = "monthly" }) => {
+  const dt = new Date(startDate);
+  if (Number.isNaN(dt.getTime())) return `monthly:${new Date().toISOString()}`;
+  return `${canonicalBillingPeriodKey(billingPeriodKey)}:${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+};
+
 const formatInputDate = (value) => {
   if (!value) return "";
   const dt = new Date(value);
@@ -169,7 +239,7 @@ const TenantStatement = () => {
 
   const initialRequestedTab = String(location.state?.initialTab || "statement").trim().toLowerCase();
   const [activeTab, setActiveTab] = useState(
-    ["statement", "billing", "details", "charges", "reviews", "actions"].includes(initialRequestedTab)
+    ["statement", "billing", "reviews"].includes(initialRequestedTab)
       ? initialRequestedTab
       : "statement"
   );
@@ -179,15 +249,7 @@ const TenantStatement = () => {
   const [reviewFormOpen, setReviewFormOpen] = useState(false);
   const [allocationTraceTarget, setAllocationTraceTarget] = useState(null);
   const [editingReviewId, setEditingReviewId] = useState(null);
-  const [reviewRecords, setReviewRecords] = useState(() => {
-    try {
-      const storageKey = `rentReviews_${tenantId}`;
-      const stored = localStorage.getItem(storageKey);
-      return stored ? JSON.parse(stored) : [];
-    } catch (error) {
-      return [];
-    }
-  });
+  const [reviewRecords, setReviewRecords] = useState([]);
   const [reviewForm, setReviewForm] = useState({
     type: "percentage",
     value: 5,
@@ -236,7 +298,7 @@ const TenantStatement = () => {
 
   useEffect(() => {
     const requestedTab = String(location.state?.initialTab || "").trim().toLowerCase();
-    const allowedTabs = ["statement", "billing", "details", "charges", "reviews", "actions"];
+    const allowedTabs = ["statement", "billing", "reviews"];
 
     if (requestedTab && allowedTabs.includes(requestedTab)) {
       setActiveTab(requestedTab);
@@ -374,8 +436,31 @@ const TenantStatement = () => {
   };
 
   const tenantLease = useMemo(() => {
-    return leasesFromStore.find((lease) => safeId(lease?.tenant) === safeId(tenantId));
-  }, [leasesFromStore, tenantId]);
+    const tenantKey = safeId(tenantId);
+    const tenantUnitKey = safeId(tenant?.unit?._id || tenant?.unit);
+    const tenantLeases = (Array.isArray(leasesFromStore) ? leasesFromStore : []).filter((lease) => {
+      const leaseTenantKey = safeId(lease?.tenant);
+      const leaseUnitKey = safeId(lease?.unit);
+      return (tenantKey && leaseTenantKey === tenantKey) || (tenantUnitKey && leaseUnitKey === tenantUnitKey);
+    });
+
+    if (tenantLeases.length === 0) return null;
+
+    const preferredStatuses = ["active", "pending_signature", "draft", "renewed", "expired", "terminated", "cancelled"];
+    tenantLeases.sort((a, b) => {
+      const statusRankA = preferredStatuses.indexOf(String(a?.status || "").toLowerCase());
+      const statusRankB = preferredStatuses.indexOf(String(b?.status || "").toLowerCase());
+      const normalizedRankA = statusRankA === -1 ? preferredStatuses.length : statusRankA;
+      const normalizedRankB = statusRankB === -1 ? preferredStatuses.length : statusRankB;
+      if (normalizedRankA !== normalizedRankB) return normalizedRankA - normalizedRankB;
+
+      const startA = new Date(a?.startDate || a?.createdAt || 0).getTime();
+      const startB = new Date(b?.startDate || b?.createdAt || 0).getTime();
+      return startB - startA;
+    });
+
+    return tenantLeases[0] || null;
+  }, [leasesFromStore, tenantId, tenant?.unit]);
 
   useEffect(() => {
     const rows = Array.isArray(tenantLease?.billingScheduleAdjustments)
@@ -394,19 +479,9 @@ const TenantStatement = () => {
   }, [localBillingScheduleAdjustments]);
 
   useEffect(() => {
-    try {
-      const storageKey = `rentReviews_${tenantId}`;
-      const stored = localStorage.getItem(storageKey);
-      setReviewRecords(stored ? JSON.parse(stored) : []);
-    } catch (error) {
-      setReviewRecords([]);
-    }
-  }, [tenantId]);
-
-  useEffect(() => {
-    const storageKey = `rentReviews_${tenantId}`;
-    localStorage.setItem(storageKey, JSON.stringify(reviewRecords));
-  }, [reviewRecords, tenantId]);
+    const rows = Array.isArray(tenantLease?.rentReviewRecords) ? tenantLease.rentReviewRecords : [];
+    setReviewRecords(rows);
+  }, [tenantLease]);
 
   useEffect(() => {
     document.title = "MILIK";
@@ -494,7 +569,7 @@ const TenantStatement = () => {
     toast.info("Invoice cancellation is not enabled in the current backend route yet.");
   };
 
-  const getInvoicesForPeriod = (periodLabel, categories = ["RENT_CHARGE", "UTILITY_CHARGE"]) => {
+  const getInvoicesForPeriod = (periodRow, categories = ["RENT_CHARGE", "UTILITY_CHARGE"]) => {
     const allowedCategories = Array.isArray(categories)
       ? categories.map((category) => String(category || "").toUpperCase())
       : [];
@@ -503,11 +578,14 @@ const TenantStatement = () => {
       const invoicePeriod = formatPeriodLabel(invoice?.invoiceDate || invoice?.createdAt);
       const status = String(invoice?.status || "").toLowerCase();
       const invoiceCategory = String(invoice?.category || "").toUpperCase();
+      const metadataPeriodKey = String(invoice?.metadata?.periodKey || "").trim();
+      const rowPeriodKey = String(periodRow?.periodKey || "").trim();
 
       return (
-        invoicePeriod === periodLabel &&
         !["cancelled", "reversed"].includes(status) &&
-        (allowedCategories.length === 0 || allowedCategories.includes(invoiceCategory))
+        (allowedCategories.length === 0 || allowedCategories.includes(invoiceCategory)) &&
+        ((metadataPeriodKey && rowPeriodKey && metadataPeriodKey === rowPeriodKey) ||
+          (!metadataPeriodKey && invoicePeriod === periodRow?.description))
       );
     });
   };
@@ -566,8 +644,8 @@ const TenantStatement = () => {
       }
 
       for (const period of periodsWithoutInvoices) {
-        const periodDate = new Date(period.periodYear, period.periodMonth, 1);
-        const dueDate = new Date(period.periodYear, period.periodMonth, 5);
+        const periodDate = period.fromRaw ? new Date(period.fromRaw) : new Date(period.periodYear, period.periodMonth, 1);
+        const dueDate = period.dueDateRaw ? new Date(period.dueDateRaw) : new Date(period.periodYear, period.periodMonth, 5);
 
         if (billingMode === "separate") {
           if (Number(period.rent || 0) > 0) {
@@ -579,6 +657,14 @@ const TenantStatement = () => {
               description: buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: "Rent" }),
               invoiceDate: periodDate,
               dueDate,
+              metadata: {
+                periodKey: period.periodKey,
+                billingPeriodKey: period.billingPeriodKey,
+                billingPeriodLabel: period.billingPeriodLabel,
+                periodFromDate: period.fromRaw,
+                periodToDate: period.toRaw,
+                sourceTransactionType: "billing_schedule",
+              },
               ...taxPayload,
             });
           }
@@ -602,7 +688,15 @@ const TenantStatement = () => {
               }),
               invoiceDate: periodDate,
               dueDate,
-              metadata: buildUtilityInvoiceMetadata(utilityLabel),
+              metadata: {
+                ...(buildUtilityInvoiceMetadata(utilityLabel) || {}),
+                periodKey: period.periodKey,
+                billingPeriodKey: period.billingPeriodKey,
+                billingPeriodLabel: period.billingPeriodLabel,
+                periodFromDate: period.fromRaw,
+                periodToDate: period.toRaw,
+                sourceTransactionType: "billing_schedule",
+              },
               ...taxPayload,
             });
           }
@@ -620,13 +714,21 @@ const TenantStatement = () => {
                   : buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: "Rent" }),
               invoiceDate: periodDate,
               dueDate,
-              metadata: buildCombinedInvoiceMetadata({
-                utilityAmount: Number(period.utility || 0),
-                utilityLabel: Array.isArray(period.utilityNames) && period.utilityNames.length > 0
-                  ? period.utilityNames.join(", ")
-                  : "Utility",
-                periodLabel: period.description,
-              }),
+              metadata: {
+                ...(buildCombinedInvoiceMetadata({
+                  utilityAmount: Number(period.utility || 0),
+                  utilityLabel: Array.isArray(period.utilityNames) && period.utilityNames.length > 0
+                    ? period.utilityNames.join(", ")
+                    : "Utility",
+                  periodLabel: period.description,
+                }) || {}),
+                periodKey: period.periodKey,
+                billingPeriodKey: period.billingPeriodKey,
+                billingPeriodLabel: period.billingPeriodLabel,
+                periodFromDate: period.fromRaw,
+                periodToDate: period.toRaw,
+                sourceTransactionType: "billing_schedule",
+              },
               ...taxPayload,
             });
           }
@@ -653,8 +755,8 @@ const TenantStatement = () => {
           return;
         }
 
-        const depositInvoiceDate = new Date(depositPeriod.periodYear, depositPeriod.periodMonth, 1);
-        const depositDueDate = new Date(depositPeriod.periodYear, depositPeriod.periodMonth, 5);
+        const depositInvoiceDate = depositPeriod.fromRaw ? new Date(depositPeriod.fromRaw) : new Date(depositPeriod.periodYear, depositPeriod.periodMonth, 1);
+        const depositDueDate = depositPeriod.dueDateRaw ? new Date(depositPeriod.dueDateRaw) : new Date(depositPeriod.periodYear, depositPeriod.periodMonth, 5);
 
         await createTenantInvoice({
           ...invoiceContext,
@@ -671,6 +773,11 @@ const TenantStatement = () => {
             sourceTransactionType: "tenant_statement_deposit",
             includeInLandlordStatement: false,
             includeInCategoryTotals: false,
+            periodKey: depositPeriod.periodKey,
+            billingPeriodKey: depositPeriod.billingPeriodKey,
+            billingPeriodLabel: depositPeriod.billingPeriodLabel,
+            periodFromDate: depositPeriod.fromRaw,
+            periodToDate: depositPeriod.toRaw,
           },
         });
 
@@ -1135,6 +1242,7 @@ const TenantStatement = () => {
 
   const billingScheduleData = useMemo(() => {
     const baseRent = tenantLease?.rentAmount || tenant?.rent || 23000;
+    const companyBillingPeriods = normalizeBillingPeriods(companyTaxConfig);
 
     let tenantUtilities = [];
     let serviceCharge = 0;
@@ -1192,48 +1300,74 @@ const TenantStatement = () => {
       scheduleEndDate = new Date(scheduleStartDate.getTime() + 2 * 365 * 24 * 60 * 60 * 1000);
     }
 
+    const tenantUnitId = tenant?.unit?._id || tenant?.unit;
+    const matchedUnit = Array.isArray(unitsFromStore)
+      ? unitsFromStore.find((unit) => String(unit?._id || "") === String(tenantUnitId || ""))
+      : null;
+    const selectedBillingPeriodKey = canonicalBillingPeriodKey(
+      tenantLease?.billingPeriodKey ||
+        tenant?.billingPeriodKey ||
+        tenant?.billingFrequency ||
+        tenant?.unit?.billingPeriodKey ||
+        tenant?.unit?.billingFrequency ||
+        matchedUnit?.billingPeriodKey ||
+        matchedUnit?.billingFrequency ||
+        "monthly"
+    );
+    const selectedBillingPeriod =
+      companyBillingPeriods.find((item) => item.key === selectedBillingPeriodKey) ||
+      companyBillingPeriods.find((item) => item.key === "monthly") ||
+      { key: "monthly", name: "Monthly", durationInMonths: 1 };
+    const paymentDueDay = Math.max(1, Math.min(28, Number(tenantLease?.paymentDueDay || 5)));
+
     let currentDate = new Date(scheduleStartDate);
-    currentDate.setDate(1);
+    currentDate.setHours(0, 0, 0, 0);
 
     while (currentDate < scheduleEndDate) {
-      const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-      const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-      const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
-      const monthName = currentDate.toLocaleDateString("en-US", {
-        month: "short",
-        year: "2-digit",
-      });
-      const periodKey = buildPeriodKey(currentDate.getFullYear(), currentDate.getMonth());
-      const adjustment = billingScheduleAdjustmentsByPeriod[periodKey] || null;
+      const nextDate = addMonthsPreservingDay(currentDate, selectedBillingPeriod.durationInMonths) || new Date(scheduleEndDate);
+      const periodEnd = new Date(Math.min(nextDate.getTime() - 1, scheduleEndDate.getTime()));
+      const periodKey = buildSchedulePeriodKey({ startDate: currentDate, billingPeriodKey: selectedBillingPeriod.key });
+      const adjustment = billingScheduleAdjustmentsByPeriod[periodKey] || billingScheduleAdjustmentsByPeriod[buildPeriodKey(currentDate.getFullYear(), currentDate.getMonth())] || null;
 
       if (adjustment?.status === "deleted") {
         currentDate = nextDate;
         continue;
       }
 
-      const periodInvoices = getInvoicesForPeriod(monthName);
+      const resolvedFromDate = adjustment?.fromDate || currentDate;
+      const resolvedToDate = adjustment?.toDate || periodEnd;
+      const periodInvoices = getInvoicesForPeriod({
+        periodKey,
+        description: buildScheduleLabel({
+          startDate: resolvedFromDate,
+          endDate: resolvedToDate,
+          billingPeriod: selectedBillingPeriod,
+        }),
+      });
       const createdInvoiceNumber = periodInvoices
         .map((item) => item.invoiceNumber)
         .filter(Boolean)
         .join(", ");
       const hasCreatedInvoice = periodInvoices.length > 0;
 
-      const resolvedRent = Number(adjustment?.rentAmount ?? baseRent);
-      const resolvedUtility = Number(adjustment?.utilityAmount ?? serviceCharge);
+      const resolvedRent = Number(adjustment?.rentAmount ?? baseRent * selectedBillingPeriod.durationInMonths);
+      const resolvedUtility = Number(adjustment?.utilityAmount ?? serviceCharge * selectedBillingPeriod.durationInMonths);
       const resolvedUtilityNames =
         Array.isArray(adjustment?.utilityNames) && adjustment.utilityNames.length > 0
           ? adjustment.utilityNames
           : tenantUtilityNames;
-      const resolvedFromDate = adjustment?.fromDate || monthStart;
-      const resolvedToDate = adjustment?.toDate || monthEnd;
       const isFrozen = adjustment?.status === "frozen";
+      const dueDate = new Date(resolvedFromDate);
+      dueDate.setDate(Math.min(paymentDueDay, new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0).getDate()));
+      dueDate.setHours(23, 59, 59, 999);
 
       scheduleData.push({
         from: formatDisplayDate(resolvedFromDate),
         to: formatDisplayDate(resolvedToDate),
         fromRaw: formatInputDate(resolvedFromDate),
         toRaw: formatInputDate(resolvedToDate),
-        description: monthName,
+        dueDateRaw: formatInputDate(dueDate),
+        description: buildScheduleLabel({ startDate: resolvedFromDate, endDate: resolvedToDate, billingPeriod: selectedBillingPeriod }),
         rent: resolvedRent,
         utility: resolvedUtility,
         utilityNames: resolvedUtilityNames.length > 0 ? resolvedUtilityNames : [],
@@ -1245,13 +1379,16 @@ const TenantStatement = () => {
         periodMonth: currentDate.getMonth(),
         periodYear: currentDate.getFullYear(),
         periodKey,
+        billingPeriodKey: selectedBillingPeriod.key,
+        billingPeriodLabel: selectedBillingPeriod.name,
+        intervalMonths: selectedBillingPeriod.durationInMonths,
       });
 
       currentDate = nextDate;
     }
 
     return scheduleData;
-  }, [tenantLease, tenant, unitsFromStore, tenantInvoices, billingScheduleAdjustmentsByPeriod]);
+  }, [tenantLease, tenant, unitsFromStore, tenantInvoices, billingScheduleAdjustmentsByPeriod, companyTaxConfig]);
 
   const billingScheduleByKey = useMemo(() => {
     return new Map((billingScheduleData || []).map((row) => [row.periodKey, row]));
@@ -1338,10 +1475,7 @@ const TenantStatement = () => {
   const tabs = [
     { id: "statement", label: "Tenant Statement", icon: <FaFileInvoiceDollar /> },
     { id: "billing", label: "Billing Schedule", icon: <FaCalendarAlt /> },
-    { id: "details", label: "Tenant Details", icon: <FaUser /> },
-    { id: "charges", label: "Standing Charges", icon: <FaMoneyBillWave /> },
     { id: "reviews", label: "Rent Reviews / Escalations", icon: <FaChartBar /> },
-    { id: "actions", label: "Actions", icon: <FaCog /> },
   ];
 
   const handlePrint = () => {
@@ -1670,21 +1804,40 @@ const TenantStatement = () => {
     };
 
     const persistScheduleAdjustments = async (updater, successMessage) => {
-      if (!safeId(tenantLease?._id)) {
-        toast.error("Active lease not found for this tenant.");
-        return false;
-      }
-
       const currentAdjustments = Array.isArray(localBillingScheduleAdjustments)
         ? localBillingScheduleAdjustments
         : [];
 
       try {
         setSavingScheduleAction(true);
+
+        let targetLeaseId = safeId(tenantLease?._id);
+        if (!targetLeaseId && currentCompany?._id) {
+          const refreshedLeases = await getLeases(dispatch, currentCompany._id, null, tenantId);
+          const refreshedLeaseList = Array.isArray(refreshedLeases)
+            ? refreshedLeases
+            : Array.isArray(refreshedLeases?.data)
+            ? refreshedLeases.data
+            : [];
+          const tenantKey = safeId(tenantId);
+          const tenantUnitKey = safeId(tenant?.unit?._id || tenant?.unit);
+          const matchedLease = refreshedLeaseList.find((lease) => {
+            const leaseTenantKey = safeId(lease?.tenant);
+            const leaseUnitKey = safeId(lease?.unit);
+            return (tenantKey && leaseTenantKey === tenantKey) || (tenantUnitKey && leaseUnitKey === tenantUnitKey);
+          });
+          targetLeaseId = safeId(matchedLease?._id);
+        }
+
+        if (!targetLeaseId) {
+          toast.error("No lease record was found for this tenant. Save or restore the tenant agreement first.");
+          return false;
+        }
+
         const nextAdjustments = updater([...currentAdjustments]);
         setLocalBillingScheduleAdjustments(nextAdjustments);
 
-        await updateLease(dispatch, tenantLease._id, {
+        await updateLease(dispatch, targetLeaseId, {
           billingScheduleAdjustments: nextAdjustments,
         });
 
@@ -1699,6 +1852,55 @@ const TenantStatement = () => {
         return false;
       } finally {
         setSavingScheduleAction(false);
+      }
+    };
+
+    const persistRentReviewRecords = async (nextReviewRecords, nextScheduleAdjustments = localBillingScheduleAdjustments, successMessage = "Rent review changes saved") => {
+      try {
+        let targetLeaseId = safeId(tenantLease?._id);
+        if (!targetLeaseId && currentCompany?._id) {
+          const refreshedLeases = await getLeases(dispatch, currentCompany._id, null, tenantId);
+          const refreshedLeaseList = Array.isArray(refreshedLeases)
+            ? refreshedLeases
+            : Array.isArray(refreshedLeases?.data)
+            ? refreshedLeases.data
+            : [];
+          const tenantKey = safeId(tenantId);
+          const tenantUnitKey = safeId(tenant?.unit?._id || tenant?.unit);
+          const matchedLease = refreshedLeaseList.find((lease) => {
+            const leaseTenantKey = safeId(lease?.tenant);
+            const leaseUnitKey = safeId(lease?.unit);
+            return (tenantKey && leaseTenantKey === tenantKey) || (tenantUnitKey && leaseUnitKey === tenantUnitKey);
+          });
+          targetLeaseId = safeId(matchedLease?._id);
+        }
+
+        if (!targetLeaseId) {
+          toast.error("No lease record was found for this tenant. Save or restore the tenant agreement first.");
+          return false;
+        }
+
+        setReviewRecords(nextReviewRecords);
+        if (Array.isArray(nextScheduleAdjustments)) {
+          setLocalBillingScheduleAdjustments(nextScheduleAdjustments);
+        }
+
+        await updateLease(dispatch, targetLeaseId, {
+          rentReviewRecords: nextReviewRecords,
+          billingScheduleAdjustments: Array.isArray(nextScheduleAdjustments)
+            ? nextScheduleAdjustments
+            : localBillingScheduleAdjustments,
+        });
+
+        if (currentCompany?._id) {
+          await getLeases(dispatch, currentCompany._id, null, tenantId);
+        }
+
+        toast.success(successMessage);
+        return true;
+      } catch (error) {
+        toast.error(error?.response?.data?.message || error?.message || "Rent review action failed");
+        return false;
       }
     };
 
@@ -1749,21 +1951,18 @@ const TenantStatement = () => {
         return;
       }
 
-      const matchingInvoices = tenantInvoices.filter((invoice) => {
-        const invoicePeriod = formatPeriodLabel(invoice?.invoiceDate || invoice?.createdAt);
-        const category = String(invoice?.category || "").toUpperCase();
-        return (
-          ["RENT_CHARGE", "UTILITY_CHARGE"].includes(category) &&
-          invoicedPeriods.some((row) => row.description === invoicePeriod)
-        );
-      });
+      const matchingInvoices = invoicedPeriods.flatMap((row) =>
+        getInvoicesForPeriod(row, ["RENT_CHARGE", "UTILITY_CHARGE"])
+      );
+      const uniqueInvoices = Array.from(new Map(matchingInvoices.map((invoice) => [safeId(invoice), invoice])).values());
 
-      if (matchingInvoices.length === 0) {
+
+      if (uniqueInvoices.length === 0) {
         toast.warning("No matching invoices were found to cancel.");
         return;
       }
 
-      const nonDeletable = matchingInvoices.filter((invoice) =>
+      const nonDeletable = uniqueInvoices.filter((invoice) =>
         ["paid", "partially_paid"].includes(String(invoice?.status || "").toLowerCase())
       );
 
@@ -1774,7 +1973,7 @@ const TenantStatement = () => {
 
       try {
         setSavingScheduleAction(true);
-        for (const invoice of matchingInvoices) {
+        for (const invoice of uniqueInvoices) {
           await deleteTenantInvoice(invoice._id);
         }
         toast.success("Selected invoice booking(s) cancelled successfully.");
@@ -2546,7 +2745,11 @@ const TenantStatement = () => {
       setReviewFormOpen(false);
     };
 
-    const handleSaveReview = () => {
+    const handleSaveReview = async () => {
+      if (!tenantLease?._id) {
+        toast.error("An active lease is required before saving rent reviews.");
+        return;
+      }
       if (!reviewForm.effectiveDate) {
         toast.error("Effective date is required");
         return;
@@ -2556,30 +2759,37 @@ const TenantStatement = () => {
         return;
       }
 
-      if (editingReviewId) {
-        setReviewRecords((prev) =>
-          prev.map((record) =>
+      const timestamp = new Date().toISOString();
+      const nextRecords = editingReviewId
+        ? reviewRecords.map((record) =>
             record.id === editingReviewId
               ? {
                   ...record,
                   ...reviewForm,
-                  updatedAt: new Date().toISOString(),
+                  updatedAt: timestamp,
+                  previousRent: Number(record.previousRent || baseRent),
+                  resultingRent: computeNewRent(Number(record.previousRent || baseRent), reviewForm.type, reviewForm.value),
                 }
               : record
           )
-        );
-        toast.success("Review updated");
-      } else {
-        const newRecord = {
-          id: `REV-${Date.now()}`,
-          ...reviewForm,
-          status: "Scheduled",
-          createdAt: new Date().toISOString(),
-        };
-        setReviewRecords((prev) => [...prev, newRecord]);
-        toast.success("Review created");
+        : [
+            ...reviewRecords,
+            {
+              id: `REV-${Date.now()}`,
+              reviewType: "review",
+              ...reviewForm,
+              status: "Scheduled",
+              previousRent: Number(currentEffectiveRent || baseRent),
+              resultingRent: computeNewRent(Number(currentEffectiveRent || baseRent), reviewForm.type, reviewForm.value),
+              createdAt: timestamp,
+              updatedAt: timestamp,
+            },
+          ];
+
+      const saved = await persistRentReviewRecords(nextRecords, localBillingScheduleAdjustments, editingReviewId ? "Review updated" : "Review created");
+      if (saved) {
+        resetReviewForm();
       }
-      resetReviewForm();
     };
 
     const handleEditReview = (record) => {
@@ -2594,21 +2804,86 @@ const TenantStatement = () => {
       setReviewFormOpen(true);
     };
 
-    const handleDeleteReview = (reviewId) => {
-      setReviewRecords((prev) => prev.filter((record) => record.id !== reviewId));
-      toast.success("Review deleted");
-      if (editingReviewId === reviewId) resetReviewForm();
+    const handleDeleteReview = async (reviewId) => {
+      const target = reviewRecords.find((record) => record.id === reviewId);
+      if (String(target?.status || "") === "Applied") {
+        toast.warning("Applied reviews are locked to preserve billing history.");
+        return;
+      }
+
+      const nextRecords = reviewRecords.filter((record) => record.id !== reviewId);
+      const saved = await persistRentReviewRecords(nextRecords, localBillingScheduleAdjustments, "Review deleted");
+      if (saved && editingReviewId === reviewId) resetReviewForm();
     };
 
-    const handleApplyReview = (reviewId) => {
-      setReviewRecords((prev) =>
-        prev.map((record) =>
-          record.id === reviewId
-            ? { ...record, status: "Applied", appliedAt: new Date().toISOString() }
-            : record
-        )
+    const handleApplyReview = async (reviewId) => {
+      const target = computedRows.find((record) => record.id === reviewId);
+      if (!target) {
+        toast.error("Review record not found");
+        return;
+      }
+      if (String(target.status || "") === "Applied") {
+        toast.info("This review has already been applied.");
+        return;
+      }
+
+      const effectiveDate = new Date(target.effectiveDate);
+      if (Number.isNaN(effectiveDate.getTime())) {
+        toast.error("Review effective date is invalid.");
+        return;
+      }
+
+      const nextRecords = reviewRecords.map((record) =>
+        record.id === reviewId
+          ? {
+              ...record,
+              status: "Applied",
+              appliedAt: new Date().toISOString(),
+              previousRent: Number(target.previousRent || baseRent),
+              resultingRent: Number(target.resultingRent || baseRent),
+              updatedAt: new Date().toISOString(),
+            }
+          : record
       );
-      toast.success("Review applied to effective rent");
+
+      const nextAdjustments = [...(Array.isArray(localBillingScheduleAdjustments) ? localBillingScheduleAdjustments : [])];
+      const adjustmentIndexByKey = new Map(nextAdjustments.map((item, index) => [String(item?.periodKey || ""), index]));
+
+      (billingScheduleData || []).forEach((row) => {
+        const rowPeriodStart = row?.fromRaw ? new Date(row.fromRaw) : null;
+        if (!row?.periodKey || !rowPeriodStart || Number.isNaN(rowPeriodStart.getTime())) return;
+        if (rowPeriodStart < effectiveDate) return;
+        if (String(row?.booked || "").toLowerCase() === "yes") return;
+        if (String(row?.frozen || "").toLowerCase() === "yes") return;
+
+        const existingIndex = adjustmentIndexByKey.get(String(row.periodKey));
+        const existing = existingIndex >= 0 ? nextAdjustments[existingIndex] : { periodKey: row.periodKey };
+        const nextRow = {
+          ...existing,
+          periodKey: row.periodKey,
+          fromDate: row.fromRaw,
+          toDate: row.toRaw,
+          rentAmount: Number(target.resultingRent || row.rent || 0),
+          utilityAmount: Number(existing?.utilityAmount ?? row.utility ?? 0),
+          utilityNames: Array.isArray(existing?.utilityNames) && existing.utilityNames.length > 0
+            ? existing.utilityNames
+            : Array.isArray(row?.utilityNames)
+            ? row.utilityNames
+            : [],
+          status: String(existing?.status || "active") === "deleted" ? "active" : String(existing?.status || "active"),
+          note: existing?.note || `Rent review applied effective ${row.from}`,
+          updatedAt: new Date().toISOString(),
+        };
+
+        if (existingIndex >= 0) {
+          nextAdjustments[existingIndex] = nextRow;
+        } else {
+          nextAdjustments.push(nextRow);
+          adjustmentIndexByKey.set(String(row.periodKey), nextAdjustments.length - 1);
+        }
+      });
+
+      await persistRentReviewRecords(nextRecords, nextAdjustments, "Review applied and future billing periods updated");
     };
 
     const formatFrequency = (frequency) => {
@@ -2812,15 +3087,17 @@ const TenantStatement = () => {
                             )}
                             <button
                               onClick={() => handleEditReview(record)}
-                              className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
-                              title="Edit"
+                              disabled={isApplied}
+                              className={`px-2 py-1 text-xs rounded text-white ${isApplied ? "bg-slate-300 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}
+                              title={isApplied ? "Applied reviews are locked" : "Edit"}
                             >
                               <FaEdit />
                             </button>
                             <button
                               onClick={() => handleDeleteReview(record.id)}
-                              className="px-2 py-1 text-xs rounded bg-red-600 text-white hover:bg-red-700"
-                              title="Delete"
+                              disabled={isApplied}
+                              className={`px-2 py-1 text-xs rounded text-white ${isApplied ? "bg-slate-300 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"}`}
+                              title={isApplied ? "Applied reviews are locked" : "Delete"}
                             >
                               <FaTrash />
                             </button>
@@ -3143,14 +3420,8 @@ const TenantStatement = () => {
         return renderStatement();
       case "billing":
         return renderBillingSchedule();
-      case "details":
-        return renderTenantDetails();
-      case "charges":
-        return renderStandingCharges();
       case "reviews":
         return renderRentReviewsAndEscalations();
-      case "actions":
-        return renderActions();
       default:
         return renderStatement();
     }

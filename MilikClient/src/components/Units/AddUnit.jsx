@@ -11,6 +11,35 @@ import { adminRequests } from "../../utils/requestMethods";
 
 // Orange theme constants
 const MILIK_ORANGE_BG = "bg-orange-600";
+const normalizeBillingPeriodKey = (value = "") =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+
+const BILLING_PERIOD_ALIASES = {
+  monthly: "monthly",
+  quarter: "quarterly",
+  quarterly: "quarterly",
+  annually: "annual",
+  annual: "annual",
+  yearly: "annual",
+  semi_annual: "semi_annual",
+  semiannual: "semi_annual",
+  semi_annually: "semi_annual",
+  biannual: "semi_annual",
+  bi_annually: "semi_annual",
+  bi_monthly: "bi_monthly",
+  bimonthly: "bi_monthly",
+};
+
+const canonicalBillingPeriodKey = (value = "") => {
+  const normalized = normalizeBillingPeriodKey(value);
+  return BILLING_PERIOD_ALIASES[normalized] || normalized || "monthly";
+};
+
 const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
 const MILIK_ORANGE_RING = "focus:ring-orange-500/30";
 const MILIK_ORANGE_BORDER_FOCUS = "focus:border-orange-600";
@@ -154,6 +183,7 @@ const AddUnit = () => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [generalError, setGeneralError] = useState("");
   const [utilityOptions, setUtilityOptions] = useState([]);
+  const [billingPeriodOptions, setBillingPeriodOptions] = useState([{ key: "monthly", name: "Monthly", durationInMonths: 1 }]);
   const [depositTouched, setDepositTouched] = useState(Boolean(isEditMode));
   const [rentTouched, setRentTouched] = useState(Boolean(isEditMode));
   const draftStorageKey = currentCompany?._id
@@ -177,9 +207,22 @@ const AddUnit = () => {
           const names = Array.from(new Set((res?.data?.utilityTypes || [])
             .filter((item) => item?.isActive !== false && item?.name)
             .map((item) => String(item.name))));
+          const periods = Array.isArray(res?.data?.billingPeriods)
+            ? res.data.billingPeriods
+                .filter((item) => item?.isActive !== false)
+                .map((item) => ({
+                  key: canonicalBillingPeriodKey(item?.key || item?.name || "monthly"),
+                  name: String(item?.name || "Billing Period").trim() || "Billing Period",
+                  durationInMonths: Math.max(1, Number(item?.durationInMonths || 1)),
+                }))
+            : [];
           setUtilityOptions(names);
+          setBillingPeriodOptions(periods.length > 0 ? periods : [{ key: "monthly", name: "Monthly", durationInMonths: 1 }]);
         })
-        .catch(() => setUtilityOptions([]));
+        .catch(() => {
+          setUtilityOptions([]);
+          setBillingPeriodOptions([{ key: "monthly", name: "Monthly", durationInMonths: 1 }]);
+        });
     }
   }, [dispatch, currentCompany, isEditMode]);
 
@@ -201,7 +244,7 @@ const AddUnit = () => {
           description: existingUnit.description || "",
           amenities: existingUnit.amenities?.join(", ") || "",
           utilities: existingUnit.utilities || [],
-          billingFrequency: existingUnit.billingFrequency || "monthly",
+          billingFrequency: canonicalBillingPeriodKey(existingUnit.billingPeriodKey || existingUnit.billingFrequency || "monthly"),
         });
       }
     }
@@ -391,24 +434,15 @@ const AddUnit = () => {
   // Total monthly bill (rent + utilities not included)
   const totalMonthlyBill = monthlyRent + monthlyUtilityBill;
 
-  // Calculate billing amount based on frequency
+  // Calculate billing amount based on configured periodicity
   const getBillingAmount = () => {
-    const freq = formData.billingFrequency || "monthly";
-    const base = totalMonthlyBill;
-
-    switch (freq) {
-      case "annually":
-        return base * 12;
-      case "semi-annually":
-        return base * 6;
-      case "quarterly":
-        return base * 3;
-      case "bi-monthly":
-        return base * 2;
-      case "monthly":
-      default:
-        return base;
-    }
+    const selectedPeriodKey = canonicalBillingPeriodKey(formData.billingFrequency || "monthly");
+    const selectedPeriod =
+      billingPeriodOptions.find((item) => item.key === selectedPeriodKey) ||
+      billingPeriodOptions.find((item) => item.key === "monthly") ||
+      { durationInMonths: 1 };
+    const intervalMonths = Math.max(1, Number(selectedPeriod?.durationInMonths || 1));
+    return totalMonthlyBill * intervalMonths;
   };
 
   const billingAmount = getBillingAmount();
@@ -474,7 +508,8 @@ const AddUnit = () => {
           isIncluded: u.isIncluded,
           unitCharge: u.unitCharge ? parseFloat(u.unitCharge) : 0
         })),
-      billingFrequency: formData.billingFrequency || "monthly",
+      billingFrequency: canonicalBillingPeriodKey(formData.billingFrequency || "monthly"),
+      billingPeriodKey: canonicalBillingPeriodKey(formData.billingFrequency || "monthly"),
       business: currentCompany._id,
       isVacant: formData.status === "vacant",
       vacantSince: formData.status === "vacant" ? new Date() : null,
@@ -869,20 +904,21 @@ const AddUnit = () => {
                       className={`w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-slate-900 font-semibold shadow-sm transition-all duration-200 hover:border-slate-400 focus:outline-none focus:ring-2 ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
                       disabled={loading}
                     >
-                      <option value="monthly">Monthly</option>
-                      <option value="bi-monthly">Bi-Monthly (Every 2 Months)</option>
-                      <option value="quarterly">Quarterly (Every 3 Months)</option>
-                      <option value="semi-annually">Semi-Annually (Every 6 Months)</option>
-                      <option value="annually">Annually (Yearly)</option>
+                      {billingPeriodOptions.map((period) => (
+                        <option key={period.key} value={period.key}>
+                          {period.name}{Number(period.durationInMonths || 1) > 1 ? ` (Every ${Number(period.durationInMonths || 1)} Months)` : ""}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   {/* Billing Amount Display */}
                   <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-lg p-4 text-white shadow-lg">
                     <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
-                      {formData.billingFrequency === "monthly"
-                        ? "Monthly Invoice Amount"
-                        : `${formData.billingFrequency.charAt(0).toUpperCase() + formData.billingFrequency.slice(1)} Invoice Amount`}
+                      {(() => {
+                        const selectedPeriod = billingPeriodOptions.find((item) => item.key === canonicalBillingPeriodKey(formData.billingFrequency || "monthly"));
+                        return `${selectedPeriod?.name || "Configured"} Invoice Amount`;
+                      })()}
                     </div>
                     <div className="text-3xl font-bold text-white">
                       KES {billingAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

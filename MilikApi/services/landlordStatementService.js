@@ -925,6 +925,12 @@ const getEffectiveDepositReceiptAmount = (receipt = {}) => {
     if (Math.abs(fromRows) > 0) return round2(fromRows);
   }
 
+  const paymentType = safeName(receipt?.paymentType || "");
+  if (paymentType === "deposit") {
+    const rawAmount = Number(receipt?.amount || 0);
+    if (Math.abs(rawAmount) > 0) return round2(rawAmount);
+  }
+
   return 0;
 };
 

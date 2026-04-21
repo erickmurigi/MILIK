@@ -66,6 +66,68 @@ const MONTH_OPTIONS = [
   { value: 11, label: "December" },
 ];
 
+
+const FALLBACK_BILLING_PERIOD_MONTHS = {
+  monthly: 1,
+  bi_monthly: 2,
+  quarterly: 3,
+  semi_annual: 6,
+  annual: 12,
+};
+
+const normalizeBillingPeriodKey = (value = "") =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+
+const canonicalBillingPeriodKey = (value = "") => {
+  const normalized = normalizeBillingPeriodKey(value);
+  const aliases = {
+    month: "monthly",
+    monthly: "monthly",
+    quarter: "quarterly",
+    quarterly: "quarterly",
+    semiannual: "semi_annual",
+    semi_annually: "semi_annual",
+    biannual: "semi_annual",
+    annually: "annual",
+    yearly: "annual",
+    annual: "annual",
+  };
+  return aliases[normalized] || normalized || "monthly";
+};
+
+const addMonthsPreservingDay = (dateValue, months = 1) => {
+  const source = new Date(dateValue);
+  if (Number.isNaN(source.getTime())) return null;
+  const day = source.getDate();
+  const next = new Date(source);
+  next.setMonth(next.getMonth() + Number(months || 0), 1);
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(day, lastDay));
+  return next;
+};
+
+const formatScheduleLabel = ({ startDate, endDate, billingPeriod }) => {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "-";
+  if (Number(billingPeriod?.durationInMonths || 1) <= 1) {
+    return `${start.toLocaleString("en-US", { month: "short" })} ${String(start.getFullYear()).slice(-2)}`;
+  }
+  return `${start.toLocaleDateString("en-GB")} - ${end.toLocaleDateString("en-GB")}`;
+};
+
+const buildSchedulePeriodKey = ({ startDate, billingPeriodKey = "monthly" }) => {
+  const dt = new Date(startDate);
+  if (Number.isNaN(dt.getTime())) return "";
+  return `${canonicalBillingPeriodKey(billingPeriodKey)}:${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+};
+
 const emptyFilters = {
   status: "ACTIVE",
   fromDate: "",
@@ -430,7 +492,7 @@ const isInvoiceInBillingPeriod = (dateRef, month, year) => {
   return dt.getMonth() === Number(month) && dt.getFullYear() === Number(year);
 };
 
-const getActiveInvoicesForTenantPeriod = ({ invoices = [], tenantId, unitId = null, month, year }) =>
+const getActiveInvoicesForTenantPeriod = ({ invoices = [], tenantId, unitId = null, month, year, periodKey = "" }) =>
   invoices.filter((invoice) => {
     const invoiceTenantId = String(invoice?.tenant?._id || invoice?.tenant || "");
     if (invoiceTenantId !== String(tenantId || "")) return false;
@@ -439,6 +501,11 @@ const getActiveInvoicesForTenantPeriod = ({ invoices = [], tenantId, unitId = nu
       if (invoiceUnitId !== String(unitId)) return false;
     }
     if (!isActiveInvoiceStatus(invoice?.status)) return false;
+
+    const invoicePeriodKey = String(invoice?.metadata?.periodKey || "").trim();
+    if (periodKey && invoicePeriodKey) {
+      return invoicePeriodKey === String(periodKey);
+    }
 
     return isInvoiceInBillingPeriod(invoice?.invoiceDate || invoice?.createdAt, month, year);
   });
@@ -451,11 +518,12 @@ const hasBlockingInvoiceForRequest = ({
   year,
   category,
   metadata,
+  periodKey = "",
 }) => {
   const requestedBucket = getInvoiceConflictBucket({ category, metadata });
   if (!requestedBucket) return false;
 
-  return getActiveInvoicesForTenantPeriod({ invoices, tenantId, unitId, month, year }).some((invoice) => {
+  return getActiveInvoicesForTenantPeriod({ invoices, tenantId, unitId, month, year, periodKey }).some((invoice) => {
     const existingBucket = getInvoiceConflictBucket({
       category: invoice?.category,
       metadata: invoice?.metadata || {},
@@ -746,6 +814,8 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const unitsFromStore = useSelector((state) => state.unit?.units || []);
   const tenantsFromStore = useMemo(() => ensureArray(rawTenantsFromStore), [rawTenantsFromStore]);
   const [companyTaxConfig, setCompanyTaxConfig] = useState(null);
+  const [companyBillingPeriods, setCompanyBillingPeriods] = useState([]);
+  const [leases, setLeases] = useState([]);
 
   const normalizedTaxConfig = useMemo(
     () => normalizeCompanyTaxConfig(companyTaxConfig),
@@ -756,6 +826,146 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
     [normalizedTaxConfig]
   );
   const companyTaxEnabled = Boolean(normalizedTaxConfig?.taxSettings?.enabled);
+  const normalizedBillingPeriods = useMemo(() => {
+    const source = Array.isArray(companyBillingPeriods) && companyBillingPeriods.length > 0
+      ? companyBillingPeriods
+      : [{ key: "monthly", name: "Monthly", durationInMonths: 1, isActive: true }];
+    const seen = new Set();
+    return source
+      .map((item) => ({
+        key: canonicalBillingPeriodKey(item?.key || item?.name || "monthly"),
+        name: String(item?.name || item?.label || item?.key || "Monthly").trim() || "Monthly",
+        durationInMonths: Math.max(1, Number(item?.durationInMonths || FALLBACK_BILLING_PERIOD_MONTHS[canonicalBillingPeriodKey(item?.key || item?.name)] || 1)),
+        isActive: item?.isActive !== false,
+      }))
+      .filter((item) => {
+        if (!item.key || seen.has(item.key)) return false;
+        seen.add(item.key);
+        return true;
+      });
+  }, [companyBillingPeriods]);
+
+  const resolveBillingPeriodDefinition = (billingPeriodKey = "monthly") => {
+    const normalizedKey = canonicalBillingPeriodKey(billingPeriodKey);
+    return (
+      normalizedBillingPeriods.find((item) => item.key === normalizedKey) ||
+      normalizedBillingPeriods.find((item) => item.key === "monthly") ||
+      { key: "monthly", name: "Monthly", durationInMonths: 1, isActive: true }
+    );
+  };
+
+  const leaseLookup = useMemo(() => {
+    const byTenant = new Map();
+    const byTenantUnit = new Map();
+
+    const activeLeases = (Array.isArray(leases) ? leases : [])
+      .filter((lease) => ["active", "draft", "pending_signature"].includes(String(lease?.status || "").toLowerCase()))
+      .sort((a, b) => new Date(b?.startDate || b?.createdAt || 0) - new Date(a?.startDate || a?.createdAt || 0));
+
+    activeLeases.forEach((lease) => {
+      const tenantKey = String(lease?.tenant?._id || lease?.tenant || "");
+      const unitKey = String(lease?.unit?._id || lease?.unit || "");
+      if (tenantKey && !byTenant.has(tenantKey)) {
+        byTenant.set(tenantKey, lease);
+      }
+      if (tenantKey && unitKey) {
+        const compositeKey = `${tenantKey}:${unitKey}`;
+        if (!byTenantUnit.has(compositeKey)) {
+          byTenantUnit.set(compositeKey, lease);
+        }
+      }
+    });
+
+    return { byTenant, byTenantUnit };
+  }, [leases]);
+
+  const resolveLeaseForTenantUnit = (tenant, unitId = null) => {
+    const tenantKey = String(tenant?._id || "");
+    const unitKey = String(unitId || tenant?.invoiceUnit?._id || tenant?.invoiceUnit || tenant?.unit?._id || tenant?.unit || "");
+    if (tenantKey && unitKey) {
+      const exact = leaseLookup.byTenantUnit.get(`${tenantKey}:${unitKey}`);
+      if (exact) return exact;
+    }
+    return tenantKey ? leaseLookup.byTenant.get(tenantKey) || null : null;
+  };
+
+  const resolveTenantBookingPeriod = ({ tenant, unitContext, month, year }) => {
+    const lease = resolveLeaseForTenantUnit(tenant, unitContext?.unitId);
+    const invoiceMonthStart = new Date(Number(year), Number(month), 1, 0, 0, 0, 0);
+    if (Number.isNaN(invoiceMonthStart.getTime())) {
+      return { allowed: false, reason: "Invalid billing period selected." };
+    }
+
+    const billingPeriod = resolveBillingPeriodDefinition(
+      lease?.billingPeriodKey ||
+      tenant?.billingPeriodKey ||
+      tenant?.billingFrequency ||
+      unitContext?.unit?.billingPeriodKey ||
+      unitContext?.unit?.billingFrequency ||
+      "monthly"
+    );
+    const leaseStartDate = new Date(lease?.startDate || tenant?.moveInDate || invoiceMonthStart);
+    leaseStartDate.setHours(0, 0, 0, 0);
+    const scheduleAnchor = new Date(leaseStartDate);
+    const leaseEndDate = lease?.endDate ? new Date(lease.endDate) : null;
+    if (leaseEndDate && !Number.isNaN(leaseEndDate.getTime())) {
+      leaseEndDate.setHours(23, 59, 59, 999);
+    }
+
+    let currentDate = new Date(scheduleAnchor);
+    while (currentDate <= invoiceMonthStart) {
+      const nextDate = addMonthsPreservingDay(currentDate, billingPeriod.durationInMonths) || new Date(invoiceMonthStart);
+      const periodEnd = new Date(nextDate.getTime() - 1);
+      if (
+        invoiceMonthStart.getFullYear() === currentDate.getFullYear() &&
+        invoiceMonthStart.getMonth() === currentDate.getMonth()
+      ) {
+        const periodKey = buildSchedulePeriodKey({ startDate: currentDate, billingPeriodKey: billingPeriod.key });
+        const rawAdjustments = Array.isArray(lease?.billingScheduleAdjustments) ? lease.billingScheduleAdjustments : [];
+        const adjustment =
+          rawAdjustments.find((item) => String(item?.periodKey || "") === String(periodKey)) ||
+          rawAdjustments.find((item) => {
+            const itemFrom = item?.fromDate ? new Date(item.fromDate) : null;
+            return itemFrom && itemFrom.getFullYear() === currentDate.getFullYear() && itemFrom.getMonth() === currentDate.getMonth();
+          }) ||
+          null;
+
+        if (adjustment?.status === "deleted") {
+          return { allowed: false, reason: "Selected billing period has been deleted from the lease schedule." };
+        }
+        if (adjustment?.status === "frozen") {
+          return { allowed: false, reason: "Selected billing period is frozen in the lease schedule." };
+        }
+        if (leaseEndDate && currentDate > leaseEndDate) {
+          return { allowed: false, reason: "Selected billing period falls outside the lease term." };
+        }
+
+        const fromDate = adjustment?.fromDate ? new Date(adjustment.fromDate) : currentDate;
+        const toDate = adjustment?.toDate ? new Date(adjustment.toDate) : periodEnd;
+        const paymentDueDay = Math.max(1, Math.min(28, Number(lease?.paymentDueDay || 5)));
+        const dueDate = new Date(fromDate);
+        dueDate.setDate(Math.min(paymentDueDay, new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0).getDate()));
+        dueDate.setHours(23, 59, 59, 999);
+
+        return {
+          allowed: true,
+          lease,
+          billingPeriod,
+          periodKey,
+          fromDate,
+          toDate,
+          dueDate,
+          description: formatScheduleLabel({ startDate: fromDate, endDate: toDate, billingPeriod }),
+          rentAmount: Number(adjustment?.rentAmount ?? Number(unitContext?.rentAmount || 0) * billingPeriod.durationInMonths),
+          utilityAmount: Number(adjustment?.utilityAmount ?? Number(unitContext?.utilityAmount || 0) * billingPeriod.durationInMonths),
+          utilityNames: Array.isArray(adjustment?.utilityNames) ? adjustment.utilityNames : [],
+        };
+      }
+      currentDate = nextDate;
+    }
+
+    return { allowed: false, reason: "Selected month is not a scheduled billing start for this tenant's billing frequency." };
+  };
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -830,6 +1040,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
         const res = await adminRequests.get(`/company-settings/${currentCompany._id}`);
         if (!isMounted) return;
         setCompanyTaxConfig(res.data || null);
+        setCompanyBillingPeriods(Array.isArray(res?.data?.billingPeriods) ? res.data.billingPeriods : []);
         const defaultTaxCodeKey =
           res?.data?.taxSettings?.defaultTaxCodeKey || "vat_standard";
         setSingleBookingForm((prev) => ({
@@ -843,6 +1054,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
       } catch {
         if (isMounted) {
           setCompanyTaxConfig(null);
+          setCompanyBillingPeriods([]);
         }
       }
     };
@@ -852,6 +1064,30 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
       isMounted = false;
     };
   }, [currentCompany?._id]);
+
+  useEffect(() => {
+    if (!currentCompany?._id) {
+      setLeases([]);
+      return;
+    }
+
+    let isMounted = true;
+    const loadLeases = async () => {
+      try {
+        const res = await adminRequests.get(`/leases?business=${currentCompany._id}`);
+        if (!isMounted) return;
+        const rows = Array.isArray(res?.data) ? res.data : Array.isArray(res?.data?.data) ? res.data.data : [];
+        setLeases(rows);
+      } catch {
+        if (isMounted) setLeases([]);
+      }
+    };
+
+    loadLeases();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentCompany?._id, refreshTick]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -1075,6 +1311,49 @@ const getTenantPricing = (tenant) => {
   };
 };
 
+
+
+const getTenantPricingForBookingPeriod = (tenant, month, year) => {
+  const pricing = getTenantPricingForBookingPeriod(tenant, Number(batchBookingForm.month), Number(batchBookingForm.year));
+  const scheduleAwareUnitContexts = pricing.unitContexts
+    .map((context) => {
+      const bookingPeriod = resolveTenantBookingPeriod({ tenant, unitContext: context, month, year });
+      if (!bookingPeriod?.allowed) return null;
+      return {
+        ...context,
+        rentAmount: bookingPeriod.rentAmount,
+        utilityAmount: bookingPeriod.utilityAmount,
+        utilityLabel:
+          Array.isArray(bookingPeriod.utilityNames) && bookingPeriod.utilityNames.length === 1
+            ? bookingPeriod.utilityNames[0]
+            : context.utilityLabel,
+      };
+    })
+    .filter(Boolean);
+
+  if (!scheduleAwareUnitContexts.length) {
+    return {
+      rentAmount: 0,
+      utilityAmount: 0,
+      utilityLabel: "",
+      total: 0,
+      unitContexts: [],
+    };
+  }
+
+  const rentAmount = scheduleAwareUnitContexts.reduce((sum, item) => sum + Number(item.rentAmount || 0), 0);
+  const utilityAmount = scheduleAwareUnitContexts.reduce((sum, item) => sum + Number(item.utilityAmount || 0), 0);
+  const utilityLabels = Array.from(new Set(scheduleAwareUnitContexts.map((item) => item.utilityLabel).filter(Boolean)));
+
+  return {
+    rentAmount,
+    utilityAmount,
+    utilityLabel: utilityLabels.length === 1 ? utilityLabels[0] : utilityLabels.length > 1 ? "Utilities" : "",
+    total: rentAmount + utilityAmount,
+    unitContexts: scheduleAwareUnitContexts,
+  };
+};
+
 const getTenantPropertyId = (tenant) => {
     const directPropertyId = tenant?.property?._id || tenant?.property;
     if (directPropertyId) return directPropertyId;
@@ -1111,7 +1390,7 @@ const getTenantPropertyId = (tenant) => {
 
   const selectedSingleBookingPreview = useMemo(() => {
     if (!selectedSingleBookingTenant) return null;
-    const pricing = getTenantPricing(selectedSingleBookingTenant);
+    const pricing = getTenantPricingForBookingPeriod(selectedSingleBookingTenant, Number(singleBookingForm.month), Number(singleBookingForm.year));
     const bookingAmounts = resolveBookingAmountsForMode({
       rentAmount: pricing.rentAmount,
       utilityAmount: pricing.utilityAmount,
@@ -1956,12 +2235,24 @@ const visibleInvoiceKeys = useMemo(
     throw new Error("Missing createdBy user context.");
   }
 
+  const bookingPeriodContext =
+    targetTenant?.bookingPeriodContext && typeof targetTenant.bookingPeriodContext === "object"
+      ? targetTenant.bookingPeriodContext
+      : null;
+
   const resolvedBillingPeriodDate =
-    targetTenant?.invoiceDateOverride || getStartOfPeriod(month, year);
+    bookingPeriodContext?.fromDate ||
+    targetTenant?.invoiceDateOverride ||
+    getStartOfPeriod(month, year);
   const resolvedBookingDate =
     bookingDateOverride ||
     targetTenant?.bookingDateOverride ||
+    bookingPeriodContext?.fromDate ||
     resolvedBillingPeriodDate;
+  const resolvedDueDate =
+    bookingPeriodContext?.dueDate ||
+    getDueDateForPeriod(month, year, dueDay);
+
   const invoicePayload = {
     business: businessId,
     property: propertyId,
@@ -1973,7 +2264,7 @@ const visibleInvoiceKeys = useMemo(
     description,
     invoiceDate: resolvedBillingPeriodDate,
     bookingDate: resolvedBookingDate,
-    dueDate: getDueDateForPeriod(month, year, dueDay),
+    dueDate: resolvedDueDate,
     createdBy,
     chartAccountId: revenueAccountId,
     metadata: buildBookingMetadata({
@@ -1981,10 +2272,30 @@ const visibleInvoiceKeys = useMemo(
         metadata && typeof metadata === "object"
           ? {
               ...metadata,
+              ...(bookingPeriodContext?.periodKey
+                ? {
+                    periodKey: bookingPeriodContext.periodKey,
+                    billingPeriodKey: bookingPeriodContext.billingPeriodKey,
+                    billingPeriodLabel: bookingPeriodContext.billingPeriodLabel,
+                    periodStartDate: bookingPeriodContext.fromDate,
+                    periodEndDate: bookingPeriodContext.toDate,
+                  }
+                : {}),
               ...(bookingDateOverride ? { bookWithBookingDate: true } : {}),
             }
-          : bookingDateOverride
-          ? { bookWithBookingDate: true }
+          : bookingDateOverride || bookingPeriodContext?.periodKey
+          ? {
+              ...(bookingDateOverride ? { bookWithBookingDate: true } : {}),
+              ...(bookingPeriodContext?.periodKey
+                ? {
+                    periodKey: bookingPeriodContext.periodKey,
+                    billingPeriodKey: bookingPeriodContext.billingPeriodKey,
+                    billingPeriodLabel: bookingPeriodContext.billingPeriodLabel,
+                    periodStartDate: bookingPeriodContext.fromDate,
+                    periodEndDate: bookingPeriodContext.toDate,
+                  }
+                : {}),
+            }
           : undefined,
       bookingGroupId,
       billingMode,
@@ -2054,25 +2365,49 @@ const createInvoiceForTenant = async (
   const unitContexts = pricing.unitContexts || [];
   const createdInvoiceIds = [];
   let encounteredBlockingInvoice = false;
+  let encounteredOutOfCyclePeriod = false;
 
   if (!unitContexts.length) {
     return { created: false, reason: "No assigned unit was found for this tenant" };
   }
 
   for (const unitContext of unitContexts) {
+    const bookingPeriodContext = resolveTenantBookingPeriod({
+      tenant: targetTenant,
+      unitContext,
+      month,
+      year,
+    });
+
+    if (!bookingPeriodContext?.allowed) {
+      encounteredOutOfCyclePeriod = true;
+      continue;
+    }
+
     const bookingAmounts = resolveBookingAmountsForMode({
-      rentAmount: unitContext.rentAmount,
-      utilityAmount: unitContext.utilityAmount,
+      rentAmount: bookingPeriodContext.rentAmount,
+      utilityAmount: bookingPeriodContext.utilityAmount,
       billingMode: normalizedBillingMode,
     });
     const rentAmount = Number(bookingAmounts.rentAmount || 0);
     const utilityAmount = Number(bookingAmounts.utilityAmount || 0);
-    const utilityMetadata = buildUtilityInvoiceMetadata(unitContext.utilityLabel);
+    const utilityLabel = Array.isArray(bookingPeriodContext?.utilityNames) && bookingPeriodContext.utilityNames.length === 1
+      ? bookingPeriodContext.utilityNames[0]
+      : unitContext.utilityLabel;
+    const utilityMetadata = buildUtilityInvoiceMetadata(utilityLabel);
     const targetTenantForUnit = {
       ...targetTenant,
       invoiceUnit: unitContext.unit,
-      bookingDateOverride: bookingDateOverride || getStartOfPeriod(month, year),
-      invoiceDateOverride: getStartOfPeriod(month, year),
+      bookingDateOverride: bookingDateOverride || bookingPeriodContext.fromDate || getStartOfPeriod(month, year),
+      invoiceDateOverride: bookingPeriodContext.fromDate || getStartOfPeriod(month, year),
+      bookingPeriodContext: {
+        periodKey: bookingPeriodContext.periodKey,
+        billingPeriodKey: bookingPeriodContext.billingPeriod.key,
+        billingPeriodLabel: bookingPeriodContext.billingPeriod.name,
+        fromDate: bookingPeriodContext.fromDate,
+        toDate: bookingPeriodContext.toDate,
+        dueDate: bookingPeriodContext.dueDate,
+      },
     };
 
     if (rentAmount <= 0 && utilityAmount <= 0) {
@@ -2088,6 +2423,7 @@ const createInvoiceForTenant = async (
         month,
         year,
         category: "RENT_CHARGE",
+        periodKey: bookingPeriodContext.periodKey,
       });
 
     const utilityBlocked =
@@ -2100,6 +2436,7 @@ const createInvoiceForTenant = async (
         year,
         category: "UTILITY_CHARGE",
         metadata: utilityMetadata,
+        periodKey: bookingPeriodContext.periodKey,
       });
 
     if (rentBlocked || utilityBlocked) {
@@ -2114,7 +2451,7 @@ const createInvoiceForTenant = async (
         month,
         year,
         dueDay,
-        description: buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` }),
+        description: bookingPeriodContext.description || buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` }),
         taxSelection,
         bookingDateOverride,
         bookingGroupId: effectiveBookingGroupId,
@@ -2131,7 +2468,7 @@ const createInvoiceForTenant = async (
         month,
         year,
         dueDay,
-        description: buildUtilityChargeDescription({ utilityLabel: unitContext.utilityLabel || `Utility - ${unitContext.unitName}`, month, year }),
+        description: bookingPeriodContext.description || buildUtilityChargeDescription({ utilityLabel: utilityLabel || `Utility - ${unitContext.unitName}`, month, year }),
         metadata: utilityMetadata,
         taxSelection,
         bookingDateOverride,
@@ -2144,6 +2481,10 @@ const createInvoiceForTenant = async (
 
   if (createdInvoiceIds.length === 0 && encounteredBlockingInvoice) {
     return { created: false, reason: "already_exists", periodLabel };
+  }
+
+  if (createdInvoiceIds.length === 0 && encounteredOutOfCyclePeriod) {
+    return { created: false, reason: "Selected period is not a scheduled billing start for this tenant." };
   }
 
   return { created: createdInvoiceIds.length > 0, invoiceIds: createdInvoiceIds, periodLabel, ledgerSynced: true };
@@ -2182,7 +2523,7 @@ const createInvoiceForTenant = async (
       return;
     }
 
-    const pricing = getTenantPricing(selectedTenant);
+    const pricing = getTenantPricingForBookingPeriod(selectedTenant, Number(singleBookingForm.month), Number(singleBookingForm.year));
     const selectedAmounts = resolveBookingAmountsForMode({
       rentAmount: pricing.rentAmount,
       utilityAmount: pricing.utilityAmount,
@@ -2356,19 +2697,41 @@ const createInvoiceForTenant = async (
         let tenantHasBatchItems = false;
 
         for (const unitContext of unitContexts) {
+          const bookingPeriodContext = resolveTenantBookingPeriod({
+            tenant,
+            unitContext,
+            month,
+            year,
+          });
+
+          if (!bookingPeriodContext?.allowed) {
+            continue;
+          }
+
           const bookingAmounts = resolveBookingAmountsForMode({
-            rentAmount: unitContext.rentAmount,
-            utilityAmount: unitContext.utilityAmount,
+            rentAmount: bookingPeriodContext.rentAmount,
+            utilityAmount: bookingPeriodContext.utilityAmount,
             billingMode: normalizedBatchBillingMode,
           });
           const rentAmount = Number(bookingAmounts.rentAmount || 0);
           const utilityAmount = Number(bookingAmounts.utilityAmount || 0);
-          const utilityMetadata = buildUtilityInvoiceMetadata(unitContext.utilityLabel);
+          const utilityLabel = Array.isArray(bookingPeriodContext?.utilityNames) && bookingPeriodContext.utilityNames.length === 1
+            ? bookingPeriodContext.utilityNames[0]
+            : unitContext.utilityLabel;
+          const utilityMetadata = buildUtilityInvoiceMetadata(utilityLabel);
           const targetTenantForUnit = {
             ...tenant,
             invoiceUnit: unitContext.unit,
-            bookingDateOverride: batchBookingDateOverride || getStartOfPeriod(month, year),
-            invoiceDateOverride: getStartOfPeriod(month, year),
+            bookingDateOverride: batchBookingDateOverride || bookingPeriodContext.fromDate || getStartOfPeriod(month, year),
+            invoiceDateOverride: bookingPeriodContext.fromDate || getStartOfPeriod(month, year),
+            bookingPeriodContext: {
+              periodKey: bookingPeriodContext.periodKey,
+              billingPeriodKey: bookingPeriodContext.billingPeriod.key,
+              billingPeriodLabel: bookingPeriodContext.billingPeriod.name,
+              fromDate: bookingPeriodContext.fromDate,
+              toDate: bookingPeriodContext.toDate,
+              dueDate: bookingPeriodContext.dueDate,
+            },
           };
 
           if (rentAmount <= 0 && utilityAmount <= 0) {
@@ -2384,6 +2747,7 @@ const createInvoiceForTenant = async (
               month,
               year,
               category: "RENT_CHARGE",
+              periodKey: bookingPeriodContext.periodKey,
             });
 
           const shouldCreateUtility =
@@ -2396,6 +2760,7 @@ const createInvoiceForTenant = async (
               year,
               category: "UTILITY_CHARGE",
               metadata: utilityMetadata,
+              periodKey: bookingPeriodContext.periodKey,
             });
 
           if (shouldCreateRent) {
@@ -2426,7 +2791,7 @@ const createInvoiceForTenant = async (
                 month,
                 year,
                 dueDay,
-                description: buildUtilityChargeDescription({ utilityLabel: unitContext.utilityLabel || `Utility - ${unitContext.unitName}`, month, year }),
+                description: bookingPeriodContext.description || buildUtilityChargeDescription({ utilityLabel: utilityLabel || `Utility - ${unitContext.unitName}`, month, year }),
                 metadata: utilityMetadata,
                 taxSelection: selectedTaxSelection,
                 bookingDateOverride: batchBookingDateOverride,

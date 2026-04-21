@@ -170,6 +170,19 @@ TenantInvoiceSchema.index({ business: 1, invoiceNumber: 1 }, { unique: true });
 // Performance index for tenant balance recomputation
 TenantInvoiceSchema.index({ business: 1, tenant: 1, status: 1 });
 TenantInvoiceSchema.index({ business: 1, tenant: 1, invoiceDate: -1 });
+TenantInvoiceSchema.index({ business: 1, category: 1, status: 1, dueDate: 1, invoiceDate: 1 });
+TenantInvoiceSchema.index({ business: 1, category: 1, status: 1, dueDate: 1, tenant: 1 });
+
+TenantInvoiceSchema.index({
+  business: 1,
+  property: 1,
+  tenant: 1,
+  unit: 1,
+  category: 1,
+  status: 1,
+  "metadata.periodKey": 1,
+  invoiceDate: 1,
+});
 
 TenantInvoiceSchema.index(
   {

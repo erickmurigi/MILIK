@@ -303,11 +303,81 @@ const buildUtilityColumns = (workspace = null, rows = []) => {
   return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
 };
 
+const buildStatementColumns = (workspace = null, utilityColumns = []) => {
+  if (Array.isArray(workspace?.statementColumns) && workspace.statementColumns.length > 0) {
+    return workspace.statementColumns.map((item) => ({
+      key: String(item?.key || ''),
+      label: item?.label || titleCase(String(item?.key || '').replace(/_/g, ' ')),
+      sourceKeys: Array.isArray(item?.sourceKeys) && item.sourceKeys.length > 0 ? item.sourceKeys.map((value) => toUtilityKey(value)) : [toUtilityKey(item?.key || item?.label || '')],
+      invoiced: Number(item?.invoiced || 0),
+      paid: Number(item?.paid || 0),
+      isGrouped: Boolean(item?.isGrouped),
+      categoryType: item?.categoryType || 'utility',
+    }));
+  }
+
+  if (utilityColumns.length <= 4) {
+    return utilityColumns.map((item) => ({
+      key: item.key,
+      label: item.label,
+      sourceKeys: [item.key],
+      invoiced: Number(item?.invoiced || 0),
+      paid: Number(item?.paid || 0),
+      isGrouped: false,
+      categoryType: item?.categoryType || 'utility',
+    }));
+  }
+
+  const visible = utilityColumns.slice(0, 3).map((item) => ({
+    key: item.key,
+    label: item.label,
+    sourceKeys: [item.key],
+    invoiced: Number(item?.invoiced || 0),
+    paid: Number(item?.paid || 0),
+    isGrouped: false,
+    categoryType: item?.categoryType || 'utility',
+  }));
+  const overflow = utilityColumns.slice(3);
+  visible.push({
+    key: 'other_charges',
+    label: 'Other Charges',
+    sourceKeys: overflow.map((item) => item.key),
+    invoiced: overflow.reduce((sum, item) => sum + Number(item?.invoiced || 0), 0),
+    paid: overflow.reduce((sum, item) => sum + Number(item?.paid || 0), 0),
+    isGrouped: true,
+    categoryType: 'mixed',
+  });
+  return visible;
+};
+
 const getUtilityValue = (row = {}, key = "", phase = "invoiced") =>
   Number(normalizeRowUtilities(row)?.[key]?.[phase] || 0);
 
 const getPreparedUtilityValue = (row = {}, key = "", phase = "invoiced") =>
   Number(row?.__utilityMap?.[key]?.[phase] || 0);
+
+
+const buildPreparedStatementColumnMap = (row = {}, statementColumns = []) => {
+  const utilityMap = row?.__utilityMap && typeof row.__utilityMap === 'object' ? row.__utilityMap : normalizeRowUtilities(row);
+  if (row?.statementColumns && typeof row.statementColumns === 'object') {
+    return row.statementColumns;
+  }
+  return (Array.isArray(statementColumns) ? statementColumns : []).reduce((acc, column) => {
+    const sourceKeys = Array.isArray(column?.sourceKeys) && column.sourceKeys.length > 0 ? column.sourceKeys : [column?.key];
+    acc[column.key] = sourceKeys.reduce(
+      (totals, sourceKey) => {
+        totals.invoiced += Number(utilityMap?.[sourceKey]?.invoiced || 0);
+        totals.paid += Number(utilityMap?.[sourceKey]?.paid || 0);
+        return totals;
+      },
+      { invoiced: 0, paid: 0 }
+    );
+    return acc;
+  }, {});
+};
+
+const getPreparedStatementColumnValue = (row = {}, key = '', phase = 'invoiced') =>
+  Number(row?.__statementColumnMap?.[key]?.[phase] || row?.statementColumns?.[key]?.[phase] || 0);
 
 const Statements = () => {
   const dispatch = useDispatch();
@@ -339,8 +409,6 @@ const Statements = () => {
   const [processedStatements, setProcessedStatements] = useState([]);
   const [loadingProcessedContext, setLoadingProcessedContext] = useState(false);
   const [processedContextLoaded, setProcessedContextLoaded] = useState(false);
-  const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
-  const [showPdfModal, setShowPdfModal] = useState(false);
   const [loadingPdfPreview, setLoadingPdfPreview] = useState(false);
 
   const autoDraftTimerRef = useRef(null);
@@ -583,13 +651,21 @@ const Statements = () => {
     summary?.openingLandlordSettlementBalance ?? summary?.openingSettlementBalance ?? 0
   );
   const utilityColumns = useMemo(() => buildUtilityColumns(workspace, rows), [workspace, rows]);
+  const statementColumns = useMemo(
+    () => buildStatementColumns(workspace, utilityColumns),
+    [workspace, utilityColumns]
+  );
   const preparedRows = useMemo(
     () =>
-      rows.map((row) => ({
-        ...row,
-        __utilityMap: normalizeRowUtilities(row),
-      })),
-    [rows]
+      rows.map((row) => {
+        const utilityMap = normalizeRowUtilities(row);
+        return {
+          ...row,
+          __utilityMap: utilityMap,
+          __statementColumnMap: buildPreparedStatementColumnMap({ ...row, __utilityMap: utilityMap }, statementColumns),
+        };
+      }),
+    [rows, statementColumns]
   );
 
   const tenantUnitMeta = useMemo(() => {
@@ -690,6 +766,7 @@ const Statements = () => {
     return Array.from(grouped.values())
       .map((row) => ({
         ...row,
+        __statementColumnMap: buildPreparedStatementColumnMap(row, statementColumns),
         displayUnitLabel:
           row.allUnitLabels.length > 1
             ? `${row.allUnitLabels[0]} + ${row.allUnitLabels.length - 1} more`
@@ -702,7 +779,7 @@ const Statements = () => {
           { numeric: true }
         )
       );
-  }, [collapseAdditionalUnitRows, preparedRows, tenantUnitMeta]);
+  }, [collapseAdditionalUnitRows, preparedRows, statementColumns, tenantUnitMeta]);
   const nonDepositAdditionRows = useMemo(
     () => additionRows.filter((item) => String(item?.category || "") !== "deposit_remittance"),
     [additionRows]
@@ -741,7 +818,7 @@ const Statements = () => {
       ),
     [preparedRows, summary]
   );
-  const statementColSpan = 7 + utilityColumns.length * 2 + (hasInvoiceVatColumn ? 2 : 0);
+  const statementColSpan = 7 + statementColumns.length * 2 + (hasInvoiceVatColumn ? 2 : 0);
   const hasFuturePeriodDate =
     isFutureIsoDate(periodStart, todayIso) || isFutureIsoDate(periodEnd, todayIso);
   const hasValidPeriodSelection =
@@ -947,22 +1024,42 @@ const Statements = () => {
     }
   };
 
-  const closePdfModal = () => {
-    setShowPdfModal(false);
-    setLoadingPdfPreview(false);
-    setPdfPreviewUrl((currentUrl) => {
-      if (currentUrl) {
-        window.URL.revokeObjectURL(currentUrl);
-      }
-      return "";
-    });
-  };
+  const printBlobInHiddenFrame = (blobUrl) => {
+    const frame = document.createElement("iframe");
+    frame.style.position = "fixed";
+    frame.style.right = "0";
+    frame.style.bottom = "0";
+    frame.style.width = "0";
+    frame.style.height = "0";
+    frame.style.border = "0";
+    frame.setAttribute("aria-hidden", "true");
 
-  useEffect(() => () => {
-    if (pdfPreviewUrl) {
-      window.URL.revokeObjectURL(pdfPreviewUrl);
-    }
-  }, [pdfPreviewUrl]);
+    const cleanup = () => {
+      window.setTimeout(() => {
+        try {
+          frame.remove();
+        } catch {}
+        window.URL.revokeObjectURL(blobUrl);
+      }, 1500);
+    };
+
+    frame.onload = () => {
+      window.setTimeout(() => {
+        try {
+          frame.contentWindow?.focus();
+          frame.contentWindow?.print();
+        } catch {
+          cleanup();
+          return;
+        }
+
+        cleanup();
+      }, 250);
+    };
+
+    frame.src = blobUrl;
+    document.body.appendChild(frame);
+  };
 
   const handleDownload = async () => {
     if (!canExportStatement) {
@@ -1003,33 +1100,12 @@ const Statements = () => {
       });
 
       const blob = new Blob([response.data], { type: "application/pdf" });
-      setPdfPreviewUrl((currentUrl) => {
-        if (currentUrl) {
-          window.URL.revokeObjectURL(currentUrl);
-        }
-        return window.URL.createObjectURL(blob);
-      });
-      setShowPdfModal(true);
+      const blobUrl = window.URL.createObjectURL(blob);
+      printBlobInHiddenFrame(blobUrl);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to print statement PDF");
     } finally {
       setLoadingPdfPreview(false);
-    }
-  };
-
-  const handlePrintFromModal = () => {
-    const frame = document.getElementById("landlord-statement-pdf-frame");
-    if (!frame) {
-      toast.error("Statement preview is not ready yet");
-      return;
-    }
-
-    try {
-      frame.focus();
-      frame.contentWindow?.focus();
-      frame.contentWindow?.print();
-    } catch (error) {
-      toast.error("Unable to open the print dialog for this preview");
     }
   };
 
@@ -1212,11 +1288,11 @@ const Statements = () => {
                   <button
                     type="button"
                     onClick={handlePrint}
-                    disabled={!canExportStatement || !draftStatement?._id}
+                    disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
                     className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
-                    <FaPrint />
-                    Print
+                    <FaPrint className={loadingPdfPreview ? "animate-pulse" : ""} />
+                    {loadingPdfPreview ? "Printing..." : "Print"}
                   </button>
 
                   <button
@@ -1370,7 +1446,7 @@ const Statements = () => {
                           {hasInvoiceVatColumn && (
                             <th className="px-4 py-3 text-right font-semibold text-white">VAT Paid</th>
                           )}
-                          {utilityColumns.map((column) => (
+                          {statementColumns.map((column) => (
                             <React.Fragment key={`head-${column.key}`}>
                               <th className="px-4 py-3 text-right font-semibold text-white">
                                 {column.label} Invoiced
@@ -1417,13 +1493,13 @@ const Statements = () => {
                               {hasInvoiceVatColumn ? (
                                 <td className="px-4 py-3 text-right text-slate-700">{currency(row.paidTax ?? 0)}</td>
                               ) : null}
-                              {utilityColumns.map((column) => (
+                              {statementColumns.map((column) => (
                                 <React.Fragment key={`${row.unitId || row.unitNumber || "row"}-${column.key}`}>
                                   <td className="px-4 py-3 text-right text-slate-700">
-                                    {currency(getPreparedUtilityValue(row, column.key, "invoiced"))}
+                                    {currency(getPreparedStatementColumnValue(row, column.key, "invoiced"))}
                                   </td>
                                   <td className="px-4 py-3 text-right text-slate-700">
-                                    {currency(getPreparedUtilityValue(row, column.key, "paid"))}
+                                    {currency(getPreparedStatementColumnValue(row, column.key, "paid"))}
                                   </td>
                                 </React.Fragment>
                               ))}
@@ -1444,7 +1520,7 @@ const Statements = () => {
                             {hasInvoiceVatColumn ? (
                               <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>
                             ) : null}
-                            {utilityColumns.map((column) => (
+                            {statementColumns.map((column) => (
                               <React.Fragment key={`foot-${column.key}`}>
                                 <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(Number(column?.invoiced || 0))}</td>
                                 <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(Number(column?.paid || 0))}</td>
@@ -1699,6 +1775,7 @@ const Statements = () => {
             </>
           )}
         </div>
+
       </div>
     </DashboardLayout>
   );

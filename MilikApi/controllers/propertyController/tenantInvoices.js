@@ -156,15 +156,65 @@ const resolveMonthlyBillingDueDate = ({ invoiceDate, dueDate }) => {
   return getMonthDueDate(monthStart, requestedDueDate.getDate());
 };
 
-const shouldForceMonthlyBillingDates = ({ category, metadata }) => {
+const canonicalizeBillingPeriodKey = (value) => {
+  const normalized = String(value || "monthly")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_");
+
+  if (!normalized) return "monthly";
+  if (["monthly", "month", "1_month", "1m"].includes(normalized)) return "monthly";
+  if (["quarterly", "quarter", "3_months", "3m"].includes(normalized)) return "quarterly";
+  if (["semi_annual", "semiannual", "semi_annually", "semi_annually", "biannual", "half_yearly", "6_months", "6m"].includes(normalized)) return "semi_annual";
+  if (["annual", "annually", "yearly", "12_months", "12m"].includes(normalized)) return "annual";
+  return normalized;
+};
+
+const resolveInvoiceBillingPeriodKey = (metadata = {}) => canonicalizeBillingPeriodKey(
+  metadata?.billingPeriodKey || metadata?.periodicityKey || metadata?.frequencyKey || metadata?.billingFrequency || "monthly"
+);
+
+const shouldUseRecurringBillingDateAlignment = ({ category, metadata }) => {
   const normalizedCategory = String(category || "").toUpperCase();
   if (!["RENT_CHARGE", "UTILITY_CHARGE"].includes(normalizedCategory)) return false;
 
-  const sourceTransactionType = String(metadata?.sourceTransactionType || metadata?.source || "")
+  const sourceTransactionType = String(metadata?.sourceTransactionType || metadata?.source || metadata?.bookingSource || "")
     .trim()
     .toLowerCase();
 
   return sourceTransactionType !== "meter_reading";
+};
+
+const resolveRecurringBillingDates = ({ category, invoiceDate, dueDate, metadata = {} }) => {
+  const requestedInvoiceDate = normalizeDate(invoiceDate);
+  const requestedDueDate = dueDate ? normalizeDate(dueDate, requestedInvoiceDate) : null;
+
+  if (!shouldUseRecurringBillingDateAlignment({ category, metadata })) {
+    return {
+      invoiceDate: requestedInvoiceDate,
+      dueDate: requestedDueDate || requestedInvoiceDate,
+    };
+  }
+
+  const billingPeriodKey = resolveInvoiceBillingPeriodKey(metadata);
+  const periodStartCandidate = metadata?.periodStartDate || metadata?.periodFromDate || null;
+  const alignedInvoiceDate = periodStartCandidate
+    ? normalizeDate(periodStartCandidate, requestedInvoiceDate)
+    : billingPeriodKey === "monthly"
+    ? getMonthStart(requestedInvoiceDate)
+    : requestedInvoiceDate;
+
+  const alignedDueDate = requestedDueDate
+    ? normalizeDate(requestedDueDate, alignedInvoiceDate)
+    : billingPeriodKey === "monthly"
+    ? resolveMonthlyBillingDueDate({ invoiceDate: alignedInvoiceDate, dueDate: null })
+    : alignedInvoiceDate;
+
+  return {
+    invoiceDate: alignedInvoiceDate,
+    dueDate: alignedDueDate,
+  };
 };
 
 const resolveRequestedBookingDate = (bookingDate, fallbackDate) =>
@@ -250,6 +300,65 @@ const getInvoiceDuplicateBucket = ({ category, metadata = {} } = {}) => {
 };
 
 const isUtilityDuplicateBucket = (bucket = "") => bucket === "utility" || String(bucket).startsWith("utility:");
+
+const normalizeSchedulePeriodKey = (value = "") => String(value || "").trim();
+
+const buildRecurringInvoiceCacheKey = ({ businessId, propertyId, tenantId, unitId, statementPeriod, periodKey = "" } = {}) => {
+  const normalizedPeriodKey = normalizeSchedulePeriodKey(periodKey);
+  return [
+    String(businessId || ""),
+    String(propertyId || ""),
+    String(tenantId || ""),
+    String(unitId || ""),
+    normalizedPeriodKey || statementPeriod?.start?.toISOString?.() || "",
+  ].join(":");
+};
+
+const buildRecurringInvoiceConflictFilter = ({
+  businessId,
+  propertyId,
+  tenantId,
+  unitId,
+  statementPeriod,
+  periodKey = "",
+} = {}) => {
+  const normalizedPeriodKey = normalizeSchedulePeriodKey(periodKey);
+  const baseFilter = {
+    business: businessId,
+    property: propertyId,
+    tenant: tenantId,
+    unit: unitId,
+    category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE"] },
+  };
+
+  if (!normalizedPeriodKey) {
+    return {
+      ...baseFilter,
+      invoiceDate: {
+        $gte: statementPeriod.start,
+        $lte: statementPeriod.end,
+      },
+    };
+  }
+
+  return {
+    ...baseFilter,
+    $or: [
+      { "metadata.periodKey": normalizedPeriodKey },
+      {
+        $and: [
+          { $or: [{ "metadata.periodKey": { $exists: false } }, { "metadata.periodKey": "" }, { metadata: { $exists: false } }] },
+          {
+            invoiceDate: {
+              $gte: statementPeriod.start,
+              $lte: statementPeriod.end,
+            },
+          },
+        ],
+      },
+    ],
+  };
+};
 
 const findConflictingMonthlyInvoice = ({ existingInvoices = [], category, metadata = {} } = {}) => {
   const requestedBucket = getInvoiceDuplicateBucket({ category, metadata });
@@ -2578,14 +2687,15 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
 
   const requestedInvoiceDate = normalizeDate(invoiceDate);
   const requestedBookingDate = resolveRequestedBookingDate(bookingDate, requestedInvoiceDate);
-  const shouldForceMonthlyDates = shouldForceMonthlyBillingDates({ category, metadata });
-  const normalizedInvoiceDate = shouldForceMonthlyDates
-    ? getMonthStart(requestedInvoiceDate)
-    : requestedInvoiceDate;
+  const recurringDates = resolveRecurringBillingDates({
+    category,
+    invoiceDate: requestedInvoiceDate,
+    dueDate,
+    metadata: metadata && typeof metadata === "object" ? metadata : {},
+  });
+  const normalizedInvoiceDate = recurringDates.invoiceDate;
   const normalizedBookingDate = requestedBookingDate || normalizedInvoiceDate;
-  let normalizedDueDate = shouldForceMonthlyDates
-    ? resolveMonthlyBillingDueDate({ invoiceDate: normalizedInvoiceDate, dueDate })
-    : normalizeDate(dueDate, normalizedInvoiceDate);
+  let normalizedDueDate = recurringDates.dueDate;
 
   if (normalizedDueDate < normalizedInvoiceDate) {
     normalizedDueDate = normalizedInvoiceDate;
@@ -2755,29 +2865,30 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     req?.body?.account;
 
   const statementPeriod = buildStatementPeriod(normalizedInvoiceDate);
-  const monthlyInvoiceCacheKey = [
-    String(businessId),
-    String(accountingContext.propertyId),
-    String(tenant),
-    String(unit),
-    statementPeriod.start.toISOString(),
-  ].join(":");
+  const schedulePeriodKey = normalizeSchedulePeriodKey(normalizedMetadata?.periodKey);
+  const recurringInvoiceCacheKey = buildRecurringInvoiceCacheKey({
+    businessId,
+    propertyId: accountingContext.propertyId,
+    tenantId: tenant,
+    unitId: unit,
+    statementPeriod,
+    periodKey: schedulePeriodKey,
+  });
   const activeMonthlyInvoices = ["RENT_CHARGE", "UTILITY_CHARGE"].includes(normalizedCategory)
     ? await getOrLoadCachedValue(
         batchContext?.monthlyInvoiceCache,
-        monthlyInvoiceCacheKey,
+        recurringInvoiceCacheKey,
         () =>
-          TenantInvoice.find({
-            business: businessId,
-            property: accountingContext.propertyId,
-            tenant,
-            unit,
-            category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE"] },
-            invoiceDate: {
-              $gte: statementPeriod.start,
-              $lte: statementPeriod.end,
-            },
-          })
+          TenantInvoice.find(
+            buildRecurringInvoiceConflictFilter({
+              businessId,
+              propertyId: accountingContext.propertyId,
+              tenantId: tenant,
+              unitId: unit,
+              statementPeriod,
+              periodKey: schedulePeriodKey,
+            })
+          )
             .select("_id invoiceNumber category status invoiceDate metadata")
             .lean()
       )
@@ -2903,7 +3014,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
         metadata: invoice.metadata || {},
       },
     ];
-    batchContext.monthlyInvoiceCache.set(monthlyInvoiceCacheKey, Promise.resolve(nextCachedInvoices));
+    batchContext.monthlyInvoiceCache.set(recurringInvoiceCacheKey, Promise.resolve(nextCachedInvoices));
   }
 
   try {

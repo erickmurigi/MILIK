@@ -47,6 +47,15 @@ const normalizeDate = (value, fallbackToEnd = false) => {
 
 const round2 = (value) => Number((Number(value || 0)).toFixed(2));
 
+const resolveInvoiceDueDateForReports = (invoice = {}) => {
+  const dueDate = invoice?.dueDate ? normalizeDate(invoice.dueDate, true) : null;
+  if (dueDate) return dueDate;
+
+  const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
+  const fallback = metadata?.periodEndDate || metadata?.periodToDate || metadata?.periodStartDate || metadata?.periodFromDate || invoice?.invoiceDate || null;
+  return fallback ? normalizeDate(fallback, true) : null;
+};
+
 const isManagerIncomeAccount = (account = {}) => {
   const code = String(account.code || "").trim();
   const name = String(account.name || "").trim().toLowerCase();
@@ -891,8 +900,9 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
         else if (category === "LATE_PENALTY_CHARGE") penaltyBalance += remaining;
         else if (category === "DEPOSIT_CHARGE") depositBalance += remaining;
         else otherBalance += remaining;
-        if (remaining > 0 && invoice?.dueDate && (!oldestDueDate || new Date(invoice.dueDate) < new Date(oldestDueDate))) {
-          oldestDueDate = invoice.dueDate;
+        const reportDueDate = resolveInvoiceDueDateForReports(invoice);
+        if (remaining > 0 && reportDueDate && (!oldestDueDate || new Date(reportDueDate) < new Date(oldestDueDate))) {
+          oldestDueDate = reportDueDate;
         }
       });
 

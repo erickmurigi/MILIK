@@ -1,5 +1,26 @@
 // models/Lease.js
 import mongoose from "mongoose";
+import { canonicalizeBillingPeriodKey } from "../services/billingPeriodService.js";
+
+
+const RentReviewRecordSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, trim: true },
+    reviewType: { type: String, enum: ["review", "escalation"], default: "review" },
+    type: { type: String, enum: ["percentage", "amount"], default: "percentage" },
+    value: { type: Number, default: 0, min: 0 },
+    frequency: { type: String, trim: true, default: "yearly" },
+    effectiveDate: { type: Date, required: true },
+    note: { type: String, trim: true, default: "" },
+    status: { type: String, enum: ["Draft", "Scheduled", "Applied"], default: "Scheduled" },
+    previousRent: { type: Number, default: 0, min: 0 },
+    resultingRent: { type: Number, default: 0, min: 0 },
+    appliedAt: { type: Date, default: null },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
 
 const BillingScheduleAdjustmentSchema = new mongoose.Schema(
   {
@@ -54,6 +75,7 @@ const LeaseSchema = new mongoose.Schema(
     rentAmount: { type: Number, required: true, min: 0 },
     depositAmount: { type: Number, required: true, min: 0, default: 0 },
     paymentDueDay: { type: Number, required: true, min: 1, max: 28, default: 5 },
+    billingPeriodKey: { type: String, trim: true, default: "monthly" },
     noticePeriodDays: { type: Number, default: 30, min: 0 },
     lateFee: { type: Number, default: 0, min: 0 },
     terms: { type: String, trim: true, default: "" },
@@ -86,6 +108,7 @@ const LeaseSchema = new mongoose.Schema(
     },
     autoCreatedFromTenant: { type: Boolean, default: false },
     billingScheduleAdjustments: [BillingScheduleAdjustmentSchema],
+    rentReviewRecords: [RentReviewRecordSchema],
   },
   { timestamps: true }
 );
@@ -130,9 +153,41 @@ LeaseSchema.pre("validate", function normalizeLease(next) {
   this.rentAmount = Number(this.rentAmount || 0);
   this.depositAmount = Number(this.depositAmount || 0);
   this.paymentDueDay = Number(this.paymentDueDay || 5);
+  this.billingPeriodKey = canonicalizeBillingPeriodKey(this.billingPeriodKey || "monthly");
   this.noticePeriodDays = Number(this.noticePeriodDays || 0);
   this.lateFee = Number(this.lateFee || 0);
   this.version = Number(this.version || 1);
+
+  if (Array.isArray(this.rentReviewRecords)) {
+    this.rentReviewRecords = this.rentReviewRecords
+      .filter((item) => item && item.id && item.effectiveDate)
+      .map((item) => {
+        const next = {
+          ...item,
+          id: String(item.id).trim(),
+          reviewType: ["review", "escalation"].includes(String(item.reviewType || "").trim().toLowerCase())
+            ? String(item.reviewType || "").trim().toLowerCase()
+            : "review",
+          type: ["percentage", "amount"].includes(String(item.type || "").trim().toLowerCase())
+            ? String(item.type || "").trim().toLowerCase()
+            : "percentage",
+          value: Number(item.value || 0),
+          frequency: String(item.frequency || "yearly").trim().toLowerCase() || "yearly",
+          effectiveDate: new Date(item.effectiveDate),
+          note: typeof item.note === "string" ? item.note.trim() : "",
+          status: ["Draft", "Scheduled", "Applied"].includes(String(item.status || "Scheduled"))
+            ? String(item.status || "Scheduled")
+            : "Scheduled",
+          previousRent: Number(item.previousRent || 0),
+          resultingRent: Number(item.resultingRent || 0),
+          appliedAt: item.appliedAt ? new Date(item.appliedAt) : null,
+          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+          updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+        };
+        return next;
+      })
+      .sort((a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate));
+  }
 
   if (this.startDate && this.endDate) {
     const start = new Date(this.startDate);

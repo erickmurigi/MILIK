@@ -81,6 +81,56 @@ const formatPenaltyDescriptionPeriod = (value) => {
   return `${dt.toLocaleString("en-US", { month: "short" })}/${String(dt.getFullYear()).slice(-2)}`;
 };
 
+const canonicalizeBillingPeriodKey = (value) => {
+  const normalized = String(value || "monthly")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_");
+
+  if (!normalized) return "monthly";
+  if (["monthly", "month", "1_month", "1m"].includes(normalized)) return "monthly";
+  if (["quarterly", "quarter", "3_months", "3m"].includes(normalized)) return "quarterly";
+  if (["semi_annual", "semiannual", "semi_annually", "biannual", "half_yearly", "6_months", "6m"].includes(normalized)) return "semi_annual";
+  if (["annual", "annually", "yearly", "12_months", "12m"].includes(normalized)) return "annual";
+  return normalized;
+};
+
+const resolveInvoiceCoverageWindow = (invoice = {}) => {
+  const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
+  const billingPeriodKey = canonicalizeBillingPeriodKey(metadata?.billingPeriodKey || metadata?.frequencyKey || metadata?.billingFrequency || "monthly");
+  const invoiceDate = normalizeDate(invoice?.invoiceDate || new Date());
+  const startCandidate = metadata?.periodStartDate || metadata?.periodFromDate || invoice?.invoiceDate || null;
+  const endCandidate = metadata?.periodEndDate || metadata?.periodToDate || null;
+  const start = startCandidate ? startOfDay(startCandidate) : startOfDay(invoiceDate);
+
+  let end = null;
+  if (endCandidate) {
+    end = normalizeDate(endCandidate, start);
+    end.setHours(23, 59, 59, 999);
+  } else if (billingPeriodKey === "monthly") {
+    end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999);
+  } else {
+    const dueDate = invoice?.dueDate ? normalizeDate(invoice.dueDate, start) : null;
+    end = dueDate ? new Date(dueDate) : new Date(start);
+    end.setHours(23, 59, 59, 999);
+  }
+
+  return { start, end, billingPeriodKey, periodKey: String(metadata?.periodKey || "").trim() };
+};
+
+const isInvoiceInCurrentPenaltyWindow = (invoice, runDate) => {
+  const runAt = startOfDay(runDate);
+  const invoiceWindow = resolveInvoiceCoverageWindow(invoice);
+  if (invoiceWindow.periodKey) {
+    return invoiceWindow.periodKey === buildPeriodKey({ repeatFrequency: invoiceWindow.billingPeriodKey === "monthly" ? "monthly" : "manual" }, invoiceWindow.start)
+      ? runAt >= invoiceWindow.start && runAt <= invoiceWindow.end
+      : runAt >= invoiceWindow.start && runAt <= invoiceWindow.end;
+  }
+
+  return runAt >= invoiceWindow.start && runAt <= invoiceWindow.end;
+};
+
 const assertRuleCanRun = (rule, runDate) => {
   if (!rule?.active) {
     const error = new Error("This late penalty rule is inactive. Activate it before previewing or processing penalties.");
@@ -116,10 +166,10 @@ const isInvoiceCategoryEligible = (invoice, rule, runDate) => {
   if (category === "LATE_PENALTY_CHARGE" || category === "DEPOSIT_CHARGE") return false;
   if (mode === "rent_only") return category === "RENT_CHARGE";
   if (mode === "current_period_rent_only") {
-    return category === "RENT_CHARGE" && getMonthKey(invoice?.invoiceDate) === getMonthKey(runDate);
+    return category === "RENT_CHARGE" && isInvoiceInCurrentPenaltyWindow(invoice, runDate);
   }
   if (mode === "current_period_bill_balance_only") {
-    return getMonthKey(invoice?.invoiceDate) === getMonthKey(runDate);
+    return isInvoiceInCurrentPenaltyWindow(invoice, runDate);
   }
   if (mode === "all_arrears" || mode === "outstanding_invoice_balance") {
     return category === "RENT_CHARGE" || category === "UTILITY_CHARGE";
@@ -741,7 +791,7 @@ export const processLatePenalties = async (req, res) => {
             unit: row.unitId,
             category: "LATE_PENALTY_CHARGE",
             amount: Number(row.calculatedPenalty || 0),
-            description: `${formatPenaltyDescriptionPeriod(runDate)} Late Penalty`,
+            description: `${row.sourceInvoiceNumber || formatPenaltyDescriptionPeriod(runDate)} Late Penalty`,
             invoiceDate: runDate,
             dueDate: runDate,
             createdBy: actorUserId,

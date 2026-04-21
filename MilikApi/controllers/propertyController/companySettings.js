@@ -8,6 +8,12 @@ import {
   DEFAULT_TAX_SETTINGS,
   normalizeCompanyTaxConfiguration,
 } from "../../services/taxCalculationService.js";
+import {
+  DEFAULT_BILLING_PERIODS,
+  buildBillingPeriodRecord,
+  canonicalizeBillingPeriodKey,
+  ensureSettingsBillingPeriods,
+} from "../../services/billingPeriodService.js";
 
 const normalizeText = (value = "") => String(value ?? "").trim();
 const normalizeLower = (value = "") => normalizeText(value).toLowerCase();
@@ -166,8 +172,9 @@ const ensureSettingsDocument = async (businessId) => {
   let settings = await findCompanySettings(businessId);
   if (!settings) {
     settings = new CompanySettings({ company: businessId });
-    ensureSettingsTaxConfiguration(settings);
   }
+  ensureSettingsTaxConfiguration(settings);
+  ensureSettingsBillingPeriods(settings);
   return settings;
 };
 
@@ -227,12 +234,12 @@ export const getCompanySettings = async (req, res, next) => {
           { _id: new mongoose.Types.ObjectId(), name: "Garbage", category: "service_charge" },
           { _id: new mongoose.Types.ObjectId(), name: "Security", category: "service_charge" },
         ],
-        billingPeriods: [
-          { _id: new mongoose.Types.ObjectId(), name: "Monthly", durationInMonths: 1, durationInDays: 30 },
-          { _id: new mongoose.Types.ObjectId(), name: "Quarterly", durationInMonths: 3, durationInDays: 90 },
-          { _id: new mongoose.Types.ObjectId(), name: "Semi-Annual", durationInMonths: 6, durationInDays: 180 },
-          { _id: new mongoose.Types.ObjectId(), name: "Annual", durationInMonths: 12, durationInDays: 365 },
-        ],
+        billingPeriods: DEFAULT_BILLING_PERIODS.map((period) =>
+          buildBillingPeriodRecord({
+            _id: new mongoose.Types.ObjectId(),
+            ...period,
+          })
+        ),
         commissions: [{ _id: new mongoose.Types.ObjectId(), name: "Default", percentage: 10, applicableTo: "rent" }],
         expenseItems: [
           { _id: new mongoose.Types.ObjectId(), name: "Maintenance", category: "maintenance" },
@@ -246,6 +253,7 @@ export const getCompanySettings = async (req, res, next) => {
       await settings.save();
     } else {
       ensureSettingsTaxConfiguration(settings);
+      ensureSettingsBillingPeriods(settings);
       if (settings.isModified()) {
         await settings.save();
       }
@@ -361,13 +369,21 @@ export const addBillingPeriod = async (req, res, next) => {
     const settings = await ensureSettingsDocument(businessId);
     ensureUniqueCollectionName({ items: settings.billingPeriods, name, label: "Billing period" });
 
-    const newPeriod = {
+    const newPeriod = buildBillingPeriodRecord({
       _id: new mongoose.Types.ObjectId(),
+      key: req.body?.key || name,
       name,
       durationInMonths,
       durationInDays,
       isActive: true,
-    };
+    });
+
+    const duplicateKey = settings.billingPeriods.find(
+      (item) => canonicalizeBillingPeriodKey(item?.key || item?.name) === newPeriod.key
+    );
+    if (duplicateKey) {
+      return res.status(400).json({ message: "Billing period key already exists. Use a different name." });
+    }
 
     settings.billingPeriods.push(newPeriod);
     await settings.save();
@@ -386,6 +402,8 @@ export const updateBillingPeriod = async (req, res, next) => {
     if (!settings) {
       return res.status(404).json({ message: "Settings not found" });
     }
+
+    ensureSettingsBillingPeriods(settings);
 
     const period = settings.billingPeriods.id(periodId);
     if (!period) {
@@ -423,6 +441,17 @@ export const updateBillingPeriod = async (req, res, next) => {
 
     if (req.body?.isActive !== undefined) {
       period.isActive = Boolean(req.body.isActive);
+    }
+
+    period.key = canonicalizeBillingPeriodKey(period.key || req.body?.key || period.name);
+
+    const duplicateKey = settings.billingPeriods.find(
+      (item) =>
+        String(item?._id || "") !== String(periodId || "") &&
+        canonicalizeBillingPeriodKey(item?.key || item?.name) === period.key
+    );
+    if (duplicateKey) {
+      return res.status(400).json({ message: "Billing period key already exists. Use a different name." });
     }
 
     await settings.save();

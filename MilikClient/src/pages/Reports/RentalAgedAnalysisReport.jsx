@@ -11,6 +11,12 @@ const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString()}`;
 const ITEMS_PER_PAGE = 50;
 const normalizeArray = (value) => (Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : []);
 
+const resolveInvoiceDueDateForAging = (invoice = {}) => {
+  if (invoice?.dueDate) return invoice.dueDate;
+  const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
+  return metadata?.periodEndDate || metadata?.periodToDate || metadata?.periodStartDate || metadata?.periodFromDate || invoice?.invoiceDate || null;
+};
+
 const daysBetween = (earlier, later = new Date()) => {
   const start = new Date(earlier);
   const end = new Date(later);
@@ -87,9 +93,10 @@ const RentalAgedAnalysisReport = () => {
           days90: 0,
           days90Plus: 0,
           total: 0,
-          oldestDueDate: invoice?.dueDate || null,
+          oldestDueDate: resolveInvoiceDueDateForAging(invoice) || null,
         };
-        const bucket = bucketOutstanding(invoice?.dueDate, outstanding);
+        const effectiveDueDate = resolveInvoiceDueDateForAging(invoice);
+        const bucket = bucketOutstanding(effectiveDueDate, outstanding);
         existing.current += bucket.current;
         existing.days30 += bucket.days30;
         existing.days60 += bucket.days60;
@@ -97,8 +104,8 @@ const RentalAgedAnalysisReport = () => {
         existing.days90Plus += bucket.days90Plus;
         existing.total += outstanding;
         existing.categoryBreakdown[invoice?.category] = (existing.categoryBreakdown[invoice?.category] || 0) + outstanding;
-        if (invoice?.dueDate && (!existing.oldestDueDate || new Date(invoice.dueDate) < new Date(existing.oldestDueDate))) {
-          existing.oldestDueDate = invoice.dueDate;
+        if (effectiveDueDate && (!existing.oldestDueDate || new Date(effectiveDueDate) < new Date(existing.oldestDueDate))) {
+          existing.oldestDueDate = effectiveDueDate;
         }
         summaryByTenant.set(tenantId, existing);
       });

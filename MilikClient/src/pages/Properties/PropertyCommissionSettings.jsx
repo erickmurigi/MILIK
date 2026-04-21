@@ -13,6 +13,24 @@ const SELECT = INPUT;
 const GREEN = 'bg-[#0B3B2E]';
 const GREEN_HOVER = 'hover:bg-[#0A3127]';
 
+const normalizeCategoryKey = (value = '') =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9:_-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const buildCommissionCategoryKey = (kind = 'utility', name = '') => {
+  if (kind === 'rent') return 'rent';
+  const normalizedName = normalizeCategoryKey(name);
+  return normalizedName ? `${kind}:${normalizedName}` : `${kind}:other`;
+};
+
+const readableCategoryKind = (value = '') =>
+  String(value || 'utility')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+
 const defaultForm = {
   commissionPaymentMode: 'percentage',
   commissionPercentage: 0,
@@ -20,6 +38,7 @@ const defaultForm = {
   commissionRecognitionBasis: 'received',
   tenantsPaysTo: 'propertyManager',
   depositHeldBy: 'propertyManager',
+  commissionCategoryKeys: ['rent'],
   commissionTaxSettings: {
     enabled: false,
     taxCodeKey: 'vat_standard',
@@ -35,6 +54,9 @@ const normalizePropertyForm = (property) => ({
   commissionRecognitionBasis: property?.commissionRecognitionBasis || 'received',
   tenantsPaysTo: property?.tenantsPaysTo || 'propertyManager',
   depositHeldBy: property?.depositHeldBy || 'propertyManager',
+  commissionCategoryKeys: Array.isArray(property?.commissionCategoryKeys) && property.commissionCategoryKeys.length > 0
+    ? Array.from(new Set(property.commissionCategoryKeys.map((item) => normalizeCategoryKey(item)).filter(Boolean)))
+    : ['rent'],
   commissionTaxSettings: {
     enabled: Boolean(property?.commissionTaxSettings?.enabled),
     taxCodeKey: property?.commissionTaxSettings?.taxCodeKey || 'vat_standard',
@@ -66,6 +88,7 @@ const PropertyCommissionSettings = () => {
   const [taxConfig, setTaxConfig] = useState({
     taxSettings: { enabled: false, defaultVatRate: 16 },
     taxCodes: [],
+    utilityTypes: [],
   });
 
   useEffect(() => {
@@ -88,12 +111,14 @@ const PropertyCommissionSettings = () => {
         setTaxConfig({
           taxSettings: response?.data?.taxSettings || { enabled: false, defaultVatRate: 16 },
           taxCodes: Array.isArray(response?.data?.taxCodes) ? response.data.taxCodes : [],
+          utilityTypes: Array.isArray(response?.data?.utilityTypes) ? response.data.utilityTypes : [],
         });
       } catch (error) {
         if (!cancelled) {
           setTaxConfig({
             taxSettings: { enabled: false, defaultVatRate: 16 },
             taxCodes: [],
+            utilityTypes: [],
           });
         }
       }
@@ -115,6 +140,38 @@ const PropertyCommissionSettings = () => {
     if (rows.length > 0) return rows;
     return [{ key: 'vat_standard', name: 'VAT Standard', rate: Number(taxConfig?.taxSettings?.defaultVatRate || 16) }];
   }, [taxConfig]);
+
+
+  const availableCommissionCategories = useMemo(() => {
+    const utilityTypes = Array.isArray(taxConfig.utilityTypes)
+      ? taxConfig.utilityTypes.filter((item) => item?.isActive !== false)
+      : [];
+
+    const utilityRows = utilityTypes
+      .map((item) => {
+        const categoryType = normalizeCategoryKey(item?.category || 'utility') || 'utility';
+        const normalizedName = String(item?.name || '').trim();
+        if (!normalizedName) return null;
+        return {
+          key: buildCommissionCategoryKey(categoryType, normalizedName),
+          label: normalizedName,
+          categoryType,
+          description: item?.description || '',
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.label.localeCompare(right.label));
+
+    return [
+      {
+        key: 'rent',
+        label: 'Rent',
+        categoryType: 'rent',
+        description: 'Classic rent line items remain commissionable by default for backward compatibility.',
+      },
+      ...utilityRows,
+    ];
+  }, [taxConfig.utilityTypes]);
 
   useEffect(() => {
     if (!selectedProperty) {
@@ -143,6 +200,29 @@ const PropertyCommissionSettings = () => {
     }));
   };
 
+
+  const handleCommissionCategoryToggle = (categoryKey) => {
+    const normalizedKey = normalizeCategoryKey(categoryKey);
+    if (!normalizedKey) return;
+
+    setFormData((prev) => {
+      const existing = new Set(
+        Array.isArray(prev.commissionCategoryKeys)
+          ? prev.commissionCategoryKeys.map((item) => normalizeCategoryKey(item)).filter(Boolean)
+          : ['rent']
+      );
+
+      if (existing.has(normalizedKey)) existing.delete(normalizedKey);
+      else existing.add(normalizedKey);
+
+      const nextKeys = Array.from(existing);
+      return {
+        ...prev,
+        commissionCategoryKeys: nextKeys.length > 0 ? nextKeys : ['rent'],
+      };
+    });
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!selectedProperty) {
@@ -162,8 +242,22 @@ const PropertyCommissionSettings = () => {
       return;
     }
 
+    const normalizedCommissionCategoryKeys = Array.from(
+      new Set(
+        (Array.isArray(formData.commissionCategoryKeys) ? formData.commissionCategoryKeys : ['rent'])
+          .map((item) => normalizeCategoryKey(item))
+          .filter(Boolean)
+      )
+    );
+
+    if (normalizedCommissionCategoryKeys.length === 0) {
+      toast.error('Select at least one commissionable statement category');
+      return;
+    }
+
     const payload = {
       ...formData,
+      commissionCategoryKeys: normalizedCommissionCategoryKeys,
       commissionTaxSettings: {
         enabled: Boolean(formData.commissionTaxSettings.enabled),
         taxCodeKey: formData.commissionTaxSettings.taxCodeKey || 'vat_standard',
@@ -298,6 +392,36 @@ const PropertyCommissionSettings = () => {
                         <option value="propertyManager">Property Manager</option>
                         <option value="landlord">Landlord</option>
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Commissionable Statement Categories</label>
+                      <p className="mb-3 text-xs leading-5 text-slate-500">
+                        Select the normalized landlord-statement categories that should contribute to the commission base.
+                        Rent stays available for backward compatibility, while active utility and service-charge types come from company operational settings.
+                      </p>
+                      <div className="space-y-3">
+                        {availableCommissionCategories.map((item) => {
+                          const isChecked = (formData.commissionCategoryKeys || []).includes(item.key);
+                          return (
+                            <label key={item.key} className={`flex items-start gap-3 rounded-xl border px-4 py-3 transition ${isChecked ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleCommissionCategoryToggle(item.key)}
+                                className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
+                              />
+                              <div>
+                                <div className="text-sm font-semibold text-slate-900">{item.label}</div>
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {readableCategoryKind(item.categoryType)}
+                                  {item.description ? ` • ${item.description}` : ''}
+                                </div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 </div>

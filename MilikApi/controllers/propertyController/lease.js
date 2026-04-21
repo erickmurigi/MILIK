@@ -4,6 +4,7 @@ import Lease from "../../models/Lease.js";
 import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
 import { emitToCompany } from "../../utils/socketManager.js";
+import { canonicalizeBillingPeriodKey } from "../../services/billingPeriodService.js";
 
 const ACTIVE_LEASE_STATUSES = ["draft", "pending_signature", "active"];
 const TERMINAL_LEASE_STATUSES = ["expired", "terminated", "renewed", "cancelled"];
@@ -68,6 +69,36 @@ const addDays = (dateValue, days) => {
   if (Number.isNaN(date.getTime())) return null;
   date.setDate(date.getDate() + Number(days || 0));
   return date;
+};
+
+
+const sanitizeRentReviewRecords = (rows = []) => {
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .filter((row) => row && row.id && row.effectiveDate)
+    .map((row) => ({
+      id: String(row.id),
+      reviewType: ["review", "escalation"].includes(String(row.reviewType || "").trim().toLowerCase())
+        ? String(row.reviewType || "").trim().toLowerCase()
+        : "review",
+      type: ["percentage", "amount"].includes(String(row.type || "").trim().toLowerCase())
+        ? String(row.type || "").trim().toLowerCase()
+        : "percentage",
+      value: Number(row.value || 0),
+      frequency: String(row.frequency || "yearly").trim().toLowerCase() || "yearly",
+      effectiveDate: new Date(row.effectiveDate),
+      note: row.note ? String(row.note) : "",
+      status: ["Draft", "Scheduled", "Applied"].includes(String(row.status || "Scheduled"))
+        ? String(row.status || "Scheduled")
+        : "Scheduled",
+      previousRent: Number(row.previousRent || 0),
+      resultingRent: Number(row.resultingRent || 0),
+      appliedAt: row.appliedAt ? new Date(row.appliedAt) : null,
+      createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      updatedAt: row.updatedAt ? new Date(row.updatedAt) : new Date(),
+    }))
+    .sort((a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate));
 };
 
 const sanitizeBillingScheduleAdjustments = (rows = []) => {
@@ -234,6 +265,15 @@ const sanitizeLeasePayload = async ({ req, payload = {}, existingLease = null } 
     rentAmount: normalizeMoney(payload.rentAmount, existingLease?.rentAmount ?? tenant?.rent ?? unit?.rent ?? 0),
     depositAmount: normalizeMoney(payload.depositAmount, existingLease?.depositAmount ?? tenant?.depositAmount ?? 0),
     paymentDueDay: normalizeDay(payload.paymentDueDay, existingLease?.paymentDueDay || 5),
+    billingPeriodKey: canonicalizeBillingPeriodKey(
+      payload.billingPeriodKey ??
+        payload.billingFrequency ??
+        existingLease?.billingPeriodKey ??
+        existingLease?.billingFrequency ??
+        unit?.billingPeriodKey ??
+        unit?.billingFrequency ??
+        "monthly"
+    ),
     noticePeriodDays: Math.max(0, Number(payload.noticePeriodDays ?? existingLease?.noticePeriodDays ?? 30) || 0),
     lateFee: normalizeMoney(payload.lateFee, existingLease?.lateFee ?? 0),
     terms: normalizeString(payload.terms, existingLease?.terms || ""),
@@ -269,6 +309,10 @@ const sanitizeLeasePayload = async ({ req, payload = {}, existingLease = null } 
       payload.billingScheduleAdjustments !== undefined
         ? sanitizeBillingScheduleAdjustments(payload.billingScheduleAdjustments)
         : existingLease?.billingScheduleAdjustments || [],
+    rentReviewRecords:
+      payload.rentReviewRecords !== undefined
+        ? sanitizeRentReviewRecords(payload.rentReviewRecords)
+        : existingLease?.rentReviewRecords || [],
   };
 };
 

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { canonicalizeBillingPeriodKey } from "../services/billingPeriodService.js";
 
 const unitUtilitySchema = new mongoose.Schema(
   {
@@ -58,7 +59,13 @@ const UnitSchema = new mongoose.Schema(
 
     billingFrequency: {
       type: String,
-      enum: ["monthly", "bi-monthly", "quarterly", "semi-annually", "annually"],
+      trim: true,
+      default: "monthly",
+    },
+
+    billingPeriodKey: {
+      type: String,
+      trim: true,
       default: "monthly",
     },
 
@@ -124,6 +131,12 @@ UnitSchema.pre("validate", function (next) {
       isIncluded: !!item?.isIncluded,
     }));
   }
+
+  const normalizedBillingPeriodKey = canonicalizeBillingPeriodKey(
+    this.billingPeriodKey || this.billingFrequency || "monthly"
+  );
+  this.billingPeriodKey = normalizedBillingPeriodKey;
+  this.billingFrequency = normalizedBillingPeriodKey;
 
   this.rent = Number(this.rent || 0);
   this.deposit = Number(this.deposit || 0);

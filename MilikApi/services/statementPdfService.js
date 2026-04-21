@@ -131,8 +131,74 @@ const buildUtilityColumnsFromRows = (rows = []) => {
     .sort((a, b) => String(a.label).localeCompare(String(b.label)));
 };
 
-const getRowUtilityAmount = (row = {}, key = "", phase = "invoiced") =>
-  Number(normalizeRowUtilities(row)?.[key]?.[phase] || 0);
+const buildStatementColumns = (workspace = {}, utilityColumns = []) => {
+  if (Array.isArray(workspace?.statementColumns) && workspace.statementColumns.length > 0) {
+    return workspace.statementColumns.map((item) => ({
+      key: String(item?.key || ""),
+      label: item?.label || titleCase(String(item?.key || "").replace(/_/g, " ")),
+      sourceKeys:
+        Array.isArray(item?.sourceKeys) && item.sourceKeys.length > 0
+          ? item.sourceKeys.map((value) => normalizeUtilityKey(value))
+          : [normalizeUtilityKey(item?.key || item?.label || "")],
+      invoiced: Number(item?.invoiced || 0),
+      paid: Number(item?.paid || 0),
+      isGrouped: Boolean(item?.isGrouped),
+    }));
+  }
+
+  if (utilityColumns.length <= 4) {
+    return utilityColumns.map((item) => ({
+      key: item.key,
+      label: item.label,
+      sourceKeys: [item.key],
+      invoiced: Number(item?.invoiced || 0),
+      paid: Number(item?.paid || 0),
+      isGrouped: false,
+    }));
+  }
+
+  const visible = utilityColumns.slice(0, 3).map((item) => ({
+    key: item.key,
+    label: item.label,
+    sourceKeys: [item.key],
+    invoiced: Number(item?.invoiced || 0),
+    paid: Number(item?.paid || 0),
+    isGrouped: false,
+  }));
+  const overflow = utilityColumns.slice(3);
+  visible.push({
+    key: "other_charges",
+    label: "Other Charges",
+    sourceKeys: overflow.map((item) => item.key),
+    invoiced: overflow.reduce((sum, item) => sum + Number(item?.invoiced || 0), 0),
+    paid: overflow.reduce((sum, item) => sum + Number(item?.paid || 0), 0),
+    isGrouped: true,
+  });
+  return visible;
+};
+
+const buildRowStatementColumnMap = (row = {}, statementColumns = []) => {
+  if (row?.statementColumns && typeof row.statementColumns === "object") {
+    return row.statementColumns;
+  }
+
+  const utilityMap = normalizeRowUtilities(row);
+  return (Array.isArray(statementColumns) ? statementColumns : []).reduce((acc, column) => {
+    const sourceKeys = Array.isArray(column?.sourceKeys) && column.sourceKeys.length > 0 ? column.sourceKeys : [column?.key];
+    acc[column.key] = sourceKeys.reduce(
+      (totals, sourceKey) => {
+        totals.invoiced += Number(utilityMap?.[sourceKey]?.invoiced || 0);
+        totals.paid += Number(utilityMap?.[sourceKey]?.paid || 0);
+        return totals;
+      },
+      { invoiced: 0, paid: 0 }
+    );
+    return acc;
+  }, {});
+};
+
+const getRowStatementColumnAmount = (row = {}, key = "", phase = "invoiced") =>
+  Number(buildRowStatementColumnMap(row, row?.__statementColumns || [])?.[key]?.[phase] || 0);
 
 const buildBusinessLocation = (business = {}) =>
   [
@@ -191,25 +257,73 @@ const releasePdfRenderSlot = () => {
   if (next) next();
 };
 
+const resetBrowser = async () => {
+  if (globalBrowser) {
+    try {
+      await globalBrowser.close();
+    } catch {
+      // ignore
+    }
+  }
+  globalBrowser = null;
+  browserInitializing = false;
+};
+
+const isBrowserUsable = (browser) => {
+  if (!browser) return false;
+  if (typeof browser.isConnected === "function") return browser.isConnected();
+  return true;
+};
+
 async function getBrowser() {
-  if (globalBrowser) return globalBrowser;
+  if (isBrowserUsable(globalBrowser)) return globalBrowser;
 
   if (browserInitializing) {
-    while (!globalBrowser) {
+    while (browserInitializing) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    return globalBrowser;
+    if (isBrowserUsable(globalBrowser)) return globalBrowser;
   }
 
   browserInitializing = true;
-  globalBrowser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-  browserInitializing = false;
+  try {
+    globalBrowser = await puppeteer.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    });
 
-  return globalBrowser;
+    if (typeof globalBrowser.on === "function") {
+      globalBrowser.on("disconnected", () => {
+        globalBrowser = null;
+        browserInitializing = false;
+      });
+    }
+
+    return globalBrowser;
+  } finally {
+    browserInitializing = false;
+  }
 }
+
+const createPdfPage = async () => {
+  let browser = await getBrowser();
+
+  try {
+    const page = await browser.newPage();
+    await page.setCacheEnabled(false);
+    page.on("error", () => {});
+    page.on("pageerror", () => {});
+    return page;
+  } catch {
+    await resetBrowser();
+    browser = await getBrowser();
+    const page = await browser.newPage();
+    await page.setCacheEnabled(false);
+    page.on("error", () => {});
+    page.on("pageerror", () => {});
+    return page;
+  }
+};
 
 const buildRowsFromLines = (lines = []) => {
   const map = new Map();
@@ -317,25 +431,6 @@ const normalizePrintableRow = (item = {}) => ({
   sourceId: String(item.sourceId || item.sourceTransactionId || item._id || "").trim(),
 });
 
-const toSafeDateKey = (value) => {
-  if (!value) return "";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return String(value || "").trim().toLowerCase();
-  }
-  return parsed.toISOString().slice(0, 10);
-};
-
-const makeRowFingerprint = (item = {}) => {
-  const row = normalizePrintableRow(item);
-  return [
-    row.sourceId || "",
-    toSafeDateKey(row.date),
-    row.description.toLowerCase(),
-    Number(row.amount || 0).toFixed(2),
-  ].join("|");
-};
-
 const sanitizePrintableSections = ({
   additionRows = [],
   expenseRows = [],
@@ -431,538 +526,323 @@ export const generateStatementPdf = async (statementId, businessId) => {
       ? workspace.rows.map((row) => ({ ...row }))
       : buildRowsFromLines(lines);
 
-  const utilityColumns =
-    Array.isArray(workspace.utilityColumns) && workspace.utilityColumns.length > 0
-      ? workspace.utilityColumns.map((item) => ({
-          key: normalizeUtilityKey(item?.key || item?.label || ""),
-          label: item?.label || titleCase(String(item?.key || item?.label || "").replace(/_/g, " ")) || "Other Utility",
-          invoiced: Number(item?.invoiced || 0),
-          paid: Number(item?.paid || 0),
-        }))
-      : buildUtilityColumnsFromRows(rows);
-
-  const utilityTotalsMap = utilityColumns.reduce((acc, item) => {
-    acc[item.key] = item;
-    return acc;
-  }, {});
-
-  const totals = workspace.totals
-    ? {
-        ...workspace.totals,
-        utilities: Array.isArray(workspace.totals?.utilities)
-          ? workspace.totals.utilities.map((item) => ({
-              key: normalizeUtilityKey(item?.key || item?.label || ""),
-              label: item?.label || titleCase(String(item?.key || item?.label || "").replace(/_/g, " ")) || "Other Utility",
-              invoiced: Number(item?.invoiced || 0),
-              paid: Number(item?.paid || 0),
-            }))
-          : utilityColumns,
-      }
-    : {
-    perMonth: rows.reduce((sum, row) => sum + Number(row.perMonth || 0), 0),
-    openingBalance: rows.reduce(
-      (sum, row) => sum + Number(row.openingBalance || row.balanceBF || 0),
-      0
-    ),
-    invoicedRent: rows.reduce((sum, row) => sum + Number(row.invoicedRent || 0), 0),
-    invoicedGarbage: Number(utilityTotalsMap.garbage?.invoiced || 0),
-    invoicedWater: Number(utilityTotalsMap.water?.invoiced || 0),
-    invoicedTax: rows.reduce((sum, row) => sum + Number(row.invoicedTax || 0), 0),
-    paidRent: rows.reduce((sum, row) => sum + Number(row.paidRent || 0), 0),
-    paidGarbage: Number(utilityTotalsMap.garbage?.paid || 0),
-    paidWater: Number(utilityTotalsMap.water?.paid || 0),
-    paidTax: rows.reduce((sum, row) => sum + Number(row.paidTax || 0), 0),
-    utilityInvoiced: utilityColumns.reduce(
-      (sum, row) => sum + Number(row.invoiced || 0),
-      0
-    ),
-    utilityPaid: utilityColumns.reduce((sum, row) => sum + Number(row.paid || 0), 0),
-    utilities: utilityColumns,
-    closingBalance: rows.reduce(
-      (sum, row) => sum + Number(row.closingBalance || row.balanceCF || 0),
-      0
-    ),
-  };
-
-  const rawExpenseRows = Array.isArray(workspace.expenseRows)
-    ? workspace.expenseRows
-    : [];
-  const rawAdditionRows = Array.isArray(workspace.additionRows)
-    ? workspace.additionRows
-    : [];
-  const rawDirectToLandlordRows = Array.isArray(workspace.directToLandlordRows)
-    ? workspace.directToLandlordRows
-    : [];
-
-  const { additionRows, expenseRows, directToLandlordRows } =
-    sanitizePrintableSections({
-      additionRows: rawAdditionRows,
-      expenseRows: rawExpenseRows,
-      directToLandlordRows: rawDirectToLandlordRows,
+    const utilityColumns =
+      Array.isArray(workspace.utilityColumns) && workspace.utilityColumns.length > 0
+        ? workspace.utilityColumns.map((item) => ({
+            key: normalizeUtilityKey(item?.key || item?.label || ""),
+            label: item?.label || titleCase(String(item?.key || item?.label || "").replace(/_/g, " ")) || "Other Utility",
+            invoiced: Number(item?.invoiced || 0),
+            paid: Number(item?.paid || 0),
+          }))
+        : buildUtilityColumnsFromRows(rows);
+    const statementColumns = buildStatementColumns(workspace, utilityColumns);
+    rows.forEach((row) => {
+      row.__statementColumns = statementColumns;
+      row.__statementColumnMap = buildRowStatementColumnMap(row, statementColumns);
     });
 
-  const summary = workspace.summary || {};
-  const depositMemo = workspace.depositMemo || {};
-  const depositMemoRows = Array.isArray(depositMemo.rows) ? depositMemo.rows : [];
-  const depositMemoTotals = depositMemo.totals || {};
-  const broughtForwardCreditApplications = workspace.broughtForwardCreditApplications || {};
-  const broughtForwardCreditApplicationRows = Array.isArray(broughtForwardCreditApplications.rows)
-    ? broughtForwardCreditApplications.rows
-    : [];
-  const broughtForwardCreditApplicationTotals = broughtForwardCreditApplications.totals || {};
-  const printableAdditionsTotal = sumPrintableAmounts(additionRows);
-  const printableDeductionsTotal = sumPrintableAmounts(expenseRows);
-  const printableDirectToLandlordTotal = sumPrintableAmounts(directToLandlordRows);
-  const summaryBasisLabel =
-    summary.settlementBasisLabel || summary.basisCollectionsLabel || "Manager-held collections";
-  const summaryBasisAmount = Number(
-    summary.settlementBasisAmount ?? summary.basisCollections ?? summary.managerCollections ?? 0
-  );
-  const utilityPassThroughLabel =
-    summary.utilityPassThroughLabel || "Utilities (added as billed)";
-  const utilityPassThroughAmount = Number(summary.utilityPassThroughAmount ?? 0);
-  const invoiceVatPassThroughLabel =
-    summary.invoiceVatPassThroughLabel || "Invoice VAT (pass-through)";
-  const invoiceVatPassThroughAmount = Number(
-    summary.invoiceVatPassThroughAmount ?? summary.totalInvoiceVatInvoiced ?? 0
-  );
-  const commissionAmount = Number(summary.commissionAmount || 0);
-  const commissionTaxAmount = Number(summary.commissionTaxAmount || 0);
-  const commissionGrossAmount = Number(
-    summary.commissionGrossAmount ?? commissionAmount + commissionTaxAmount
-  );
-  const totalInvoiceVatReceived = Number(
-    summary.totalInvoiceVatReceived ?? totals.paidTax ?? 0
-  );
-  const hasInvoiceVatColumn =
-    Number(summary.totalInvoiceVatInvoiced || 0) > 0 ||
-    totalInvoiceVatReceived > 0 ||
-    rows.some((row) => Number(row?.invoicedTax || 0) > 0 || Number(row?.paidTax || 0) > 0);
-  const nonCommissionDeductions = Number(
-    summary.nonCommissionDeductions ??
-      summary.totalExpenses ??
-      Math.max(printableDeductionsTotal - commissionGrossAmount, 0)
-  );
-  const directToLandlordAmount = Number(
-    summary.directToLandlordCollections ??
-      summary.directToLandlordOffsets ??
-      summary.totalDirectToLandlordCollections ??
-      printableDirectToLandlordTotal
-  );
-  const additionsAmount = Number(
-    summary.additions ?? summary.totalAdditions ?? printableAdditionsTotal
-  );
-  const openingSettlementBalance = Number(
-    summary.openingLandlordSettlementBalance ?? summary.openingSettlementBalance ?? 0
-  );
-  const commissionBaseLabel = summary.commissionBaseLabel || "Commission base";
-  const commissionBaseAmount = Number(summary.commissionBaseAmount || 0);
-  const settlement = resolveSettlementDisplay(summary);
+    const utilityTotalsMap = utilityColumns.reduce((acc, item) => {
+      acc[item.key] = item;
+      return acc;
+    }, {});
 
-  const businessName =
-    statement.business?.companyName || statement.business?.name || "Milik";
-  const businessSlogan =
-    statement.business?.slogan || "Modern Property Management";
-  const businessLogo = statement.business?.logo || "";
-  const businessPhone = statement.business?.phoneNo || statement.business?.phone || "";
-  const businessEmail = statement.business?.email || "";
-  const businessPostalAddress = buildBusinessPostalAddress(statement.business || {});
-  const businessLocation = buildBusinessLocation(statement.business || {});
+    const totals = workspace.totals
+      ? {
+          ...workspace.totals,
+          utilities: Array.isArray(workspace.totals?.utilities)
+            ? workspace.totals.utilities.map((item) => ({
+                key: normalizeUtilityKey(item?.key || item?.label || ""),
+                label: item?.label || titleCase(String(item?.key || item?.label || "").replace(/_/g, " ")) || "Other Utility",
+                invoiced: Number(item?.invoiced || 0),
+                paid: Number(item?.paid || 0),
+              }))
+            : utilityColumns,
+          statementColumns,
+        }
+      : {
+          perMonth: rows.reduce((sum, row) => sum + Number(row.perMonth || 0), 0),
+          openingBalance: rows.reduce(
+            (sum, row) => sum + Number(row.openingBalance || row.balanceBF || 0),
+            0
+          ),
+          invoicedRent: rows.reduce((sum, row) => sum + Number(row.invoicedRent || 0), 0),
+          invoicedGarbage: Number(utilityTotalsMap.garbage?.invoiced || 0),
+          invoicedWater: Number(utilityTotalsMap.water?.invoiced || 0),
+          invoicedTax: rows.reduce((sum, row) => sum + Number(row.invoicedTax || 0), 0),
+          paidRent: rows.reduce((sum, row) => sum + Number(row.paidRent || 0), 0),
+          paidGarbage: Number(utilityTotalsMap.garbage?.paid || 0),
+          paidWater: Number(utilityTotalsMap.water?.paid || 0),
+          paidTax: rows.reduce((sum, row) => sum + Number(row.paidTax || 0), 0),
+          utilityInvoiced: utilityColumns.reduce(
+            (sum, row) => sum + Number(row.invoiced || 0),
+            0
+          ),
+          utilityPaid: utilityColumns.reduce((sum, row) => sum + Number(row.paid || 0), 0),
+          utilities: utilityColumns,
+          statementColumns,
+          closingBalance: rows.reduce(
+            (sum, row) => sum + Number(row.closingBalance || row.balanceCF || 0),
+            0
+          ),
+        };
 
-  const propertyName =
-    statement.property?.propertyName ||
-    statement.property?.name ||
-    workspace.propertyLabel ||
-    "Property";
+    const rawExpenseRows = Array.isArray(workspace.expenseRows)
+      ? workspace.expenseRows
+      : [];
+    const rawAdditionRows = Array.isArray(workspace.additionRows)
+      ? workspace.additionRows
+      : [];
+    const rawDirectToLandlordRows = Array.isArray(workspace.directToLandlordRows)
+      ? workspace.directToLandlordRows
+      : [];
 
-  const landlordName =
-    statement.landlord?.landlordName ||
-    `${statement.landlord?.firstName || ""} ${statement.landlord?.lastName || ""}`.trim() ||
-    workspace.landlordLabel ||
-    "Landlord";
+    const { additionRows, expenseRows, directToLandlordRows } =
+      sanitizePrintableSections({
+        additionRows: rawAdditionRows,
+        expenseRows: rawExpenseRows,
+        directToLandlordRows: rawDirectToLandlordRows,
+      });
 
-  const scheduleRowsHtml = rows
-    .map(
-      (row) => `
-        <tr>
-          <td>${esc(row.unit || row.unitNumber || "-")}</td>
-          <td>${esc(row.accountNo || "-")}</td>
-          <td>${esc(row.tenantName || "VACANT")}</td>
-          <td class="num">${formatCurrency(row.perMonth || 0)}</td>
-          <td class="num">${formatCurrency(row.openingBalance ?? row.balanceBF ?? 0)}</td>
-          <td class="num">${formatCurrency(row.invoicedRent || 0)}</td>
-          ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(row.invoicedTax || 0)}</td>` : ""}
-          ${utilityColumns
-            .map(
-              (column) =>
-                `<td class="num">${formatCurrency(
-                  getRowUtilityAmount(row, column.key, "invoiced")
-                )}</td>`
-            )
-            .join("")}
-          <td class="num">${formatCurrency(row.paidRent || row.rentPaid || 0)}</td>
-          ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(row.paidTax || 0)}</td>` : ""}
-          ${utilityColumns
-            .map(
-              (column) =>
-                `<td class="num">${formatCurrency(
-                  getRowUtilityAmount(row, column.key, "paid")
-                )}</td>`
-            )
-            .join("")}
-          <td class="num strong">${formatCurrency(row.closingBalance ?? row.balanceCF ?? 0)}</td>
-        </tr>
-      `
-    )
-    .join("");
+    const summary = workspace.summary || {};
+    const depositMemo = workspace.depositMemo || {};
+    const depositMemoRows = Array.isArray(depositMemo.rows) ? depositMemo.rows : [];
+    const depositMemoTotals = depositMemo.totals || {};
+    const broughtForwardCreditApplications = workspace.broughtForwardCreditApplications || {};
+    const broughtForwardCreditApplicationRows = Array.isArray(broughtForwardCreditApplications.rows)
+      ? broughtForwardCreditApplications.rows
+      : [];
+    const broughtForwardCreditApplicationTotals = broughtForwardCreditApplications.totals || {};
+    const printableAdditionsTotal = sumPrintableAmounts(additionRows);
+    const printableDeductionsTotal = sumPrintableAmounts(expenseRows);
+    const printableDirectToLandlordTotal = sumPrintableAmounts(directToLandlordRows);
+    const summaryBasisLabel =
+      summary.settlementBasisLabel || summary.basisCollectionsLabel || "Manager-held collections";
+    const summaryBasisAmount = Number(
+      summary.settlementBasisAmount ?? summary.basisCollections ?? summary.managerCollections ?? 0
+    );
+    const utilityPassThroughLabel =
+      summary.utilityPassThroughLabel || "Utilities (added as billed)";
+    const utilityPassThroughAmount = Number(summary.utilityPassThroughAmount ?? 0);
+    const invoiceVatPassThroughLabel =
+      summary.invoiceVatPassThroughLabel || "Invoice VAT (pass-through)";
+    const invoiceVatPassThroughAmount = Number(
+      summary.invoiceVatPassThroughAmount ?? summary.totalInvoiceVatInvoiced ?? 0
+    );
+    const commissionAmount = Number(summary.commissionAmount || 0);
+    const commissionTaxAmount = Number(summary.commissionTaxAmount || 0);
+    const totalInvoiceVatReceived = Number(
+      summary.totalInvoiceVatReceived ?? totals.paidTax ?? 0
+    );
+    const hasInvoiceVatColumn =
+      Number(summary.totalInvoiceVatInvoiced || 0) > 0 ||
+      totalInvoiceVatReceived > 0 ||
+      rows.some((row) => Number(row?.invoicedTax || 0) > 0 || Number(row?.paidTax || 0) > 0);
+    const nonCommissionDeductions = Number(
+      summary.nonCommissionDeductions ??
+        summary.totalExpenses ??
+        Math.max(printableDeductionsTotal - (commissionAmount + commissionTaxAmount), 0)
+    );
+    const directToLandlordAmount = Number(
+      summary.directToLandlordCollections ??
+        summary.directToLandlordOffsets ??
+        summary.totalDirectToLandlordCollections ??
+        printableDirectToLandlordTotal
+    );
+    const additionsAmount = Number(
+      summary.additions ?? summary.totalAdditions ?? printableAdditionsTotal
+    );
+    const openingSettlementBalance = Number(
+      summary.openingLandlordSettlementBalance ?? summary.openingSettlementBalance ?? 0
+    );
+    const commissionBaseLabel = summary.commissionBaseLabel || "Commission base";
+    const commissionBaseAmount = Number(summary.commissionBaseAmount || 0);
+    const settlement = resolveSettlementDisplay(summary);
 
-  const settlementSummaryRowsHtml = [
-    {
-      label: "Opening landlord settlement B/F",
-      value: formatCurrency(openingSettlementBalance),
-      tone: openingSettlementBalance < 0 ? "negative" : "",
-    },
-    {
-      label: esc(summaryBasisLabel),
-      value: formatCurrency(summaryBasisAmount),
-      tone: "",
-    },
-    ...(utilityPassThroughAmount > 0
-      ? [
-          {
-            label: esc(utilityPassThroughLabel),
-            value: formatCurrency(utilityPassThroughAmount),
-            tone: "",
-          },
-        ]
-      : []),
-    ...(invoiceVatPassThroughAmount > 0
-      ? [
-          {
-            label: esc(invoiceVatPassThroughLabel),
-            value: formatCurrency(invoiceVatPassThroughAmount),
-            tone: "",
-          },
-        ]
-      : []),
-    {
-      label: "Additions",
-      value: formatCurrency(additionsAmount),
-      tone: "",
-    },
-    {
-      label: "Expenses & other deductions",
-      value: formatCurrency(nonCommissionDeductions),
-      tone: "",
-    },
-    {
-      label: esc(commissionBaseLabel),
-      value: formatCurrency(commissionBaseAmount),
-      tone: "",
-    },
-    {
-      label: "Commission",
-      value: formatCurrency(commissionAmount),
-      tone: "",
-    },
-    ...(commissionTaxAmount > 0
-      ? [
-          {
-            label: "VAT on commission",
-            value: formatCurrency(commissionTaxAmount),
-            tone: "",
-          },
-        ]
-      : []),
-    {
-      label: "Direct to landlord collections (memo)",
-      value: formatCurrency(directToLandlordAmount),
-      tone: "",
-    },
-    {
-      label: esc(settlement.label),
-      value: formatCurrency(settlement.amount),
-      tone: settlement.isNegative ? "settlement-negative" : "settlement-positive",
-    },
-  ]
-    .map(
-      (item) => `
-        <tr class="${item.tone || ""}">
-          <td>${item.label}</td>
-          <td class="num">${item.value}</td>
-        </tr>
-      `
-    )
-    .join("");
+    const businessName =
+      statement.business?.companyName || statement.business?.name || "Milik";
+    const businessSlogan =
+      statement.business?.slogan || "Modern Property Management";
+    const businessLogo = statement.business?.logo || "";
+    const businessPhone = statement.business?.phoneNo || statement.business?.phone || "";
+    const businessEmail = statement.business?.email || "";
+    const businessPostalAddress = buildBusinessPostalAddress(statement.business || {});
+    const businessLocation = buildBusinessLocation(statement.business || {});
 
-  const html = `<!DOCTYPE html>
-  <html>
-    <head>
-      <meta charset="utf-8" />
-      <title>Landlord Statement</title>
-      <style>
-        * { box-sizing: border-box; }
-        body {
-          margin: 0;
-          padding: 10mm 8mm;
-          font-family: Arial, Helvetica, sans-serif;
-          color: #111827;
-          background: #ffffff;
-          font-size: 9px;
-        }
-        .sheet {
-          width: 100%;
-        }
-        .header-table,
-        .statement-table,
-        .simple-table,
-        .summary-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-        .header-table td {
-          vertical-align: top;
-        }
-        .brand-cell {
-          width: 78px;
-          padding-right: 10px;
-        }
-        .brand-logo {
-          width: 62px;
-          height: 62px;
-          object-fit: contain;
-        }
-        .brand-fallback {
-          width: 62px;
-          height: 62px;
-          border: 1px solid #111827;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 20px;
-          font-weight: 700;
-        }
-        .business-name {
-          font-size: 20px;
-          font-weight: 700;
-          margin: 0 0 2px;
-        }
-        .business-line {
-          margin: 1px 0;
-          color: #374151;
-        }
-        .statement-title {
-          text-align: center;
-          font-size: 13px;
-          font-weight: 700;
-          margin: 10px 0 4px;
-          text-transform: uppercase;
-        }
-        .statement-subtitle {
-          text-align: center;
-          margin-bottom: 10px;
-          font-size: 9px;
-          color: #4b5563;
-        }
-        .meta-table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 8px;
-        }
-        .meta-table td {
-          padding: 2px 4px;
-          vertical-align: top;
-        }
-        .meta-label {
-          width: 86px;
-          font-weight: 700;
-          text-transform: uppercase;
-        }
-        .meta-value {
-          font-weight: 700;
-        }
-        .period-cell {
-          text-align: right;
-          font-weight: 700;
-          white-space: nowrap;
-        }
-        .section-title {
-          margin: 10px 0 4px;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          border-bottom: 1px solid #111827;
-          padding-bottom: 2px;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-        th,
-        td {
-          border: 1px solid #111827;
-          padding: 3px 4px;
-          vertical-align: middle;
-        }
-        th {
-          background: #f3f4f6;
-          font-weight: 700;
-        }
-        .num {
-          text-align: right;
-          white-space: nowrap;
-        }
-        .center {
-          text-align: center;
-        }
-        .muted {
-          color: #6b7280;
-        }
-        .schedule-wrap {
-          overflow: hidden;
-        }
-        .statement-table {
-          font-size: 8px;
-        }
-        .statement-table th,
-        .statement-table td {
-          padding: 2px 3px;
-        }
-        .statement-table thead tr:first-child th {
-          text-align: center;
-        }
-        .totals-row td {
-          font-weight: 700;
-          background: #f9fafb;
-        }
-        .two-col {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 8px;
-        }
-        .two-col > tbody > tr > td {
-          width: 50%;
-          vertical-align: top;
-          border: none;
-          padding: 0;
-        }
-        .two-col > tbody > tr > td:first-child {
-          padding-right: 6px;
-        }
-        .two-col > tbody > tr > td:last-child {
-          padding-left: 6px;
-        }
-        .summary-head {
-          background: #0B3B2E;
-          color: #ffffff;
-        }
-        .summary-head th {
-          background: #0B3B2E;
-          color: #ffffff;
-        }
-        .summary-table td,
-        .summary-table th {
-          padding: 4px 5px;
-        }
-        .summary-table .label {
-          font-weight: 700;
-        }
-        .summary-table .final-row td {
-          font-weight: 700;
-          font-size: 10px;
-          background: #f3f4f6;
-        }
-        .negative {
-          color: #991b1b;
-        }
-        .footnote {
-          margin-top: 8px;
-          font-size: 8px;
-          color: #6b7280;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="sheet">
-        <table class="header-table">
+    const propertyName =
+      statement.property?.propertyName ||
+      statement.property?.name ||
+      workspace.propertyLabel ||
+      "Property";
+
+    const landlordName =
+      statement.landlord?.landlordName ||
+      `${statement.landlord?.firstName || ""} ${statement.landlord?.lastName || ""}`.trim() ||
+      workspace.landlordLabel ||
+      "Landlord";
+
+    const scheduleRowsHtml = rows
+      .map(
+        (row) => `
           <tr>
-            <td class="brand-cell">
-              ${businessLogo ? `<img src="${esc(businessLogo)}" alt="logo" class="brand-logo" />` : `<div class="brand-fallback">M</div>`}
-            </td>
-            <td>
-              <div class="business-name">${esc(businessName)}</div>
-              ${businessSlogan ? `<div class="business-line">${esc(businessSlogan)}</div>` : ""}
-              ${businessPostalAddress ? `<div class="business-line">${esc(businessPostalAddress)}</div>` : ""}
-              ${businessLocation ? `<div class="business-line">${esc(businessLocation)}</div>` : ""}
-              <div class="business-line">${businessPhone ? `TEL: ${esc(businessPhone)}` : ""}${businessPhone && businessEmail ? " | " : ""}${businessEmail ? `EMAIL: ${esc(businessEmail)}` : ""}</div>
-            </td>
-            <td class="period-cell">
-              <div>Statement No: ${esc(statement.statementNumber || "-")}</div>
-              <div>Generated: ${formatDate(statement.generatedAt || statement.updatedAt || new Date())}</div>
-            </td>
+            <td>${esc(row.unit || row.unitNumber || "-")}</td>
+            <td>${esc(row.accountNo || "-")}</td>
+            <td>${esc(row.tenantName || "VACANT")}</td>
+            <td class="num">${formatCurrency(row.perMonth || 0)}</td>
+            <td class="num">${formatCurrency(row.openingBalance ?? row.balanceBF ?? 0)}</td>
+            <td class="num">${formatCurrency(row.invoicedRent || 0)}</td>
+            ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(row.invoicedTax || 0)}</td>` : ""}
+            ${statementColumns
+              .map(
+                (column) =>
+                  `<td class="num">${formatCurrency(
+                    getRowStatementColumnAmount(row, column.key, "invoiced")
+                  )}</td>`
+              )
+              .join("")}
+            <td class="num">${formatCurrency(row.paidRent || row.rentPaid || 0)}</td>
+            ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(row.paidTax || 0)}</td>` : ""}
+            ${statementColumns
+              .map(
+                (column) =>
+                  `<td class="num">${formatCurrency(
+                    getRowStatementColumnAmount(row, column.key, "paid")
+                  )}</td>`
+              )
+              .join("")}
+            <td class="num strong">${formatCurrency(row.closingBalance ?? row.balanceCF ?? 0)}</td>
           </tr>
-        </table>
+        `
+      )
+      .join("");
 
-        <div class="statement-title">Property Account Statement - ${esc(String(statement?.metadata?.statementType || statement?.metadata?.workspace?.statementType || statement?.statementType || "Provisional").toUpperCase())}</div>
-        <div class="statement-subtitle">Professional landlord schedule and settlement summary</div>
-
-        <table class="meta-table">
-          <tr>
-            <td class="meta-label">Landlord</td>
-            <td class="meta-value">${esc(landlordName)}</td>
-            <td class="period-cell">STATEMENT PERIOD ${esc(workspace.periodLabel || `${formatDate(statement.periodStart)} - ${formatDate(statement.periodEnd)}`)}</td>
-          </tr>
-          <tr>
-            <td class="meta-label">Property</td>
-            <td class="meta-value">${esc(propertyName)}</td>
-            <td></td>
-          </tr>
-        </table>
-
-        <div class="section-title">Statement Schedule</div>
-        <div class="schedule-wrap">
-          <table class="statement-table">
-            <thead>
-              <tr>
-                <th rowspan="2">Unit</th>
-                <th rowspan="2">A/c No.</th>
-                <th rowspan="2">Tenant/Resident</th>
-                <th rowspan="2" class="num">Per Month</th>
-                <th rowspan="2" class="num">Balance B/F</th>
-                <th colspan="${1 + (hasInvoiceVatColumn ? 1 : 0) + utilityColumns.length}">Amount Invoiced</th>
-                <th colspan="${1 + (hasInvoiceVatColumn ? 1 : 0) + utilityColumns.length}">Amount Received</th>
-                <th rowspan="2" class="num">Balance C/F</th>
-              </tr>
-              <tr>
-                <th class="num">Rent</th>
-                ${hasInvoiceVatColumn ? `<th class="num">Rent VAT</th>` : ""}
-                ${utilityColumns.map((column) => `<th class="num">${esc(column.label)}</th>`).join("")}
-                <th class="num">Rent</th>
-                ${hasInvoiceVatColumn ? `<th class="num">Rent VAT</th>` : ""}
-                ${utilityColumns.map((column) => `<th class="num">${esc(column.label)}</th>`).join("")}
-              </tr>
-            </thead>
-            <tbody>
-              ${scheduleRowsHtml}
-              <tr class="totals-row">
-                <td colspan="3" class="num">Total</td>
-                <td class="num">${formatCurrency(totals.perMonth || 0)}</td>
-                <td class="num">${formatCurrency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
-                <td class="num">${formatCurrency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
-                ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.invoicedTax ?? summary.totalInvoiceVatInvoiced ?? 0)}</td>` : ""}
-                ${utilityColumns.map((column) => `<td class="num">${formatCurrency(column?.invoiced || 0)}</td>`).join("")}
-                <td class="num">${formatCurrency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
-                ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>` : ""}
-                ${utilityColumns.map((column) => `<td class="num">${formatCurrency(column?.paid || 0)}</td>`).join("")}
-                <td class="num">${formatCurrency(totals.closingBalance ?? summary.closingBalance ?? 0)}</td>
-              </tr>
-            </tbody>
+    const html = `<!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Landlord Statement</title>
+        <style>
+          @page { size: A4 landscape; margin: 8mm 6mm; }
+          * { box-sizing: border-box; }
+          body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; color: #111827; background: #ffffff; font-size: 9px; }
+          .sheet { width: 100%; max-width: 285mm; margin: 0 auto; }
+          .header-table, .statement-table, .simple-table, .summary-table { width: 100%; border-collapse: collapse; }
+          .header-table td { vertical-align: top; }
+          .brand-cell { width: 78px; padding-right: 10px; }
+          .brand-logo { width: 62px; height: 62px; object-fit: contain; }
+          .brand-fallback { width: 62px; height: 62px; border: 1px solid #111827; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; }
+          .business-name { font-size: 20px; font-weight: 700; margin: 0 0 2px; }
+          .business-line { margin: 1px 0; color: #374151; }
+          .statement-title { text-align: center; font-size: 13px; font-weight: 700; margin: 10px 0 4px; text-transform: uppercase; }
+          .statement-subtitle { text-align: center; margin-bottom: 10px; font-size: 9px; color: #4b5563; }
+          .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+          .meta-table td { padding: 2px 4px; vertical-align: top; }
+          .meta-label { width: 86px; font-weight: 700; text-transform: uppercase; }
+          .meta-value { font-weight: 700; }
+          .period-cell { text-align: right; font-weight: 700; white-space: nowrap; }
+          .section-title { margin: 10px 0 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #111827; padding-bottom: 2px; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #111827; padding: 3px 4px; vertical-align: middle; }
+          th { background: #f3f4f6; font-weight: 700; }
+          .num { text-align: right; white-space: nowrap; }
+          .center { text-align: center; }
+          .muted { color: #6b7280; }
+          .schedule-wrap { overflow: hidden; }
+          .statement-table { font-size: 7.5px; table-layout: fixed; }
+          .statement-table th, .statement-table td { padding: 2px 3px; word-break: break-word; }
+          .statement-table thead tr:first-child th { text-align: center; }
+          .totals-row td { font-weight: 700; background: #f9fafb; }
+          .two-col { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          .two-col > tbody > tr > td { width: 50%; vertical-align: top; border: none; padding: 0; }
+          .two-col > tbody > tr > td:first-child { padding-right: 6px; }
+          .two-col > tbody > tr > td:last-child { padding-left: 6px; }
+          .summary-head { background: #0B3B2E; color: #ffffff; }
+          .summary-head th { background: #0B3B2E; color: #ffffff; }
+          .summary-table td, .summary-table th { padding: 4px 5px; }
+          .summary-table .label { font-weight: 700; }
+          .summary-table .final-row td { font-weight: 700; font-size: 10px; background: #f3f4f6; }
+          .negative { color: #991b1b; }
+          .footnote { margin-top: 8px; font-size: 8px; color: #6b7280; }
+        </style>
+      </head>
+      <body>
+        <div class="sheet">
+          <table class="header-table">
+            <tr>
+              <td class="brand-cell">
+                ${businessLogo ? `<img src="${esc(businessLogo)}" alt="logo" class="brand-logo" />` : `<div class="brand-fallback">M</div>`}
+              </td>
+              <td>
+                <div class="business-name">${esc(businessName)}</div>
+                ${businessSlogan ? `<div class="business-line">${esc(businessSlogan)}</div>` : ""}
+                ${businessPostalAddress ? `<div class="business-line">${esc(businessPostalAddress)}</div>` : ""}
+                ${businessLocation ? `<div class="business-line">${esc(businessLocation)}</div>` : ""}
+                <div class="business-line">${businessPhone ? `TEL: ${esc(businessPhone)}` : ""}${businessPhone && businessEmail ? " | " : ""}${businessEmail ? `EMAIL: ${esc(businessEmail)}` : ""}</div>
+              </td>
+              <td class="period-cell">
+                <div>Statement No: ${esc(statement.statementNumber || "-")}</div>
+                <div>Generated: ${formatDate(statement.generatedAt || statement.updatedAt || new Date())}</div>
+              </td>
+            </tr>
           </table>
-        </div>
 
-        <table class="two-col">
-          <tr>
+          <div class="statement-title">LANDLORD STATEMENT - ${esc(String(statement?.metadata?.statementType || statement?.metadata?.workspace?.statementType || statement?.statementType || "Provisional").toUpperCase())}</div>
+          <div class="statement-subtitle">Professional landlord schedule and settlement summary</div>
+
+          <table class="meta-table">
+            <tr>
+              <td class="meta-label">Landlord</td>
+              <td class="meta-value">${esc(landlordName)}</td>
+              <td class="period-cell">STATEMENT PERIOD ${esc(workspace.periodLabel || `${formatDate(statement.periodStart)} - ${formatDate(statement.periodEnd)}`)}</td>
+            </tr>
+            <tr>
+              <td class="meta-label">Property</td>
+              <td class="meta-value">${esc(propertyName)}</td>
+              <td></td>
+            </tr>
+          </table>
+
+          <div class="section-title">Statement Schedule</div>
+          <div class="schedule-wrap">
+            <table class="statement-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">Unit</th>
+                  <th rowspan="2">A/c No.</th>
+                  <th rowspan="2">Tenant/Resident</th>
+                  <th rowspan="2" class="num">Per Month</th>
+                  <th rowspan="2" class="num">Balance B/F</th>
+                  <th colspan="${1 + (hasInvoiceVatColumn ? 1 : 0) + statementColumns.length}">Amount Invoiced</th>
+                  <th colspan="${1 + (hasInvoiceVatColumn ? 1 : 0) + statementColumns.length}">Amount Received</th>
+                  <th rowspan="2" class="num">Balance C/F</th>
+                </tr>
+                <tr>
+                  <th class="num">Rent</th>
+                  ${hasInvoiceVatColumn ? `<th class="num">Rent VAT</th>` : ""}
+                  ${statementColumns.map((column) => `<th class="num">${esc(column.label)}</th>`).join("")}
+                  <th class="num">Rent</th>
+                  ${hasInvoiceVatColumn ? `<th class="num">Rent VAT</th>` : ""}
+                  ${statementColumns.map((column) => `<th class="num">${esc(column.label)}</th>`).join("")}
+                </tr>
+              </thead>
+              <tbody>
+                ${scheduleRowsHtml}
+                <tr class="totals-row">
+                  <td colspan="3" class="num">Total</td>
+                  <td class="num">${formatCurrency(totals.perMonth || 0)}</td>
+                  <td class="num">${formatCurrency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
+                  <td class="num">${formatCurrency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
+                  ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.invoicedTax ?? summary.totalInvoiceVatInvoiced ?? 0)}</td>` : ""}
+                  ${statementColumns.map((column) => `<td class="num">${formatCurrency(column?.invoiced || 0)}</td>`).join("")}
+                  <td class="num">${formatCurrency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
+                  ${hasInvoiceVatColumn ? `<td class="num">${formatCurrency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>` : ""}
+                  ${statementColumns.map((column) => `<td class="num">${formatCurrency(column?.paid || 0)}</td>`).join("")}
+                  <td class="num">${formatCurrency(totals.closingBalance ?? summary.closingBalance ?? 0)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <table class="two-col"><tbody><tr>
             <td>
               <div class="section-title">Additions</div>
               <table class="simple-table">
@@ -1064,13 +944,13 @@ export const generateStatementPdf = async (statementId, businessId) => {
                 </tbody>
               </table>
             </td>
-          </tr>
-        </table>
+          </tr></tbody></table>
 
-        <div class="footnote">Generated from MILIK statement workspace. This print layout is kept compact and wide so schedule columns fit within the in-system print preview and downloaded PDF.</div>
-      </div>
-    </body>
-  </html>`;
+          <div class="footnote">Generated from MILIK statement workspace. This print layout is kept compact and wide so schedule columns fit within the in-system print preview and downloaded PDF.</div>
+        </div>
+      </body>
+    </html>`;
+
     await acquirePdfRenderSlot();
     try {
       const page = await createPdfPage();
@@ -1089,7 +969,8 @@ export const generateStatementPdf = async (statementId, businessId) => {
         format: "A4",
         landscape: true,
         printBackground: true,
-        margin: { top: "10mm", right: "8mm", bottom: "10mm", left: "8mm" },
+        preferCSSPageSize: true,
+        margin: { top: "8mm", right: "6mm", bottom: "8mm", left: "6mm" },
       });
 
       try {
@@ -1100,6 +981,9 @@ export const generateStatementPdf = async (statementId, businessId) => {
 
       rememberPdfBuffer(cacheKey, pdfBuffer);
       return Buffer.from(pdfBuffer);
+    } catch (error) {
+      await resetBrowser();
+      throw error;
     } finally {
       releasePdfRenderSlot();
     }

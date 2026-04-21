@@ -15,7 +15,21 @@ const utilityTypeSchema = new mongoose.Schema(
 const billingPeriodSchema = new mongoose.Schema(
   {
     _id: mongoose.Schema.Types.ObjectId,
-    name: { type: String, required: true },
+    key: {
+      type: String,
+      required: true,
+      trim: true,
+      default: function () {
+        return String(this?.name || "monthly")
+          .trim()
+          .toLowerCase()
+          .replace(/&/g, " and ")
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_+|_+$/g, "")
+          .replace(/_+/g, "_") || "monthly";
+      },
+    },
+    name: { type: String, required: true, trim: true },
     durationInDays: { type: Number, required: true },
     durationInMonths: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
@@ -176,6 +190,7 @@ const CompanySettingsSchema = new mongoose.Schema(
 
 CompanySettingsSchema.index({ "utilityTypes.isActive": 1 });
 CompanySettingsSchema.index({ "billingPeriods.isActive": 1 });
+CompanySettingsSchema.index({ "billingPeriods.key": 1 });
 CompanySettingsSchema.index({ "expenseItems.isActive": 1 });
 CompanySettingsSchema.index({ "taxCodes.key": 1 });
 

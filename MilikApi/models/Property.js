@@ -297,6 +297,24 @@ const PropertySchema = new mongoose.Schema(
       min: 0,
     },
 
+    commissionCategoryKeys: {
+      type: [String],
+      default: ["rent"],
+      set: (value) => {
+        const items = Array.isArray(value) ? value : [value];
+        const normalized = items
+          .map((item) =>
+            String(item || "")
+              .trim()
+              .toLowerCase()
+              .replace(/[^a-z0-9:_-]+/g, "_")
+              .replace(/^_+|_+$/g, "")
+          )
+          .filter(Boolean);
+        return Array.from(new Set(normalized.length > 0 ? normalized : ["rent"]));
+      },
+    },
+
     commissionTaxSettings: {
       type: commissionTaxSettingsSchema,
       default: () => ({}),
