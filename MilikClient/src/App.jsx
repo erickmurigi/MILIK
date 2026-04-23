@@ -31,6 +31,7 @@ import CommissionsList from "./pages/Properties/CommissionsList";
 import Units from "./pages/Units/Units";
 import AddUnit from "./components/Units/AddUnit";
 import Tenants from "./pages/Tenants/Tenants";
+import TerminatedTenants from "./pages/Tenants/TerminatedTenants";
 import AddTenant from "./pages/Tenants/AddTenant";
 import TenantStatement from "./pages/Tenants/TenantStatement";
 import RentalInvoices from "./pages/Tenants/RentalInvoices";
@@ -460,6 +461,7 @@ function App() {
         <Route path="/units/space-types" element={<PermissionRoute resource="units" moduleKey="propertyManagement"><UnitTypesPage /></PermissionRoute>} />
         <Route path="/agreements" element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TenantAgreements /></PermissionRoute>} />
         <Route path="/tenants" element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><Tenants /></PermissionRoute>} />
+        <Route path="/tenants/terminated" element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TerminatedTenants /></PermissionRoute>} />
         <Route path="/tenant/new" element={<ProtectedRoute><AddTenant /></ProtectedRoute>} />
         <Route path="/tenant/:id/statement" element={<ProtectedRoute><TenantStatement /></ProtectedRoute>} />
         <Route path="/tenant/:id/edit" element={<ProtectedRoute><AddTenant /></ProtectedRoute>} />

@@ -61,6 +61,28 @@ const isDuplicateKeyError = (error) =>
   Boolean(error) &&
   (error?.code === 11000 || error?.name === "MongoServerError" || /E11000 duplicate key/i.test(String(error?.message || "")));
 
+const findExistingInvoiceByIdempotencyKey = async (businessId, idempotencyKey) => {
+  const normalizedKey = String(idempotencyKey || "").trim();
+  if (!normalizedKey) return null;
+
+  return TenantInvoice.findOne({
+    business: businessId,
+    idempotencyKey: normalizedKey,
+  })
+    .populate("chartAccount", "code name type")
+    .populate("ledgerEntries")
+    .populate("createdBy", "surname otherNames email profile");
+};
+
+const isIdempotencyKeyDuplicateError = (error) => {
+  if (!isDuplicateKeyError(error)) return false;
+
+  const duplicateFields = Object.keys(error?.keyPattern || {});
+  if (duplicateFields.includes("idempotencyKey")) return true;
+
+  return /idempotencyKey/i.test(String(error?.message || ""));
+};
+
 const resolveDepositHolderLabel = ({ requestedValue = null, tenantValue = null, propertyValue = null, companyMode = "" } = {}) => {
   const normalizeHolder = (value = "") => {
     const normalized = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -570,6 +592,7 @@ const mapInvoiceCategoryToLedgerCategory = (invoiceCategory) => {
     case "DEPOSIT_CHARGE":
       return "DEPOSIT_CHARGE";
     case "LATE_PENALTY_CHARGE":
+    case "OTHER_CHARGE":
       return "ADJUSTMENT";
     default:
       throw new Error(`Unsupported invoice category for ledger posting: ${invoiceCategory}`);
@@ -602,6 +625,38 @@ const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountV
     if (!account?._id) {
       throw new Error(
         "Late penalty posting account not found. Create or select a penalty income chart account before processing late penalties."
+      );
+    }
+
+    return account;
+  }
+
+  if (normalizedCategory === "OTHER_CHARGE") {
+    if (!String(chartAccountValue || "").trim()) {
+      const configuredLeaseAgreementIncome = await resolveConfiguredAccountingDefaultAccount({
+        businessId,
+        field: "leaseAgreementFeeIncomeAccount",
+      });
+      if (configuredLeaseAgreementIncome?._id) return configuredLeaseAgreementIncome;
+    }
+
+    const account = await findAnyChartAccount(businessId, chartAccountValue, [
+      { code: "4101", type: "income" },
+      { code: "4300", type: "income" },
+      { nameRegex: "lease agreement", type: "income" },
+      { nameRegex: "agreement fee", type: "income" },
+      { nameRegex: "lease fee", type: "income" },
+      { nameRegex: "^service charge income$", type: "income" },
+      { nameRegex: "service charge", type: "income" },
+      { nameRegex: "service income", type: "income" },
+      { nameRegex: "^other property income$", type: "income" },
+      { nameRegex: "other property income", type: "income" },
+      { nameRegex: "other income", type: "income" },
+    ]);
+
+    if (!account?._id) {
+      throw new Error(
+        "Lease/agreement fee income account not found. Configure Lease / Agreement Fee Income Account under Accounting Defaults or create a suitable income chart account before charging lease fees."
       );
     }
 
@@ -643,6 +698,14 @@ const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountV
 
   return account;
 };
+
+
+export const resolveLeaseAgreementFeeIncomeAccount = async ({ businessId, chartAccountValue = null } = {}) =>
+  resolveInvoiceIncomeAccount({
+    businessId,
+    category: "OTHER_CHARGE",
+    chartAccountValue,
+  });
 
 const resolveActorUserId = async ({ req, business, bodyCreatedBy }) =>
   resolveAuditActorUserId({
@@ -835,6 +898,7 @@ const getInvoicePriorityGroup = (invoice = {}) => {
   if (category === "DEPOSIT_CHARGE") return "deposit";
   if (category === "UTILITY_CHARGE") return "utility";
   if (category === "LATE_PENALTY_CHARGE") return "late_penalty";
+  if (category === "OTHER_CHARGE") return "other";
 
   const description = String(invoice?.description || "").toLowerCase();
   if (/debit\s*note/.test(description)) return "debit_note";
@@ -1477,7 +1541,11 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount }) => {
         : invoice.category !== "DEPOSIT_CHARGE" && invoice.category !== "LATE_PENALTY_CHARGE";
 
     postingRole =
-      invoice.category === "LATE_PENALTY_CHARGE" ? "manager_penalty_income" : "income_or_charge";
+      invoice.category === "LATE_PENALTY_CHARGE"
+        ? "manager_penalty_income"
+        : invoice.category === "OTHER_CHARGE"
+          ? "manager_service_income"
+          : "income_or_charge";
     includeInLandlordStatement = metadataIncludeInStatement;
     includeInCategoryTotals = metadataIncludeInTotals;
   }
@@ -2663,6 +2731,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     createdBy,
     chartAccountId,
     metadata,
+    idempotencyKey,
   } = payload || {};
 
   if (!business || !property || !tenant || !unit || !category || !invoiceDate || !dueDate) {
@@ -2713,6 +2782,14 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
 
   const normalizedCategory = String(category).toUpperCase();
   const normalizedMetadata = metadata && typeof metadata === "object" ? metadata : {};
+  const normalizedIdempotencyKey = String(idempotencyKey || "").trim();
+
+  if (normalizedIdempotencyKey) {
+    const existingInvoice = await findExistingInvoiceByIdempotencyKey(businessId, normalizedIdempotencyKey);
+    if (existingInvoice) {
+      return existingInvoice;
+    }
+  }
 
   if (normalizedCategory === "RENT_CHARGE" && isLegacyCombinedInvoiceMetadata(normalizedMetadata)) {
     const error = new Error(
@@ -2982,9 +3059,17 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
       postingError: null,
       ledgerEntries: [],
       metadata: normalizedMetadata,
+      idempotencyKey: normalizedIdempotencyKey || null,
       taxSnapshot,
     });
   } catch (createError) {
+    if (isIdempotencyKeyDuplicateError(createError) && normalizedIdempotencyKey) {
+      const existingInvoice = await findExistingInvoiceByIdempotencyKey(businessId, normalizedIdempotencyKey);
+      if (existingInvoice) {
+        return existingInvoice;
+      }
+    }
+
     if (isDuplicateKeyError(createError)) {
       const duplicateMessage =
         normalizedCategory === "LATE_PENALTY_CHARGE" &&

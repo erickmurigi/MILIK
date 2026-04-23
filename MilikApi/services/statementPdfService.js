@@ -22,6 +22,25 @@ const formatDepositMemoCurrency = (value) =>
 
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString("en-GB") : "");
 
+const buildStatementPeriodLabel = (workspace = {}, statement = {}) => {
+  const explicit =
+    workspace?.statementPeriodLabel ||
+    workspace?.periodLabel ||
+    "";
+
+  if (String(explicit || "").trim()) {
+    return String(explicit).trim();
+  }
+
+  const start = workspace?.statementPeriodStart || statement?.periodStart || null;
+  const end = workspace?.statementPeriodEnd || statement?.periodEnd || null;
+  const startLabel = formatDate(start);
+  const endLabel = formatDate(end);
+
+  if (startLabel && endLabel) return `${startLabel} - ${endLabel}`;
+  return startLabel || endLabel || "-";
+};
+
 const esc = (value = "") =>
   String(value || "").replace(/[&<>"']/g, (m) => ({
     "&": "&amp;",
@@ -509,6 +528,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
 
   const renderPromise = (async () => {
     const workspace = statement.metadata?.workspace || {};
+    const statementPeriodLabel = buildStatementPeriodLabel(workspace, statement);
     const workspaceHasRows = Array.isArray(workspace.rows) && workspace.rows.length > 0;
 
     const lines = workspaceHasRows
@@ -792,7 +812,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
             <tr>
               <td class="meta-label">Landlord</td>
               <td class="meta-value">${esc(landlordName)}</td>
-              <td class="period-cell">STATEMENT PERIOD ${esc(workspace.periodLabel || `${formatDate(statement.periodStart)} - ${formatDate(statement.periodEnd)}`)}</td>
+              <td class="period-cell">STATEMENT PERIOD: ${esc(statementPeriodLabel)}</td>
             </tr>
             <tr>
               <td class="meta-label">Property</td>

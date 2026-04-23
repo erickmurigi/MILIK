@@ -189,6 +189,22 @@ const buildCombinedInvoiceMetadata = ({ utilityAmount = 0, utilityLabel = "", pe
 
 const getInvoiceCategoryLabel = (invoice = {}) => {
   const category = String(invoice?.category || "").toUpperCase();
+  const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
+  const sourceType = String(metadata?.sourceTransactionType || metadata?.source || "").trim().toLowerCase();
+  const billItemKey = String(metadata?.billItemKey || "").trim().toLowerCase();
+  const billItemLabel = String(metadata?.billItemLabel || "").trim();
+
+  if (
+    category === "OTHER_CHARGE" &&
+    (
+      sourceType === "lease_agreement_fee" ||
+      billItemKey === "lease_agreement_fee" ||
+      String(billItemLabel || "").toLowerCase() === "lease / agreement fee"
+    )
+  ) {
+    return "Lease / Agreement Fee";
+  }
+
   if (category === "RENT_CHARGE") return "Rent Charge";
   if (category === "UTILITY_CHARGE") return "Utility Charge";
   if (category === "DEPOSIT_CHARGE") {

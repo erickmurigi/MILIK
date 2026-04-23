@@ -32,6 +32,11 @@ const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
 const MILIK_ORANGE_RING = "focus:ring-orange-500/30";
 const MILIK_ORANGE_BORDER_FOCUS = "focus:border-orange-700";
 
+const normalizePropertyServiceMode = (value = "Managing") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "letting" ? "Letting" : "Managing";
+};
+
 function Modal({ open, title, onClose, children, maxWidthClass = "max-w-lg" }) {
   const panelRef = useRef(null);
 
@@ -236,7 +241,7 @@ const EditProperty = () => {
   const initialFormData = useMemo(
     () => ({
       dateAcquired: "",
-      letManage: "Managing",
+      letManage: normalizePropertyServiceMode("Managing"),
       landlords: [{ name: "", contact: "", isPrimary: true }],
       propertyCode: "",
       propertyName: "",
@@ -803,7 +808,7 @@ const EditProperty = () => {
               label="Let/Manage"
               required
               placeholder="Select..."
-              items={["Managing", "Letting", "Both"]}
+              items={["Managing", "Letting"]}
               value={formData.letManage}
               onChange={(val) => handleChange({ target: { name: "letManage", value: val } })}
               getLabel={(x) => x}

@@ -139,6 +139,11 @@ const accountingDefaultsSchema = new mongoose.Schema(
       ref: "ChartOfAccount",
       default: null,
     },
+    leaseAgreementFeeIncomeAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
   },
   { _id: false }
 );

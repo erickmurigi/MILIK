@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import {
   Area,
@@ -24,11 +24,14 @@ const normalizeArray = (value) => {
 };
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase();
+
 const parseDate = (value) => {
   const date = value ? new Date(value) : null;
   return date && !Number.isNaN(date.getTime()) ? date : null;
 };
-const getInvoiceRecognitionDate = (invoice) => parseDate(invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt);
+
+const getInvoiceRecognitionDate = (invoice) =>
+  parseDate(invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt);
 
 const FinancialOverview = ({ darkMode }) => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
@@ -39,6 +42,8 @@ const FinancialOverview = ({ darkMode }) => {
 
   const [invoices, setInvoices] = useState([]);
   const [processedStatements, setProcessedStatements] = useState([]);
+  const chartRef = useRef(null);
+  const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
@@ -92,10 +97,39 @@ const FinancialOverview = ({ darkMode }) => {
     };
 
     loadData();
+
     return () => {
       active = false;
     };
   }, [businessId]);
+
+  useEffect(() => {
+    const element = chartRef.current;
+    if (!element) return;
+
+    const updateSize = () => {
+      const nextWidth = Math.max(0, Math.floor(element.clientWidth || 0));
+      const nextHeight = Math.max(0, Math.floor(element.clientHeight || 0));
+
+      setChartSize((prev) => {
+        if (prev.width === nextWidth && prev.height === nextHeight) return prev;
+        return { width: nextWidth, height: nextHeight };
+      });
+    };
+
+    updateSize();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => {
+        updateSize();
+      });
+      observer.observe(element);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -153,6 +187,7 @@ const FinancialOverview = ({ darkMode }) => {
 
   const currentMonthExpected = chartData[currentMonthIndex]?.expected || 0;
   const currentMonthCollected = chartData[currentMonthIndex]?.collected || 0;
+
   const outstandingArrears = useMemo(
     () =>
       invoices.reduce((sum, invoice) => {
@@ -163,6 +198,7 @@ const FinancialOverview = ({ darkMode }) => {
   );
 
   const collectionRate = currentMonthExpected > 0 ? (currentMonthCollected / currentMonthExpected) * 100 : 0;
+
   const unpostedReceipts = useMemo(
     () =>
       rentPayments.filter(
@@ -174,14 +210,20 @@ const FinancialOverview = ({ darkMode }) => {
       ).length,
     [rentPayments]
   );
+
   const pendingStatements = useMemo(
     () =>
       processedStatements.filter((item) => {
         if (normalizeText(item?.status) === 'reversed') return false;
-        return ['processed', 'unpaid', 'part_paid'].includes(normalizeText(item?.status)) || Number(item?.balanceDue || 0) > 0 || Number(item?.recoveryBalance || 0) > 0;
+        return (
+          ['processed', 'unpaid', 'part_paid'].includes(normalizeText(item?.status)) ||
+          Number(item?.balanceDue || 0) > 0 ||
+          Number(item?.recoveryBalance || 0) > 0
+        );
       }).length,
     [processedStatements]
   );
+
   const occupiedUnits = useMemo(
     () => units.filter((unit) => normalizeText(unit?.status) === 'occupied' || unit?.isVacant === false).length,
     [units]
@@ -196,8 +238,13 @@ const FinancialOverview = ({ darkMode }) => {
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
+
     return (
-      <div className={`p-3 rounded-lg shadow-lg border text-xs ${darkMode ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-[#31694E]/20 text-slate-800'}`}>
+      <div
+        className={`p-3 rounded-lg shadow-lg border text-xs ${
+          darkMode ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-[#31694E]/20 text-slate-800'
+        }`}
+      >
         <p className="font-extrabold mb-2 uppercase tracking-wide text-[10px]">{label}</p>
         {payload.map((entry) => (
           <div key={entry.name} className="flex items-center justify-between gap-4 mb-1 last:mb-0">
@@ -210,7 +257,11 @@ const FinancialOverview = ({ darkMode }) => {
   };
 
   return (
-    <div className={`dashboard-panel rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-md border ${darkMode ? 'border-gray-700' : 'border-gray-100'} p-4`}>
+    <div
+      className={`dashboard-panel rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-md border ${
+        darkMode ? 'border-gray-700' : 'border-gray-100'
+      } p-4`}
+    >
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <h2 className={`text-sm font-extrabold uppercase tracking-tight ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>
@@ -222,15 +273,24 @@ const FinancialOverview = ({ darkMode }) => {
               : 'Current-month expected versus collected, aligned to booking dates with live arrears across unpaid invoices.'}
           </p>
         </div>
-        <div className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'bg-[#31694E]/20 text-[#8bd1b0]' : 'bg-[#ECF6F1] text-[#1f4a35]'}`}>
+        <div
+          className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] ${
+            darkMode ? 'bg-[#31694E]/20 text-[#8bd1b0]' : 'bg-[#ECF6F1] text-[#1f4a35]'
+          }`}
+        >
           this month
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         {cards.map((card) => (
-          <div key={card.label} className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-700/30' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
-            <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>{card.label}</div>
+          <div
+            key={card.label}
+            className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-700/30' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}
+          >
+            <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>
+              {card.label}
+            </div>
             <div className={`mt-2 text-base font-extrabold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{card.value}</div>
           </div>
         ))}
@@ -253,27 +313,49 @@ const FinancialOverview = ({ darkMode }) => {
         </div>
       </div>
 
-      <div className="h-[180px] min-h-[180px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -24, bottom: 0 }}>
-            <defs>
-              <linearGradient id="expectedFillCompact" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#E85C0D" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="#E85C0D" stopOpacity={0.03} />
-              </linearGradient>
-              <linearGradient id="collectedFillCompact" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#31694E" stopOpacity={0.45} />
-                <stop offset="95%" stopColor="#31694E" stopOpacity={0.04} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#e5e7eb'} vertical={false} />
-            <XAxis dataKey="month" stroke={darkMode ? '#9ca3af' : '#6b7280'} fontSize={10} fontWeight={700} />
-            <YAxis stroke={darkMode ? '#9ca3af' : '#6b7280'} fontSize={10} fontWeight={700} width={36} tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`} />
-            <Tooltip content={<CustomTooltip />} />
-            <Area type="monotone" dataKey="expected" name={isLandlordMode ? 'Billed' : 'Expected'} stroke="#E85C0D" strokeWidth={2} fill="url(#expectedFillCompact)" />
-            <Area type="monotone" dataKey="collected" name="Collected" stroke="#31694E" strokeWidth={2} fill="url(#collectedFillCompact)" />
-          </AreaChart>
-        </ResponsiveContainer>
+      <div ref={chartRef} className="h-[180px] min-h-[180px] min-w-0 w-full">
+        {chartSize.width > 0 && chartSize.height > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -24, bottom: 0 }}>
+              <defs>
+                <linearGradient id="expectedFillCompact" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#E85C0D" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#E85C0D" stopOpacity={0.03} />
+                </linearGradient>
+                <linearGradient id="collectedFillCompact" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#31694E" stopOpacity={0.45} />
+                  <stop offset="95%" stopColor="#31694E" stopOpacity={0.04} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#e5e7eb'} vertical={false} />
+              <XAxis dataKey="month" stroke={darkMode ? '#9ca3af' : '#6b7280'} fontSize={10} fontWeight={700} />
+              <YAxis
+                stroke={darkMode ? '#9ca3af' : '#6b7280'}
+                fontSize={10}
+                fontWeight={700}
+                width={36}
+                tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Area
+                type="monotone"
+                dataKey="expected"
+                name={isLandlordMode ? 'Billed' : 'Expected'}
+                stroke="#E85C0D"
+                strokeWidth={2}
+                fill="url(#expectedFillCompact)"
+              />
+              <Area
+                type="monotone"
+                dataKey="collected"
+                name="Collected"
+                stroke="#31694E"
+                strokeWidth={2}
+                fill="url(#collectedFillCompact)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : null}
       </div>
     </div>
   );

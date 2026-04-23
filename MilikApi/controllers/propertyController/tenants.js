@@ -14,10 +14,37 @@ import LandlordStatementLine from "../../models/LandlordStatementLine.js";
 import Maintenance from "../../models/Maintenance.js";
 import Inspection from "../../models/Inspection.js";
 import MeterReading from "../../models/MeterReading.js";
+import { createTenantInvoiceRecord, resolveLeaseAgreementFeeIncomeAccount } from "./tenantInvoices.js";
 
 
 const ACTIVE_TENANT_STATUSES = ["active", "overdue"];
 const VALID_PAYMENT_METHODS = ["bank_transfer", "mobile_money", "cash", "check", "credit_card"];
+
+const normalizePropertyServiceMode = (value = "Managing") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "letting" ? "Letting" : "Managing";
+};
+
+const getPrimaryLandlordIdFromProperty = (propertyDoc = {}) => {
+  const landlords = Array.isArray(propertyDoc?.landlords) ? propertyDoc.landlords : [];
+  const primary = landlords.find((item) => item?.isPrimary && item?.landlordId);
+  const fallback = landlords.find((item) => item?.landlordId);
+  return String(primary?.landlordId || fallback?.landlordId || "");
+};
+
+const buildLeaseAgreementFeeIdempotencyKey = ({ businessId, tenantId, unitId, propertyId, moveInDate = null, amount = 0 }) => {
+  const keyParts = [
+    "lease_agreement_fee",
+    String(businessId || "").trim(),
+    String(tenantId || "").trim(),
+    String(unitId || "").trim(),
+    String(propertyId || "").trim(),
+    String(moveInDate || "").trim(),
+    Number(amount || 0).toFixed(2),
+  ].filter(Boolean);
+
+  return keyParts.join(":");
+};
 
 const isValidObjectIdString = (value) =>
   typeof value === "string" && mongoose.Types.ObjectId.isValid(value);
@@ -71,7 +98,7 @@ const ensureUnitsBelongToBusiness = async ({ businessId, unitIds = [] } = {}) =>
   const unitDocs = await Unit.find({
     _id: { $in: normalizedIds },
     business: businessId,
-  }).populate("property", "depositHeldBy landlords");
+  }).populate("property", "depositHeldBy landlords letManage");
 
   if (unitDocs.length !== normalizedIds.length) {
     const error = new Error("One or more selected units were not found for the selected company");
@@ -672,6 +699,7 @@ export const createTenant = async (req, res, next) => {
     });
 
     const unit = unitDocs.find((item) => String(item._id) === requestedUnits.primary) || null;
+    const propertyServiceMode = normalizePropertyServiceMode(unit?.property?.letManage);
 
     const normalizedName = normalizeString(req.body.name);
     const normalizedPhone = normalizeString(req.body.phone);
@@ -714,6 +742,39 @@ export const createTenant = async (req, res, next) => {
     const defaultDepositAmount = Number(
       req.body.depositAmount ?? unit.deposit ?? req.body.rent ?? unit.rent ?? 0
     );
+
+    const createLeaseFeeInvoice = req.body.createLeaseFeeInvoice === true || String(req.body.createLeaseFeeInvoice || "").trim().toLowerCase() === "true";
+    const leaseFeeAmount = Number(req.body.leaseFeeAmount || 0);
+    const leaseFeeDescription = String(req.body.leaseFeeDescription || "").trim();
+
+    if (createLeaseFeeInvoice && leaseFeeAmount > 0) {
+      const landlordId = getPrimaryLandlordIdFromProperty(unit?.property);
+      if (!landlordId) {
+        return res.status(400).json({
+          success: false,
+          message: "Cannot create lease/agreement fee because the property has no assigned landlord.",
+        });
+      }
+
+      const requestedChartAccountValue =
+        req.body?.chartAccount ||
+        req.body?.chartAccountCode ||
+        req.body?.accountCode ||
+        req.body?.account ||
+        null;
+
+      try {
+        await resolveLeaseAgreementFeeIncomeAccount({
+          businessId,
+          chartAccountValue: requestedChartAccountValue,
+        });
+      } catch (accountError) {
+        return res.status(accountError?.statusCode || 400).json({
+          success: false,
+          message: accountError?.message || "Lease/agreement fee income account not found. Configure Lease / Agreement Fee Income Account under Accounting Defaults.",
+        });
+      }
+    }
 
     const newTenant = new Tenant({
       ...req.body,
@@ -758,6 +819,55 @@ export const createTenant = async (req, res, next) => {
       unitDoc: unit,
       action: "upsert",
     });
+
+    if (createLeaseFeeInvoice && leaseFeeAmount > 0) {
+      const landlordId = getPrimaryLandlordIdFromProperty(unit?.property);
+
+      const feeDate = req.body.moveInDate ? new Date(req.body.moveInDate) : new Date();
+      const defaultDescription = `Lease / Agreement Fee for ${populatedTenant?.name || normalizedName}`;
+
+      const leaseFeeMoveInDate = req.body.moveInDate
+        ? new Date(req.body.moveInDate).toISOString().split("T")[0]
+        : feeDate.toISOString().split("T")[0];
+      const leaseFeeIdempotencyKey = buildLeaseAgreementFeeIdempotencyKey({
+        businessId,
+        tenantId: savedTenant._id,
+        unitId: unit._id,
+        propertyId: String(unit.property?._id || unit.property || ""),
+        moveInDate: leaseFeeMoveInDate,
+        amount: leaseFeeAmount,
+      });
+
+      await createTenantInvoiceRecord({
+        req,
+        payload: {
+          business: businessId,
+          property: String(unit.property?._id || unit.property || ""),
+          landlord: landlordId,
+          tenant: String(savedTenant._id),
+          unit: String(unit._id),
+          category: "OTHER_CHARGE",
+          amount: leaseFeeAmount,
+          description: leaseFeeDescription || defaultDescription,
+          invoiceDate: feeDate,
+          bookingDate: feeDate,
+          dueDate: feeDate,
+          createdBy: req.body?.createdBy,
+          idempotencyKey: leaseFeeIdempotencyKey,
+          metadata: {
+            sourceTransactionType: "lease_agreement_fee",
+            sourceKey: leaseFeeIdempotencyKey,
+            statementClassification: "manager_service_income",
+            includeInLandlordStatement: false,
+            includeInCategoryTotals: false,
+            billItemKey: "lease_agreement_fee",
+            billItemLabel: "Lease / Agreement Fee",
+            invoicePriorityCategory: "other",
+            propertyServiceMode: propertyServiceMode.toLowerCase(),
+          },
+        },
+      });
+    }
 
     return res.status(201).json({
       success: true,

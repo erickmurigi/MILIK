@@ -14,7 +14,7 @@ import {
   FaUser, FaUsers, FaAddressCard, FaTag, FaClipboard,
   FaHandshake, FaChartLine, FaChartPie, FaFileAlt, FaBalanceScale,
   FaToolbox, FaDatabase, FaWrench, FaHeadset, FaInfoCircle, FaList,
-  FaBuilding, FaKey
+  FaBuilding, FaKey, FaUserSlash
 } from "react-icons/fa";
 import "./dashboard.css";
 import TabManager from "../../components/Layout/TabManager";
@@ -42,6 +42,7 @@ const MENU_PERMISSION_MAP = {
   "tenants-list": { resource: "tenants", action: "view", moduleKey: "propertyManagement" },
   "add-tenant": { resource: "tenants", action: "create", moduleKey: "propertyManagement" },
   "tenant-deposits": { resource: "tenants", action: "view", moduleKey: "propertyManagement" },
+  "terminated-tenants": { resource: "tenants", action: "view", moduleKey: "propertyManagement" },
   "tenant-take-on-balances": { resource: "tenants", action: "view", moduleKey: "propertyManagement" },
   "rental-invoices-list": { resource: "tenantInvoices", action: "view", moduleKey: "propertyManagement" },
   "new-invoice": { resource: "tenantInvoices", action: "create", moduleKey: "propertyManagement" },
@@ -349,6 +350,7 @@ const TopToolbar = ({
       "add-unit": "/units/new",
       "space-types": "/units/space-types",
       "tenants-list": "/tenants",
+      "terminated-tenants": "/tenants/terminated",
       "add-tenant": "/tenant/new",
       "tenant-agreements": "/agreements",
       "tenant-deposits": "/tenants/deposits",
@@ -498,6 +500,7 @@ const TopToolbar = ({
         icon: FaUsers,
         submenu: [
           { id: "tenants-list", label: "Tenants Listing", icon: FaUsers },
+          { id: "terminated-tenants", label: "Terminated Tenants", icon: FaUserSlash },
           { id: "add-tenant", label: "New Tenant", icon: FaPlus },
           { type: "separator" },
           { id: "tenant-deposits", label: "Tenants Deposits", icon: FaCoins },

@@ -166,6 +166,7 @@ const ACCOUNTING_DEFAULT_FIELDS = [
   "penaltyIncomeAccount",
   "depositLiabilityAccount",
   "managementCommissionIncomeAccount",
+  "leaseAgreementFeeIncomeAccount",
 ];
 
 const ensureSettingsDocument = async (businessId) => {
@@ -722,7 +723,7 @@ export const updateTaxConfiguration = async (req, res, next) => {
     settings.markModified("taxCodes");
 
     await settings.save();
-    await settings.populate?.("accountingDefaults.tenantReceivableAccount accountingDefaults.rentIncomeAccount accountingDefaults.utilityRechargeIncomeAccount accountingDefaults.penaltyIncomeAccount accountingDefaults.depositLiabilityAccount accountingDefaults.managementCommissionIncomeAccount");
+    await settings.populate?.("accountingDefaults.tenantReceivableAccount accountingDefaults.rentIncomeAccount accountingDefaults.utilityRechargeIncomeAccount accountingDefaults.penaltyIncomeAccount accountingDefaults.depositLiabilityAccount accountingDefaults.managementCommissionIncomeAccount accountingDefaults.leaseAgreementFeeIncomeAccount");
 
     res.status(200).json({
       message: "Tax configuration updated successfully",

@@ -32,6 +32,23 @@ const endOfDay = (value) => {
   return d;
 };
 
+const formatStatementPeriodDate = (value) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const buildStatementPeriodLabel = (start, end) => {
+  const startLabel = formatStatementPeriodDate(start);
+  const endLabel = formatStatementPeriodDate(end);
+  if (startLabel && endLabel) return `${startLabel} - ${endLabel}`;
+  return startLabel || endLabel || "";
+};
+
 const oid = (value) =>
   typeof value === "string" && mongoose.Types.ObjectId.isValid(value)
     ? new mongoose.Types.ObjectId(value)
@@ -1116,11 +1133,14 @@ export const generateLandlordStatement = async ({
 
   const property = await Property.findById(propertyObjectId)
     .select(
-      "dateAcquired propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount commissionTaxSettings totalUnits business landlords depositHeldBy"
+      "dateAcquired propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount commissionTaxSettings totalUnits business landlords depositHeldBy letManage"
     )
     .lean();
 
   if (!property) throw new Error("Property not found");
+  if (String(property?.letManage || "").trim().toLowerCase() === "letting") {
+    throw new Error("Landlord statements are not available for letting-only properties. Convert the property to Managing before generating recurring landlord statements.");
+  }
   if (!property.business) {
     throw new Error("Property is missing business scope. Cannot generate landlord statement safely.");
   }
@@ -2458,20 +2478,74 @@ export const generateLandlordStatement = async ({
       row.referenceNumbers = Array.from(
         new Set((row.referenceNumbers || []).filter(Boolean))
       );
+      row.hasTransactionInPeriod = false;
+      return row;
+    });
+
+  const rowsByTenantId = new Map();
+  tenantRows.forEach((row) => {
+    const tenantId = String(row?.tenantId || "").trim();
+    if (!tenantId) return;
+    if (!rowsByTenantId.has(tenantId)) rowsByTenantId.set(tenantId, []);
+    rowsByTenantId.get(tenantId).push(row);
+  });
+
+  entries.forEach((entry) => {
+    const tenantId = String(entry?.tenant || "").trim();
+    if (!tenantId) return;
+
+    const entryDate = entry?.transactionDate ? new Date(entry.transactionDate) : null;
+    if (!entryDate || Number.isNaN(entryDate.getTime())) return;
+    if (entryDate.getTime() < periodStart.getTime() || entryDate.getTime() > periodEnd.getTime()) return;
+
+    const tenantRowsForEntry = rowsByTenantId.get(tenantId) || [];
+    tenantRowsForEntry.forEach((row) => {
+      row.hasTransactionInPeriod = true;
+    });
+  });
+
+  const filteredTenantRows = tenantRows
+    .filter((row) => {
+      if (String(row?.tenantName || "").toUpperCase() === "VACANT") return true;
+
+      const tenantRecord = tenantMap.get(String(row?.tenantId || "")) || null;
+      const tenantStatus = safeName(tenantRecord?.status || "");
+
+      // Keep occupied / active tenant rows visible even when the current period has
+      // no new activity so the next statement grid remains continuous and truthful.
+      // Former / terminated tenants should still only appear when they had statement
+      // activity in the current window.
+      if (tenantStatus !== "terminated") return true;
+      return row.hasTransactionInPeriod === true;
+    })
+    .map((row) => {
+      if (String(row?.tenantName || "").toUpperCase() === "VACANT") return row;
+
+      const tenantRecord = tenantMap.get(String(row?.tenantId || "")) || null;
+      const tenantStatus = safeName(tenantRecord?.status || "");
+      if (tenantStatus === "terminated") {
+        return {
+          ...row,
+          tenantName: row.tenantName.includes("(Former Tenant)")
+            ? row.tenantName
+            : `${row.tenantName} (Former Tenant)`,
+        };
+      }
+
       return row;
     })
     .sort((a, b) =>
       String(a.unit).localeCompare(String(b.unit), undefined, { numeric: true })
     );
 
-  const utilityColumns = buildUtilityColumns(tenantRows);
+  const utilityColumns = buildUtilityColumns(filteredTenantRows);
   const utilityTotalsMap = utilityColumns.reduce((acc, item) => {
     acc[item.key] = item;
     return acc;
   }, {});
 
   const totalRentInvoiced = round2(
-    tenantRows.reduce((sum, row) => sum + row.invoicedRent, 0)
+    filteredTenantRows.reduce((sum, row) => sum + row.invoicedRent, 0)
   );
   const totalGarbageInvoiced = round2(
     Number(utilityTotalsMap.garbage?.invoiced || 0)
@@ -2480,13 +2554,13 @@ export const generateLandlordStatement = async ({
     Number(utilityTotalsMap.water?.invoiced || 0)
   );
   const totalRentReceived = round2(
-    tenantRows.reduce((sum, row) => sum + row.paidRent, 0)
+    filteredTenantRows.reduce((sum, row) => sum + row.paidRent, 0)
   );
   const totalInvoiceVatInvoiced = round2(
-    tenantRows.reduce((sum, row) => sum + Number(row.invoicedTax || 0), 0)
+    filteredTenantRows.reduce((sum, row) => sum + Number(row.invoicedTax || 0), 0)
   );
   const totalInvoiceVatReceived = round2(
-    tenantRows.reduce((sum, row) => sum + Number(row.paidTax || 0), 0)
+    filteredTenantRows.reduce((sum, row) => sum + Number(row.paidTax || 0), 0)
   );
   const totalGarbageReceived = round2(
     Number(utilityTotalsMap.garbage?.paid || 0)
@@ -2501,10 +2575,10 @@ export const generateLandlordStatement = async ({
     utilityColumns.reduce((sum, item) => sum + Number(item.paid || 0), 0)
   );
   const totalBalanceBF = round2(
-    tenantRows.reduce((sum, row) => sum + row.balanceBF, 0)
+    filteredTenantRows.reduce((sum, row) => sum + row.balanceBF, 0)
   );
   const totalBalanceCF = round2(
-    tenantRows.reduce((sum, row) => sum + row.balanceCF, 0)
+    filteredTenantRows.reduce((sum, row) => sum + row.balanceCF, 0)
   );
 
   const commissionPct = Number(property.commissionPercentage || 0);
@@ -2528,7 +2602,7 @@ export const generateLandlordStatement = async ({
   }
 
   const occupiedRentRoll = round2(
-    tenantRows.reduce((sum, row) => {
+    filteredTenantRows.reduce((sum, row) => {
       if (String(row?.tenantName || "").toUpperCase() === "VACANT") return sum;
       return sum + Number(row?.perMonth || 0);
     }, 0)
@@ -2692,10 +2766,10 @@ export const generateLandlordStatement = async ({
   const depositsHeldByManager = round2(depositMemoBuckets.manager.closingBalance);
   const depositsHeldByLandlord = round2(depositMemoBuckets.landlord.closingBalance);
 
-  const occupiedUnits = tenantRows.filter(
+  const occupiedUnits = filteredTenantRows.filter(
     (row) => row.tenantName !== "VACANT"
   ).length;
-  const vacantUnits = tenantRows.filter(
+  const vacantUnits = filteredTenantRows.filter(
     (row) => row.tenantName === "VACANT"
   ).length;
 
@@ -2737,8 +2811,14 @@ export const generateLandlordStatement = async ({
       };
     });
 
+  const statementPeriodLabel = buildStatementPeriodLabel(periodStart, periodEnd);
+
   const workspace = {
-    periodLabel: `${periodStart.toLocaleString("en-KE", {
+    periodLabel: statementPeriodLabel,
+    statementPeriodLabel,
+    statementPeriodStart: periodStart,
+    statementPeriodEnd: periodEnd,
+    statementMonthLabel: `${periodStart.toLocaleString("en-KE", {
       month: "long",
     })} ${periodStart.getFullYear()}`,
     propertyLabel: `${property.propertyCode ? `[${property.propertyCode}] ` : ""}${
@@ -2758,7 +2838,7 @@ export const generateLandlordStatement = async ({
       );
     })(),
     utilityColumns,
-    rows: tenantRows.map((row) => ({
+    rows: filteredTenantRows.map((row) => ({
       ...row,
       unitNumber: row.unit,
       openingBalance: row.balanceBF,
@@ -2768,7 +2848,7 @@ export const generateLandlordStatement = async ({
       balance: row.balanceCF,
     })),
     totals: {
-      perMonth: round2(tenantRows.reduce((sum, row) => sum + row.perMonth, 0)),
+      perMonth: round2(filteredTenantRows.reduce((sum, row) => sum + row.perMonth, 0)),
       openingBalance: totalBalanceBF,
       invoicedRent: totalRentInvoiced,
       invoicedGarbage: totalGarbageInvoiced,
@@ -2815,7 +2895,7 @@ export const generateLandlordStatement = async ({
         taxApplied: round2(broughtForwardCreditApplicationTotals.taxApplied),
       },
     },
-    rowCount: tenantRows.length,
+    rowCount: filteredTenantRows.length,
     summary: {
       openingBalance: totalBalanceBF,
       closingBalance: totalBalanceCF,
@@ -2844,7 +2924,7 @@ export const generateLandlordStatement = async ({
       totalInvoiceVatReceivedManager: round2(totalInvoiceTaxReceivedManager),
       totalInvoiceVatReceivedLandlord: round2(totalInvoiceTaxReceivedLandlord),
       totalUtilityCollected,
-      unappliedPayments: round2(tenantRows.reduce((sum, row) => sum + Number(row.unappliedCredits || 0), 0)),
+      unappliedPayments: round2(filteredTenantRows.reduce((sum, row) => sum + Number(row.unappliedCredits || 0), 0)),
       directToLandlordCollections,
       totalDirectToLandlordCollections: directToLandlordCollections,
       openingLandlordSettlementBalance: openingSettlementBalance,

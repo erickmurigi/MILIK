@@ -97,12 +97,19 @@ const commissionTaxSettingsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+
+const normalizePropertyServiceMode = (value = "Managing") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "letting") return "Letting";
+  return "Managing";
+};
+
 const PropertySchema = new mongoose.Schema(
   {
     dateAcquired: { type: Date },
     letManage: {
       type: String,
-      enum: ["Managing", "Letting", "Both"],
+      enum: ["Managing", "Letting"],
       default: "Managing",
     },
 
@@ -480,6 +487,12 @@ PropertySchema.pre("save", function (next) {
     }
   }
 
+  next();
+});
+
+
+PropertySchema.pre("validate", function normalizeLetManage(next) {
+  this.letManage = normalizePropertyServiceMode(this.letManage);
   next();
 });
 

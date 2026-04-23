@@ -184,6 +184,8 @@ const normalizeAccountingDefaults = (settings = {}) => ({
   depositLiabilityAccount: settings?.accountingDefaults?.depositLiabilityAccount || "",
   managementCommissionIncomeAccount:
     settings?.accountingDefaults?.managementCommissionIncomeAccount || "",
+  leaseAgreementFeeIncomeAccount:
+    settings?.accountingDefaults?.leaseAgreementFeeIncomeAccount || "",
 });
 
 const ACCOUNTING_DEFAULT_FIELDS = [
@@ -221,6 +223,12 @@ const ACCOUNTING_DEFAULT_FIELDS = [
     key: "managementCommissionIncomeAccount",
     label: "Management Commission Income Account",
     description: "Default commission income account used when processed statements or landlord payments post commission entries.",
+    type: "income",
+  },
+  {
+    key: "leaseAgreementFeeIncomeAccount",
+    label: "Lease / Agreement Fee Income Account",
+    description: "Default income account used when charging one-time tenant onboarding or lease/agreement fees.",
     type: "income",
   },
 ];

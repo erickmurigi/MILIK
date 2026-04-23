@@ -403,8 +403,24 @@ const deriveInvoiceDescription = (invoice = {}) => {
   return description;
 };
 
+const isLeaseAgreementFeeInvoice = ({ category, metadata = {} } = {}) => {
+  const normalizedCategory = String(category || "").toUpperCase();
+  if (normalizedCategory !== "OTHER_CHARGE") return false;
+
+  const sourceType = String(metadata?.sourceTransactionType || metadata?.source || "").trim().toLowerCase();
+  const billItemKey = String(metadata?.billItemKey || "").trim().toLowerCase();
+  const billItemLabel = String(metadata?.billItemLabel || "").trim().toLowerCase();
+
+  return (
+    sourceType === "lease_agreement_fee" ||
+    billItemKey === "lease_agreement_fee" ||
+    billItemLabel === "lease / agreement fee"
+  );
+};
+
 const getInvoiceChargeTypeKey = ({ category, metadata = {} } = {}) => {
   const normalizedCategory = String(category || "").toUpperCase();
+  if (isLeaseAgreementFeeInvoice({ category, metadata })) return "lease_agreement_fee";
   if (
     normalizedCategory === "RENT_CHARGE" &&
     String(metadata?.billItemKey || "").toLowerCase() === "rent_utility:combined"
@@ -423,6 +439,7 @@ const getInvoiceChargeTypeLabel = (chargeType = "rent") => {
   if (normalized === "deposit") return "Deposit";
   if (normalized === "utility") return "Utility";
   if (normalized === "late_penalty") return "Late Penalty";
+  if (normalized === "lease_agreement_fee") return "Lease / Agreement Fee";
   return "Rent";
 };
 

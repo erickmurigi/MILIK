@@ -47,6 +47,25 @@ const formatDateTime = (value) => {
   });
 };
 
+const buildStatementPeriodLabel = (workspace = {}, statement = {}) => {
+  const explicit =
+    workspace?.statementPeriodLabel ||
+    workspace?.periodLabel ||
+    "";
+
+  if (String(explicit || "").trim()) {
+    return String(explicit).trim();
+  }
+
+  const start = workspace?.statementPeriodStart || statement?.periodStart || null;
+  const end = workspace?.statementPeriodEnd || statement?.periodEnd || null;
+  const startLabel = formatDate(start);
+  const endLabel = formatDate(end);
+
+  if (startLabel && endLabel) return `${startLabel} - ${endLabel}`;
+  return startLabel || endLabel || "-";
+};
+
 const sumSectionAmounts = (items = []) =>
   items.reduce((sum, item) => sum + Number(item?.amount || 0), 0);
 
@@ -611,6 +630,7 @@ const Statements = () => {
     ? depositSettlement.rows
     : [];
   const depositSettlementTotals = depositSettlement?.totals || {};
+  const statementPeriodLabel = buildStatementPeriodLabel(workspace, draftStatement || {});
   const broughtForwardCreditApplications = workspace?.broughtForwardCreditApplications || {};
   const broughtForwardCreditApplicationRows = Array.isArray(broughtForwardCreditApplications?.rows)
     ? broughtForwardCreditApplications.rows
@@ -1332,10 +1352,18 @@ const Statements = () => {
               {activeTab === "summary" ? (
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="border-b border-slate-200 px-6 py-4">
-                    <h3 className="text-lg font-semibold text-slate-900">Statement Summary</h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      This preview now uses the same stored statement summary as the PDF output.
-                    </p>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-900">Statement Summary</h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                          This preview now uses the same stored statement summary as the PDF output.
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Statement Period</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{statementPeriodLabel}</p>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 px-6 py-5 md:grid-cols-2 xl:grid-cols-5">
@@ -1428,7 +1456,13 @@ const Statements = () => {
               ) : (
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="border-b border-slate-200 px-6 py-4">
-                    <h3 className="text-lg font-semibold text-slate-900">Statement Workspace Preview</h3>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <h3 className="text-lg font-semibold text-slate-900">Statement Workspace Preview</h3>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Statement Period</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{statementPeriodLabel}</p>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="overflow-auto rounded-b-2xl">

@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-export const TENANT_INVOICE_CATEGORIES = ["RENT_CHARGE", "UTILITY_CHARGE", "DEPOSIT_CHARGE", "LATE_PENALTY_CHARGE"];
+export const TENANT_INVOICE_CATEGORIES = ["RENT_CHARGE", "UTILITY_CHARGE", "DEPOSIT_CHARGE", "LATE_PENALTY_CHARGE", "OTHER_CHARGE"];
 
 const taxSnapshotSchema = new mongoose.Schema(
   {
@@ -152,6 +152,12 @@ const TenantInvoiceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    idempotencyKey: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true,
+    },
     taxSnapshot: {
       type: taxSnapshotSchema,
       default: () => ({}),
@@ -166,6 +172,16 @@ TenantInvoiceSchema.index({ business: 1, tenant: 1, bookingDate: -1 });
 TenantInvoiceSchema.index({ business: 1, property: 1, landlord: 1, invoiceDate: -1 });
 TenantInvoiceSchema.index({ business: 1, property: 1, landlord: 1, bookingDate: -1 });
 TenantInvoiceSchema.index({ business: 1, invoiceNumber: 1 }, { unique: true });
+
+TenantInvoiceSchema.index(
+  { business: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      idempotencyKey: { $exists: true, $type: "string", $ne: "" },
+    },
+  }
+);
 
 // Performance index for tenant balance recomputation
 TenantInvoiceSchema.index({ business: 1, tenant: 1, status: 1 });

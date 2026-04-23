@@ -464,6 +464,13 @@ const formatPropertyDependencyMessage = (summary = {}) => {
   return parts.slice(0, 6).join(", ");
 };
 
+
+const normalizePropertyServiceMode = (value = "Managing") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "letting") return "Letting";
+  return "Managing";
+};
+
 // Create property
 export const createProperty = async (req, res) => {
   try {
@@ -628,7 +635,7 @@ export const createProperty = async (req, res) => {
 
     const property = new Property({
       dateAcquired: dateAcquired ? new Date(dateAcquired) : null,
-      letManage,
+      letManage: normalizePropertyServiceMode(letManage),
       landlords: modeAwareAssignment.landlords,
       propertyCode: resolvedPropertyCode,
       propertyName: normalizedPropertyName,
@@ -1019,6 +1026,10 @@ export const updateProperty = async (req, res, next) => {
     }
     if (req.body.rentCurrency !== undefined && typeof req.body.rentCurrency === "string") {
       req.body.rentCurrency = req.body.rentCurrency.trim() || "Kenyan Shilling [KES]";
+    }
+
+    if (req.body.letManage !== undefined) {
+      req.body.letManage = normalizePropertyServiceMode(req.body.letManage);
     }
 
     if (Array.isArray(req.body.standingCharges)) {

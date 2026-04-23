@@ -1114,8 +1114,10 @@ export const reverseStatement = async (req, res) => {
       reason,
     });
 
+    const reversalTimestamp = new Date();
+
     statement.status = "reversed";
-    statement.reversedAt = new Date();
+    statement.reversedAt = reversalTimestamp;
     statement.reversedBy = actorUserId;
     statement.reversalReason = reason || "Processed statement reversed";
     if (!statement.reversedSourceStatement && statement.sourceStatement) {
@@ -1146,7 +1148,10 @@ export const reverseStatement = async (req, res) => {
         landlordId: statement?.landlord?._id || statement?.landlord || null,
         statementType: statement?.statementType || "provisional",
         periodStart: statement?.periodStart || null,
-        periodEnd: statement?.periodEnd || statement?.cutoffAt || statement?.closedAt || null,
+        periodEnd: reversalTimestamp,
+        statementStartAt: statement?.periodStart || null,
+        statementEndAt: reversalTimestamp,
+        cutoffAt: reversalTimestamp,
         sourceStatementId:
           statement?.reversedSourceStatement?._id || statement?.reversedSourceStatement || null,
       },

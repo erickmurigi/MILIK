@@ -135,6 +135,7 @@ export const createDraftStatement = async ({
   landlordId,
   statementPeriodStart,
   statementPeriodEnd,
+  cutoffAt = null,
   statementType = "provisional",
   userId,
   notes = "",
@@ -149,6 +150,7 @@ export const createDraftStatement = async ({
     landlordId,
     statementPeriodStart,
     statementPeriodEnd,
+    cutoffAt,
   });
 
   // Step 2: Reuse an already-open draft for the same logical period before reserving a new statement number.
@@ -289,7 +291,13 @@ export const createDraftStatement = async ({
  *
  * @returns {Promise<Object>} Refreshed draft with latest lines
  */
-export const refreshDraftStatement = async (statementId, userId, notes = "", statementType = null) => {
+export const refreshDraftStatement = async (
+  statementId,
+  userId,
+  notes = "",
+  statementType = null,
+  cutoffAt = null
+) => {
   if (!statementId || !userId) {
     throw new Error("refreshDraftStatement requires statementId and userId");
   }
@@ -310,7 +318,8 @@ export const refreshDraftStatement = async (statementId, userId, notes = "", sta
     propertyId: draft.property,
     landlordId: draft.landlord,
     statementPeriodStart: draft.periodStart,
-    statementPeriodEnd: draft.periodEnd,
+    statementPeriodEnd: cutoffAt || draft.periodEnd,
+    cutoffAt: cutoffAt || draft.periodEnd,
   });
 
   // Replace all existing draft lines with refreshed lines.

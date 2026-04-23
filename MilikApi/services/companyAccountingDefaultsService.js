@@ -65,6 +65,23 @@ const ACCOUNTING_DEFAULT_KEYS = {
       { nameRegex: "commission", type: "income" },
     ],
   },
+  leaseAgreementFeeIncomeAccount: {
+    label: "Lease / Agreement Fee Income Account",
+    allowedTypes: ["income"],
+    fallbackCandidates: [
+      { code: "4101", type: "income" },
+      { code: "4300", type: "income" },
+      { nameRegex: "lease agreement", type: "income" },
+      { nameRegex: "agreement fee", type: "income" },
+      { nameRegex: "lease fee", type: "income" },
+      { nameRegex: "^service charge income$", type: "income" },
+      { nameRegex: "service charge", type: "income" },
+      { nameRegex: "service income", type: "income" },
+      { nameRegex: "^other property income$", type: "income" },
+      { nameRegex: "other property income", type: "income" },
+      { nameRegex: "other income", type: "income" },
+    ],
+  },
 };
 
 const normalizeType = (value = "") => String(value || "").trim().toLowerCase();

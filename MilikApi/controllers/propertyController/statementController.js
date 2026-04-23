@@ -143,6 +143,9 @@ export const createDraft = async (req, res, next) => {
     }
 
     const refreshRequested = req.body?.refresh === true || String(req.query?.refresh || "").toLowerCase() === "true";
+    const requestedCutoffAtRaw = req.body?.cutoffAt || req.body?.statementEndAt || null;
+    const requestedCutoffAt = requestedCutoffAtRaw ? new Date(requestedCutoffAtRaw) : null;
+    const hasExplicitCutoffAt = requestedCutoffAt && !Number.isNaN(requestedCutoffAt.getTime());
     const periodStartStart = startOfDay(periodStart);
     const periodStartEnd = endOfDay(periodStart);
     const periodEndStart = startOfDay(periodEnd);
@@ -157,7 +160,9 @@ export const createDraft = async (req, res, next) => {
       ...(periodStartStart && periodStartEnd
         ? { periodStart: { $gte: periodStartStart, $lte: periodStartEnd } }
         : {}),
-      ...(periodEndStart && periodEndEnd
+      ...(hasExplicitCutoffAt
+        ? { periodEnd: requestedCutoffAt }
+        : periodEndStart && periodEndEnd
         ? { periodEnd: { $gte: periodEndStart, $lte: periodEndEnd } }
         : {}),
     }).sort({ createdAt: -1, _id: -1 });
@@ -179,7 +184,8 @@ export const createDraft = async (req, res, next) => {
         existingDraft._id,
         userId,
         notes || "",
-        statementType
+        statementType,
+        hasExplicitCutoffAt ? requestedCutoffAt : null
       );
 
       const lines = await LandlordStatementLine.find({ statement: existingDraft._id })
@@ -210,6 +216,7 @@ export const createDraft = async (req, res, next) => {
       landlordId,
       statementPeriodStart: periodStart,
       statementPeriodEnd: periodEnd,
+      cutoffAt: hasExplicitCutoffAt ? requestedCutoffAt : null,
       statementType,
       userId,
       notes: notes || "",

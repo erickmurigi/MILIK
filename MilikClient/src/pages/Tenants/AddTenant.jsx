@@ -356,6 +356,9 @@ const AddTenant = () => {
     emergencyContactPhone: "",
     emergencyContactRelationship: "Family",
     utilities: [],
+    createLeaseFeeInvoice: false,
+    leaseFeeAmount: "",
+    leaseFeeDescription: "",
   });
 
   const [fieldErrors, setFieldErrors] = useState({});
@@ -1092,6 +1095,12 @@ useEffect(() => {
       }
     }
 
+    if (!isEditMode && formData.createLeaseFeeInvoice) {
+      if (formData.leaseFeeAmount === "" || Number(formData.leaseFeeAmount) <= 0) {
+        errors.leaseFeeAmount = "Enter a valid lease / agreement fee amount";
+      }
+    }
+
     setFieldErrors(errors);
     return errors;
   };
@@ -1149,6 +1158,9 @@ useEffect(() => {
           phone: formData.emergencyContactPhone || "",
           relationship: formData.emergencyContactRelationship || "Family",
         },
+        createLeaseFeeInvoice: !isEditMode && !!formData.createLeaseFeeInvoice,
+        leaseFeeAmount: !isEditMode && formData.createLeaseFeeInvoice ? parseFloat(formData.leaseFeeAmount || 0) : 0,
+        leaseFeeDescription: !isEditMode && formData.createLeaseFeeInvoice ? formData.leaseFeeDescription || "" : "",
       };
 
       const result = isEditMode
@@ -1752,7 +1764,78 @@ for (const request of invoiceRequests) {
                       </select>
                       <p className="mt-1 text-xs text-gray-600">At Will / Fixed Term</p>
                     </div>
-                  </div>
+</div>
+
+                  {!isEditMode && (
+                    <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50/70 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h4 className="text-sm font-bold text-orange-900">Lease / Agreement Fee</h4>
+                          <p className="mt-1 text-xs text-orange-800">
+                            Create a one-time tenant onboarding charge. This is posted as manager/company income and excluded from landlord statements.
+                          </p>
+                        </div>
+                        <label className="inline-flex items-center gap-2 text-sm font-semibold text-orange-900">
+                          <input
+                            type="checkbox"
+                            name="createLeaseFeeInvoice"
+                            checked={!!formData.createLeaseFeeInvoice}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setFormData((prev) => ({
+                                ...prev,
+                                createLeaseFeeInvoice: checked,
+                                leaseFeeAmount: checked ? prev.leaseFeeAmount : "",
+                                leaseFeeDescription: checked ? prev.leaseFeeDescription : "",
+                              }));
+                              if (!checked) {
+                                setFieldErrors((prev) => ({ ...prev, leaseFeeAmount: undefined }));
+                              }
+                            }}
+                            className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                          />
+                          Apply fee
+                        </label>
+                      </div>
+
+                      {formData.createLeaseFeeInvoice && (
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className={labelClass}>Lease / Agreement Fee Amount (Ksh) <span className="text-red-500">*</span></label>
+                            <input
+                              type="number"
+                              name="leaseFeeAmount"
+                              value={formData.leaseFeeAmount}
+                              onChange={handleInputChange}
+                              placeholder="5000"
+                              step="0.01"
+                              min="0"
+                              className={`${inputClass} ${fieldErrors.leaseFeeAmount ? "border-red-500" : ""}`}
+                            />
+                            {fieldErrors.leaseFeeAmount && (
+                              <p className="mt-1 text-xs text-red-600">{fieldErrors.leaseFeeAmount}</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className={labelClass}>Fee Description</label>
+                            <input
+                              type="text"
+                              name="leaseFeeDescription"
+                              value={formData.leaseFeeDescription}
+                              onChange={handleInputChange}
+                              placeholder="Lease preparation and agreement fee"
+                              className={inputClass}
+                            />
+                            <p className="mt-1 text-xs text-slate-500">
+                              Posting uses the Lease / Agreement Fee Income Account under Accounting Defaults when configured.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
 
                   {formData.leaseType === "fixed" && (
                     <div className="mt-4">
