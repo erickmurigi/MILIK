@@ -181,17 +181,17 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
       </div>
 
       <div
-        className={`flex flex-1 overflow-x-hidden bg-white ${
+        className={`flex flex-1 bg-white min-h-0 ${
           lockContentScroll
-            ? "h-[calc(100vh-var(--milik-header-offset,0px))] min-h-0 overflow-hidden pb-9"
-            : "min-h-screen pb-20"
+            ? "h-[calc(100vh-120px)] overflow-hidden pb-9"
+            : "min-h-screen overflow-x-hidden pb-20"
         }`}
       >
         <main
-          className={`flex-1 pt-2 overflow-x-hidden bg-white ${
+          className={`flex-1 min-h-0 overflow-hidden bg-white ${
             lockContentScroll
-              ? "overflow-y-hidden min-h-0 h-full"
-              : "overflow-y-auto min-h-[calc(100vh-9rem)]"
+              ? "h-full"
+              : "min-h-[calc(100vh-9rem)]"
           }`}
         >
           <div

@@ -1057,7 +1057,7 @@ const TenantStatement = () => {
     const hasSelection = Boolean(selectedAllocationTrace && allocationTraceTarget?.kind);
 
     return (
-      <div className="mt-2 grid max-h-[24vh] flex-shrink-0 gap-2 overflow-auto rounded-lg border border-slate-200 bg-slate-50/60 p-2 xl:grid-cols-[0.95fr_1.35fr]">
+      <div className="mt-1.5 grid max-h-[20vh] flex-shrink-0 gap-2 overflow-auto rounded-lg border border-slate-200 bg-slate-50/60 p-1.5 xl:grid-cols-[0.95fr_1.35fr]">
         <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-2.5 py-1.5">
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Receipt application tracing</p>
@@ -1514,29 +1514,78 @@ const TenantStatement = () => {
         return fromOk && toOk;
       });
 
+    const statementSummaryChips = [
+      {
+        label: "Rent",
+        value: `Ksh ${(tenantLease?.rentAmount || tenant?.rent || 0).toLocaleString()}`,
+        accent: "text-blue-700",
+      },
+      {
+        label: "Charges",
+        value: `Ksh ${(statementData?.totalCharges || 0).toLocaleString()}`,
+        accent: "text-orange-700",
+      },
+      {
+        label: "Paid",
+        value: `Ksh ${(statementData?.totalPayments || 0).toLocaleString()}`,
+        accent: "text-emerald-700",
+      },
+      {
+        label: "Outstanding",
+        value: `Ksh ${Math.abs(statementData?.operationalOutstanding || 0).toLocaleString()}`,
+        accent: "text-amber-700",
+      },
+      {
+        label: statementData?.unappliedCredits > 0 ? "Credit" : "Net",
+        value: `Ksh ${Math.abs((statementData?.unappliedCredits > 0 ? statementData?.unappliedCredits : statementData?.currentBalance) || 0).toLocaleString()}`,
+        accent: statementData?.unappliedCredits > 0 ? "text-sky-700" : statementData?.currentBalance >= 0 ? "text-emerald-700" : "text-red-700",
+      },
+    ];
+
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-sm statement-tab">
-        <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 backdrop-blur filter-section">
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500" />
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500" />
-            <select value={transactionType} onChange={(e) => setTransactionType(e.target.value)} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500">
-              <option value="ALL">All Transactions</option><option value="CHARGE">Invoices Only</option><option value="DEBIT_NOTE">Debit Notes</option><option value="CREDIT_NOTE">Credit Notes</option><option value="PAYMENT">Receipts Only</option>
-            </select>
-            <div className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-700">Rows: {visibleStatementTransactions.length}</div>
-            <div className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-700">Net: Ksh {Math.abs(statementData?.currentBalance || 0).toLocaleString()}</div>
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-5">
-            {[
-              { label: "Monthly Rent", value: `Ksh ${(tenantLease?.rentAmount || tenant?.rent || 0).toLocaleString()}`, accent: "text-blue-700" },
-              { label: "Total Charges", value: `Ksh ${(statementData?.totalCharges || 0).toLocaleString()}`, accent: "text-orange-700" },
-              { label: "Payments", value: `Ksh ${(statementData?.totalPayments || 0).toLocaleString()}`, accent: "text-emerald-700" },
-              { label: "Outstanding", value: `Ksh ${Math.abs(statementData?.operationalOutstanding || 0).toLocaleString()}`, accent: "text-amber-700" },
-              { label: statementData?.unappliedCredits > 0 ? "Unapplied Credit" : "Net Position", value: `Ksh ${Math.abs((statementData?.unappliedCredits > 0 ? statementData?.unappliedCredits : statementData?.currentBalance) || 0).toLocaleString()}`, accent: statementData?.unappliedCredits > 0 ? "text-sky-700" : statementData?.currentBalance >= 0 ? "text-emerald-700" : "text-red-700" },
-            ].map((card) => (<div key={card.label} className="rounded-md border border-slate-200 bg-white px-2 py-1.5"><div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">{card.label}</div><div className={`mt-0.5 text-[13px] font-black ${card.accent}`}>{card.value}</div></div>))}
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm statement-tab">
+        <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-1.5 backdrop-blur filter-section">
+          <div className="flex flex-col gap-1.5 xl:flex-row xl:items-center xl:justify-between">
+            <div className="grid min-w-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-[150px_150px_minmax(180px,1fr)_110px]">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              />
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              />
+              <select
+                value={transactionType}
+                onChange={(e) => setTransactionType(e.target.value)}
+                className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              >
+                <option value="ALL">All Transactions</option>
+                <option value="CHARGE">Invoices Only</option>
+                <option value="DEBIT_NOTE">Debit Notes</option>
+                <option value="CREDIT_NOTE">Credit Notes</option>
+                <option value="PAYMENT">Receipts Only</option>
+              </select>
+              <div className="inline-flex h-7 items-center rounded-md border border-slate-200 bg-white px-2 text-[10.5px] font-bold text-slate-700">
+                Rows: {visibleStatementTransactions.length}
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {statementSummaryChips.map((chip) => (
+                <div key={chip.label} className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10.5px] shadow-sm">
+                  <span className="font-black uppercase tracking-[0.12em] text-slate-500">{chip.label}</span>
+                  <span className={`font-black ${chip.accent}`}>{chip.value}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="transaction-scroll-area h-[39vh] min-h-[230px] max-h-[430px] flex-shrink-0 overflow-auto">
+
+        <div className="transaction-scroll-area min-h-[260px] flex-1 overflow-auto">
           <table className="transaction-table min-w-full table-fixed text-[10.5px]">
             <colgroup><col className="w-[10%]" /><col className="w-[35%]" /><col className="w-[11%]" /><col className="w-[13%]" /><col className="w-[9%]" /><col className="w-[11%]" /><col className="w-[11%]" /></colgroup>
             <thead><tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">{['Date', 'Description', 'Type', 'Code', 'Trace', 'Amount', 'R. Balance'].map((header, index) => (<th key={header} className={`whitespace-nowrap px-2.5 py-1.5 text-[9.5px] font-black uppercase tracking-[0.12em] ${index >= 5 ? 'text-right' : index === 4 || index === 2 ? 'text-center' : 'text-left'}`}>{header}</th>))}</tr></thead>

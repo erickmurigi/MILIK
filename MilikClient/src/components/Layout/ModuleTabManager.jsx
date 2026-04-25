@@ -151,7 +151,7 @@ const ModuleTabManager = ({ darkMode }) => {
           onClick={() => switchModule(module.id)}
         >
           <span className="flex-shrink-0 text-xs">{module.icon}</span>
-          <span className="max-w-[150px] truncate">{module.title}</span>
+          <span className="max-w-[150px] truncate uppercase" style={{ textTransform: 'uppercase' }}>{module.title}</span>
           {module.closable && (
             <button
               onClick={(event) => {

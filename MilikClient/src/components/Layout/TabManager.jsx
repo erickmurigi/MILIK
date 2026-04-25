@@ -359,7 +359,7 @@ const TabManager = ({ darkMode }) => {
             title={tab.title}
           >
             {tab.route === '/dashboard' && <FaHome className="mr-2 w-4 h-4" />}
-            <span className="text-xs truncate max-w-[160px]">{tab.title}</span>
+            <span className="text-xs truncate max-w-[160px] uppercase" style={{ textTransform: 'uppercase' }}>{tab.title}</span>
             {tab.closable && sortedTabs.length > 1 && (
               <button
                 onClick={(e) => closeTab(tab.id, e)}
