@@ -87,11 +87,11 @@ const Dashboard = ({ darkMode }) => {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-1 bg-white">
-        <div className={`flex-1 overflow-auto px-4 pt-3 pb-5 space-y-5 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+      <div className="flex min-h-0 flex-1 bg-white">
+        <div className={`flex-1 overflow-auto px-2 pt-2 pb-3 space-y-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
           <MetricsGrid darkMode={darkMode} />
 
-          <div className="dashboard-main-grid gap-5">
+          <div className="dashboard-main-grid gap-2">
             <QuickActions darkMode={darkMode} />
             <PropertiesOverview darkMode={darkMode} />
             <FinancialOverview darkMode={darkMode} />

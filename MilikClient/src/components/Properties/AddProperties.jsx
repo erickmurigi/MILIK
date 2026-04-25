@@ -23,6 +23,7 @@ import { getLandlords, createLandlord } from "../../redux/apiCalls";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
 import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 
 const MILIK_ORANGE_BG = "bg-orange-600";
 const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
@@ -360,8 +361,11 @@ const AddProperty = () => {
   const sectionCard = "bg-white border border-slate-200 rounded-lg shadow-sm";
   const sectionHeader = "text-sm font-bold text-slate-900 tracking-tight";
 
+  const uppercasePropertyFields = new Set(["propertyCode", "propertyName", "zoneRegion", "roadStreet", "estateArea", "townCityState", "lrNumber", "specification", "invoicePrefix", "specificContactInfo"]);
+
   const handleChange = (e, section = null, index = null) => {
     const { name, value, type, checked } = e.target;
+    const normalizedValue = type === "checkbox" ? checked : (uppercasePropertyFields.has(name) ? normalizeUppercaseInput(value) : value);
 
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: "" }));
@@ -375,7 +379,7 @@ const AddProperty = () => {
       const updatedLandlords = [...formData.landlords];
       updatedLandlords[index] = {
         ...updatedLandlords[index],
-        [name]: value,
+        [name]: uppercasePropertyFields.has(name) ? normalizeUppercaseInput(value) : value,
         isPrimary: index === 0,
       };
       setFormData((prev) => ({ ...prev, landlords: updatedLandlords }));
@@ -387,7 +391,7 @@ const AddProperty = () => {
         ...prev,
         [section]: {
           ...prev[section],
-          [name]: type === "checkbox" ? checked : value,
+          [name]: normalizedValue,
         },
       }));
       return;
@@ -395,7 +399,7 @@ const AddProperty = () => {
 
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: normalizedValue,
     }));
   };
 

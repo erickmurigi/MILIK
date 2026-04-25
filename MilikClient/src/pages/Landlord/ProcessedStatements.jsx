@@ -30,6 +30,7 @@ const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
+const ITEMS_PER_PAGE = 50;
 
 const money = (value) => Number(value || 0).toFixed(2);
 const formatDate = (dateString) => {
@@ -73,6 +74,7 @@ const ProcessedStatements = () => {
   const [expandedRow, setExpandedRow] = useState(null);
   const [searchText, setSearchText] = useState("");
   const [sortBy, setSortBy] = useState("date-desc");
+  const [currentPage, setCurrentPage] = useState(1);
   const [showPayModal, setShowPayModal] = useState(null);
   const [showRecoveryModal, setShowRecoveryModal] = useState(null);
   const [showCommissionModal, setShowCommissionModal] = useState(null);
@@ -145,6 +147,21 @@ const ProcessedStatements = () => {
 
     return filtered;
   }, [statements, activeTab, searchText, sortBy]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStatements.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = filteredStatements.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedStatements = filteredStatements.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setExpandedRow(null);
+  }, [activeTab, searchText, sortBy]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
 
   const stats = useMemo(() => {
     const reversed = statements.filter((statement) => statement?.status === "reversed");
@@ -504,99 +521,30 @@ const ProcessedStatements = () => {
 
   return (
     <>
-      <DashboardLayout>
-        <div className="flex min-h-[calc(100vh-10rem)] flex-col bg-slate-50 p-4">
-          <div className="mx-auto flex w-full max-w-[98%] min-h-0 flex-1 flex-col gap-4">
-            <div className="flex flex-shrink-0 items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Processed Statements</h1>
-                <p className="mt-2 text-gray-600">View processed statements, payouts, and recoveries</p>
-              </div>
-              <button
-                onClick={() => navigate(-1)}
-                className="flex items-center gap-2 rounded-lg bg-gray-600 px-4 py-2 text-white transition hover:bg-gray-700"
-              >
-                <FaArrowLeft /> Back
-              </button>
-            </div>
-
-            <div className="grid flex-shrink-0 grid-cols-1 gap-4 md:grid-cols-4">
-              <div className="rounded-lg bg-yellow-500 p-6 text-white shadow-md">
-                <p className="text-sm opacity-90">Outstanding to Landlords</p>
-                <p className="text-2xl font-bold">{stats.totalUnpaid}</p>
-                <p className="text-xs opacity-75">Amount: {money(stats.totalAmountUnpaid)}</p>
-              </div>
-              <div className="rounded-lg bg-red-600 p-6 text-white shadow-md">
-                <p className="text-sm opacity-90">Recoveries from Landlords</p>
-                <p className="text-2xl font-bold">{stats.totalRecoveries}</p>
-                <p className="text-xs opacity-75">Amount: {money(stats.totalRecoveryAmount)}</p>
-              </div>
-              <div className={`${MILIK_GREEN} rounded-lg p-6 text-white shadow-md`}>
-                <p className="text-sm opacity-90">Total Paid</p>
-                <p className="text-2xl font-bold">{stats.totalPaid}</p>
-                <p className="text-xs opacity-75">Amount: {money(stats.totalAmountPaid)}</p>
-              </div>
-              <div className="rounded-lg bg-blue-600 p-6 text-white shadow-md">
-                <p className="text-sm opacity-90">Total Statements</p>
-                <p className="text-2xl font-bold">{statements.length}</p>
-                <p className="text-xs opacity-75">Reversed: {stats.totalReversed}</p>
-              </div>
-            </div>
-
-            <div className="flex-shrink-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-6 flex flex-wrap gap-4 border-b">
-                <button
-                  onClick={() => setActiveTab("outstanding")}
-                  className={`border-b-2 px-4 py-2 font-semibold transition ${
-                    activeTab === "outstanding"
-                      ? `${MILIK_GREEN} border-orange-500 text-white`
-                      : "border-transparent text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <FaHourglass className="mr-2 inline" /> Outstanding ({stats.totalUnpaid})
-                </button>
-                <button
-                  onClick={() => setActiveTab("recoveries")}
-                  className={`border-b-2 px-4 py-2 font-semibold transition ${
-                    activeTab === "recoveries"
-                      ? `${MILIK_GREEN} border-orange-500 text-white`
-                      : "border-transparent text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <FaHourglass className="mr-2 inline" /> Recoveries ({stats.totalRecoveries})
-                </button>
-                <button
-                  onClick={() => setActiveTab("paid")}
-                  className={`border-b-2 px-4 py-2 font-semibold transition ${
-                    activeTab === "paid"
-                      ? `${MILIK_GREEN} border-orange-500 text-white`
-                      : "border-transparent text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <FaCheckCircle className="mr-2 inline" /> Paid ({stats.totalPaid})
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-4 md:flex-row">
-                <input
-                  type="text"
-                  placeholder="Search by landlord or property..."
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-orange-500"
-                />
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-orange-500"
-                >
+      <DashboardLayout lockContentScroll>
+        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+          <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
+            <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={() => setActiveTab("outstanding")} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Outstanding ({stats.totalUnpaid})</button>
+                <button onClick={() => setActiveTab("recoveries")} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Recoveries ({stats.totalRecoveries})</button>
+                <button onClick={() => setActiveTab("paid")} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle /> Paid ({stats.totalPaid})</button>
+                <input type="text" placeholder="Search by landlord or property..." value={searchText} onChange={(e) => setSearchText(e.target.value)} className="h-8 min-w-[260px] flex-1 rounded-md border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]" />
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]">
                   <option value="date-desc">Newest First</option>
                   <option value="date-asc">Oldest First</option>
                 </select>
+                <button onClick={() => navigate(-1)} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-600 px-3 text-[11px] font-bold text-white hover:bg-slate-700"><FaArrowLeft /> Back</button>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="rounded-md border border-yellow-200 bg-yellow-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-yellow-700">Outstanding: {stats.totalUnpaid} • {money(stats.totalAmountUnpaid)}</span>
+                <span className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-red-700">Recoveries: {stats.totalRecoveries} • {money(stats.totalRecoveryAmount)}</span>
+                <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-700">Paid: {stats.totalPaid} • {money(stats.totalAmountPaid)}</span>
+                <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-blue-700">Statements: {statements.length} • Reversed {stats.totalReversed}</span>
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
               {loading ? (
                 <div className="flex flex-1 items-center justify-center p-12 text-center"><p className="text-gray-500">Loading statements...</p></div>
               ) : filteredStatements.length === 0 ? (
@@ -616,7 +564,7 @@ const ProcessedStatements = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredStatements.map((statement) => {
+                      {paginatedStatements.map((statement) => {
                         const isNegative = isNegativeProcessedStatement(statement);
                         const outstandingRecovery = getOutstandingRecoveryBalance(statement);
                         return (
@@ -810,6 +758,17 @@ const ProcessedStatements = () => {
                   </table>
                 </div>
               )}
+              <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
+                <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+                  <div className="font-semibold">Showing <span className="font-bold text-slate-900">{filteredStatements.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredStatements.length)}</span> of <span className="font-bold text-slate-900">{filteredStatements.length}</span> processed statements</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                    <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                    <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                    <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

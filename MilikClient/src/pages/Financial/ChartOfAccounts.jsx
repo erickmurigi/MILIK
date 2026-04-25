@@ -438,94 +438,18 @@ const ChartOfAccounts = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50">
-        <div className="px-4 md:px-6 py-5">
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-2">
-                <FaBook className="text-[#0B3B2E]" />
-                Chart of Accounts
-              </h1>
-              <p className="text-sm text-slate-600 mt-1">
-                Auto-populated company chart with real balances and full CRUD controls. Double-click a posting ledger to open full activity.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={loadAccounts}
-                className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100 flex items-center gap-2"
-              >
-                <FaSyncAlt />
-                Refresh
-              </button>
-
-              <button
-                onClick={openCreateModal}
-                className="px-4 py-2 rounded-lg bg-[#0B3B2E] hover:bg-[#082d24] text-white text-sm font-semibold flex items-center gap-2"
-              >
-                <FaPlus />
-                Add Account
-              </button>
-
-              <button
-                onClick={openEditModal}
-                disabled={selectedAccounts.length !== 1}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${
-                  selectedAccounts.length === 1
-                    ? "bg-amber-500 hover:bg-amber-600 text-white"
-                    : "bg-slate-200 text-slate-500 cursor-not-allowed"
-                }`}
-              >
-                <FaEdit />
-                Edit Selected
-              </button>
-
-              <button
-                onClick={handleDeleteSelected}
-                disabled={selectedAccounts.length === 0}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${
-                  selectedAccounts.length > 0
-                    ? "bg-rose-600 hover:bg-rose-700 text-white"
-                    : "bg-slate-200 text-slate-500 cursor-not-allowed"
-                }`}
-              >
-                <FaTrash />
-                Delete Selected
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Total Accounts</div>
-              <div className="mt-2 text-2xl font-bold text-slate-900">{totalAccounts}</div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Groups</div>
-              <div className="mt-2 text-2xl font-bold text-slate-900 flex items-center gap-2">
-                <FaLayerGroup className="text-[#0B3B2E]" />
-                {ACCOUNT_GROUPS.length}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Net Total Balance</div>
-              <div className="mt-2 text-2xl font-bold text-slate-900">{formatMoney(totalBalance)}</div>
-            </div>
-          </div>
-
-          <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
             <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
               <div className="relative w-full lg:max-w-xl">
                 <FaSearch className="absolute left-3 top-3 text-slate-400" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by code, account name, type, class, subgroup, or parent"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]"
+                  placeholder="Search by code, account name, type, class, or subgroup"
+                  className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] pl-8 pr-3 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
               </div>
 
@@ -543,17 +467,22 @@ const ChartOfAccounts = () => {
                   <FaFolderOpen className="text-[#0B3B2E]" />
                   {selectedAccounts.length} selected
                 </div>
+                <button onClick={loadAccounts} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100"><FaSyncAlt /> Refresh</button>
+                <button onClick={openCreateModal} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00]"><FaPlus /> Add Account</button>
+                <button onClick={openEditModal} disabled={selectedAccounts.length !== 1} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length === 1 ? "bg-amber-500 hover:bg-amber-600" : "bg-slate-300"}`}><FaEdit /> Edit</button>
+                <button onClick={handleDeleteSelected} disabled={selectedAccounts.length === 0} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length > 0 ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-300"}`}><FaTrash /> Delete</button>
               </div>
             </div>
           </div>
 
           {loading && (
-            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm text-blue-800">
               Loading chart of accounts...
             </div>
           )}
 
-          <div className="mt-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="min-h-0 flex-1 overflow-auto p-2">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
             {groupedAccounts.map((group) => {
               const groupIds = group.accounts.map((a) => a._id);
               const allGroupSelected =
@@ -561,7 +490,7 @@ const ChartOfAccounts = () => {
 
               return (
                 <div key={group.key} className={`rounded-xl border ${group.color} overflow-hidden`}>
-                  <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-white/70">
+                  <div className="px-3 py-1.5 border-b border-slate-200 flex items-center justify-between bg-white/70">
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => toggleSelectAllInGroup(group.accounts)}
@@ -579,24 +508,23 @@ const ChartOfAccounts = () => {
                   </div>
 
                   <div className="overflow-x-auto bg-white">
-                    <table className="w-full min-w-[980px] text-sm">
+                    <table className="w-full min-w-[860px] text-xs">
                       <thead className="bg-[#0B3B2E] text-white">
                         <tr>
-                          <th className="text-left px-4 py-3 w-[44px]"></th>
-                          <th className="text-left px-4 py-3">Code</th>
-                          <th className="text-left px-4 py-3">Account Name</th>
-                          <th className="text-left px-4 py-3">Type</th>
-                          <th className="text-left px-4 py-3">Class</th>
-                          <th className="text-left px-4 py-3">Normal Side</th>
-                          <th className="text-left px-4 py-3">Parent</th>
-                          <th className="text-right px-4 py-3">Balance</th>
-                          <th className="text-right px-4 py-3">Status</th>
+                          <th className="text-left px-3 py-1.5 w-[44px]"></th>
+                          <th className="text-left px-3 py-1.5">Code</th>
+                          <th className="text-left px-3 py-1.5">Account Name</th>
+                          <th className="text-left px-3 py-1.5">Type</th>
+                          <th className="text-left px-3 py-1.5">Class</th>
+                          <th className="text-left px-3 py-1.5">Normal Side</th>
+                          <th className="text-right px-3 py-1.5">Balance</th>
+                          <th className="text-right px-3 py-1.5">Status</th>
                         </tr>
                       </thead>
                       <tbody>
                         {group.accounts.length === 0 ? (
                           <tr>
-                            <td colSpan="9" className="px-4 py-6 text-center text-slate-500">
+                            <td colSpan="8" className="px-3 py-6 text-center text-slate-500">
                               No accounts found.
                             </td>
                           </tr>
@@ -614,7 +542,7 @@ const ChartOfAccounts = () => {
                                 }}
                                 title={account?.isPosting !== false && !account?.isHeader ? "Double-click to open ledger activity" : "Header accounts cannot open activity"}
                               >
-                                <td className="px-4 py-3">
+                                <td className="px-3 py-1.5">
                                   <button
                                     onClick={() => toggleSelect(account._id)}
                                     className="text-slate-700 hover:text-slate-900"
@@ -622,8 +550,8 @@ const ChartOfAccounts = () => {
                                     {selected ? <FaCheckSquare /> : <FaSquare />}
                                   </button>
                                 </td>
-                                <td className="px-4 py-3 font-mono text-slate-900">{account.code}</td>
-                                <td className="px-4 py-3">
+                                <td className="px-3 py-1.5 font-mono text-slate-900">{account.code}</td>
+                                <td className="px-3 py-1.5">
                                   <div
                                     className="font-medium text-slate-900"
                                     style={{ paddingLeft: `${Number(account.level || 0) * 18}px` }}
@@ -631,20 +559,15 @@ const ChartOfAccounts = () => {
                                     {account.name}
                                   </div>
                                 </td>
-                                <td className="px-4 py-3 text-slate-700">{typeLabel(account.type)}</td>
-                                <td className="px-4 py-3 text-slate-600">{classLabel(account)}</td>
-                                <td className="px-4 py-3 text-slate-600">
+                                <td className="px-3 py-1.5 text-slate-700">{typeLabel(account.type)}</td>
+                                <td className="px-3 py-1.5 text-slate-600">{classLabel(account)}</td>
+                                <td className="px-3 py-1.5 text-slate-600">
                                   {account.normalBalanceSide || NORMAL_BALANCE_BY_TYPE[account.type] || "-"}
                                 </td>
-                                <td className="px-4 py-3 text-slate-600">
-                                  {account.parentAccount
-                                    ? `${account.parentAccount.code} - ${account.parentAccount.name}`
-                                    : "-"}
-                                </td>
-                                <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                                <td className="px-3 py-1.5 text-right font-semibold text-slate-900">
                                   {formatMoney(account.balance || 0)}
                                 </td>
-                                <td className="px-4 py-3 text-right">
+                                <td className="px-3 py-1.5 text-right">
                                   <div className="inline-flex gap-2 flex-wrap justify-end">
                                     {account.isSystem && (
                                       <span className="inline-flex text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
@@ -787,7 +710,7 @@ const ChartOfAccounts = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label className="flex items-center justify-between rounded-xl border border-slate-300 px-4 py-3">
+                  <label className="flex items-center justify-between rounded-xl border border-slate-300 px-3 py-1.5">
                     <div>
                       <div className="text-sm font-semibold text-slate-800">Header Account</div>
                       <div className="text-xs text-slate-500">Use for grouping children, not direct posting.</div>
@@ -805,7 +728,7 @@ const ChartOfAccounts = () => {
                     />
                   </label>
 
-                  <label className="flex items-center justify-between rounded-xl border border-slate-300 px-4 py-3">
+                  <label className="flex items-center justify-between rounded-xl border border-slate-300 px-3 py-1.5">
                     <div>
                       <div className="text-sm font-semibold text-slate-800">Posting Account</div>
                       <div className="text-xs text-slate-500">Receives ledger entries directly.</div>
@@ -844,6 +767,7 @@ const ChartOfAccounts = () => {
             </div>
           </div>
         )}
+      </div>
       </div>
     </DashboardLayout>
   );

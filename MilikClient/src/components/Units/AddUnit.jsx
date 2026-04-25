@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { createUnit, getUnits, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { adminRequests } from "../../utils/requestMethods";
+import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 
 // Orange theme constants
 const MILIK_ORANGE_BG = "bg-orange-600";
@@ -369,8 +370,11 @@ const AddUnit = () => {
   
   const labelClass = "block text-sm font-bold text-slate-800 mb-1 tracking-tight";
 
+  const uppercaseUnitFields = new Set(["unitNumber", "description", "amenities"]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    const nextValue = uppercaseUnitFields.has(name) ? normalizeUppercaseInput(value) : value;
 
     if (name === "rent") {
       setRentTouched(true);
@@ -385,9 +389,9 @@ const AddUnit = () => {
     }
 
     setFormData((prev) => {
-      const next = { ...prev, [name]: value };
+      const next = { ...prev, [name]: nextValue };
       if (name === "rent" && !depositTouched && !isEditMode) {
-        next.deposit = value;
+        next.deposit = nextValue;
       }
       return next;
     });

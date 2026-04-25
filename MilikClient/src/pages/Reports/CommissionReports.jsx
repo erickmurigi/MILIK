@@ -16,6 +16,7 @@ const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
+const ITEMS_PER_PAGE = 50;
 
 const formatCurrency = (value = 0) =>
   `KES ${Number(value || 0).toLocaleString("en-KE", {
@@ -113,12 +114,15 @@ const CommissionReports = () => {
     monthFrom: currentMonth,
     monthTo: currentMonth,
     search: "",
+    status: "recognized",
   });
   const [appliedFilters, setAppliedFilters] = useState({
     monthFrom: currentMonth,
     monthTo: currentMonth,
     search: "",
+    status: "recognized",
   });
+  const [currentPage, setCurrentPage] = useState(1);
 
   const loadData = useCallback(async () => {
     if (!currentCompany?._id) {
@@ -190,6 +194,9 @@ const CommissionReports = () => {
           status: isReversed ? "Reversed" : "Recognized",
         };
 
+        if (appliedFilters.status === "recognized" && isReversed) return null;
+        if (appliedFilters.status === "reversed" && !isReversed) return null;
+
         if (search) {
           const haystack = [
             row.statementNumber,
@@ -216,6 +223,20 @@ const CommissionReports = () => {
       });
   }, [appliedFilters, statementRows]);
 
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE)), [filteredRows.length]);
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedRows = useMemo(() => filteredRows.slice(startIndex, endIndex), [filteredRows, startIndex, endIndex]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [appliedFilters]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
+
   const totals = useMemo(() => ({
     statements: filteredRows.length,
     months: new Set(filteredRows.map((row) => row.monthKey)).size,
@@ -231,6 +252,7 @@ const CommissionReports = () => {
       monthFrom: currentMonth,
       monthTo: currentMonth,
       search: "",
+      status: "recognized",
     };
     setDraftFilters(nextFilters);
     setAppliedFilters(nextFilters);
@@ -279,9 +301,9 @@ const CommissionReports = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="sticky top-0 z-30 bg-gray-50 px-2 pt-2">
-          <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="month"
@@ -296,6 +318,16 @@ const CommissionReports = () => {
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, monthTo: e.target.value }))}
                 className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
+
+              <select
+                value={draftFilters.status}
+                onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))}
+                className="rounded border border-orange-300 bg-orange-50 px-3 py-1 text-xs font-semibold text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
+              >
+                <option value="recognized">Recognized only</option>
+                <option value="reversed">Reversed only</option>
+                <option value="all">All statuses</option>
+              </select>
 
               <div className="flex min-w-[240px] flex-1 items-center gap-2 rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus-within:ring-1 focus-within:ring-[#0B3B2E]">
                 <FaSearch className="text-[11px]" />
@@ -345,90 +377,73 @@ const CommissionReports = () => {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto p-2">
-          <div className="mb-3 grid grid-cols-1 gap-3 lg:grid-cols-4">
-            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Recognized Commission</div>
-              <div className="mt-2 text-2xl font-black text-[#0B3B2E]">{formatCurrency(totals.recognizedCommission)}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="mb-2 grid grid-cols-1 gap-2 lg:grid-cols-4">
+            <div className="rounded-md border border-gray-200 bg-white px-2 py-1.5 shadow-sm">
+              <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500">Recognized Commission</div>
+              <div className="mt-0.5 text-[12px] font-black text-[#0B3B2E]">{formatCurrency(totals.recognizedCommission)}</div>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Reversed Commission</div>
-              <div className="mt-2 text-2xl font-black text-red-700">{formatCurrency(totals.reversedCommission)}</div>
+            <div className="rounded-md border border-gray-200 bg-white px-2 py-1.5 shadow-sm">
+              <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500">Reversed Commission</div>
+              <div className="mt-0.5 text-[12px] font-black text-red-700">{formatCurrency(totals.reversedCommission)}</div>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Statements / Months</div>
-              <div className="mt-2 text-2xl font-black text-gray-900">{totals.statements} / {totals.months}</div>
+            <div className="rounded-md border border-gray-200 bg-white px-2 py-1.5 shadow-sm">
+              <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500">Statements / Months</div>
+              <div className="mt-0.5 text-[12px] font-black text-gray-900">{totals.statements} / {totals.months}</div>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Reversed Statements</div>
-              <div className="mt-2 text-2xl font-black text-[#FF8C00]">{totals.reversedStatements}</div>
+            <div className="rounded-md border border-gray-200 bg-white px-2 py-1.5 shadow-sm">
+              <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500">Reversed Statements</div>
+              <div className="mt-0.5 text-[12px] font-black text-[#FF8C00]">{totals.reversedStatements}</div>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
-              <div>
-                <h1 className="flex items-center gap-3 text-xl font-black tracking-tight text-gray-900">
-                  <FaMoneyBillWave className="text-[#0B3B2E]" />
-                  Commission Reports
-                </h1>
-                <p className="mt-1 text-sm text-gray-600">
-                  {currentCompany?.companyName
-                    ? `Commission recognized from processed statements for ${currentCompany.companyName}.`
-                    : "Select a company to view commission recognition."}
-                </p>
-              </div>
-              <div className="rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700">
-                {filteredRows.length} row{filteredRows.length === 1 ? "" : "s"}
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+            <div className="min-h-0 flex-1 overflow-auto">
+              <table className="min-w-full text-[12px]">
+                <thead className="sticky top-0 z-20 bg-[#0B3B2E] text-xs uppercase tracking-wide text-white">
                   <tr>
-                    <th className="px-4 py-3 text-left font-bold">Recognition Date</th>
-                    <th className="px-4 py-3 text-left font-bold">Statement No.</th>
-                    <th className="px-4 py-3 text-left font-bold">Property</th>
-                    <th className="px-4 py-3 text-left font-bold">Landlord</th>
-                    <th className="px-4 py-3 text-left font-bold">Recognition Basis</th>
-                    <th className="px-4 py-3 text-left font-bold">Percentage / Amount</th>
-                    <th className="px-4 py-3 text-right font-bold">Recognized</th>
-                    <th className="px-4 py-3 text-right font-bold">Reversed</th>
-                    <th className="px-4 py-3 text-left font-bold">Status</th>
+                    <th className="px-3 py-2 text-left font-bold">Recognition Date</th>
+                    <th className="px-3 py-2 text-left font-bold">Statement No.</th>
+                    <th className="px-3 py-2 text-left font-bold">Property</th>
+                    <th className="px-3 py-2 text-left font-bold">Landlord</th>
+                    <th className="px-3 py-2 text-left font-bold">Recognition Basis</th>
+                    <th className="px-3 py-2 text-left font-bold">Percentage / Amount</th>
+                    <th className="px-3 py-2 text-right font-bold">Recognized</th>
+                    <th className="px-3 py-2 text-right font-bold">Reversed</th>
+                    <th className="px-3 py-2 text-left font-bold">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {!currentCompany?._id ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-500">
+                      <td colSpan={9} className="px-4 py-10 text-center text-[12px] text-gray-500">
                         Select an active company to view the commission report.
                       </td>
                     </tr>
                   ) : loading ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-500">
+                      <td colSpan={9} className="px-4 py-10 text-center text-[12px] text-gray-500">
                         Loading commission report...
                       </td>
                     </tr>
                   ) : filteredRows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-500">
+                      <td colSpan={9} className="px-4 py-10 text-center text-[12px] text-gray-500">
                         No recognized commission data found for the selected filter range.
                       </td>
                     </tr>
                   ) : (
-                    filteredRows.map((row) => (
+                    paginatedRows.map((row) => (
                       <tr key={row.id} className="border-t border-gray-200 hover:bg-gray-50/80">
-                        <td className="px-4 py-3 font-semibold text-gray-900">{formatDate(row.recognitionDate)}</td>
-                        <td className="px-4 py-3 text-gray-700">{row.statementNumber}</td>
-                        <td className="px-4 py-3 text-gray-700">{row.propertyName}</td>
-                        <td className="px-4 py-3 text-gray-700">{row.landlordName}</td>
-                        <td className="px-4 py-3 text-gray-700">{row.recognitionBasis}</td>
-                        <td className="px-4 py-3 text-gray-700">{row.structureLabel}</td>
-                        <td className="px-4 py-3 text-right font-bold text-[#0B3B2E]">{formatCurrency(row.recognizedAmount)}</td>
-                        <td className="px-4 py-3 text-right font-bold text-red-700">{formatCurrency(row.reversedAmount)}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-2 font-semibold text-gray-900">{formatDate(row.recognitionDate)}</td>
+                        <td className="px-3 py-2 text-gray-700">{row.statementNumber}</td>
+                        <td className="px-3 py-2 text-gray-700">{row.propertyName}</td>
+                        <td className="px-3 py-2 text-gray-700">{row.landlordName}</td>
+                        <td className="px-3 py-2 text-gray-700">{row.recognitionBasis}</td>
+                        <td className="px-3 py-2 text-gray-700">{row.structureLabel}</td>
+                        <td className="px-3 py-2 text-right font-bold text-[#0B3B2E]">{formatCurrency(row.recognizedAmount)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-red-700">{formatCurrency(row.reversedAmount)}</td>
+                        <td className="px-3 py-2">
                           <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${row.status === "Reversed" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
                             {row.status}
                           </span>
@@ -438,16 +453,25 @@ const CommissionReports = () => {
                   )}
                 </tbody>
                 {filteredRows.length > 0 ? (
-                  <tfoot className="bg-gray-100 text-sm font-black text-gray-900">
+                  <tfoot className="bg-gray-100 text-[12px] font-black text-gray-900">
                     <tr>
-                      <td colSpan={6} className="px-4 py-3">Totals</td>
-                      <td className="px-4 py-3 text-right text-[#0B3B2E]">{formatCurrency(totals.recognizedCommission)}</td>
-                      <td className="px-4 py-3 text-right text-red-700">{formatCurrency(totals.reversedCommission)}</td>
-                      <td className="px-4 py-3" />
+                      <td colSpan={6} className="px-3 py-2">Totals</td>
+                      <td className="px-3 py-2 text-right text-[#0B3B2E]">{formatCurrency(totals.recognizedCommission)}</td>
+                      <td className="px-3 py-2 text-right text-red-700">{formatCurrency(totals.reversedCommission)}</td>
+                      <td className="px-3 py-2" />
                     </tr>
                   </tfoot>
                 ) : null}
               </table>
+            </div>
+            <div className="sticky bottom-0 z-20 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <div className="font-semibold">Showing <span className="font-bold text-slate-900">{filteredRows.length ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> commission row(s)</div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                <button type="button" onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                <button type="button" onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+              </div>
             </div>
           </div>
         </div>

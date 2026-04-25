@@ -51,6 +51,7 @@ import {
   getTenantInvoiceNotes,
 } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -1499,9 +1500,9 @@ const confirmTransferUnit = async () => {
                 placeholder="Tenant Name"
                 value={draftFilters.tenantName}
                 onChange={(e) =>
-                  setDraftFilters({ ...draftFilters, tenantName: e.target.value })
+                  setDraftFilters({ ...draftFilters, tenantName: normalizeUppercaseInput(e.target.value) })
                 }
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 bg-[#addbb2] text-gray-800 placeholder-gray-600"
+                className={LISTING_UI.filterInputTinted}
               />
             </div>
 
@@ -1511,9 +1512,9 @@ const confirmTransferUnit = async () => {
                 placeholder="Tenant Code (TT####)"
                 value={draftFilters.tenantCode}
                 onChange={(e) =>
-                  setDraftFilters({ ...draftFilters, tenantCode: e.target.value })
+                  setDraftFilters({ ...draftFilters, tenantCode: normalizeUppercaseInput(e.target.value) })
                 }
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 bg-[#addbb2] text-gray-800 placeholder-gray-600"
+                className={LISTING_UI.filterInputTinted}
               />
             </div>
 
@@ -1524,7 +1525,7 @@ const confirmTransferUnit = async () => {
                 placeholder={isTerminatedView ? "Search terminated tenants..." : "Search tenants..."}
                 value={draftFilters.search}
                 onChange={(e) =>
-                  setDraftFilters({ ...draftFilters, search: e.target.value })
+                  setDraftFilters({ ...draftFilters, search: normalizeUppercaseInput(e.target.value) })
                 }
                 className="w-full pl-9 pr-3 py-1 text-xs border border-gray-300 rounded bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
               />
@@ -1578,7 +1579,7 @@ const confirmTransferUnit = async () => {
                   <div className="py-1">
                     <button
                       onClick={handleViewStatement}
-                      className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
                     >
                       <FaFileInvoiceDollar size={12} />
                       <span>View Tenant Statement</span>
@@ -1586,7 +1587,7 @@ const confirmTransferUnit = async () => {
                     {canUpdateTenant && (
                     <button
                       onClick={handleEditTenant}
-                      className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
                     >
                       <FaUserEdit size={12} />
                       <span>Edit Tenant Details</span>
@@ -1596,7 +1597,7 @@ const confirmTransferUnit = async () => {
                     <button
                       onClick={handleTransferUnit}
                       disabled={isTerminatedView || selectedTenants.length !== 1 || !selectedPrimaryTenant?.canTransfer}
-                      className={`w-full text-left px-4 py-2 text-xs flex items-center gap-2 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTransfer ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
+                      className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTransfer ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
                       title={!isTerminatedView && selectedTenants.length === 1 && selectedPrimaryTenant?.canTransfer ? "Transfer selected tenant unit" : isTerminatedView ? "Transfers are disabled on terminated tenants" : "Only one active tenant can be transferred at a time"}
                     >
                       <FaExchangeAlt size={12} />
@@ -1605,14 +1606,14 @@ const confirmTransferUnit = async () => {
                     )}
                     <button
                       onClick={handleViewReceipts}
-                      className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
                     >
                       <FaMoneyBillWave size={12} />
                       <span>View Tenant Receipts</span>
                     </button>
                     <button
                       onClick={handleOpenAgreement}
-                      className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
                     >
                       <FaFileInvoiceDollar size={12} />
                       <span>Open Tenant Agreement</span>
@@ -1620,7 +1621,7 @@ const confirmTransferUnit = async () => {
                     {canUpdateTenant && (
                     <button
                       onClick={handleAddUtility}
-                      className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700"
                     >
                       <FaBolt size={12} />
                       <span>Add Utility to Selected Tenant</span>
@@ -1629,7 +1630,7 @@ const confirmTransferUnit = async () => {
                     {canUpdateTenant && (
                     <button
                       onClick={handleReviewRent}
-                      className="w-full text-left px-4 py-2 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700 border-t border-gray-200"
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700 border-t border-gray-200"
                     >
                       <FaChartLine size={12} />
                       <span>Review Rent for Selected Tenant</span>
@@ -1639,7 +1640,7 @@ const confirmTransferUnit = async () => {
                     <button
                       onClick={handleOpenTerminateTenant}
                       disabled={isTerminatedView || selectedTenants.length !== 1 || !selectedPrimaryTenant?.canTerminate}
-                      className={`w-full text-left px-4 py-2 text-xs flex items-center gap-2 border-t border-gray-200 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTerminate ? "hover:bg-amber-50 text-amber-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
+                      className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 border-t border-gray-200 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTerminate ? "hover:bg-amber-50 text-amber-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
                       title={!isTerminatedView && selectedTenants.length === 1 && selectedPrimaryTenant?.canTerminate ? "Terminate selected tenant" : isTerminatedView ? "Tenant is already terminated" : "Only one active tenant can be terminated at a time"}
                     >
                       <FaUserSlash size={12} />
@@ -1651,7 +1652,7 @@ const confirmTransferUnit = async () => {
                         setActionMenuOpen(false);
                         setShowCommunicationModal(true);
                       }}
-                      className="w-full text-left px-4 py-2 text-xs hover:bg-orange-50 flex items-center gap-2 text-orange-700 border-t border-gray-200"
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 flex items-center gap-2 text-orange-700 border-t border-gray-200"
                     >
                       <FaSms size={12} />
                       <span>SMS Tenants</span>
@@ -1660,7 +1661,7 @@ const confirmTransferUnit = async () => {
                     <button
                       onClick={handleDeleteSelectedTenants}
                       disabled={selectedDeletableTenants.length === 0}
-                      className={`w-full text-left px-4 py-2 text-xs flex items-center gap-2 border-t border-gray-200 font-semibold ${selectedDeletableTenants.length > 0 ? "hover:bg-red-50 text-red-600" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
+                      className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 border-t border-gray-200 font-semibold ${selectedDeletableTenants.length > 0 ? "hover:bg-red-50 text-red-600" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
                       title={selectedDeletableTenants.length > 0 ? "Delete selected unused tenant records" : "Selected tenants are protected because they are active or already have history"}
                     >
                       <FaTrash size={12} />
@@ -1824,7 +1825,7 @@ const confirmTransferUnit = async () => {
                         <tr className="bg-transparent">
                           <td colSpan={12} className="px-2 pt-1.5 pb-1">
                             <h3 className="text-sm font-extrabold text-black tracking-normal uppercase">
-                              {tenant.propertyName}
+                              {toListingCaps(tenant.propertyName)}
                             </h3>
                             <div className="mt-1 h-[2px] w-full bg-[#FF8C00]" />
                           </td>
@@ -1864,10 +1865,10 @@ const confirmTransferUnit = async () => {
                           </span>
                         </td>
                         <td className="px-2 py-1 font-mono text-gray-600 border-r border-gray-200 text-xs">
-                          {tenant.tenantCode}
+                          {toListingCaps(tenant.tenantCode)}
                         </td>
                         <td className="px-2 py-1 border-r border-gray-200">
-                          <div className="font-bold text-gray-900">{tenant.tenantName}</div>
+                          <div className="font-bold text-gray-900">{toListingCaps(tenant.tenantName)}</div>
                           {tenant.expiryWarning?.hasWarning && (
                             <div className="mt-0.5 text-[10px] font-semibold text-red-700">
                               {tenant.expiryWarning.summary}
@@ -1875,10 +1876,10 @@ const confirmTransferUnit = async () => {
                           )}
                         </td>
                         <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
-                          {tenant.propertyName}
+                          {toListingCaps(tenant.propertyName)}
                         </td>
                         <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
-                          {tenant.unitNumber}
+                          {toListingCaps(tenant.unitNumber)}
                         </td>
                         {isTerminatedView ? (
                           <>
@@ -1976,7 +1977,7 @@ const confirmTransferUnit = async () => {
 
                       {expandedTenants.includes(tenant.id) && (
                         <tr className="bg-gray-100 border-b border-gray-200">
-                          <td colSpan="12" className="px-3 py-2">
+                          <td colSpan="12" className="px-3 py-1.5">
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
                               <div>
                                 <h4 className="font-bold text-gray-900 mb-2 text-xs border-b-2 border-orange-500 pb-1">
@@ -1993,7 +1994,7 @@ const confirmTransferUnit = async () => {
                                   </div>
                                   <div>
                                     <span className="font-bold text-gray-700 block text-xs">Property:</span>
-                                    <p className="text-gray-600 text-xs">{tenant.propertyName}</p>
+                                    <p className="text-gray-600 text-xs">{toListingCaps(tenant.propertyName)}</p>
                                   </div>
                                 </div>
                               </div>
@@ -2043,7 +2044,7 @@ const confirmTransferUnit = async () => {
                                 <div className="space-y-1 text-xs">
                                   <div>
                                     <span className="font-bold text-gray-700 block text-xs">Unit:</span>
-                                    <p className="text-gray-600 text-xs">{tenant.unitNumber}</p>
+                                    <p className="text-gray-600 text-xs">{toListingCaps(tenant.unitNumber)}</p>
                                   </div>
                                   <div>
                                     <span className="font-bold text-gray-700 block text-xs">Lease Start Date:</span>
@@ -2257,8 +2258,8 @@ const confirmTransferUnit = async () => {
           </div>
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
-          <button onClick={() => setShowTransferModal(false)} className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">Cancel</button>
-          <button onClick={confirmTransferUnit} disabled={isTransferring} className="rounded-2xl bg-[#0B3B2E] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{isTransferring ? "Transferring..." : "Transfer Unit"}</button>
+          <button onClick={() => setShowTransferModal(false)} className="rounded-2xl border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700">Cancel</button>
+          <button onClick={confirmTransferUnit} disabled={isTransferring} className="rounded-2xl bg-[#0B3B2E] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60">{isTransferring ? "Transferring..." : "Transfer Unit"}</button>
         </div>
       </div>
     </div>
@@ -2332,7 +2333,7 @@ const confirmTransferUnit = async () => {
                   if (isTerminating) return;
                   setShowTerminateModal(false);
                 }}
-                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+                className="rounded-2xl border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700"
                 disabled={isTerminating}
               >
                 Cancel
@@ -2340,7 +2341,7 @@ const confirmTransferUnit = async () => {
               <button
                 onClick={confirmTerminateTenant}
                 disabled={!canUpdateTenant || isTerminating}
-                className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-2xl bg-red-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {isTerminating ? "Terminating..." : "Terminate Tenant"}
               </button>
@@ -2361,7 +2362,7 @@ const confirmTransferUnit = async () => {
                 <button
                   onClick={closeDepositSettlementModal}
                   disabled={isProcessingDepositSettlement}
-                  className="rounded-2xl border border-white/30 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
+                  className="rounded-2xl border border-white/30 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
                 >
                   Close
                 </button>
@@ -2573,17 +2574,17 @@ const confirmTransferUnit = async () => {
                         <table className="min-w-full divide-y divide-slate-200 text-xs">
                           <thead className="bg-slate-50 text-slate-600">
                             <tr>
-                              <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Invoice</th>
-                              <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Category</th>
-                              <th className="px-3 py-2 text-right font-black uppercase tracking-[0.14em]">Open</th>
+                              <th className="px-3 py-1.5 text-left font-black uppercase tracking-[0.14em]">Invoice</th>
+                              <th className="px-3 py-1.5 text-left font-black uppercase tracking-[0.14em]">Category</th>
+                              <th className="px-3 py-1.5 text-right font-black uppercase tracking-[0.14em]">Open</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 bg-white">
                             {depositSettlementContext.creditableInvoices.map((invoice) => (
                               <tr key={normalizeId(invoice?._id)}>
-                                <td className="px-3 py-2 font-semibold text-slate-900">{invoice?.invoiceNumber || "-"}</td>
-                                <td className="px-3 py-2 text-slate-600">{String(invoice?.category || "-").replace(/_/g, " ")}</td>
-                                <td className="px-3 py-2 text-right font-black text-slate-900">Ksh {roundMoney(invoice?.remainingCreditableAmount ?? invoice?.remainingBalance ?? 0).toLocaleString()}</td>
+                                <td className="px-3 py-1.5 font-semibold text-slate-900">{invoice?.invoiceNumber || "-"}</td>
+                                <td className="px-3 py-1.5 text-slate-600">{String(invoice?.category || "-").replace(/_/g, " ")}</td>
+                                <td className="px-3 py-1.5 text-right font-black text-slate-900">Ksh {roundMoney(invoice?.remainingCreditableAmount ?? invoice?.remainingBalance ?? 0).toLocaleString()}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -2609,7 +2610,7 @@ const confirmTransferUnit = async () => {
                       <button
                         onClick={closeDepositSettlementModal}
                         disabled={isProcessingDepositSettlement}
-                        className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+                        className="rounded-2xl border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-60"
                       >
                         Cancel
                       </button>
@@ -2653,7 +2654,7 @@ const confirmTransferUnit = async () => {
                     {selectedDeletableTenants.slice(0, 10).map((tenant) => (
                       <li key={tenant.id} className="flex items-center gap-2">
                         <span className="w-2 h-2 bg-red-500 rounded-full"></span>
-                        <span className="font-semibold">{tenant.tenantCode}</span> - {tenant.tenantName}
+                        <span className="font-semibold">{toListingCaps(tenant.tenantCode)}</span> - {toListingCaps(tenant.tenantName)}
                       </li>
                     ))}
                     {selectedDeletableTenants.length > 10 && (
@@ -2676,14 +2677,14 @@ const confirmTransferUnit = async () => {
               <button
                 onClick={() => setShowDeleteModal(false)}
                 disabled={isDeleting}
-                className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDeleteTenants}
                 disabled={!canDeleteTenant || isDeleting || selectedDeletableTenants.length === 0}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isDeleting ? (
                   <>

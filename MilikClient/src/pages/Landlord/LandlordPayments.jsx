@@ -657,98 +657,39 @@ const LandlordPayments = ({ mode = "payments" }) => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
-        <div className="mx-auto" style={{ maxWidth: "96%" }}>
-          {/* Header */}
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-4">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => navigate("/landlords")}
-                  className="text-slate-600 hover:text-slate-900 flex items-center gap-2 font-semibold text-sm"
-                >
-                  <FaArrowLeft /> Back to Landlords
-                </button>
-                <h1 className="text-xl font-bold text-slate-900">{mode === "advancement" ? "Landlord Advancement" : "Landlord Payments"}</h1>
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+              <div className="relative md:col-span-2">
+                <FaSearch className="absolute left-3 top-2.5 text-slate-400 text-xs" />
+                <input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search landlord name, code, email..." className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 pl-8 pr-3 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]" />
               </div>
-
-              <button
-                onClick={() => getLandlords(dispatch, currentCompany._id)}
-                className="px-4 py-2 text-xs border border-slate-300 rounded-md hover:bg-slate-50 font-semibold flex items-center gap-2"
-              >
-                <FaRedoAlt /> Refresh
-              </button>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                <p className="text-[10px] font-bold uppercase text-slate-600">Landlords</p>
-                <p className="text-2xl font-bold text-slate-900">{stats.totalLandlords}</p>
-              </div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-[10px] font-bold uppercase text-blue-700">Rent Collected</p>
-                <p className="text-2xl font-bold text-blue-700">
-                  Ksh {stats.totalCollected.toLocaleString()}
-                </p>
-              </div>
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                <p className="text-[10px] font-bold uppercase text-green-700">Paid to Landlords</p>
-                <p className="text-2xl font-bold text-green-700">
-                  Ksh {stats.totalPaid.toLocaleString()}
-                </p>
-              </div>
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                <p className="text-[10px] font-bold uppercase text-orange-700">Balance Owed</p>
-                <p className="text-2xl font-bold text-orange-700">
-                  Ksh {stats.totalOwed.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Filters */}
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <div className="md:col-span-2 relative">
-                <FaSearch className="absolute left-3 top-3 text-slate-400 text-xs" />
-                <input
-                  value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  placeholder="Search landlord name, code, email..."
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-md"
-                />
-              </div>
-
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                className="px-3 py-2 text-sm border border-slate-300 rounded-md"
-              >
-                <option value="all">All Status</option>
-                <option value="Active">Active</option>
-                <option value="Archived">Archived</option>
+              <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]">
+                <option value="all">All Status</option><option value="Active">Active</option><option value="Archived">Archived</option>
               </select>
-
-              <select
-                value={filters.paymentStatus}
-                onChange={(e) => setFilters({ ...filters, paymentStatus: e.target.value })}
-                className="px-3 py-2 text-sm border border-slate-300 rounded-md"
-              >
-                <option value="all">All Payment Status</option>
-                <option value="owed">Balance Owed</option>
-                <option value="clear">Fully Paid</option>
+              <select value={filters.paymentStatus} onChange={(e) => setFilters({ ...filters, paymentStatus: e.target.value })} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]">
+                <option value="all">All Payment Status</option><option value="owed">Balance Owed</option><option value="clear">Fully Paid</option>
               </select>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Landlords: <span className="text-slate-900">{stats.totalLandlords}</span></span>
+                <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-blue-700">Collected: Ksh {stats.totalCollected.toLocaleString()}</span>
+                <span className="rounded-md border border-green-200 bg-green-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-green-700">Paid: Ksh {stats.totalPaid.toLocaleString()}</span>
+                <span className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-orange-700">Balance: Ksh {stats.totalOwed.toLocaleString()}</span>
+              </div>
+              <button onClick={() => getLandlords(dispatch, currentCompany._id)} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt /> Refresh</button>
             </div>
           </div>
 
           {/* Table */}
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full min-w-[1400px] text-xs">
                 <thead>
-                  <tr className={`${MILIK_GREEN} text-white`}>
+                  <tr className={`sticky top-0 z-10 ${MILIK_GREEN} text-white`}>
                     <th className="px-3 py-2 text-center">
                       <input
                         type="checkbox"
@@ -872,7 +813,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
             </div>
 
             {/* Pagination */}
-            <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-between">
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2 flex items-center justify-between text-xs text-slate-600">
               <div className="text-xs text-slate-600">
                 Showing {currentPageData.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}{" "}
                 to {Math.min(currentPage * ITEMS_PER_PAGE, filteredLandlords.length)} of{" "}

@@ -343,29 +343,14 @@ const PaymentVouchers = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
-        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">{isLandlordWorkspace ? "Owner Finance" : "Financial Operations"}</p>
-                <h1 className="mt-0.5 flex items-center gap-2 text-xl font-black text-slate-900"><FaFileInvoiceDollar className="text-[#0B3B2E]" /> Payment Vouchers</h1>
-                <p className="mt-0.5 text-xs text-slate-500">Create, edit, approve, pay, reverse, select, and delete vouchers with stronger operational controls.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button onClick={bulkDeleteSelected} className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete Selected</button>
-                <button onClick={openCreate} disabled={!canCreateVoucher} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus /> New Voucher</button>
-              </div>
+        <div className="mx-auto flex h-full w-full max-w-[96%] min-h-0 flex-1 flex-col gap-2">
+          <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">Count: {stats.count}</span>
+              <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">Total: KES {stats.total.toLocaleString()}</span>
+              <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Paid: KES {stats.paid.toLocaleString()}</span>
+              <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">Draft: {stats.draft}</span>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Count</p><p className="mt-1 text-base font-black text-slate-900">{stats.count}</p></div>
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Total</p><p className="mt-1 text-base font-black text-blue-700">KES {stats.total.toLocaleString()}</p></div>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Paid</p><p className="mt-1 text-base font-black text-emerald-700">KES {stats.paid.toLocaleString()}</p></div>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Draft</p><p className="mt-1 text-base font-black text-amber-700">{stats.draft}</p></div>
-          </div>
-
-          <div className="sticky top-0 z-20 flex-shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
             <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
               <div className="relative md:col-span-2">
                 <FaSearch className="absolute left-3 top-2.5 text-xs text-slate-400" />
@@ -373,14 +358,14 @@ const PaymentVouchers = () => {
                   value={filters.search}
                   onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                   placeholder={isLandlordWorkspace ? "Search voucher, narration, owner, property" : "Search voucher, narration, landlord, property"}
-                  className="h-8 w-full rounded-md border border-slate-300 py-1.5 pl-8 pr-3 text-xs"
+                  className="h-8 w-full rounded border border-[#FF8C00]/70 bg-white py-1.5 pl-8 pr-3 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
                 />
               </div>
 
               <select
                 value={filters.category}
                 onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
-                className="h-8 px-3 py-1.5 text-xs border border-slate-300 rounded-md"
+                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
               >
                 <option value="all">All categories</option>
                 {categories.map((item) => (
@@ -393,7 +378,7 @@ const PaymentVouchers = () => {
               <select
                 value={filters.status}
                 onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="h-8 px-3 py-1.5 text-xs border border-slate-300 rounded-md"
+                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
               >
                 <option value="all">All statuses</option>
                 <option value="draft">Draft</option>
@@ -405,7 +390,7 @@ const PaymentVouchers = () => {
               <select
                 value={filters.propertyId}
                 onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                className="h-8 px-3 py-1.5 text-xs border border-slate-300 rounded-md"
+                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
               >
                 <option value="all">All properties</option>
                 {properties.map((property) => (
@@ -417,14 +402,18 @@ const PaymentVouchers = () => {
 
               <button
                 onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })}
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-300 px-3 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-4 py-1 text-xs text-white shadow-sm bg-[#0B3B2E] hover:bg-[#0A3127]"
               >
                 <FaFilter /> Reset
               </button>
             </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button onClick={bulkDeleteSelected} className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete Selected</button>
+              <button onClick={openCreate} disabled={!canCreateVoucher} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus /> New Voucher</button>
+            </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="min-h-0 flex-1 overflow-auto">
               <table className="min-w-full text-xs">
                 <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
@@ -448,15 +437,15 @@ const PaymentVouchers = () => {
                   ) : currentPageRows.map((voucher, index) => {
                     const isBusy = (action) => rowActionKey === `${voucher._id}:${action}`;
                     return (
-                      <tr key={voucher._id} className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                        <td className="px-4 py-3"><button type="button" onClick={() => toggleSelect(voucher._id)}>{selectedIds.includes(voucher._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
-                        <td className="px-4 py-3"><div className="font-black text-slate-900">{voucher.voucherNo}</div><div className="text-xs text-slate-500">{voucher.reference || voucher.narration || "No reference"}</div></td>
-                        <td className="px-4 py-3 text-slate-700">{categories.find((item) => item.value === voucher.category)?.label || voucher.category}</td>
-                        <td className="px-4 py-3 text-slate-700">{voucher.propertyName}</td>
-                        <td className="px-4 py-3 text-slate-700">{voucher.landlordName}</td>
-                        <td className="px-4 py-3 text-right font-black text-slate-900">KES {Number(voucher.amount || 0).toLocaleString()}</td>
-                        <td className="px-4 py-3 text-slate-700">{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString() : "-"}</td>
-                        <td className="px-4 py-3"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span></td>
+                      <tr key={voucher._id} className={`cursor-pointer border-t border-slate-200 transition-colors ${selectedIds.includes(voucher._id) ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50" : index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50 hover:bg-blue-50/40"}`}>
+                        <td className="px-3 py-2"><button type="button" onClick={() => toggleSelect(voucher._id)}>{selectedIds.includes(voucher._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
+                        <td className="px-3 py-2"><div className="font-black text-slate-900">{voucher.voucherNo}</div><div className="text-xs text-slate-500">{voucher.reference || voucher.narration || "No reference"}</div></td>
+                        <td className="px-3 py-2 text-slate-700">{categories.find((item) => item.value === voucher.category)?.label || voucher.category}</td>
+                        <td className="px-3 py-2 text-slate-700">{voucher.propertyName}</td>
+                        <td className="px-3 py-2 text-slate-700">{voucher.landlordName}</td>
+                        <td className="px-3 py-2 text-right font-black text-slate-900">KES {Number(voucher.amount || 0).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-slate-700">{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString() : "-"}</td>
+                        <td className="px-3 py-2"><span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-black ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span></td>
                         <td className="px-3 py-2 text-right">
                           <div className="inline-flex flex-wrap justify-end gap-2">
                             {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"><FaEdit /> Edit</button>}
@@ -499,26 +488,26 @@ const PaymentVouchers = () => {
             </div>
             <div className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
               {form.sourceRequisitionNo ? (
-                <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+                <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
                   <span className="font-black uppercase tracking-[0.16em] text-violet-700">Source Requisition</span>
                   <div className="mt-1 font-bold">{form.sourceRequisitionNo}</div>
                   <div className="mt-1 text-xs text-violet-700">This voucher will keep the requisition linked and mark it as converted.</div>
                 </div>
               ) : null}
-              <label className="block"><span className="text-sm font-bold text-slate-700">Category</span><select value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20">{categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Property</span><select value={form.propertyId} onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">{selectedCategoryMeta?.propertyRequired ? "Select property" : "No property linkage"}</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">{selectedCategoryMeta?.propertyRequired ? "This voucher remains property-linked." : "Leave blank for company-level or petty-cash activity."}</span></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Liability Account</span><select value={form.liabilityAccountId} onChange={(e) => setForm((prev) => ({ ...prev, liabilityAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select liability account</option>{liabilityAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Used for accrual / payable recognition before settlement.</span></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Amount</span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Debit Posting Account</span><select value={form.debitAccountId} onChange={(e) => setForm((prev) => ({ ...prev, debitAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">{selectedCategoryMeta?.explicitDebitAccount ? "Select debit account" : "Automatic from voucher category"}</option>{debitAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">{selectedCategoryMeta?.explicitDebitAccount ? form.category === "petty_cash_float" ? "Choose the petty-cash asset account receiving the float." : "Choose the expense account to debit when this voucher is approved." : "Landlord-borne vouchers continue using the existing automatic posting logic."}</span></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Due Date</span><input type="date" value={form.dueDate} onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
-              {!editingVoucherId && <label className="block"><span className="text-sm font-bold text-slate-700">Initial Status</span><select value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="draft">Draft</option><option value="approved">Approved</option><option value="paid">Paid</option></select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Paid creates the accrual leg and immediately settles it through the selected cashbook.</span></label>}
-              <label className="block"><span className="text-sm font-bold text-slate-700">Settlement Cashbook / Petty Cash</span><select value={form.settlementAccountId} onChange={(e) => setForm((prev) => ({ ...prev, settlementAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select cashbook / petty cash account</option>{settlementAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Required before a voucher can be marked as paid.</span></label>
-              <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Reference</span><input value={form.reference} onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Narration</span><textarea rows={3} value={form.narration} onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Category</span><select value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20">{categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Property</span><select value={form.propertyId} onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">{selectedCategoryMeta?.propertyRequired ? "Select property" : "No property linkage"}</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">{selectedCategoryMeta?.propertyRequired ? "This voucher remains property-linked." : "Leave blank for company-level or petty-cash activity."}</span></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Liability Account</span><select value={form.liabilityAccountId} onChange={(e) => setForm((prev) => ({ ...prev, liabilityAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select liability account</option>{liabilityAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Used for accrual / payable recognition before settlement.</span></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Amount</span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Debit Posting Account</span><select value={form.debitAccountId} onChange={(e) => setForm((prev) => ({ ...prev, debitAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">{selectedCategoryMeta?.explicitDebitAccount ? "Select debit account" : "Automatic from voucher category"}</option>{debitAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">{selectedCategoryMeta?.explicitDebitAccount ? form.category === "petty_cash_float" ? "Choose the petty-cash asset account receiving the float." : "Choose the expense account to debit when this voucher is approved." : "Landlord-borne vouchers continue using the existing automatic posting logic."}</span></label>
+              <label className="block"><span className="text-sm font-bold text-slate-700">Due Date</span><input type="date" value={form.dueDate} onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              {!editingVoucherId && <label className="block"><span className="text-sm font-bold text-slate-700">Initial Status</span><select value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="draft">Draft</option><option value="approved">Approved</option><option value="paid">Paid</option></select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Paid creates the accrual leg and immediately settles it through the selected cashbook.</span></label>}
+              <label className="block"><span className="text-sm font-bold text-slate-700">Settlement Cashbook / Petty Cash</span><select value={form.settlementAccountId} onChange={(e) => setForm((prev) => ({ ...prev, settlementAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select cashbook / petty cash account</option>{settlementAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Required before a voucher can be marked as paid.</span></label>
+              <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Reference</span><input value={form.reference} onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Narration</span><textarea rows={3} value={form.narration} onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
             </div>
             <div className="sticky bottom-0 z-20 flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
-              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700">Cancel</button>
-              <button onClick={handleSave} disabled={saving || (editingVoucherId ? !canUpdateVoucher : !canCreateVoucher)} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60"><FaSave /> {saving ? "Saving..." : editingVoucherId ? "Update Voucher" : "Save Voucher"}</button>
+              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-black text-slate-700">Cancel</button>
+              <button onClick={handleSave} disabled={saving || (editingVoucherId ? !canUpdateVoucher : !canCreateVoucher)} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-3 py-2 text-sm font-black text-white disabled:opacity-60"><FaSave /> {saving ? "Saving..." : editingVoucherId ? "Update Voucher" : "Save Voucher"}</button>
             </div>
           </div>
         </div>

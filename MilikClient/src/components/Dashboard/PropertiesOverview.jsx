@@ -259,13 +259,13 @@ const PropertiesOverview = ({ darkMode }) => {
   }, [propertiesWithStats]);
 
   return (
-    <div className={`dashboard-panel dashboard-panel-compact rounded-xl ${darkMode ? 'bg-white/95' : 'bg-white'} shadow-md border ${darkMode ? 'border-gray-700' : 'border-gray-100'} p-4`}>
-      <div className="flex items-center justify-between mb-4 gap-3">
+    <div className={`dashboard-panel dashboard-panel-compact rounded-xl ${darkMode ? 'bg-white/95' : 'bg-white'} shadow-md border ${darkMode ? 'border-gray-700' : 'border-gray-100'} p-2`}>
+      <div className="mb-2 flex items-center justify-between gap-2">
         <div>
-          <h2 className={`text-sm font-extrabold uppercase tracking-tight ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>
+          <h2 className={`text-xs font-extrabold uppercase tracking-tight ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>
             Portfolio Overview
           </h2>
-          <p className={`mt-1 text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-600'}`}>
+          <p className={`mt-1 text-[11px] font-medium ${darkMode ? 'text-gray-500' : 'text-gray-600'}`}>
             Booking-date aware property billing, occupancy and collection snapshot across your portfolio.
           </p>
         </div>
@@ -278,20 +278,20 @@ const PropertiesOverview = ({ darkMode }) => {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
+      <div className="mb-2 grid grid-cols-2 gap-2">
+        <div className={`rounded-lg border p-2 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
           <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Portfolio occupancy</div>
-          <div className={`mt-1 text-lg font-extrabold ${darkMode ? 'text-gray-900' : 'text-slate-900'}`}>{portfolioOccupancy.toFixed(1)}%</div>
+          <div className={`mt-1 text-base font-extrabold ${darkMode ? 'text-gray-900' : 'text-slate-900'}`}>{portfolioOccupancy.toFixed(1)}%</div>
         </div>
-        <div className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
+        <div className={`rounded-lg border p-2 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
           <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Collection pace</div>
-          <div className={`mt-1 text-lg font-extrabold ${darkMode ? 'text-gray-900' : 'text-slate-900'}`}>{portfolioCollection.toFixed(1)}%</div>
+          <div className={`mt-1 text-base font-extrabold ${darkMode ? 'text-gray-900' : 'text-slate-900'}`}>{portfolioCollection.toFixed(1)}%</div>
         </div>
       </div>
 
-      <div className="dashboard-scroll-list space-y-2.5 pr-1">
+      <div className="dashboard-scroll-list space-y-2 pr-1">
         {propertiesWithStats.length === 0 ? (
-          <div className={`p-5 rounded-lg border text-center ${
+          <div className={`p-3 rounded-lg border text-center ${
             darkMode
               ? 'bg-gray-50 border-gray-700 text-gray-500'
               : 'bg-gray-50/80 border-gray-200 text-gray-500'
@@ -302,7 +302,7 @@ const PropertiesOverview = ({ darkMode }) => {
           propertiesWithStats.map((property) => (
             <div
               key={property.id}
-              className={`rounded-xl border p-3 ${
+              className={`rounded-lg border p-2 ${
                 darkMode
                   ? 'border-gray-700 bg-gray-50'
                   : 'border-[#dce9e1] bg-white'
@@ -321,12 +321,12 @@ const PropertiesOverview = ({ darkMode }) => {
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className={`text-lg font-extrabold ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>{property.occupancyRate.toFixed(0)}%</div>
+                  <div className={`text-base font-extrabold ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>{property.occupancyRate.toFixed(0)}%</div>
                   <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Occupied</div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-3">
+              <div className="mt-2 grid grid-cols-2 gap-2">
                 <div className="rounded-lg border border-[#dce9e1] bg-[#fbfdfc] p-2">
                   <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#4a6b5e]">Units</div>
                   <div className="mt-1 text-sm font-bold text-slate-900">{property.totalUnits}</div>
@@ -339,7 +339,7 @@ const PropertiesOverview = ({ darkMode }) => {
                 </div>
               </div>
 
-              <div className="mt-3 space-y-2">
+              <div className="mt-2 space-y-1.5">
                 <div>
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1">
                     <span>Collections this month</span>

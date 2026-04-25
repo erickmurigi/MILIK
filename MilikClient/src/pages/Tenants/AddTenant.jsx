@@ -19,6 +19,7 @@ import { createTenantInvoice } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 
 // Milik theme constants
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
@@ -990,9 +991,12 @@ useEffect(() => {
 
   const labelClass = "block text-sm font-bold text-slate-800 mb-1 tracking-tight";
 
+  const uppercaseTenantFields = new Set(["tenantCode", "name", "idNumber", "emergencyContactName"]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const nextValue = uppercaseTenantFields.has(name) ? normalizeUppercaseInput(value) : value;
+    setFormData((prev) => ({ ...prev, [name]: nextValue }));
 
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: "" }));

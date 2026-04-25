@@ -234,51 +234,8 @@ const TenantPrepayments = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Receipting Workspace</p>
-                <h1 className="mt-0.5 text-xl font-black text-slate-900">Tenant Prepayments</h1>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Review receipts with unapplied balance using the server-filtered prepayment feed so allocation work stays fast, traceable, and safe for large businesses.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => navigate("/receipts/new")}
-                  className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[11px] font-bold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaReceipt /> New Receipt
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-5">
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Open Prepayments</p>
-              <p className="mt-1 text-base font-black text-slate-900">{totals.rowCount}</p>
-            </div>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Unapplied Balance</p>
-              <p className="mt-1 text-base font-black text-amber-700">{formatMoney(totals.totalUnapplied)}</p>
-            </div>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Already Allocated</p>
-              <p className="mt-1 text-base font-black text-emerald-700">{formatMoney(totals.totalAllocated)}</p>
-            </div>
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Confirmed Rows</p>
-              <p className="mt-1 text-base font-black text-blue-700">{totals.confirmedRows}</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Receipt Value</p>
-              <p className="mt-1 text-base font-black text-slate-900">{formatMoney(totals.totalReceiptAmount)}</p>
-            </div>
-          </div>
-
           <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-2 shadow-sm backdrop-blur">
               <div className="grid grid-cols-1 gap-2 md:grid-cols-3 lg:grid-cols-4">
                 <div className="relative lg:col-span-2">
                   <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
@@ -286,14 +243,14 @@ const TenantPrepayments = () => {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search tenant, property, unit, reference"
-                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 pl-9 text-xs"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white py-1.5 pl-8 pr-2.5 text-[11px] text-slate-900 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
                   />
                 </div>
                 <div>
                   <select
                     value={propertyFilter}
                     onChange={(e) => setPropertyFilter(e.target.value)}
-                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs"
+                    className="h-8 w-full rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
                   >
                     <option value="all">All Properties</option>
                     {propertyOptions.map((property) => (
@@ -307,7 +264,7 @@ const TenantPrepayments = () => {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs"
+                    className="h-8 w-full rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
                   >
                     <option value="all">All Active Prepayments</option>
                     <option value="confirmed">Confirmed Only</option>
@@ -316,23 +273,38 @@ const TenantPrepayments = () => {
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  onClick={() => navigate("/receipts/new")}
-                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaReceipt /> New Receipt
-                </button>
-                <button
-                  onClick={() => {
-                    setSearch("");
-                    setPropertyFilter("all");
-                    setStatusFilter("all");
-                  }}
-                  className="flex items-center gap-2 rounded-md bg-slate-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
-                >
-                  <FaCoins /> Reset Filters
-                </button>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { label: "Open", value: totals.rowCount, accent: "text-slate-900" },
+                    { label: "Unapplied", value: formatMoney(totals.totalUnapplied), accent: "text-amber-700" },
+                    { label: "Allocated", value: formatMoney(totals.totalAllocated), accent: "text-emerald-700" },
+                    { label: "Confirmed", value: totals.confirmedRows, accent: "text-blue-700" },
+                    { label: "Receipt Value", value: formatMoney(totals.totalReceiptAmount), accent: "text-slate-900" },
+                  ].map((card) => (
+                    <span key={card.label} className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                      {card.label} <span className={`normal-case tracking-normal ${card.accent}`}>{card.value}</span>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => navigate("/receipts/new")}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white shadow-sm transition hover:bg-[#0A3127]"
+                  >
+                    <FaReceipt /> New Receipt
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSearch("");
+                      setPropertyFilter("all");
+                      setStatusFilter("all");
+                    }}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  >
+                    <FaCoins /> Reset Filters
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -403,7 +375,7 @@ const TenantPrepayments = () => {
               </table>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
+            <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
               <p>
                 <span className="font-semibold">Showing:</span> {showingStart}
                 {" - "}

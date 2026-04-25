@@ -8,6 +8,7 @@ import { getTenantInvoices } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 
 const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString()}`;
+const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : "—");
 const ITEMS_PER_PAGE = 50;
 const normalizeArray = (value) => (Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : []);
 
@@ -38,6 +39,7 @@ const RentalAgedAnalysisReport = () => {
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
   const businessId = currentCompany?._id || "";
+  const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || "Milik";
 
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState([]);
@@ -165,6 +167,22 @@ const RentalAgedAnalysisReport = () => {
     [filteredRows]
   );
 
+
+
+  const printGeneratedAt = useMemo(() => new Date().toLocaleString(), [filteredRows, filters]);
+
+  const handlePrint = () => {
+    if (!canExportReports) {
+      toast.warning("You do not have permission to print reports");
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        window.print();
+      });
+    });
+  };
+
   const exportCsv = () => {
     if (!canExportReports) {
       toast.warning("You do not have permission to export reports");
@@ -194,64 +212,121 @@ const RentalAgedAnalysisReport = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+      <div className="print-only-wrapper">
+        <style>{`
+          @page { size: landscape; margin: 10mm; }
+          .report-print-shell { font-family: 'Nunito Sans', Arial, sans-serif; color: #0f172a; }
+          .report-print-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 12px; }
+          .report-print-brand { color: #0B3B2E; font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 900; }
+          .report-print-title { margin: 2px 0 4px; font-size: 20px; font-weight: 900; color: #0f172a; }
+          .report-print-subtitle { margin: 0; font-size: 10px; line-height: 1.45; color: #475569; max-width: 760px; }
+          .report-print-meta { text-align: right; font-size: 9px; color: #475569; }
+          .report-print-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+          .report-print-metric { border: 1px solid #dbe2ea; border-radius: 9px; background: #f8fafc; padding: 7px 8px; }
+          .report-print-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; font-weight: 800; }
+          .report-print-value { margin-top: 4px; font-size: 12px; font-weight: 900; color: #0f172a; }
+          .report-print-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+          .report-print-table th, .report-print-table td { border: 1px solid #dbe2ea; padding: 5px 6px; vertical-align: top; }
+          .report-print-table thead th { background: #edf4f0; color: #0B3B2E; font-size: 8px; text-transform: uppercase; letter-spacing: 0.1em; text-align: left; }
+          .text-right { text-align: right; }
+          .text-red { color: #b91c1c; font-weight: 800; }
+          .text-emerald { color: #047857; font-weight: 800; }
+          .text-amber { color: #b45309; font-weight: 800; }
+        `}</style>
+        <div className="report-print-shell">
+          <div className="report-print-header">
+            <div>
+              <div className="report-print-brand">{companyName}</div>
+              <h1 className="report-print-title">Tenant Aging Analysis</h1>
+              <p className="report-print-subtitle">Aged tenant receivables view grouped by current, 1-30, 31-60, 61-90 and 90+ day buckets for the selected filters.</p>
+            </div>
+            <div className="report-print-meta">
+              <div><strong>Property:</strong> {filters.propertyId === "all" ? "All properties" : properties.find((property) => String(property._id) === String(filters.propertyId))?.propertyName || "Selected property"}</div>
+              <div><strong>Category:</strong> {filters.category === "all" ? "All charges" : filters.category}</div>
+              <div><strong>Generated:</strong> {printGeneratedAt}</div>
+              <div><strong>Prepared by:</strong> {currentUser?.username || currentUser?.email || "System user"}</div>
+            </div>
+          </div>
+          <div className="report-print-grid">
+            {[
+              { label: "Current", value: formatMoney(totals.current) },
+              { label: "1-30", value: formatMoney(totals.days30) },
+              { label: "31-60", value: formatMoney(totals.days60) },
+              { label: "61-90", value: formatMoney(totals.days90) },
+              { label: "90+", value: formatMoney(totals.days90Plus) },
+              { label: "Total", value: formatMoney(totals.total) },
+            ].map((card) => (
+              <div key={card.label} className="report-print-metric">
+                <div className="report-print-label">{card.label}</div>
+                <div className="report-print-value">{card.value}</div>
+              </div>
+            ))}
+          </div>
+          <table className="report-print-table">
+            <thead>
+              <tr>
+                {["Tenant", "Property", "Unit", "Current", "1-30", "31-60", "61-90", "90+", "Total", "Oldest Due"].map((header) => <th key={header}>{header}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.length === 0 ? (
+                <tr><td colSpan={10}>No aged receivables found for the current filters.</td></tr>
+              ) : filteredRows.map((row) => (
+                <tr key={row.tenantId}>
+                  <td>{row.tenantName}</td>
+                  <td>{row.propertyName}</td>
+                  <td>{row.unitNumber}</td>
+                  <td className="text-right text-emerald">{formatMoney(row.current)}</td>
+                  <td className="text-right text-amber">{formatMoney(row.days30)}</td>
+                  <td className="text-right text-amber">{formatMoney(row.days60)}</td>
+                  <td className="text-right text-red">{formatMoney(row.days90)}</td>
+                  <td className="text-right text-red">{formatMoney(row.days90Plus)}</td>
+                  <td className="text-right"><strong>{formatMoney(row.total)}</strong></td>
+                  <td>{formatDate(row.oldestDueDate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
+        <style>{`
+          .milik-report-page select:focus, .milik-report-page input:focus { border-color: #f45b0b; box-shadow: 0 0 0 1px rgba(244, 91, 11, 0.45); outline: none; }
+          .milik-report-page select option:checked { background: #f45b0b; color: #ffffff; }
+          .milik-report-page select option:hover { background: #f45b0b; color: #ffffff; }
+        `}</style>
+
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex-shrink-0 border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-3 py-2 text-white">
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-100">Tenant receivables ageing</p>
-                  <h1 className="mt-0.5 text-lg font-black leading-tight tracking-tight">Rental Aged Analysis</h1>
-                  <p className="mt-0.5 max-w-3xl text-[11px] leading-tight text-slate-200">
-                    This version uses tenant invoices and receipt allocations instead of lease snapshots, so outstanding balances age from real invoice due dates and real applied receipts.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={exportCsv} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-3 text-[11px] font-bold text-white hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed"><FaFileDownload /> Export CSV</button>
-                  <button onClick={() => { if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-3 text-[11px] font-bold text-white hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed"><FaPrint /> Print</button>
-                  <button onClick={loadData} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-3 text-[11px] font-bold text-white hover:bg-white/15"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
-                </div>
-              </div>
-            </div>
 
-            <div className="flex-shrink-0 grid gap-2 border-b border-slate-200 bg-white px-3 py-2 md:grid-cols-6">
-              {[
-                { label: 'Current', value: formatMoney(totals.current), accent: 'text-emerald-700' },
-                { label: '1-30 Days', value: formatMoney(totals.days30), accent: 'text-amber-600' },
-                { label: '31-60 Days', value: formatMoney(totals.days60), accent: 'text-orange-600' },
-                { label: '61-90 Days', value: formatMoney(totals.days90), accent: 'text-red-500' },
-                { label: '90+ Days', value: formatMoney(totals.days90Plus), accent: 'text-red-700' },
-                { label: 'Grand Total', value: formatMoney(totals.total), accent: 'text-slate-900' },
-              ].map((card) => (
-                <div key={card.label} className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{card.label}</div>
-                  <div className={`text-sm font-black leading-tight ${card.accent}`}>{card.value}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="grid gap-2 xl:grid-cols-[1.2fr_1fr_1fr_auto]">
+            <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
+              <div className="grid gap-1.5 xl:grid-cols-[1.2fr_1fr_1fr_auto]">
                 <div className="relative">
-                  <FaFilter className="absolute left-3 top-2.5 text-slate-400 text-xs" />
-                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search tenant, property, unit" className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[11px]" />
+                  <FaFilter className="absolute left-2.5 top-2 text-orange-500 text-[10px]" />
+                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search tenant, property, unit" className="h-7 w-full rounded-md border border-slate-300 bg-white pl-7 pr-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
                 </div>
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[11px]">
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
                   <option value="all">All properties</option>
                   {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
                 </select>
-                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[11px]">
+                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
                   <option value="all">All charges</option>
                   <option value="RENT_CHARGE">Rent only</option>
                   <option value="UTILITY_CHARGE">Utility only</option>
                   <option value="LATE_PENALTY_CHARGE">Late penalties only</option>
                 </select>
-                <div className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-700"><FaClock className="text-amber-600" /> {totals.count} tenant row(s)</div>
+                <div className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-semibold text-slate-700"><FaClock className="text-amber-600" /> {totals.count} tenant row(s)</div>
+              </div>
+              <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
+                <button onClick={exportCsv} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
+                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
+                <button onClick={loadData} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="min-w-full table-fixed text-sm">
+            <div className="min-h-0 flex-1 overflow-auto">
+              <table className="min-w-full table-fixed text-xs">
                 <colgroup>
                   <col className="w-[18%]" />
                   <col className="w-[18%]" />
@@ -271,7 +346,7 @@ const RentalAgedAnalysisReport = () => {
                       return (
                         <th
                           key={header}
-                          className={`whitespace-nowrap px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] ${isNumeric ? 'text-right' : 'text-left'}`}
+                          className={`whitespace-nowrap px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] ${isNumeric ? 'text-right' : 'text-left'}`}
                         >
                           {header}
                         </th>
@@ -281,32 +356,32 @@ const RentalAgedAnalysisReport = () => {
                 </thead>
                 <tbody>
                   {filteredRows.length === 0 ? (
-                    <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-500">No aged receivables found for the current filters.</td></tr>
+                    <tr><td colSpan={10} className="px-2 py-4 text-center text-xs text-slate-500">No aged receivables found for the current filters.</td></tr>
                   ) : paginatedRows.map((row) => (
                     <tr key={row.tenantId} className="border-t border-slate-200 hover:bg-slate-50/80">
-                      <td className="px-4 py-3 font-semibold text-slate-900">{row.tenantName}</td>
-                      <td className="px-4 py-3 text-slate-700">{row.propertyName}</td>
-                      <td className="px-4 py-3 text-slate-700">{row.unitNumber}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-emerald-700">{formatMoney(row.current)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-amber-600">{formatMoney(row.days30)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-orange-600">{formatMoney(row.days60)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-red-500">{formatMoney(row.days90)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-red-700">{formatMoney(row.days90Plus)}</td>
-                      <td className="px-4 py-3 text-right font-black text-slate-900">{formatMoney(row.total)}</td>
-                      <td className="px-4 py-3 text-slate-700">{row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '-'}</td>
+                      <td className="px-2 py-1.5 font-semibold text-slate-900">{row.tenantName}</td>
+                      <td className="px-2 py-1.5 text-slate-700">{row.propertyName}</td>
+                      <td className="px-2 py-1.5 text-slate-700">{row.unitNumber}</td>
+                      <td className="px-2 py-1.5 text-right font-semibold text-emerald-700">{formatMoney(row.current)}</td>
+                      <td className="px-2 py-1.5 text-right font-semibold text-amber-600">{formatMoney(row.days30)}</td>
+                      <td className="px-2 py-1.5 text-right font-semibold text-orange-600">{formatMoney(row.days60)}</td>
+                      <td className="px-2 py-1.5 text-right font-semibold text-red-500">{formatMoney(row.days90)}</td>
+                      <td className="px-2 py-1.5 text-right font-semibold text-red-700">{formatMoney(row.days90Plus)}</td>
+                      <td className="px-2 py-1.5 text-right font-black text-slate-900">{formatMoney(row.total)}</td>
+                      <td className="px-2 py-1.5 text-slate-700">{row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '-'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
-              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-2 py-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
                 <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> tenant ageing rows</div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
                   <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
                 </div>
               </div>
             </div>

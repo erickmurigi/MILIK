@@ -145,6 +145,7 @@ const TenantAgreements = () => {
     expiringOnly: false,
   });
   const [currentPage, setCurrentPage] = useState(1);
+  const [expandedAgreementId, setExpandedAgreementId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(buildInitialForm());
   const [submitting, setSubmitting] = useState(false);
@@ -458,32 +459,7 @@ const TenantAgreements = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
         <div className="sticky top-0 z-20 bg-gray-50 px-2 pt-2">
           <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h1 className="text-xl font-black tracking-tight text-gray-900">Tenant Agreements</h1>
-                <p className="mt-1 text-sm text-gray-600">
-                  Manage tenancy agreements, renewals, signatures, and expiry tracking from one workspace.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => loadData()}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaSyncAlt className="text-xs" />
-                  Refresh
-                </button>
-                <button
-                  onClick={() => openNewModal()}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1.5 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                >
-                  <FaPlus className="text-xs" />
-                  New Agreement
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-5">
               {[
                 { label: "Total", value: summary.total, tone: "bg-slate-50 border-slate-200 text-slate-800" },
                 { label: "Active", value: summary.active, tone: "bg-emerald-50 border-emerald-200 text-emerald-800" },
@@ -491,9 +467,9 @@ const TenantAgreements = () => {
                 { label: "Expiring Soon", value: summary.expiring, tone: "bg-amber-50 border-amber-200 text-amber-800" },
                 { label: "Terminated", value: summary.terminated, tone: "bg-red-50 border-red-200 text-red-700" },
               ].map((card) => (
-                <div key={card.label} className={`rounded-lg border px-3 py-3 ${card.tone}`}>
+                <div key={card.label} className={`rounded-lg border px-2 py-1.5 ${card.tone}`}>
                   <div className="text-[10px] font-black uppercase tracking-[0.18em]">{card.label}</div>
-                  <div className="mt-1 text-2xl font-black">{card.value}</div>
+                  <div className="mt-1 text-[13px] font-black">{card.value}</div>
                 </div>
               ))}
             </div>
@@ -503,7 +479,7 @@ const TenantAgreements = () => {
         <div className="px-2 pt-2">
           <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-gray-300 bg-[#DDEFE1] px-3 py-1.5 text-xs text-gray-800 shadow-sm">
+              <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs text-gray-800 shadow-sm">
                 <FaSearch className="text-[11px]" />
                 <input
                   value={filters.search}
@@ -516,7 +492,7 @@ const TenantAgreements = () => {
               <select
                 value={filters.status}
                 onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm focus:outline-none"
+                className="rounded border border-orange-300 bg-orange-50 px-2 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none"
               >
                 <option value="any">All Statuses</option>
                 {AGREEMENT_STATUS_OPTIONS.map((status) => (
@@ -527,7 +503,7 @@ const TenantAgreements = () => {
               <select
                 value={filters.property}
                 onChange={(event) => setFilters((prev) => ({ ...prev, property: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm focus:outline-none"
+                className="rounded border border-orange-300 bg-orange-50 px-2 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none"
               >
                 <option value="any">All Properties</option>
                 {[...(Array.isArray(properties) ? properties : [])]
@@ -539,7 +515,7 @@ const TenantAgreements = () => {
                   ))}
               </select>
 
-              <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 shadow-sm">
+              <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-2 py-1 text-[11px] font-medium text-gray-700 shadow-sm">
                 <input
                   type="checkbox"
                   checked={filters.expiringOnly}
@@ -550,19 +526,33 @@ const TenantAgreements = () => {
 
               <button
                 onClick={() => setFilters({ status: "any", property: "any", search: "", expiringOnly: false })}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                className={`flex items-center gap-2 rounded-md px-3 py-1 text-[11px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
               >
                 <FaRedoAlt className="text-xs" />
                 Reset
               </button>
-            </div>
+
+
+              <button
+                onClick={() => loadData()}
+                className={`flex h-8 items-center gap-2 rounded-md px-3 text-[11px] font-black text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+              >
+                <FaSyncAlt className="text-[11px]" /> Refresh
+              </button>
+
+              <button
+                onClick={() => openNewModal()}
+                className={`flex h-8 items-center gap-2 rounded-md px-3 text-[11px] font-black text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
+              >
+                <FaPlus className="text-[11px]" /> New Agreement
+              </button>            </div>
           </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden px-2 py-2">
           <div className="flex h-full min-h-0 flex-col rounded-lg border border-gray-200 bg-white shadow-sm">
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1500px] border-collapse text-xs" style={{ tableLayout: "fixed" }}>
+              <table className="w-full min-w-[1500px] table-fixed border-collapse text-[11px]" style={{ tableLayout: "fixed" }}>
                 <colgroup>
                   <col style={{ width: "150px" }} />
                   <col style={{ width: "180px" }} />
@@ -577,22 +567,22 @@ const TenantAgreements = () => {
                 </colgroup>
                 <thead>
                   <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-2 text-left font-bold">Agreement</th>
-                    <th className="px-3 py-2 text-left font-bold">Tenant</th>
-                    <th className="px-3 py-2 text-left font-bold">Property / Unit</th>
-                    <th className="px-3 py-2 text-left font-bold">Status</th>
-                    <th className="px-3 py-2 text-left font-bold">Start</th>
-                    <th className="px-3 py-2 text-left font-bold">End</th>
-                    <th className="px-3 py-2 text-right font-bold">Rent</th>
-                    <th className="px-3 py-2 text-right font-bold">Deposit</th>
-                    <th className="px-3 py-2 text-left font-bold">Signatures</th>
-                    <th className="px-3 py-2 text-left font-bold">Actions</th>
+                    <th className="px-2 py-1.5 text-left font-bold">Agreement</th>
+                    <th className="px-2 py-1.5 text-left font-bold">Tenant</th>
+                    <th className="px-2 py-1.5 text-left font-bold">Property / Unit</th>
+                    <th className="px-2 py-1.5 text-left font-bold">Status</th>
+                    <th className="px-2 py-1.5 text-left font-bold">Start</th>
+                    <th className="px-2 py-1.5 text-left font-bold">End</th>
+                    <th className="px-2 py-1.5 text-right font-bold">Rent</th>
+                    <th className="px-2 py-1.5 text-right font-bold">Deposit</th>
+                    <th className="px-2 py-1.5 text-left font-bold">Signatures</th>
+                    <th className="px-2 py-1.5 text-left font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pagedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-12 text-center text-sm text-gray-500">
+                      <td colSpan={10} className="px-4 py-10 text-center text-[11px] text-gray-500">
                         {isFetchingLeases ? "Loading agreements..." : "No tenant agreements found for the selected filters."}
                       </td>
                     </tr>
@@ -609,8 +599,9 @@ const TenantAgreements = () => {
                       const hasDocument = Boolean(String(row.raw?.documentUrl || "").trim());
 
                       return (
-                      <tr key={row.id} className="border-b border-gray-200 hover:bg-[#f9fbfa]">
-                        <td className="px-3 py-3 align-top">
+                      <React.Fragment key={row.id}>
+                      <tr onClick={() => setExpandedAgreementId((prev) => (prev === row.id ? null : row.id))} className="cursor-pointer border-b border-gray-200 transition hover:bg-[#f9fbfa]">
+                        <td className="px-2 py-1.5 align-top">
                           <div className="font-black text-[#0B3B2E]">{row.agreementNumber}</div>
                           <div className="mt-1 text-[11px] text-slate-500">{getStatusLabel(row.leaseType)}</div>
                           {row.isExpiring && (
@@ -619,11 +610,11 @@ const TenantAgreements = () => {
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-3 align-top">
+                        <td className="px-2 py-1.5 align-top">
                           <div className="font-bold text-gray-900">{row.tenantName}</div>
                           <div className="mt-1 text-[11px] text-slate-500">{row.tenantCode || "No code"}</div>
                         </td>
-                        <td className="px-3 py-3 align-top">
+                        <td className="px-2 py-1.5 align-top">
                           <div className="font-semibold text-gray-900">{row.propertyCode ? `${row.propertyCode} • ${row.propertyName}` : row.propertyName}</div>
                           <div className="mt-1 text-[11px] text-slate-500">{row.unitLabel !== "-" ? row.unitLabel : "No unit linked"}</div>
                           {hasDocument && (
@@ -637,16 +628,16 @@ const TenantAgreements = () => {
                             </a>
                           )}
                         </td>
-                        <td className="px-3 py-3 align-top">
+                        <td className="px-2 py-1.5 align-top">
                           <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${getStatusTone(row.status)}`}>
                             {getStatusLabel(row.status)}
                           </span>
                         </td>
-                        <td className="px-3 py-3 align-top whitespace-nowrap">{formatDateLabel(row.startDate)}</td>
-                        <td className="px-3 py-3 align-top whitespace-nowrap">{formatDateLabel(row.endDate)}</td>
-                        <td className="px-3 py-3 text-right align-top whitespace-nowrap font-bold">{formatCurrency(row.rentAmount)}</td>
-                        <td className="px-3 py-3 text-right align-top whitespace-nowrap font-bold">{formatCurrency(row.depositAmount)}</td>
-                        <td className="px-3 py-3 align-top">
+                        <td className="px-2 py-1.5 align-top whitespace-nowrap">{formatDateLabel(row.startDate)}</td>
+                        <td className="px-2 py-1.5 align-top whitespace-nowrap">{formatDateLabel(row.endDate)}</td>
+                        <td className="px-2 py-1.5 text-right align-top whitespace-nowrap font-bold">{formatCurrency(row.rentAmount)}</td>
+                        <td className="px-2 py-1.5 text-right align-top whitespace-nowrap font-bold">{formatCurrency(row.depositAmount)}</td>
+                        <td className="px-2 py-1.5 align-top">
                           <div className="space-y-1 text-[11px]">
                             <div className={row.signedByTenant ? "text-emerald-700 font-semibold" : "text-slate-500"}>
                               Tenant: {row.signedByTenant ? "Signed" : "Pending"}
@@ -656,11 +647,11 @@ const TenantAgreements = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="px-3 py-3 align-top">
+                        <td className="px-2 py-1.5 align-top">
                           <div className="flex flex-wrap gap-1.5">
                             {canEdit && (
                               <button
-                                onClick={() => openEditModal(row)}
+                                onClick={(event) => { event.stopPropagation(); openEditModal(row); }}
                                 className="rounded-lg border border-[#0B3B2E]/15 bg-[#0B3B2E]/5 px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E]/10"
                               >
                                 <FaEdit className="inline mr-1" /> Edit
@@ -668,7 +659,7 @@ const TenantAgreements = () => {
                             )}
                             {canSign && tenantPending && (
                               <button
-                                onClick={() => handleSign(row, "tenant")}
+                                onClick={(event) => { event.stopPropagation(); handleSign(row, "tenant"); }}
                                 className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 transition hover:bg-blue-100"
                               >
                                 <FaFileSignature className="inline mr-1" /> Tenant Sign
@@ -676,7 +667,7 @@ const TenantAgreements = () => {
                             )}
                             {canSign && landlordPending && (
                               <button
-                                onClick={() => handleSign(row, "landlord")}
+                                onClick={(event) => { event.stopPropagation(); handleSign(row, "landlord"); }}
                                 className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700 transition hover:bg-violet-100"
                               >
                                 <FaCheck className="inline mr-1" /> Landlord Sign
@@ -684,7 +675,7 @@ const TenantAgreements = () => {
                             )}
                             {canRenew && (
                               <button
-                                onClick={() => handleRenew(row)}
+                                onClick={(event) => { event.stopPropagation(); handleRenew(row); }}
                                 className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 transition hover:bg-amber-100"
                               >
                                 <FaClock className="inline mr-1" /> Renew
@@ -692,21 +683,21 @@ const TenantAgreements = () => {
                             )}
                             {canTerminate && (
                               <button
-                                onClick={() => handleTerminate(row)}
+                                onClick={(event) => { event.stopPropagation(); handleTerminate(row); }}
                                 className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700 transition hover:bg-red-100"
                               >
                                 <FaTimes className="inline mr-1" /> Terminate
                               </button>
                             )}
                             <button
-                              onClick={() => navigate(`/tenant/${row.tenantId}/statement`, { state: { tabTitle: `${row.tenantName} Statement` } })}
+                              onClick={(event) => { event.stopPropagation(); navigate(`/tenant/${row.tenantId}/statement`, { state: { tabTitle: `${row.tenantName} Statement` } }); }}
                               className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 transition hover:bg-emerald-100"
                             >
                               <FaFileContract className="inline mr-1" /> Statement
                             </button>
                             {canDelete && (
                               <button
-                                onClick={() => handleDelete(row)}
+                                onClick={(event) => { event.stopPropagation(); handleDelete(row); }}
                                 className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-700 transition hover:bg-slate-100"
                               >
                                 <FaTrash className="inline mr-1" /> Delete
@@ -715,6 +706,19 @@ const TenantAgreements = () => {
                           </div>
                         </td>
                       </tr>
+                        {expandedAgreementId === row.id && (
+                          <tr className="border-b border-gray-200 bg-slate-50">
+                            <td colSpan={10} className="px-2 py-1.5">
+                              <div className="grid gap-2 text-[11px] md:grid-cols-4">
+                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Lease period</span><p className="font-semibold text-slate-900">{formatDateLabel(row.startDate)} → {formatDateLabel(row.endDate)}</p></div>
+                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Rent</span><p className="font-semibold text-slate-900">{formatCurrency(row.rentAmount)}</p></div>
+                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Deposit</span><p className="font-semibold text-slate-900">{formatCurrency(row.depositAmount)}</p></div>
+                                <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Signature status</span><p className="font-semibold text-slate-900">Tenant: {row.signedByTenant ? 'Signed' : 'Pending'} · Landlord: {row.signedByLandlord ? 'Signed' : 'Pending'}</p></div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                     })
                   )}
@@ -722,7 +726,7 @@ const TenantAgreements = () => {
               </table>
             </div>
 
-            <div className="flex items-center justify-between border-t border-gray-200 px-3 py-2 text-xs text-slate-600">
+            <div className="flex items-center justify-between border-t border-gray-200 px-2 py-1.5 text-xs text-slate-600">
               <div>
                 Showing {pagedRows.length ? (safeCurrentPage - 1) * ITEMS_PER_PAGE + 1 : 0} to {Math.min(safeCurrentPage * ITEMS_PER_PAGE, filteredRows.length)} of {filteredRows.length} agreement(s)
               </div>
@@ -753,7 +757,7 @@ const TenantAgreements = () => {
               <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
                 <div>
                   <h2 className="text-lg font-black text-gray-900">{form._id ? "Edit Tenant Agreement" : "New Tenant Agreement"}</h2>
-                  <p className="mt-1 text-sm text-gray-600">Capture rent terms, deposit, due day, and renewal details in one place.</p>
+                  <p className="mt-1 text-[11px] text-gray-600">Capture rent terms, deposit, due day, and renewal details in one place.</p>
                 </div>
                 <button onClick={() => { setModalOpen(false); setForm(buildInitialForm()); }} className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
                   <FaTimes />
@@ -767,7 +771,7 @@ const TenantAgreements = () => {
                     <select
                       value={form.tenant}
                       onChange={(event) => handleTenantChange(event.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     >
                       <option value="">Select tenant</option>
                       {(Array.isArray(tenants) ? tenants : []).map((tenant) => (
@@ -780,7 +784,7 @@ const TenantAgreements = () => {
                     <select
                       value={form.unit}
                       onChange={(event) => setForm((prev) => ({ ...prev, unit: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     >
                       <option value="">Select unit</option>
                       {(Array.isArray(units) ? units : []).map((unit) => (
@@ -793,7 +797,7 @@ const TenantAgreements = () => {
                     <select
                       value={form.status}
                       onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     >
                       {AGREEMENT_STATUS_OPTIONS.map((status) => (
                         <option key={status} value={status}>{getStatusLabel(status)}</option>
@@ -807,7 +811,7 @@ const TenantAgreements = () => {
                       type="date"
                       value={form.startDate}
                       onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
@@ -816,7 +820,7 @@ const TenantAgreements = () => {
                       type="date"
                       value={form.endDate}
                       onChange={(event) => setForm((prev) => ({ ...prev, endDate: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
@@ -824,7 +828,7 @@ const TenantAgreements = () => {
                     <select
                       value={form.leaseType}
                       onChange={(event) => setForm((prev) => ({ ...prev, leaseType: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     >
                       <option value="fixed">Fixed Term</option>
                       <option value="at_will">At Will</option>
@@ -839,7 +843,7 @@ const TenantAgreements = () => {
                       step="0.01"
                       value={form.rentAmount}
                       onChange={(event) => setForm((prev) => ({ ...prev, rentAmount: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
@@ -850,7 +854,7 @@ const TenantAgreements = () => {
                       step="0.01"
                       value={form.depositAmount}
                       onChange={(event) => setForm((prev) => ({ ...prev, depositAmount: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
@@ -861,7 +865,7 @@ const TenantAgreements = () => {
                       max="28"
                       value={form.paymentDueDay}
                       onChange={(event) => setForm((prev) => ({ ...prev, paymentDueDay: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
 
@@ -872,7 +876,7 @@ const TenantAgreements = () => {
                       min="0"
                       value={form.noticePeriodDays}
                       onChange={(event) => setForm((prev) => ({ ...prev, noticePeriodDays: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
@@ -883,7 +887,7 @@ const TenantAgreements = () => {
                       step="0.01"
                       value={form.lateFee}
                       onChange={(event) => setForm((prev) => ({ ...prev, lateFee: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
@@ -892,7 +896,7 @@ const TenantAgreements = () => {
                       type="text"
                       value={form.documentUrl}
                       onChange={(event) => setForm((prev) => ({ ...prev, documentUrl: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                       placeholder="Optional link to signed PDF"
                     />
                   </div>
@@ -904,7 +908,7 @@ const TenantAgreements = () => {
                     rows={4}
                     value={form.terms}
                     onChange={(event) => setForm((prev) => ({ ...prev, terms: event.target.value }))}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     placeholder="Capture notice terms, utility arrangement, renewal notes, or special clauses."
                   />
                 </div>
@@ -913,14 +917,14 @@ const TenantAgreements = () => {
                   <button
                     type="button"
                     onClick={() => { setModalOpen(false); setForm(buildInitialForm()); }}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                    className="rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className={`rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER} ${submitting ? "opacity-70 cursor-not-allowed" : ""}`}
+                    className={`rounded-lg px-2 py-1.5 text-[11px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER} ${submitting ? "opacity-70 cursor-not-allowed" : ""}`}
                   >
                     {submitting ? "Saving..." : form._id ? "Update Agreement" : "Create Agreement"}
                   </button>

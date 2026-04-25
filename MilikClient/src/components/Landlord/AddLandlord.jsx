@@ -1,3 +1,4 @@
+import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 // components/Landlord/AddLandlord.jsx
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -235,9 +236,12 @@ const AddLandlord = () => {
 
   const labelClass = "block text-sm font-bold text-slate-800 mb-1 tracking-tight";
 
+  const uppercaseLandlordFields = new Set(["landlordCode", "landlordName", "regId", "taxPin", "postalAddress", "location"]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const nextValue = uppercaseLandlordFields.has(name) ? normalizeUppercaseInput(value) : value;
+    setFormData((prev) => ({ ...prev, [name]: nextValue }));
   };
 
   const formatFileSize = (bytes) => {

@@ -10,6 +10,7 @@ import { adminRequests } from '../../utils/requestMethods';
 const GREEN_BG = 'bg-[#0B3B2E]';
 const ORANGE = '#F97316';
 const DEFAULT_RATE = 16;
+const ITEMS_PER_PAGE = 50;
 
 const formatMoney = (value) =>
   `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 })}`;
@@ -59,6 +60,7 @@ const TaxReports = () => {
   const [companyTaxConfig, setCompanyTaxConfig] = useState({ taxSettings: { defaultVatRate: DEFAULT_RATE } });
   const [invoices, setInvoices] = useState([]);
   const [processedStatements, setProcessedStatements] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -172,6 +174,20 @@ const TaxReports = () => {
     [rows]
   );
 
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE)), [rows.length]);
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedRows = useMemo(() => rows.slice(startIndex, endIndex), [rows, startIndex, endIndex]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.startDate, filters.endDate, filters.propertyId]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
+
   const handleExportCSV = () => {
     if (!canExportReports) {
       toast.error("You do not have permission to export reports");
@@ -203,44 +219,22 @@ const TaxReports = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-100 p-6">
-        <div className="mx-auto max-w-7xl space-y-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h1 className="flex items-center gap-3 text-3xl font-bold text-slate-900">
-                <FaReceipt style={{ color: ORANGE }} /> Tax Reports
-              </h1>
-              <p className="mt-1 text-sm text-slate-600">
-                VAT / tax summary from posted tenant invoices and processed statement commission snapshots.
-              </p>
-            </div>
-            <div className="flex gap-3 print:hidden">
-              <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700">
-                <FaFileDownload className="inline" /> Export CSV
-              </button>
-              <button onClick={() => { if (!canExportReports) { toast.error("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className={`rounded-xl px-4 py-2 text-sm font-semibold text-white transition ${GREEN_BG} hover:bg-[#0A3127]`}>
-                <FaPrint className="inline" /> Print
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:hidden">
-            <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-900">
-              <FaFilter style={{ color: ORANGE }} /> Filters
-            </h2>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 p-2">
+        <div className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur print:hidden">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Start Date</label>
-                <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" />
+                <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs" />
               </div>
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">End Date</label>
-                <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" />
+                <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs" />
               </div>
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Property</label>
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm">
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs">
                   <option value="">All Properties</option>
                   {properties.map((property) => (
                     <option key={property._id} value={property._id}>{property.propertyName}</option>
@@ -248,42 +242,46 @@ const TaxReports = () => {
                 </select>
               </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="text-sm text-slate-600">Taxable Net Amount</div>
-              <div className="mt-2 text-3xl font-bold text-slate-900">{formatMoney(totals.netAmount)}</div>
-            </div>
-            <div className="rounded-2xl border border-orange-200 bg-orange-50 p-6 shadow-sm">
-              <div className="text-sm text-orange-700">Output VAT / Tax</div>
-              <div className="mt-2 text-3xl font-bold text-orange-700">{formatMoney(totals.taxAmount)}</div>
-            </div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
-              <div className="text-sm text-emerald-700">Gross Value</div>
-              <div className="mt-2 text-3xl font-bold text-emerald-700">{formatMoney(totals.grossAmount)}</div>
+            <div className="mt-2 flex flex-wrap justify-end gap-2">
+              <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"><FaFileDownload /> Export CSV</button>
+              <button onClick={() => { if (!canExportReports) { toast.error("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:opacity-50 ${GREEN_BG} hover:bg-[#0A3127]`}><FaPrint /> Print</button>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className={`${GREEN_BG} px-6 py-4 text-white`}>
-              <h3 className="text-lg font-bold">Tax Breakdown</h3>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
+              <div className="text-xs text-slate-600">Taxable Net Amount</div>
+              <div className="mt-0.5 text-sm font-bold text-slate-900">{formatMoney(totals.netAmount)}</div>
+            </div>
+            <div className="rounded-md border border-orange-200 bg-orange-50 p-2 shadow-sm">
+              <div className="text-xs text-orange-700">Output VAT / Tax</div>
+              <div className="mt-0.5 text-sm font-bold text-orange-700">{formatMoney(totals.taxAmount)}</div>
+            </div>
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2 shadow-sm">
+              <div className="text-xs text-emerald-700">Gross Value</div>
+              <div className="mt-0.5 text-sm font-bold text-emerald-700">{formatMoney(totals.grossAmount)}</div>
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+            <div className={`${GREEN_BG} px-3 py-2 text-white`}>
+              <h3 className="text-xs font-bold">Tax Breakdown</h3>
               <p className="mt-1 text-xs text-emerald-50">Default company VAT rate: {Number(companyTaxConfig?.taxSettings?.defaultVatRate || DEFAULT_RATE)}%</p>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1000px] text-sm">
-                <thead className="bg-slate-50">
+            <div className="min-h-0 flex-1 overflow-auto">
+              <table className="w-full min-w-[1000px] text-xs">
+                <thead className="sticky top-0 z-20 bg-[#0B3B2E] text-white">
                   <tr>
-                    <th className="px-4 py-3 text-left font-bold text-slate-700">Date</th>
-                    <th className="px-4 py-3 text-left font-bold text-slate-700">Source</th>
-                    <th className="px-4 py-3 text-left font-bold text-slate-700">Reference</th>
-                    <th className="px-4 py-3 text-left font-bold text-slate-700">Property</th>
-                    <th className="px-4 py-3 text-left font-bold text-slate-700">Party</th>
-                    <th className="px-4 py-3 text-left font-bold text-slate-700">Tax Code</th>
-                    <th className="px-4 py-3 text-right font-bold text-slate-700">Rate</th>
-                    <th className="px-4 py-3 text-right font-bold text-slate-700">Net</th>
-                    <th className="px-4 py-3 text-right font-bold text-slate-700">Tax</th>
-                    <th className="px-4 py-3 text-right font-bold text-slate-700">Gross</th>
+                    <th className="px-4 py-2 text-left font-bold text-white">Date</th>
+                    <th className="px-4 py-2 text-left font-bold text-white">Source</th>
+                    <th className="px-4 py-2 text-left font-bold text-white">Reference</th>
+                    <th className="px-4 py-2 text-left font-bold text-slate-700">Property</th>
+                    <th className="px-4 py-2 text-left font-bold text-white">Party</th>
+                    <th className="px-4 py-2 text-left font-bold text-white">Tax Code</th>
+                    <th className="px-4 py-2 text-right font-bold text-white">Rate</th>
+                    <th className="px-4 py-2 text-right font-bold text-white">Net</th>
+                    <th className="px-4 py-2 text-right font-bold text-white">Tax</th>
+                    <th className="px-4 py-2 text-right font-bold text-white">Gross</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -296,23 +294,32 @@ const TaxReports = () => {
                       <td colSpan="10" className="px-4 py-8 text-center text-slate-500">No tax rows found for the selected period.</td>
                     </tr>
                   ) : (
-                    rows.map((row) => (
+                    paginatedRows.map((row) => (
                       <tr key={row.id} className="border-t border-slate-200 hover:bg-slate-50">
-                        <td className="px-4 py-3">{new Date(row.date).toLocaleDateString()}</td>
-                        <td className="px-4 py-3">{row.source}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-900">{row.reference}</td>
-                        <td className="px-4 py-3">{row.propertyName}</td>
-                        <td className="px-4 py-3">{row.partyName}</td>
-                        <td className="px-4 py-3 uppercase">{row.taxCode}</td>
-                        <td className="px-4 py-3 text-right">{row.taxRate.toFixed(2)}%</td>
-                        <td className="px-4 py-3 text-right font-semibold">{formatMoney(row.netAmount)}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-orange-700">{formatMoney(row.taxAmount)}</td>
-                        <td className="px-4 py-3 text-right font-bold text-slate-900">{formatMoney(row.grossAmount)}</td>
+                        <td className="px-4 py-2">{new Date(row.date).toLocaleDateString()}</td>
+                        <td className="px-4 py-2">{row.source}</td>
+                        <td className="px-4 py-2 font-semibold text-slate-900">{row.reference}</td>
+                        <td className="px-4 py-2">{row.propertyName}</td>
+                        <td className="px-4 py-2">{row.partyName}</td>
+                        <td className="px-4 py-2 uppercase">{row.taxCode}</td>
+                        <td className="px-4 py-2 text-right">{row.taxRate.toFixed(2)}%</td>
+                        <td className="px-4 py-2 text-right font-semibold">{formatMoney(row.netAmount)}</td>
+                        <td className="px-4 py-2 text-right font-semibold text-orange-700">{formatMoney(row.taxAmount)}</td>
+                        <td className="px-4 py-2 text-right font-bold text-slate-900">{formatMoney(row.grossAmount)}</td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="sticky bottom-0 z-20 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <div className="font-semibold">Showing <span className="font-bold text-slate-900">{rows.length ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of <span className="font-bold text-slate-900">{rows.length}</span> tax row(s)</div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                <button type="button" onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+                <button type="button" onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+              </div>
             </div>
           </div>
         </div>

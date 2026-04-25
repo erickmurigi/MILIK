@@ -114,26 +114,26 @@ const MetricsGrid = ({ darkMode }) => {
   );
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div className="sticky top-0 z-20 grid grid-cols-1 gap-2 border-b border-gray-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur sm:grid-cols-2 lg:grid-cols-4">
       {metrics.map((metric) => (
         <div
           key={metric.id}
-          className={`bg-gradient-to-br ${metric.color} rounded-xl p-4 text-white shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 ${
+          className={`bg-gradient-to-br ${metric.color} rounded-lg p-2 text-white shadow-sm transition-all duration-300 ${
             metric.loading ? 'opacity-60' : ''
           }`}
         >
-          <div className="flex items-center justify-between mb-3">
-            <div className={`p-2 ${metric.iconBg} rounded-lg backdrop-blur-sm`}>
-              <div className="text-white text-lg">{metric.icon}</div>
+          <div className="mb-1.5 flex items-center justify-between">
+            <div className={`p-1.5 ${metric.iconBg} rounded-lg backdrop-blur-sm`}>
+              <div className="text-white text-base">{metric.icon}</div>
             </div>
-            <span className="text-xs font-bold px-2 py-1 rounded-md bg-gray-500/35 text-white">
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-500/35 text-white">
               {metric.change}
             </span>
           </div>
-          <h3 className="text-2xl font-extrabold mb-1 tracking-tight">
+          <h3 className="mb-0.5 text-base font-extrabold tracking-tight">
             {metric.loading ? '...' : metric.value}
           </h3>
-          <p className="text-white/80 text-xs font-semibold uppercase tracking-wide">{metric.label}</p>
+          <p className="text-white/80 text-[10px] font-semibold uppercase tracking-wide">{metric.label}</p>
         </div>
       ))}
     </div>

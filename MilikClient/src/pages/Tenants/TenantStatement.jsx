@@ -1057,26 +1057,26 @@ const TenantStatement = () => {
     const hasSelection = Boolean(selectedAllocationTrace && allocationTraceTarget?.kind);
 
     return (
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_1.4fr]">
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-4 py-3">
+      <div className="mt-2 grid max-h-[24vh] flex-shrink-0 gap-2 overflow-auto rounded-lg border border-slate-200 bg-slate-50/60 p-2 xl:grid-cols-[0.95fr_1.35fr]">
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-2.5 py-1.5">
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Receipt application tracing</p>
             <h3 className="mt-1 text-sm font-bold text-slate-900">Operational settlement view</h3>
           </div>
-          <div className="space-y-3 px-4 py-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+          <div className="space-y-2 px-2.5 py-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Receipts in trace</p>
-                <p className="mt-1 text-lg font-black text-slate-900">{receiptCount}</p>
+                <p className="mt-0.5 text-sm font-black text-slate-900">{receiptCount}</p>
               </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5">
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Receipts with unapplied balance</p>
-                <p className="mt-1 text-lg font-black text-amber-700">{unappliedCount}</p>
+                <p className="mt-0.5 text-sm font-black text-amber-700">{unappliedCount}</p>
               </div>
             </div>
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Quick trace</p>
-              <div className="mt-2 space-y-2">
+              <div className="mt-1.5 space-y-1.5">
                 {(allocationTraceData.partiallyAllocatedReceipts.length > 0
                   ? allocationTraceData.partiallyAllocatedReceipts
                   : allocationTraceData.receipts)
@@ -1086,7 +1086,7 @@ const TenantStatement = () => {
                       key={receipt.receiptId}
                       type="button"
                       onClick={() => setAllocationTraceTarget({ kind: "receipt", id: receipt.receiptId })}
-                      className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition ${
+                      className={`flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-left transition ${
                         allocationTraceTarget?.kind === "receipt" && allocationTraceTarget?.id === receipt.receiptId
                           ? "border-orange-300 bg-orange-50"
                           : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
@@ -1109,8 +1109,8 @@ const TenantStatement = () => {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-4 py-3 flex items-center justify-between gap-3">
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-2.5 py-1.5 flex items-center justify-between gap-2">
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Trace detail</p>
               <h3 className="mt-1 text-sm font-bold text-slate-900">
@@ -1124,42 +1124,42 @@ const TenantStatement = () => {
             <button
               type="button"
               onClick={() => openReceiptAllocationWorkspace(allocationTraceTarget?.kind === "receipt" ? allocationTraceTarget?.id : "")}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#0B3B2E] px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-[#0A3127]"
             >
               <FaLink size={12} />
               {allocationTraceTarget?.kind === "receipt" ? "Manage this receipt" : "Open receipts workspace"}
             </button>
           </div>
-          <div className="px-4 py-4">
+          <div className="px-2.5 py-2">
             {!hasSelection && (
-              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
+              <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-5 text-center">
                 <p className="text-sm font-semibold text-slate-700">Select a receipt from the trace list or click Trace in the transaction table.</p>
                 <p className="mt-2 text-xs text-slate-500">This page stays read-heavy. Allocation editing still happens safely from the Receipts page.</p>
               </div>
             )}
 
             {hasSelection && allocationTraceTarget?.kind === "receipt" && selectedAllocationTrace && (
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="space-y-2">
+                <div className="grid gap-2 md:grid-cols-3">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Receipt</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">{selectedAllocationTrace.receiptNumber}</p>
+                    <p className="mt-0.5 text-xs font-black text-slate-900">{selectedAllocationTrace.receiptNumber}</p>
                     <p className="text-[11px] text-slate-500">{selectedAllocationTrace.paymentDate ? new Date(selectedAllocationTrace.paymentDate).toLocaleDateString() : "-"}</p>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Allocated</p>
-                    <p className="mt-1 text-sm font-black text-green-700">Ksh {selectedAllocationTrace.allocatedAmount.toLocaleString()}</p>
+                    <p className="mt-0.5 text-xs font-black text-green-700">Ksh {selectedAllocationTrace.allocatedAmount.toLocaleString()}</p>
                     <p className="text-[11px] text-slate-500">Operational application</p>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Unapplied</p>
-                    <p className="mt-1 text-sm font-black text-amber-700">Ksh {selectedAllocationTrace.unappliedAmount.toLocaleString()}</p>
+                    <p className="mt-0.5 text-xs font-black text-amber-700">Ksh {selectedAllocationTrace.unappliedAmount.toLocaleString()}</p>
                     <p className="text-[11px] text-slate-500">Locked if receipt is already posted</p>
                   </div>
                 </div>
 
                 {selectedAllocationTrace.allocations.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+                  <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-xs text-slate-600">
                     No invoice allocations recorded for this receipt yet.
                   </div>
                 ) : (
@@ -1190,27 +1190,27 @@ const TenantStatement = () => {
             )}
 
             {hasSelection && allocationTraceTarget?.kind === "invoice" && selectedAllocationTrace && (
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="space-y-2">
+                <div className="grid gap-2 md:grid-cols-3">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Invoice</p>
-                    <p className="mt-1 text-sm font-black text-slate-900">{selectedAllocationTrace.invoiceNumber}</p>
+                    <p className="mt-0.5 text-xs font-black text-slate-900">{selectedAllocationTrace.invoiceNumber}</p>
                     <p className="text-[11px] text-slate-500">{selectedAllocationTrace.categoryLabel}</p>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Applied by receipts</p>
-                    <p className="mt-1 text-sm font-black text-green-700">Ksh {selectedAllocationTrace.appliedAmount.toLocaleString()}</p>
+                    <p className="mt-0.5 text-xs font-black text-green-700">Ksh {selectedAllocationTrace.appliedAmount.toLocaleString()}</p>
                     <p className="text-[11px] text-slate-500">Operational settlement to date</p>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Outstanding</p>
-                    <p className="mt-1 text-sm font-black text-red-700">Ksh {selectedAllocationTrace.outstandingAmount.toLocaleString()}</p>
+                    <p className="mt-0.5 text-xs font-black text-red-700">Ksh {selectedAllocationTrace.outstandingAmount.toLocaleString()}</p>
                     <p className="text-[11px] text-slate-500">Current invoice balance</p>
                   </div>
                 </div>
 
                 {selectedAllocationTrace.receiptApplications.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+                  <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-xs text-slate-600">
                     No receipt has been applied to this invoice yet.
                   </div>
                 ) : (
@@ -1232,7 +1232,7 @@ const TenantStatement = () => {
                             <td className="px-3 py-2 text-slate-600">{row.receiptDate ? new Date(row.receiptDate).toLocaleDateString() : "-"}</td>
                             <td className="px-3 py-2 text-slate-600">{row.label}</td>
                             <td className="px-3 py-2 text-right font-bold text-green-700">Ksh {row.appliedAmount.toLocaleString()}</td>
-                            <td className="px-3 py-2 text-center">
+                            <td className="px-2.5 py-1.5 text-center">
                               <button
                                 type="button"
                                 onClick={() => openReceiptAllocationWorkspace(row.receiptId)}
@@ -1495,314 +1495,71 @@ const TenantStatement = () => {
   ];
 
   const handlePrint = () => {
-    window.print();
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.print());
+    });
   };
 
   const handleDownload = () => {
-    window.print();
+    handlePrint();
   };
 
-  const renderStatement = () => (
-    <div className="statement-tab space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-        <div className="bg-blue-50 border-l-4 border-blue-600 rounded-lg px-4 py-3 shadow-sm">
-          <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">
-            Monthly Rent
-          </p>
-          <p className="text-xl font-bold text-blue-900 mt-1">
-            Ksh {(tenantLease?.rentAmount || tenant?.rent || 0).toLocaleString()}
-          </p>
-        </div>
+  const renderStatement = () => {
+    const visibleStatementTransactions = (statementData?.transactions || [])
+      .filter((t) => transactionType === "ALL" || t.type === transactionType)
+      .filter((t) => {
+        const txDate = new Date(t.date);
+        const fromOk = startDate ? txDate >= new Date(`${startDate}T00:00:00`) : true;
+        const toOk = endDate ? txDate <= new Date(`${endDate}T23:59:59`) : true;
+        return fromOk && toOk;
+      });
 
-        <div className="bg-orange-50 border-l-4 border-orange-600 rounded-lg px-4 py-3 shadow-sm">
-          <p className="text-[10px] font-bold text-orange-600 uppercase tracking-tight">
-            Total Charges
-          </p>
-          <p className="text-xl font-bold text-orange-900 mt-1">
-            Ksh {(statementData?.totalCharges || 0).toLocaleString()}
-          </p>
-        </div>
-
-        <div className="bg-amber-50 border-l-4 border-amber-600 rounded-lg px-4 py-3 shadow-sm">
-          <p className="text-[10px] font-bold text-amber-600 uppercase tracking-tight">
-            Outstanding Charges
-          </p>
-          <p className="text-xl font-bold text-amber-900 mt-1">
-            Ksh {Math.abs(statementData?.operationalOutstanding || 0).toLocaleString()}
-          </p>
-        </div>
-
-        <div
-          className={`border-l-4 rounded-lg px-4 py-3 shadow-sm ${
-            statementData?.unappliedCredits > 0
-              ? "bg-sky-50 border-sky-600"
-              : statementData?.currentBalance >= 0
-              ? "bg-green-50 border-green-600"
-              : "bg-red-50 border-red-600"
-          }`}
-        >
-          <p
-            className={`text-[10px] font-bold uppercase tracking-tight ${
-              statementData?.unappliedCredits > 0
-                ? "text-sky-600"
-                : statementData?.currentBalance >= 0
-                ? "text-green-600"
-                : "text-red-600"
-            }`}
-          >
-            Net Position
-          </p>
-          <p
-            className={`text-xl font-bold mt-1 ${
-              statementData?.unappliedCredits > 0
-                ? "text-sky-900"
-                : statementData?.currentBalance >= 0
-                ? "text-green-900"
-                : "text-red-900"
-            }`}
-          >
-            Ksh {Math.abs(statementData?.currentBalance || 0).toLocaleString()}
-          </p>
-          {statementData?.unappliedCredits > 0 && (
-            <p className="mt-1 text-[11px] font-semibold text-sky-700">Unapplied credits Ksh {(statementData?.unappliedCredits || 0).toLocaleString()}</p>
-          )}
-        </div>
-      </div>
-
-      <div className="filter-section bg-white rounded-lg shadow-sm border border-slate-200 px-4 py-3">
-        <h3 className="text-sm font-bold text-slate-900 mb-2">Filter Period</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Start Date
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              End Date
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Transaction Type
-            </label>
-            <select
-              value={transactionType}
-              onChange={(e) => setTransactionType(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-            >
-              <option value="ALL">All Transactions</option>
-              <option value="CHARGE">Invoices Only</option>
-              <option value="DEBIT_NOTE">Debit Notes</option>
-              <option value="CREDIT_NOTE">Credit Notes</option>
-              <option value="PAYMENT">Receipts Only</option>
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-sm statement-tab">
+        <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 backdrop-blur filter-section">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500" />
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500" />
+            <select value={transactionType} onChange={(e) => setTransactionType(e.target.value)} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500">
+              <option value="ALL">All Transactions</option><option value="CHARGE">Invoices Only</option><option value="DEBIT_NOTE">Debit Notes</option><option value="CREDIT_NOTE">Credit Notes</option><option value="PAYMENT">Receipts Only</option>
             </select>
+            <div className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-700">Rows: {visibleStatementTransactions.length}</div>
+            <div className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-700">Net: Ksh {Math.abs(statementData?.currentBalance || 0).toLocaleString()}</div>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-5">
+            {[
+              { label: "Monthly Rent", value: `Ksh ${(tenantLease?.rentAmount || tenant?.rent || 0).toLocaleString()}`, accent: "text-blue-700" },
+              { label: "Total Charges", value: `Ksh ${(statementData?.totalCharges || 0).toLocaleString()}`, accent: "text-orange-700" },
+              { label: "Payments", value: `Ksh ${(statementData?.totalPayments || 0).toLocaleString()}`, accent: "text-emerald-700" },
+              { label: "Outstanding", value: `Ksh ${Math.abs(statementData?.operationalOutstanding || 0).toLocaleString()}`, accent: "text-amber-700" },
+              { label: statementData?.unappliedCredits > 0 ? "Unapplied Credit" : "Net Position", value: `Ksh ${Math.abs((statementData?.unappliedCredits > 0 ? statementData?.unappliedCredits : statementData?.currentBalance) || 0).toLocaleString()}`, accent: statementData?.unappliedCredits > 0 ? "text-sky-700" : statementData?.currentBalance >= 0 ? "text-emerald-700" : "text-red-700" },
+            ].map((card) => (<div key={card.label} className="rounded-md border border-slate-200 bg-white px-2 py-1.5"><div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">{card.label}</div><div className={`mt-0.5 text-[13px] font-black ${card.accent}`}>{card.value}</div></div>))}
           </div>
         </div>
-      </div>
-
-      <div
-        className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden flex flex-col"
-        style={{ height: "360px" }}
-      >
-        <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex-shrink-0">
-          <h3 className="text-sm font-bold text-slate-900">
-            <FaChartLine className="inline mr-2" />
-            Account Transactions
-          </h3>
-        </div>
-
-        <div className="overflow-y-auto flex-grow">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0">
-              <tr className={`${MILIK_GREEN} text-white text-[11px] font-bold`}>
-                <th className="px-3 py-2 text-left">Date</th>
-                <th className="px-3 py-2 text-left">Description</th>
-                <th className="px-3 py-2 text-center">Type</th>
-                <th className="px-3 py-2 text-left">Code</th>
-                <th className="px-3 py-2 text-center">Trace</th>
-                <th className="px-3 py-2 text-right">Amount</th>
-                <th className="px-3 py-2 text-right">R. Balance</th>
-              </tr>
-            </thead>
+        <div className="transaction-scroll-area h-[39vh] min-h-[230px] max-h-[430px] flex-shrink-0 overflow-auto">
+          <table className="transaction-table min-w-full table-fixed text-[10.5px]">
+            <colgroup><col className="w-[10%]" /><col className="w-[35%]" /><col className="w-[11%]" /><col className="w-[13%]" /><col className="w-[9%]" /><col className="w-[11%]" /><col className="w-[11%]" /></colgroup>
+            <thead><tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">{['Date', 'Description', 'Type', 'Code', 'Trace', 'Amount', 'R. Balance'].map((header, index) => (<th key={header} className={`whitespace-nowrap px-2.5 py-1.5 text-[9.5px] font-black uppercase tracking-[0.12em] ${index >= 5 ? 'text-right' : index === 4 || index === 2 ? 'text-center' : 'text-left'}`}>{header}</th>))}</tr></thead>
             <tbody>
-              {statementData?.transactions && statementData.transactions.length > 0 ? (
-                statementData.transactions
-                  .filter((t) => transactionType === "ALL" || t.type === transactionType)
-                  .filter((t) => {
-                    const txDate = new Date(t.date);
-                    const fromOk = startDate ? txDate >= new Date(`${startDate}T00:00:00`) : true;
-                    const toOk = endDate ? txDate <= new Date(`${endDate}T23:59:59`) : true;
-                    return fromOk && toOk;
-                  })
-                  .map((transaction, idx) => (
-                    <tr
-                      key={transaction.id}
-                      className={`border-b border-slate-200 ${
-                        idx % 2 === 0 ? "bg-white" : "bg-slate-50"
-                      } hover:bg-blue-50 transition-colors`}
-                    >
-                      <td className="px-3 py-1.5 text-[11px] font-semibold text-gray-900 whitespace-nowrap">
-                        {new Date(transaction.date).toLocaleDateString()}
-                      </td>
-                      <td className="px-3 py-1.5 text-[11px] text-gray-700">
-                        {transaction.description}
-                      </td>
-                      <td className="px-3 py-1.5 text-center">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                            ["CHARGE", "DEBIT_NOTE"].includes(transaction.type)
-                              ? "bg-red-100 text-red-700"
-                              : "bg-green-100 text-green-700"
-                          }`}
-                        >
-                          {transaction.type}
-                        </span>
-                      </td>
-                      <td className="px-3 py-1.5 text-[11px] font-semibold text-slate-900 whitespace-nowrap">
-                        {transaction.transactionCode}
-                      </td>
-                      <td className="px-3 py-1.5 text-center">
-                        {["invoice", "receipt"].includes(String(transaction.sourceKind || "")) ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setAllocationTraceTarget({
-                                kind: transaction.sourceKind === "invoice" ? "invoice" : "receipt",
-                                id: transaction.sourceId,
-                              })
-                            }
-                            className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-[10px] font-bold text-slate-700 hover:border-slate-400 hover:bg-slate-100"
-                          >
-                            <FaLink size={10} />
-                            Trace
-                          </button>
-                        ) : (
-                          <span className="text-[10px] text-slate-300">—</span>
-                        )}
-                      </td>
-                      <td
-                        className={`px-3 py-1.5 text-[11px] font-bold text-right whitespace-nowrap ${
-                          ["CHARGE", "DEBIT_NOTE"].includes(transaction.type)
-                            ? "text-red-600"
-                            : "text-green-600"
-                        }`}
-                      >
-                        {["CHARGE", "DEBIT_NOTE"].includes(transaction.type) ? "+" : "-"}Ksh{" "}
-                        {Math.abs(transaction.amount).toLocaleString()}
-                      </td>
-                      <td className="px-3 py-1.5 text-[11px] font-bold text-right text-gray-900 whitespace-nowrap">
-                        Ksh {transaction.balance.toLocaleString()}
-                      </td>
-                    </tr>
-                  ))
-              ) : (
-                <tr>
-                  <td colSpan="7" className="px-3 py-6 text-center text-xs text-gray-600">
-                    No transactions found.
-                  </td>
+              {visibleStatementTransactions.length > 0 ? visibleStatementTransactions.map((transaction, idx) => (
+                <tr key={transaction.id} className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} border-b border-slate-200 hover:bg-orange-50/40`}>
+                  <td className="px-2.5 py-0.5 font-semibold text-slate-900 whitespace-nowrap">{new Date(transaction.date).toLocaleDateString()}</td>
+                  <td className="px-2.5 py-0.5 text-slate-700 truncate" title={transaction.description}>{transaction.description}</td>
+                  <td className="px-2.5 py-0.5 text-center"><span className={`inline-flex rounded px-2 py-0.5 text-[9px] font-black ${["CHARGE", "DEBIT_NOTE"].includes(transaction.type) ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{transaction.type}</span></td>
+                  <td className="px-2.5 py-0.5 font-semibold text-slate-900 whitespace-nowrap">{transaction.transactionCode}</td>
+                  <td className="px-2.5 py-0.5 text-center">{["invoice", "receipt"].includes(String(transaction.sourceKind || "")) ? (<button type="button" onClick={() => setAllocationTraceTarget({ kind: transaction.sourceKind === "invoice" ? "invoice" : "receipt", id: transaction.sourceId })} className="inline-flex h-6 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-100"><FaLink size={10} /> Trace</button>) : (<span className="text-[10px] text-slate-300">—</span>)}</td>
+                  <td className={`px-2.5 py-1 text-right font-black whitespace-nowrap ${["CHARGE", "DEBIT_NOTE"].includes(transaction.type) ? "text-red-600" : "text-green-600"}`}>{["CHARGE", "DEBIT_NOTE"].includes(transaction.type) ? "+" : "-"}Ksh {Math.abs(transaction.amount).toLocaleString()}</td>
+                  <td className="px-2.5 py-0.5 text-right font-black text-slate-900 whitespace-nowrap">Ksh {transaction.balance.toLocaleString()}</td>
                 </tr>
-              )}
+              )) : (<tr><td colSpan="7" className="px-3 py-8 text-center text-xs text-slate-500">No transactions found for the selected filters.</td></tr>)}
             </tbody>
           </table>
         </div>
-
-        {statementData?.transactions && statementData.transactions.length > 0 && (
-          <div className="px-4 py-2 bg-slate-100 border-t border-slate-200 flex-shrink-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
-              <div>
-                <p className="text-[10px] font-bold text-gray-600">Total Charges</p>
-                <p className="text-base font-bold text-red-600 mt-0.5">
-                  Ksh {(statementData.totalCharges || 0).toLocaleString()}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-gray-600">Total Payments</p>
-                <p className="text-base font-bold text-green-600 mt-0.5">
-                  Ksh {(statementData.totalPayments || 0).toLocaleString()}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-gray-600">Outstanding Charges</p>
-                <p className="text-base font-bold mt-0.5 text-amber-600">
-                  Ksh {(statementData?.operationalOutstanding || 0).toLocaleString()}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-gray-600">Unapplied Credits</p>
-                <p className="text-base font-bold mt-0.5 text-sky-600">
-                  Ksh {(statementData?.unappliedCredits || 0).toLocaleString()}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-gray-600">Net Position</p>
-                <p
-                  className={`text-base font-bold mt-0.5 ${
-                    statementData?.currentBalance >= 0 ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  Ksh {Math.abs(statementData?.currentBalance || 0).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="print-footer" style={{ display: "none" }}>
-          <p style={{ marginBottom: "5px" }}>
-            Generated on{" "}
-            {new Date().toLocaleDateString("en-GB", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            })}{" "}
-            at{" "}
-            {new Date().toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </p>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              fontSize: "10px",
-              color: "#9CA3AF",
-            }}
-          >
-            <span>Powered by</span>
-            <img
-              src="/logo.png"
-              alt="MILIK Logo"
-              style={{
-                width: "20px",
-                height: "20px",
-                display: "inline-block",
-                verticalAlign: "middle",
-              }}
-            />
-            <span>MILIK - Property Management System</span>
-          </div>
-        </div>
+        <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50/95 px-3 py-1.5 text-[10.5px] font-semibold text-slate-600 backdrop-blur"><div className="flex flex-wrap items-center justify-between gap-2"><span>Showing {visibleStatementTransactions.length} filtered transaction(s)</span><div className="flex flex-wrap gap-3"><span>Charges: <strong className="text-red-600">Ksh {(statementData.totalCharges || 0).toLocaleString()}</strong></span><span>Payments: <strong className="text-emerald-700">Ksh {(statementData.totalPayments || 0).toLocaleString()}</strong></span><span>Outstanding: <strong className="text-amber-700">Ksh {(statementData?.operationalOutstanding || 0).toLocaleString()}</strong></span><span>Credits: <strong className="text-sky-700">Ksh {(statementData?.unappliedCredits || 0).toLocaleString()}</strong></span></div></div></div>
+        {renderAllocationTracePanel()}
       </div>
-
-      {renderAllocationTracePanel()}
-    </div>
-  );
+    );
+  };
 
   const renderBillingSchedule = () => {
     const handleSelectSchedule = (scheduleKey) => {
@@ -2046,25 +1803,22 @@ const TenantStatement = () => {
     };
 
     return (
-      <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
-          <h3 className="text-sm font-bold text-slate-900">Rent & Other Charges Schedule</h3>
-        </div>
-
-        <div className="px-4 py-3 border-b border-slate-200 bg-emerald-50/60">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-tight text-emerald-700">Deposit Amount</p>
-              <p className="text-sm font-bold text-slate-900 mt-1">KES {tenantDepositAmount.toLocaleString()}</p>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-2 backdrop-blur">
+          <div className="mb-2 border-b border-slate-200 pb-2">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-4">
+            <div className="rounded-md border border-emerald-200 bg-white px-2 py-1.5">
+              <p className="text-[9px] font-black uppercase tracking-[0.10em] text-emerald-700">Deposit Amount</p>
+              <p className="mt-0.5 text-xs font-black text-slate-900">KES {tenantDepositAmount.toLocaleString()}</p>
             </div>
-            <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-tight text-emerald-700">Deposit Holder</p>
-              <p className="text-sm font-bold text-slate-900 mt-1">{tenantDepositHolder}</p>
-              <p className="text-[10px] text-slate-500 mt-1">Receipt mode now controls posting and clearing, not this holder label.</p>
+            <div className="rounded-md border border-emerald-200 bg-white px-2 py-1.5">
+              <p className="text-[9px] font-black uppercase tracking-[0.10em] text-emerald-700">Deposit Holder</p>
+              <p className="mt-0.5 text-xs font-black text-slate-900">{tenantDepositHolder}</p>
+              <p className="mt-0.5 text-[9px] text-slate-500">Receipt mode now controls posting and clearing, not this holder label.</p>
             </div>
-            <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-tight text-emerald-700">Deposit Billing Status</p>
-              <p className="text-sm font-bold text-slate-900 mt-1">
+            <div className="rounded-md border border-emerald-200 bg-white px-2 py-1.5">
+              <p className="text-[9px] font-black uppercase tracking-[0.10em] text-emerald-700">Deposit Billing Status</p>
+              <p className="mt-0.5 text-xs font-black text-slate-900">
                 {hasActiveDepositInvoice
                   ? `Already billed${depositInvoiceSummary?.invoiceNumber ? ` (${depositInvoiceSummary.invoiceNumber})` : ""}`
                   : "Not yet billed"}
@@ -2073,7 +1827,6 @@ const TenantStatement = () => {
           </div>
         </div>
 
-        <div className="px-4 py-2 border-b border-slate-200 bg-white">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
             <div className="md:col-span-2">
               <label className="block text-[10px] text-slate-600 font-semibold mb-1">Defined Period</label>
@@ -2093,7 +1846,7 @@ const TenantStatement = () => {
                     setScheduleFilterTo(formatInputDate(to));
                   }
                 }}
-                className="w-full text-xs border border-slate-300 rounded px-2 py-1.5"
+                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
               >
                 <option value="custom">Custom</option>
                 <option value="this_year">This Year</option>
@@ -2109,7 +1862,7 @@ const TenantStatement = () => {
                   setScheduleDefinedPeriod("custom");
                   setScheduleFilterFrom(e.target.value);
                 }}
-                className="w-full text-xs border border-slate-300 rounded px-2 py-1.5"
+                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
               />
             </div>
             <div className="md:col-span-2">
@@ -2121,7 +1874,7 @@ const TenantStatement = () => {
                   setScheduleDefinedPeriod("custom");
                   setScheduleFilterTo(e.target.value);
                 }}
-                className="w-full text-xs border border-slate-300 rounded px-2 py-1.5"
+                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
               />
             </div>
             <div className="md:col-span-3">
@@ -2131,7 +1884,7 @@ const TenantStatement = () => {
                 value={scheduleSearchText}
                 onChange={(e) => setScheduleSearchText(e.target.value)}
                 placeholder="Month, invoice no., status..."
-                className="w-full text-xs border border-slate-300 rounded px-2 py-1.5"
+                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
               />
             </div>
             <div className="md:col-span-3 flex gap-2 md:justify-end">
@@ -2173,13 +1926,13 @@ const TenantStatement = () => {
           </div>
         </div>
 
-        <div className="px-4 py-3 border-b border-slate-200 bg-gray-50">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1.5">
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={handleCreateInvoices}
               disabled={selectedSchedules.length === 0 || savingScheduleAction}
-              className={`flex items-center gap-1 px-3 py-2 rounded text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${
                 selectedSchedules.length === 0
                   ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                   : "bg-blue-600 hover:bg-blue-700 text-white"
@@ -2192,7 +1945,7 @@ const TenantStatement = () => {
               type="button"
               onClick={handleCancelInvoices}
               disabled={selectedSchedules.length === 0 || savingScheduleAction}
-              className={`flex items-center gap-1 px-3 py-2 rounded text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${
                 selectedSchedules.length === 0
                   ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                   : "bg-red-600 hover:bg-red-700 text-white"
@@ -2205,7 +1958,7 @@ const TenantStatement = () => {
               type="button"
               onClick={handleEditSchedules}
               disabled={selectedSchedules.length === 0 || savingScheduleAction}
-              className={`flex items-center gap-1 px-3 py-2 rounded text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${
                 selectedSchedules.length === 0
                   ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                   : "bg-orange-600 hover:bg-orange-700 text-white"
@@ -2218,7 +1971,7 @@ const TenantStatement = () => {
               type="button"
               onClick={handleDeleteSchedules}
               disabled={selectedSchedules.length === 0 || savingScheduleAction}
-              className={`flex items-center gap-1 px-3 py-2 rounded text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${
                 selectedSchedules.length === 0
                   ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                   : "bg-gray-600 hover:bg-gray-700 text-white"
@@ -2231,7 +1984,7 @@ const TenantStatement = () => {
               type="button"
               onClick={handleFreezeSchedules}
               disabled={selectedSchedules.length === 0 || savingScheduleAction}
-              className={`flex items-center gap-1 px-3 py-2 rounded text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${
                 selectedSchedules.length === 0
                   ? "bg-blue-200 text-blue-400 cursor-not-allowed"
                   : "bg-blue-600 hover:bg-blue-700 text-white"
@@ -2244,9 +1997,9 @@ const TenantStatement = () => {
             </button>
 
             {showFreezeScheduleModal && selectedSchedules.length > 0 && (
-              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2">
                 <div className="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-md">
-                  <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                  <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between">
                     <h3 className="font-bold text-slate-900 flex items-center gap-2">
                       <FaCheck className="text-blue-600" />
                       {selectedSchedules.every((key) => billingScheduleByKey.get(key)?.frozen === "Yes")
@@ -2261,7 +2014,7 @@ const TenantStatement = () => {
                       <FaTimes />
                     </button>
                   </div>
-                  <div className="p-4">
+                  <div className="p-2">
                     <p className="text-sm text-slate-700 mb-4">
                       {selectedSchedules.every((key) => billingScheduleByKey.get(key)?.frozen === "Yes")
                         ? "Are you sure you want to activate the selected frozen schedule(s)?"
@@ -2271,7 +2024,7 @@ const TenantStatement = () => {
                       <button
                         type="button"
                         onClick={() => setShowFreezeScheduleModal(false)}
-                        className="px-4 py-2 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
+                        className="px-3 py-1.5 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
                       >
                         Cancel
                       </button>
@@ -2313,7 +2066,7 @@ const TenantStatement = () => {
                             setSelectedSchedules([]);
                           }
                         }}
-                        className="px-4 py-2 text-xs rounded-md text-white font-semibold bg-blue-600 hover:bg-blue-700"
+                        className="px-3 py-1.5 text-xs rounded-md text-white font-semibold bg-blue-600 hover:bg-blue-700"
                       >
                         Confirm
                       </button>
@@ -2324,9 +2077,9 @@ const TenantStatement = () => {
             )}
 
             {showDeleteScheduleModal && selectedSchedules.length > 0 && (
-              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2">
                 <div className="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-md">
-                  <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                  <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between">
                     <h3 className="font-bold text-slate-900 flex items-center gap-2">
                       <FaTrash className="text-red-600" />
                       Confirm Schedule Deletion
@@ -2339,7 +2092,7 @@ const TenantStatement = () => {
                       <FaTimes />
                     </button>
                   </div>
-                  <div className="p-4">
+                  <div className="p-2">
                     <p className="text-sm text-slate-700 mb-4">
                       Are you sure you want to delete the selected schedule(s)? This action cannot be undone.
                     </p>
@@ -2347,7 +2100,7 @@ const TenantStatement = () => {
                       <button
                         type="button"
                         onClick={() => setShowDeleteScheduleModal(false)}
-                        className="px-4 py-2 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
+                        className="px-3 py-1.5 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
                       >
                         Cancel
                       </button>
@@ -2380,7 +2133,7 @@ const TenantStatement = () => {
                             setSelectedSchedules([]);
                           }
                         }}
-                        className="px-4 py-2 text-xs rounded-md text-white font-semibold bg-red-600 hover:bg-red-700"
+                        className="px-3 py-1.5 text-xs rounded-md text-white font-semibold bg-red-600 hover:bg-red-700"
                       >
                         Delete
                       </button>
@@ -2391,9 +2144,9 @@ const TenantStatement = () => {
             )}
 
             {showEditScheduleModal && editingSchedule !== null && (
-              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2">
                 <div className="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-md">
-                  <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                  <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between">
                     <h3 className="font-bold text-slate-900 flex items-center gap-2">
                       <FaCog className="text-green-600" />
                       Edit Schedule
@@ -2406,41 +2159,41 @@ const TenantStatement = () => {
                       <FaTimes />
                     </button>
                   </div>
-                  <div className="p-4 space-y-3">
+                  <div className="p-2 space-y-3">
                     <label className="text-xs font-semibold text-slate-700">From Date</label>
                     <input
                       type="date"
                       value={scheduleForm.from}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, from: e.target.value }))}
-                      className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
                     />
                     <label className="text-xs font-semibold text-slate-700">To Date</label>
                     <input
                       type="date"
                       value={scheduleForm.to}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, to: e.target.value }))}
-                      className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
                     />
                     <label className="text-xs font-semibold text-slate-700">Rent</label>
                     <input
                       type="number"
                       value={scheduleForm.rent}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, rent: e.target.value }))}
-                      className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
                     />
                     <label className="text-xs font-semibold text-slate-700">Utility</label>
                     <input
                       type="number"
                       value={scheduleForm.utility}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, utility: e.target.value }))}
-                      className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
                     />
                   </div>
-                  <div className="px-4 py-3 border-t border-slate-200 flex justify-end gap-2">
+                  <div className="px-3 py-2 border-t border-slate-200 flex justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => setShowEditScheduleModal(false)}
-                      className="px-4 py-2 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
+                      className="px-3 py-1.5 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
                     >
                       Cancel
                     </button>
@@ -2479,7 +2232,7 @@ const TenantStatement = () => {
                           setSelectedSchedules([]);
                         }
                       }}
-                      className={`px-4 py-2 text-xs rounded-md text-white font-semibold ${MILIK_GREEN} hover:bg-[#0A3127]`}
+                      className={`px-3 py-1.5 text-xs rounded-md text-white font-semibold ${MILIK_GREEN} hover:bg-[#0A3127]`}
                     >
                       Save Changes
                     </button>
@@ -2496,11 +2249,11 @@ const TenantStatement = () => {
           </div>
         </div>
 
-        <div className="overflow-auto">
-          <table className="w-full min-w-[1200px] text-xs">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full min-w-[1200px] text-[11px]">
             <thead>
-              <tr className={`${MILIK_GREEN} text-white`}>
-                <th className="px-3 py-2 text-center">
+              <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                <th className="px-2.5 py-1.5 text-center">
                   <input
                     type="checkbox"
                     checked={
@@ -2510,15 +2263,15 @@ const TenantStatement = () => {
                     className="cursor-pointer"
                   />
                 </th>
-                <th className="px-3 py-2 text-left font-semibold">From</th>
-                <th className="px-3 py-2 text-left font-semibold">To</th>
-                <th className="px-3 py-2 text-left font-semibold">Description</th>
-                <th className="px-3 py-2 text-right font-semibold">Rent Amount</th>
-                <th className="px-3 py-2 text-right font-semibold">S. Charge/Util.</th>
-                <th className="px-3 py-2 text-right font-semibold">Total</th>
+                <th className="px-2.5 py-1.5 text-left font-semibold">From</th>
+                <th className="px-2.5 py-1.5 text-left font-semibold">To</th>
+                <th className="px-2.5 py-1.5 text-left font-semibold">Description</th>
+                <th className="px-2.5 py-1.5 text-right font-semibold">Rent Amount</th>
+                <th className="px-2.5 py-1.5 text-right font-semibold">S. Charge/Util.</th>
+                <th className="px-2.5 py-1.5 text-right font-semibold">Total</th>
                 <th className="px-3 py-2 text-center font-semibold">Frozen</th>
                 <th className="px-3 py-2 text-center font-semibold">Booked</th>
-                <th className="px-3 py-2 text-left font-semibold">Invoice #</th>
+                <th className="px-2.5 py-1.5 text-left font-semibold">Invoice #</th>
               </tr>
             </thead>
             <tbody>
@@ -2534,7 +2287,7 @@ const TenantStatement = () => {
                     } border-b border-slate-200 hover:bg-emerald-50/40 cursor-pointer`}
                     onClick={() => handleSelectSchedule(row.periodKey)}
                   >
-                    <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-2.5 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -2542,11 +2295,11 @@ const TenantStatement = () => {
                         className="cursor-pointer"
                       />
                     </td>
-                    <td className="px-3 py-2 text-slate-800">{row.from}</td>
-                    <td className="px-3 py-2 text-slate-800">{row.to}</td>
-                    <td className="px-3 py-2 font-medium text-slate-900">{row.description}</td>
-                    <td className="px-3 py-2 text-right text-slate-900">{row.rent.toLocaleString()}</td>
-                    <td className="px-3 py-2 text-right text-slate-900">
+                    <td className="px-2.5 py-1 text-slate-800">{row.from}</td>
+                    <td className="px-2.5 py-1 text-slate-800">{row.to}</td>
+                    <td className="px-2.5 py-1 font-medium text-slate-900">{row.description}</td>
+                    <td className="px-2.5 py-1 text-right text-slate-900">{row.rent.toLocaleString()}</td>
+                    <td className="px-2.5 py-1 text-right text-slate-900">
                       <div>
                         <div className="font-bold">{row.utility ? row.utility.toLocaleString() : "-"}</div>
                         {row.utilityNames && row.utilityNames.length > 0 && (
@@ -2556,10 +2309,10 @@ const TenantStatement = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                    <td className="px-2.5 py-1 text-right font-semibold text-slate-900">
                       {total.toLocaleString()}
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-2.5 py-1.5 text-center">
                       <span
                         className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${
                           row.frozen === "Yes"
@@ -2570,7 +2323,7 @@ const TenantStatement = () => {
                         {row.frozen}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-2.5 py-1.5 text-center">
                       <span
                         className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${
                           row.booked === "Yes"
@@ -2599,39 +2352,39 @@ const TenantStatement = () => {
   };
 
   const renderTenantDetails = () => (
-    <div className="bg-white border border-gray-200 rounded-lg p-6">
-      <h3 className="text-lg font-bold text-gray-900 mb-6">Tenant Information</h3>
+    <div className="bg-white border border-gray-200 rounded-lg p-2">
+      <h3 className="text-sm font-bold text-gray-900 mb-6">Tenant Information</h3>
       {tenant ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           <div className="border-b md:border-b-0 pb-4 md:pb-0">
             <label className="block text-sm font-semibold text-gray-600 mb-2">Tenant Name</label>
-            <p className="text-lg font-bold text-gray-900">
+            <p className="text-sm font-bold text-gray-900">
               {tenant?.name || (tenant?.firstName && tenant?.lastName ? `${tenant.firstName} ${tenant.lastName}` : "N/A")}
             </p>
           </div>
           <div className="border-b md:border-b-0 pb-4 md:pb-0">
             <label className="block text-sm font-semibold text-gray-600 mb-2">Email</label>
-            <p className="text-lg font-bold text-gray-900">{tenant?.email || "N/A"}</p>
+            <p className="text-sm font-bold text-gray-900">{tenant?.email || "N/A"}</p>
           </div>
           <div className="border-b md:border-b-0 pb-4 md:pb-0">
             <label className="block text-sm font-semibold text-gray-600 mb-2">Phone</label>
-            <p className="text-lg font-bold text-gray-900">{tenant?.phone || "N/A"}</p>
+            <p className="text-sm font-bold text-gray-900">{tenant?.phone || "N/A"}</p>
           </div>
           <div className="border-b md:border-b-0 pb-4 md:pb-0">
             <label className="block text-sm font-semibold text-gray-600 mb-2">ID Number</label>
-            <p className="text-lg font-bold text-gray-900">{tenant?.idDocument || tenant?.idNumber || "N/A"}</p>
+            <p className="text-sm font-bold text-gray-900">{tenant?.idDocument || tenant?.idNumber || "N/A"}</p>
           </div>
           <div className="border-b md:border-b-0 pb-4 md:pb-0">
             <label className="block text-sm font-semibold text-gray-600 mb-2">Unit</label>
-            <p className="text-lg font-bold text-gray-900">{resolveTenantUnitNumber(tenant)}</p>
+            <p className="text-sm font-bold text-gray-900">{resolveTenantUnitNumber(tenant)}</p>
           </div>
           <div className="border-b md:border-b-0 pb-4 md:pb-0">
             <label className="block text-sm font-semibold text-gray-600 mb-2">Property</label>
-            <p className="text-lg font-bold text-gray-900">{resolveTenantPropertyName(tenant)}</p>
+            <p className="text-sm font-bold text-gray-900">{resolveTenantPropertyName(tenant)}</p>
           </div>
           <div className="border-b md:border-b-0 pb-4 md:pb-0">
             <label className="block text-sm font-semibold text-gray-600 mb-2">Move-In Date</label>
-            <p className="text-lg font-bold text-gray-900">
+            <p className="text-sm font-bold text-gray-900">
               {tenantLease?.startDate
                 ? new Date(tenantLease.startDate).toLocaleDateString()
                 : tenant?.moveInDate
@@ -2641,7 +2394,7 @@ const TenantStatement = () => {
           </div>
           <div className="border-b md:border-b-0 pb-4 md:pb-0">
             <label className="block text-sm font-semibold text-gray-600 mb-2">Rent Amount</label>
-            <p className="text-lg font-bold text-gray-900">
+            <p className="text-sm font-bold text-gray-900">
               Ksh {(tenantLease?.rentAmount || tenant?.rent || 0).toLocaleString()}
             </p>
           </div>
@@ -2665,8 +2418,8 @@ const TenantStatement = () => {
     );
 
     return (
-      <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Standing Charges</h3>
+      <div className="bg-white border border-gray-200 rounded-lg p-2">
+        <h3 className="text-sm font-bold text-gray-900 mb-4">Standing Charges</h3>
         <p className="text-gray-600 mb-6">Recurring charges attached to this tenancy</p>
 
         {tenantUtilities.length === 0 ? (
@@ -2675,16 +2428,16 @@ const TenantStatement = () => {
             <p className="text-sm text-gray-500 mt-2">Utilities will appear here when added to the tenant record.</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-2">
             {tenantUtilities.map((utility, idx) => (
-              <div key={idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+              <div key={idx} className="border border-gray-200 rounded-lg p-2 hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start">
                   <div>
                     <h4 className="font-semibold text-gray-900">{utility.utilityLabel || utility.utility}</h4>
                     <p className="text-sm text-gray-600 mt-1">Monthly charge for this tenant</p>
                   </div>
                   <div className="text-right">
-                    <div className="text-lg font-bold text-gray-900">
+                    <div className="text-sm font-bold text-gray-900">
                       Ksh {(parseFloat(utility.unitCharge) || 0).toLocaleString()}
                     </div>
                     <div className="text-xs text-gray-600 font-medium mt-1">
@@ -2699,7 +2452,7 @@ const TenantStatement = () => {
               </div>
             ))}
 
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="mt-6 p-2 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800">
                 <span className="font-bold">Total Monthly Standing Charges:</span>
                 <span className="float-right font-bold">Ksh {totalStandingCharges.toLocaleString()}</span>
@@ -2910,10 +2663,10 @@ const TenantStatement = () => {
 
     return (
       <div className="space-y-6">
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
+        <div className="bg-white border border-gray-200 rounded-lg p-2">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-5">
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Rent Reviews & Escalations</h3>
+              <h3 className="text-sm font-bold text-gray-900">Rent Reviews & Escalations</h3>
               <p className="text-gray-600 text-sm mt-1">
                 Manage rent adjustments with full review and escalation controls.
               </p>
@@ -2923,35 +2676,35 @@ const TenantStatement = () => {
                 setEditingReviewId(null);
                 setReviewFormOpen(true);
               }}
-              className={`${MILIK_GREEN} hover:bg-[#0A3127] text-white px-4 py-2 rounded font-semibold flex items-center gap-2`}
+              className={`${MILIK_GREEN} hover:bg-[#0A3127] text-white px-3 py-1.5 rounded font-semibold flex items-center gap-2`}
             >
               <FaPlus /> Add Review / Escalation
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
+          <div className="grid flex-shrink-0 grid-cols-2 gap-2 py-2 md:grid-cols-4">
             <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
               <p className="text-xs text-slate-600 font-semibold">Base Rent</p>
-              <p className="text-lg font-bold text-slate-900 mt-1">Ksh {baseRent.toLocaleString()}</p>
+              <p className="mt-0.5 text-xs font-black text-slate-900">Ksh {baseRent.toLocaleString()}</p>
             </div>
             <div className="border border-green-200 rounded-lg p-3 bg-green-50">
               <p className="text-xs text-green-700 font-semibold">Current Effective Rent</p>
-              <p className="text-lg font-bold text-green-700 mt-1">
+              <p className="text-sm font-bold text-green-700 mt-1">
                 Ksh {currentEffectiveRent.toLocaleString()}
               </p>
             </div>
             <div className="border border-blue-200 rounded-lg p-3 bg-blue-50">
               <p className="text-xs text-blue-700 font-semibold">Scheduled Reviews</p>
-              <p className="text-lg font-bold text-blue-700 mt-1">{pendingRecords.length}</p>
+              <p className="text-sm font-bold text-blue-700 mt-1">{pendingRecords.length}</p>
             </div>
             <div className="border border-orange-200 rounded-lg p-3 bg-orange-50">
               <p className="text-xs text-orange-700 font-semibold">Projected Next Rent</p>
-              <p className="text-lg font-bold text-orange-700 mt-1">Ksh {projectedRent.toLocaleString()}</p>
+              <p className="text-sm font-bold text-orange-700 mt-1">Ksh {projectedRent.toLocaleString()}</p>
             </div>
           </div>
 
           {reviewFormOpen && (
-            <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 mb-5">
+            <div className="border border-slate-200 rounded-lg p-2 bg-slate-50 mb-5">
               <h4 className="font-bold text-slate-900 mb-3">
                 {editingReviewId ? "Edit Review / Escalation" : "New Review / Escalation"}
               </h4>
@@ -2961,7 +2714,7 @@ const TenantStatement = () => {
                   <select
                     value={reviewForm.type}
                     onChange={(e) => setReviewForm((prev) => ({ ...prev, type: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
                   >
                     <option value="percentage">Percentage (%)</option>
                     <option value="amount">Fixed Amount (Ksh)</option>
@@ -2978,7 +2731,7 @@ const TenantStatement = () => {
                     onChange={(e) =>
                       setReviewForm((prev) => ({ ...prev, value: Math.max(0, Number(e.target.value)) }))
                     }
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
                   />
                 </div>
                 <div>
@@ -2986,7 +2739,7 @@ const TenantStatement = () => {
                   <select
                     value={reviewForm.frequency}
                     onChange={(e) => setReviewForm((prev) => ({ ...prev, frequency: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
                   >
                     <option value="yearly">Yearly</option>
                     <option value="biannual">Bi-Annual</option>
@@ -2999,7 +2752,7 @@ const TenantStatement = () => {
                     type="date"
                     value={reviewForm.effectiveDate}
                     onChange={(e) => setReviewForm((prev) => ({ ...prev, effectiveDate: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
                   />
                 </div>
                 <div>
@@ -3015,20 +2768,20 @@ const TenantStatement = () => {
                   rows={2}
                   value={reviewForm.note}
                   onChange={(e) => setReviewForm((prev) => ({ ...prev, note: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                  className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
                   placeholder="Reason for escalation/review"
                 />
               </div>
               <div className="mt-3 flex justify-end gap-2">
                 <button
                   onClick={resetReviewForm}
-                  className="px-4 py-2 rounded border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-100 flex items-center gap-2"
+                  className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-100 flex items-center gap-2"
                 >
                   <FaTimes /> Cancel
                 </button>
                 <button
                   onClick={handleSaveReview}
-                  className={`${MILIK_GREEN} hover:bg-[#0A3127] text-white px-4 py-2 rounded font-semibold text-sm`}
+                  className={`${MILIK_GREEN} hover:bg-[#0A3127] text-white px-3 py-1.5 rounded font-semibold text-sm`}
                 >
                   {editingReviewId ? "Update" : "Save"}
                 </button>
@@ -3039,7 +2792,7 @@ const TenantStatement = () => {
           <div className="overflow-auto border border-slate-200 rounded-lg">
             <table className="w-full min-w-[980px] text-sm">
               <thead>
-                <tr className={`${MILIK_GREEN} text-white text-xs`}>
+                <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white text-[10px]">
                   <th className="px-3 py-2 text-left">Effective Date</th>
                   <th className="px-3 py-2 text-left">Type</th>
                   <th className="px-3 py-2 text-left">Frequency</th>
@@ -3047,7 +2800,7 @@ const TenantStatement = () => {
                   <th className="px-3 py-2 text-right">Resulting Rent</th>
                   <th className="px-3 py-2 text-left">Status</th>
                   <th className="px-3 py-2 text-left">Notes</th>
-                  <th className="px-3 py-2 text-center">Actions</th>
+                  <th className="px-2.5 py-1.5 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -3065,11 +2818,11 @@ const TenantStatement = () => {
                         key={record.id}
                         className={`${index % 2 === 0 ? "bg-white" : "bg-slate-50"} border-b border-slate-200`}
                       >
-                        <td className="px-3 py-2 text-slate-800">
+                        <td className="px-2.5 py-1 text-slate-800">
                           {new Date(record.effectiveDate).toLocaleDateString()}
                         </td>
                         <td className="px-3 py-2 text-slate-800 capitalize">{record.type}</td>
-                        <td className="px-3 py-2 text-slate-800">{formatFrequency(record.frequency)}</td>
+                        <td className="px-2.5 py-1 text-slate-800">{formatFrequency(record.frequency)}</td>
                         <td className="px-3 py-2 text-right text-slate-900 font-semibold">
                           {record.type === "percentage"
                             ? `${Number(record.value)}%`
@@ -3288,40 +3041,40 @@ const TenantStatement = () => {
     );
 
     return (
-      <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
-          <h3 className="text-lg font-bold text-slate-900">Tenant Actions & Receipts</h3>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="px-3 py-2 border-b border-slate-200 bg-slate-50">
+          <h3 className="text-sm font-bold text-slate-900">Tenant Actions & Receipts</h3>
         </div>
 
-        <div className="px-6 py-4 border-b border-slate-200">
+        <div className="px-3 py-2 border-b border-slate-200">
           <h4 className="text-sm font-semibold text-slate-800 mb-4">Quick Actions</h4>
           <div className="flex flex-wrap gap-3">
             <button
               onClick={() => {
                 navigate(`/receipts/${tenantId}`);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded font-semibold text-sm transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded font-semibold text-sm transition-colors"
             >
               <FaMoneyBillWave size={16} />
               View All Receipts
             </button>
             <button
               onClick={() => openReceiptAllocationWorkspace()}
-              className="flex items-center gap-2 px-4 py-2 bg-[#0B3B2E] hover:bg-[#0A3127] text-white rounded font-semibold text-sm transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 bg-[#0B3B2E] hover:bg-[#0A3127] text-white rounded font-semibold text-sm transition-colors"
             >
               <FaLink size={16} />
               Receipt Allocation Workspace
             </button>
             <button
               onClick={handlePrint}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold text-sm transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold text-sm transition-colors"
             >
               <FaPrint size={16} />
               Print Statement
             </button>
             <button
               onClick={() => navigate(`/tenant/${tenantId}/edit`)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-semibold text-sm transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded font-semibold text-sm transition-colors"
             >
               <FaEdit size={16} />
               Edit Tenant
@@ -3329,7 +3082,7 @@ const TenantStatement = () => {
           </div>
         </div>
 
-        <div className="px-6 py-4">
+        <div className="px-3 py-2">
           <h4 className="text-sm font-semibold text-slate-800 mb-4">Recent Receipts</h4>
           {tenantReceipts.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
@@ -3340,13 +3093,13 @@ const TenantStatement = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-200">
-                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Receipt #</th>
-                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Date</th>
-                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Type</th>
-                    <th className="px-4 py-2 text-right font-semibold text-slate-700">Amount</th>
-                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Status</th>
-                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Allocation</th>
-                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Action</th>
+                    <th className="px-3 py-1.5 text-left font-semibold text-slate-700">Receipt #</th>
+                    <th className="px-3 py-1.5 text-left font-semibold text-slate-700">Date</th>
+                    <th className="px-3 py-1.5 text-left font-semibold text-slate-700">Type</th>
+                    <th className="px-3 py-1.5 text-right font-semibold text-slate-700">Amount</th>
+                    <th className="px-3 py-1.5 text-center font-semibold text-slate-700">Status</th>
+                    <th className="px-3 py-1.5 text-center font-semibold text-slate-700">Allocation</th>
+                    <th className="px-3 py-1.5 text-center font-semibold text-slate-700">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3368,22 +3121,22 @@ const TenantStatement = () => {
 
                       return (
                       <tr key={receipt._id} className="border-b border-slate-200 hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono text-slate-700">{receipt.receiptNumber}</td>
-                        <td className="px-4 py-3 text-slate-600">
+                        <td className="px-3 py-2 font-mono text-slate-700">{receipt.receiptNumber}</td>
+                        <td className="px-3 py-2 text-slate-600">
                           {new Date(receipt.paymentDate).toLocaleDateString()}
                         </td>
-                        <td className="px-4 py-3 text-slate-600">{receipt.paymentType}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                        <td className="px-3 py-2 text-slate-600">{receipt.paymentType}</td>
+                        <td className="px-2.5 py-1 text-right font-semibold text-slate-900">
                           Ksh {(receipt.amount || 0).toLocaleString()}
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-2.5 py-1.5 text-center">
                           <span
                             className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${receiptStatusClass}`}
                           >
                             {receiptStatusLabel}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-2.5 py-1.5 text-center">
                           <div className="space-y-2">
                             <button
                               onClick={() => setAllocationTraceTarget({ kind: "receipt", id: safeId(receipt) })}
@@ -3408,7 +3161,7 @@ const TenantStatement = () => {
                             </button>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-2.5 py-1.5 text-center">
                           <button
                             onClick={() => handlePrintReceipt(receipt)}
                             className="text-blue-600 hover:text-blue-800 font-semibold flex items-center justify-center gap-1 mx-auto"
@@ -3452,7 +3205,7 @@ const TenantStatement = () => {
             <p className="text-gray-600 mb-4">The tenant you're looking for doesn't exist.</p>
             <button
               onClick={() => navigate("/tenants")}
-              className={`${MILIK_GREEN} hover:bg-[#0A3127] text-white px-4 py-2 rounded font-semibold flex items-center gap-2 mx-auto`}
+              className={`${MILIK_GREEN} hover:bg-[#0A3127] text-white px-3 py-1.5 rounded font-semibold flex items-center gap-2 mx-auto`}
             >
               <FaArrowLeft />
               Back to Tenants
@@ -3464,9 +3217,9 @@ const TenantStatement = () => {
   }
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
-        <div className="mx-auto" style={{ maxWidth: "95%" }}>
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full min-h-0 w-full flex-col overflow-hidden" style={{ maxWidth: "98%" }}>
           <div className="print-only-header" style={{ display: "none" }}>
             <div style={{ textAlign: "center", paddingBottom: "10px", marginBottom: "10px" }}>
               <h1
@@ -3568,94 +3321,32 @@ const TenantStatement = () => {
             </div>
           </div>
 
-          <div className="sticky top-0 z-10 bg-white rounded-lg shadow-lg border border-slate-200 mb-6 p-4 no-print">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <button
-                  onClick={() => navigate("/tenants")}
-                  className="text-gray-600 hover:text-gray-900 flex items-center gap-2 font-semibold"
-                >
-                  <FaArrowLeft size={16} />
-                  Back to Tenants
-                </button>
+          <div className="sticky top-0 z-30 flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur no-print">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button onClick={() => navigate("/tenants")} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100"><FaArrowLeft size={12} /> Back</button>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                <span className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-orange-700 truncate">{tenant?.tenantName || tenant?.name || "Loading..."}</span>
+                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 truncate">Unit: {resolveTenantUnitNumber(tenant)}</span>
+                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 truncate">Property: {resolveTenantPropertyName(tenant)}</span>
+                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 truncate">Phone: {tenant?.phone || "-"}</span>
               </div>
               {activeTab === "statement" && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => navigate(`/receipts/${tenantId}`)}
-                    className="bg-[#FF8C00] hover:bg-[#e67e00] text-white px-4 py-2 rounded font-semibold flex items-center gap-2 shadow-md"
-                  >
-                    <FaMoneyBillWave size={16} />
-                    Receipts
-                  </button>
-                  <button
-                    onClick={handlePrint}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold flex items-center gap-2 shadow-md"
-                  >
-                    <FaPrint size={16} />
-                    Print
-                  </button>
-                  <button
-                    onClick={handleDownload}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-semibold flex items-center gap-2 shadow-md"
-                  >
-                    <FaDownload size={16} />
-                    Download PDF
-                  </button>
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  <button onClick={() => navigate(`/receipts/${tenantId}`)} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00]"><FaMoneyBillWave size={12} /> Receipts</button>
+                  <button onClick={handlePrint} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"><FaPrint size={12} /> Print</button>
+                  <button onClick={handleDownload} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100"><FaDownload size={12} /> PDF</button>
                 </div>
               )}
             </div>
-
-            <div className="bg-slate-50 rounded-lg px-4 py-3 print-tenant-info">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div>
-                  <p className="text-[10px] font-bold text-gray-600 uppercase tracking-tight">
-                    Tenant Name
-                  </p>
-                  <p className="text-sm font-semibold text-gray-900 mt-0.5 truncate">
-                    {tenant?.tenantName || tenant?.name || "Loading..."}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-gray-600 uppercase tracking-tight">Phone</p>
-                  <p className="text-sm font-semibold text-gray-900 mt-0.5 truncate">{tenant?.phone || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-gray-600 uppercase tracking-tight">Unit</p>
-                  <p className="text-sm font-semibold text-gray-900 mt-0.5 truncate">
-                    {resolveTenantUnitNumber(tenant)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-gray-600 uppercase tracking-tight">Property</p>
-                  <p className="text-sm font-semibold text-gray-900 mt-0.5 truncate">
-                    {resolveTenantPropertyName(tenant)}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="tabs-container bg-white rounded-lg shadow-md border border-slate-200 mt-4 overflow-hidden">
-              <div className="flex border-b border-gray-200 overflow-x-auto">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center justify-center gap-2 px-4 py-4 font-semibold text-sm whitespace-nowrap transition-colors ${
-                      activeTab === tab.id
-                        ? "bg-orange-50 text-orange-600 border-b-2 border-orange-600"
-                        : "text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    <span className="text-lg">{tab.icon}</span>
-                    <span className="hidden md:inline">{tab.label}</span>
-                  </button>
-                ))}
-              </div>
+            <div className="mt-2 flex overflow-x-auto rounded-md border border-slate-200 bg-white">
+              {tabs.map((tab) => (
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 border-r border-slate-200 px-3 text-[11px] font-bold transition-colors ${activeTab === tab.id ? "bg-orange-50 text-orange-700 shadow-inner" : "text-slate-600 hover:bg-slate-50"}`}>
+                  <span className="text-sm">{tab.icon}</span><span>{tab.label}</span>
+                </button>
+              ))}
             </div>
           </div>
-
-          <div className="space-y-4 mt-6">{renderContent()}</div>
+          <div className="mt-2 min-h-0 flex-1 overflow-hidden">{renderContent()}</div>
         </div>
       </div>
 
@@ -3723,10 +3414,43 @@ const TenantStatement = () => {
 
           .statement-tab {
             display: block !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            border: 0 !important;
+            box-shadow: none !important;
           }
 
-          .bg-gray-50 {
-            display: none !important;
+          .statement-tab > .transaction-scroll-area {
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+
+          .statement-tab > .transaction-scroll-area table {
+            width: 100% !important;
+            font-size: 9px !important;
+          }
+
+          .statement-tab > .transaction-scroll-area thead tr {
+            position: static !important;
+            background: #0B3B2E !important;
+            color: #fff !important;
+          }
+
+          .statement-tab > .transaction-scroll-area th,
+          .statement-tab > .transaction-scroll-area td {
+            padding: 4px 5px !important;
+            border: 1px solid #D1D5DB !important;
+          }
+
+          .statement-tab > .transaction-scroll-area + div {
+            display: block !important;
+            border: 1px solid #E5E7EB !important;
+            background: #fff !important;
+            padding: 6px 8px !important;
+            font-size: 9px !important;
           }
 
           .bg-gradient-to-br {
@@ -3761,10 +3485,6 @@ const TenantStatement = () => {
           .transaction-table tr {
             page-break-inside: avoid;
             page-break-after: auto;
-          }
-
-          .flex.items-center.justify-between {
-            display: none !important;
           }
 
           .bg-blue-600, .bg-green-600, .bg-orange-600, .bg-red-600 {

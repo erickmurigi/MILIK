@@ -71,6 +71,8 @@ const isLandlordPayableAccountRecord = (account = {}) => {
   );
 };
 
+const ITEMS_PER_PAGE = 50;
+
 const buildInitialForm = () => ({
   date: new Date().toISOString().split("T")[0],
   journalType: "general_manual_journal",
@@ -116,6 +118,7 @@ const JournalEntries = () => {
   });
 
   const [form, setForm] = useState(buildInitialForm());
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -181,6 +184,21 @@ const JournalEntries = () => {
       { total: 0, draft: 0, posted: 0, reversed: 0 }
     );
   }, [journals]);
+
+
+  const totalPages = Math.max(1, Math.ceil(journals.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentPageRows = journals.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.search, filters.status, filters.journalType, filters.propertyId]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
 
   const propertyOptions = useMemo(
     () =>
@@ -562,62 +580,11 @@ const JournalEntries = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-        <div className="mx-auto flex w-full max-w-[96%] flex-col gap-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Financial Accounts</p>
-                <h1 className="mt-1 flex items-center gap-3 text-2xl font-black text-slate-900">
-                  <FaBookOpen className="text-[#0B3B2E]" /> Journal Entries
-                </h1>
-                <p className="mt-1 text-sm text-slate-500">
-                  Review existing journals, post balanced drafts, and capture controlled same-company internal transfers from a popup form.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                <span className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-50 px-2 py-0.5 font-semibold text-slate-700">
-                  Count: <strong className="text-slate-900">{journals.length}</strong>
-                </span>
-                <button
-                  onClick={loadJournals}
-                  className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  <FaRedoAlt size={10} /> Refresh
-                </button>
-                <button
-                  onClick={openCreateModal}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white hover:bg-[#0A3127]"
-                >
-                  <FaPlus /> New Journal
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Total</p>
-              <p className="mt-2 text-2xl font-black text-slate-900">KES {totals.total.toLocaleString()}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Draft</p>
-              <p className="mt-2 text-2xl font-black text-slate-900">KES {totals.draft.toLocaleString()}</p>
-            </div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Posted</p>
-              <p className="mt-2 text-2xl font-black text-emerald-800">KES {totals.posted.toLocaleString()}</p>
-            </div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-700">Reversed</p>
-              <p className="mt-2 text-2xl font-black text-amber-800">KES {totals.reversed.toLocaleString()}</p>
-            </div>
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[260px] flex-1">
                   <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
@@ -625,13 +592,13 @@ const JournalEntries = () => {
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                     placeholder="Search journal no, reference, narration"
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] py-1.5 pl-9 pr-3 text-xs shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="all">All Statuses</option>
                   <option value="draft">Draft</option>
@@ -641,7 +608,7 @@ const JournalEntries = () => {
                 <select
                   value={filters.journalType}
                   onChange={(e) => setFilters((prev) => ({ ...prev, journalType: e.target.value }))}
-                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="all">All Journal Types</option>
                   {JOURNAL_TYPES.map((type) => (
@@ -653,7 +620,7 @@ const JournalEntries = () => {
                 <select
                   value={filters.propertyId}
                   onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                  className="rounded-lg border border-slate-300 bg-[#DDEFE1] px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="all">All Properties</option>
                   {propertyOptions.map((item) => (
@@ -664,27 +631,29 @@ const JournalEntries = () => {
                 </select>
                 <button
                   onClick={() => setFilters({ search: "", status: "all", journalType: "all", propertyId: "all" })}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
                 >
                   <FaFilter /> Reset
                 </button>
+                <button onClick={loadJournals} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100"><FaRedoAlt /> Refresh</button>
+                <button onClick={openCreateModal} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00]"><FaPlus /> New Journal</button>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1440px] text-sm">
+              <table className="w-full min-w-[1440px] text-xs">
                 <thead>
                   <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Journal</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Property</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Debit</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Credit</th>
-                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Amount</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Status</th>
-                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Actions</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Journal</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Date</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Type</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Property</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Debit</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Credit</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Amount</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Status</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -697,7 +666,7 @@ const JournalEntries = () => {
                       <td colSpan={10} className="px-4 py-10 text-center text-slate-500">No journals found.</td>
                     </tr>
                   ) : (
-                    journals.map((journal, index) => {
+                    currentPageRows.map((journal, index) => {
                       const busyPost = rowActionKey === `${journal._id}:post`;
                       const busyReverse = rowActionKey === `${journal._id}:reverse`;
                       const busyDelete = rowActionKey === `${journal._id}:delete`;
@@ -707,23 +676,23 @@ const JournalEntries = () => {
                           key={journal._id}
                           className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/40"} hover:bg-slate-50`}
                         >
-                          <td className="px-4 py-3">
+                          <td className="px-3 py-1.5">
                             <div className="font-black text-slate-900">{journal.journalNo}</div>
                             <div className="text-xs text-slate-500">{journal.reference || journal.narration || "No reference"}</div>
                           </td>
-                          <td className="px-4 py-3 text-slate-700">{journal.date ? new Date(journal.date).toLocaleDateString() : "-"}</td>
-                          <td className="px-4 py-3 text-slate-700">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
-                          <td className="px-4 py-3 text-slate-700">{journal.property?.propertyName || journal.property?.name || "N/A"}</td>
-                          <td className="px-4 py-3 text-slate-700">{journal.landlord?.landlordName || journal.landlord?.name || "-"}</td>
-                          <td className="px-4 py-3 text-slate-700">{journal.debitAccount?.code} - {journal.debitAccount?.name}</td>
-                          <td className="px-4 py-3 text-slate-700">{journal.creditAccount?.code} - {journal.creditAccount?.name}</td>
-                          <td className="px-4 py-3 text-right font-black text-slate-900">KES {Number(journal.amount || 0).toLocaleString()}</td>
-                          <td className="px-4 py-3">
+                          <td className="px-3 py-1.5 text-slate-700">{journal.date ? new Date(journal.date).toLocaleDateString() : "-"}</td>
+                          <td className="px-3 py-1.5 text-slate-700">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
+                          <td className="px-3 py-1.5 text-slate-700">{journal.property?.propertyName || journal.property?.name || "N/A"}</td>
+                          <td className="px-3 py-1.5 text-slate-700">{journal.landlord?.landlordName || journal.landlord?.name || "-"}</td>
+                          <td className="px-3 py-1.5 text-slate-700">{journal.debitAccount?.code} - {journal.debitAccount?.name}</td>
+                          <td className="px-3 py-1.5 text-slate-700">{journal.creditAccount?.code} - {journal.creditAccount?.name}</td>
+                          <td className="px-3 py-1.5 text-right font-black text-slate-900">KES {Number(journal.amount || 0).toLocaleString()}</td>
+                          <td className="px-3 py-1.5">
                             <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>
                               {journal.status}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right">
+                          <td className="px-3 py-1.5 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-2">
                               {journal.status === "draft" && (
                                 <>
@@ -768,6 +737,10 @@ const JournalEntries = () => {
                 </tbody>
               </table>
             </div>
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+              <div className="font-semibold">Showing <span className="font-bold text-slate-900">{journals.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, journals.length)}</span> of <span className="font-bold text-slate-900">{journals.length}</span> journal(s)</div>
+              <div className="flex items-center gap-2"><span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
+            </div>
           </div>
         </div>
       </div>
@@ -779,7 +752,7 @@ const JournalEntries = () => {
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Financial Accounts</p>
                 <h3 className="text-xl font-black">{editingJournalId ? "Edit Draft Journal" : "Create Journal Entry"}</h3>
-                <p className="mt-1 text-sm text-emerald-50">
+                <p className="mt-1 text-xs text-emerald-50">
                   {editingJournalId
                     ? "Only draft journals can be edited directly. Posted journals must be reversed to preserve audit integrity."
                     : "Draft first, then review and post from the journal list."}
@@ -800,7 +773,7 @@ const JournalEntries = () => {
                   <select
                     value={form.journalType}
                     onChange={(e) => applyJournalTypeDefaults(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   >
                     {JOURNAL_TYPES.map((type) => (
                       <option key={type.value} value={type.value}>
@@ -808,26 +781,26 @@ const JournalEntries = () => {
                       </option>
                     ))}
                   </select>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">{activeJournalTypePresentation.description}</p>
+                  <p className="mt-3 text-xs leading-6 text-slate-600">{activeJournalTypePresentation.description}</p>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="block">
-                    <span className="text-sm font-bold text-slate-700">Journal Date</span>
+                    <span className="text-xs font-bold text-slate-700">Journal Date</span>
                     <input
                       type="date"
                       value={form.date}
                       onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                     />
                   </label>
 
                   <label className="block">
-                    <span className="text-sm font-bold text-slate-700">Property</span>
+                    <span className="text-xs font-bold text-slate-700">Property</span>
                     <select
                       value={form.property}
                       onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                     >
                       <option value="">Select property</option>
                       {propertyOptions.map((item) => (
@@ -846,13 +819,13 @@ const JournalEntries = () => {
                   </label>
 
                   {isInternalTransferJournal ? (
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 md:col-span-2">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 md:col-span-2">
                       {isLandlordWorkspace
                         ? "Owner selection is not needed for internal ledger transfers. MILIK derives the owner automatically from the selected property's accounting context when the balanced ledger entries are posted."
                         : "Landlord selection is not needed for internal ledger transfers. MILIK derives the landlord automatically from the selected property's accounting context when the balanced ledger entries are posted."}
                     </div>
                   ) : isLandlordWorkspace ? (
-                    <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900 md:col-span-2">
+                    <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 text-xs text-orange-900 md:col-span-2">
                       <p className="font-black uppercase tracking-[0.16em] text-orange-700">Owner Context</p>
                       <p className="mt-1 leading-6">
                         This company is operating as the owner, so MILIK derives the owner ledger context from the selected property automatically. No separate landlord picker is required here.
@@ -860,11 +833,11 @@ const JournalEntries = () => {
                     </div>
                   ) : (
                     <label className="block md:col-span-2">
-                      <span className="text-sm font-bold text-slate-700">Landlord</span>
+                      <span className="text-xs font-bold text-slate-700">Landlord</span>
                       <select
                         value={form.landlord}
                         onChange={(e) => setForm((prev) => ({ ...prev, landlord: e.target.value }))}
-                        className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                        className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                       >
                         <option value="">Select landlord {isLandlordJournal ? "" : "(optional)"}</option>
                         {landlordOptions.map((item) => (
@@ -884,11 +857,11 @@ const JournalEntries = () => {
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="block">
-                    <span className="text-sm font-bold text-slate-700">Debit Account</span>
+                    <span className="text-xs font-bold text-slate-700">Debit Account</span>
                     <select
                       value={form.debitAccount}
                       onChange={(e) => setForm((prev) => ({ ...prev, debitAccount: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                     >
                       <option value="">Select debit account</option>
                       {accountOptions.map((item) => (
@@ -900,11 +873,11 @@ const JournalEntries = () => {
                   </label>
 
                   <label className="block">
-                    <span className="text-sm font-bold text-slate-700">Credit Account</span>
+                    <span className="text-xs font-bold text-slate-700">Credit Account</span>
                     <select
                       value={form.creditAccount}
                       onChange={(e) => setForm((prev) => ({ ...prev, creditAccount: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                     >
                       <option value="">Select credit account</option>
                       {accountOptions.map((item) => (
@@ -919,36 +892,36 @@ const JournalEntries = () => {
 
               <div className="space-y-4">
                 <label className="block">
-                  <span className="text-sm font-bold text-slate-700">Amount</span>
+                  <span className="text-xs font-bold text-slate-700">Amount</span>
                   <input
                     type="number"
                     min="0"
                     value={form.amount}
                     onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-bold text-slate-700">Reference</span>
+                  <span className="text-xs font-bold text-slate-700">Reference</span>
                   <input
                     value={form.reference}
                     onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-bold text-slate-700">Narration</span>
+                  <span className="text-xs font-bold text-slate-700">Narration</span>
                   <textarea
                     rows={5}
                     value={form.narration}
                     onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
 
-                <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700">
                   <input
                     type="checkbox"
                     checked={isInternalTransferJournal ? false : isForcedLandlordStatementJournal ? true : form.includeInLandlordStatement}
@@ -973,7 +946,7 @@ const JournalEntries = () => {
                   </span>
                 </label>
 
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
                   <p className="font-black">Control note</p>
                   <p className="mt-1 leading-6">{journalStructureHint}</p>
                   <p className="mt-2 text-xs font-semibold text-amber-800">
@@ -986,14 +959,14 @@ const JournalEntries = () => {
             <div className="sticky bottom-0 z-20 flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
               <button
                 onClick={closeCreateModal}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700"
+                className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-black text-slate-700"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveJournal}
                 disabled={!(editingJournalId ? canUpdateJournal : canCreateJournal) || saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white disabled:opacity-60"
               >
                 <FaPlus /> {saving ? "Saving..." : editingJournalId ? "Update Draft Journal" : "Save Draft Journal"}
               </button>

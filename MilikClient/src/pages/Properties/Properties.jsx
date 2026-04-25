@@ -32,6 +32,7 @@ import PropertyImportModal from "../../components/Modals/PropertyImportModal";
 import { downloadPropertiesTemplate, exportPropertiesToExcel } from "../../utils/excelTemplates";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
+import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -576,11 +577,11 @@ const Properties = () => {
       <div className="flex flex-col h-full min-h-0 p-0 bg-white overflow-hidden">
         {/* Filters Card */}
         <div className="flex-shrink-0 sticky top-0 z-30 bg-white pt-2 px-2">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-2">
+          <div className={LISTING_UI.toolbarCard}>
             {/* Row 1 */}
             <div className="flex flex-wrap items-center gap-2">
               <select
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-[#DDEFE1] text-gray-800 hover:bg-white transition-colors"
+                className={LISTING_UI.filterSelect}
                 value={draftFilters.status}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}
               >
@@ -591,7 +592,7 @@ const Properties = () => {
               </select>
 
               <select
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-[#DDEFE1] text-gray-800 hover:bg-white transition-colors"
+                className={LISTING_UI.filterSelect}
                 value={draftFilters.zone}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, zone: e.target.value }))}
               >
@@ -605,7 +606,7 @@ const Properties = () => {
               </select>
 
               <select
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-[#DDEFE1] text-gray-800 hover:bg-white transition-colors"
+                className={LISTING_UI.filterSelect}
                 value={draftFilters.category}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, category: e.target.value }))}
               >
@@ -771,30 +772,30 @@ const Properties = () => {
             <div className="mt-2 grid grid-cols-2 md:grid-cols-5 gap-2">
               <input
                 value={draftFilters.code}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, code: e.target.value }))}
+                onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))}
                 onKeyDown={onFilterEnter}
                 placeholder="Property Code"
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className={LISTING_UI.filterInput}
               />
               <input
                 value={draftFilters.name}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, name: e.target.value }))}
+                onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
                 onKeyDown={onFilterEnter}
                 placeholder="Property Name"
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className={LISTING_UI.filterInput}
               />
               <input
                 value={draftFilters.lr}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, lr: e.target.value }))}
                 onKeyDown={onFilterEnter}
                 placeholder="LR Number"
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className={LISTING_UI.filterInput}
               />
               <select
                 value={draftFilters.landlord}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, landlord: e.target.value }))}
                 onKeyDown={onFilterEnter}
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className={LISTING_UI.filterInput}
               >
                 <option value="">All Landlords</option>
                 {landlords && landlords.length > 0 ? (
@@ -809,10 +810,10 @@ const Properties = () => {
               </select>
               <input
                 value={draftFilters.location}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, location: e.target.value }))}
+                onChange={(e) => setDraftFilters((p) => ({ ...p, location: normalizeUppercaseInput(e.target.value) }))}
                 onKeyDown={onFilterEnter}
                 placeholder="Location"
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className={LISTING_UI.filterInput}
               />
             </div>
           </div>
@@ -898,10 +899,10 @@ const Properties = () => {
                                 </button>
                               </td>
 
-                              <td className="px-3 py-1 border border-gray-200 align-top truncate">{property.propertyCode}</td>
-                              <td className="px-3 py-1 border border-gray-200 align-top truncate">{property.propertyName}</td>
+                              <td className="px-3 py-1 border border-gray-200 align-top truncate">{toListingCaps(property.propertyCode)}</td>
+                              <td className="px-3 py-1 border border-gray-200 align-top truncate">{toListingCaps(property.propertyName)}</td>
                               <td className="px-3 py-1 border border-gray-200 align-top truncate">
-                                {getPrimaryLandlord(property.landlords)}
+                                {toListingCaps(getPrimaryLandlord(property.landlords))}
                               </td>
 
                               <td className="px-3 py-1 border border-gray-200 align-top">
@@ -915,10 +916,10 @@ const Properties = () => {
                               </td>
 
                               <td className="px-3 py-1 border border-gray-200 align-top truncate">
-                                {property.zoneRegion || "N/A"}
+                                {toListingCaps(property.zoneRegion || "N/A")}
                               </td>
 
-                              <td className="px-3 py-1 border border-gray-200 align-top truncate">{getFullAddress(property)}</td>
+                              <td className="px-3 py-1 border border-gray-200 align-top truncate">{toListingCaps(getFullAddress(property))}</td>
 
                               <td className="px-3 py-1 text-center border border-gray-200 align-top">
                                 {property.totalUnits || 0}

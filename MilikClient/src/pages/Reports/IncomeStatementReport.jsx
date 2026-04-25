@@ -541,9 +541,9 @@ const IncomeStatementReport = () => {
   const renderSection = (title, sections, total, accentClass = "text-gray-900") => (
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <div className={`${MILIK_GREEN_BG} text-white px-6 py-4`}>
-        <h3 className="text-lg font-extrabold tracking-wide">{title}</h3>
+        <h3 className="text-sm font-extrabold tracking-wide">{title}</h3>
       </div>
-      <div className="p-6 space-y-6">
+      <div className="p-3 space-y-6">
         {sections.length ? (
           sections.map((section) => (
             <div key={section.label}>
@@ -576,49 +576,24 @@ const IncomeStatementReport = () => {
   );
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-gray-100 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-6">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div>
-                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-gray-900 flex items-center gap-3">
-                  <FaFileInvoice style={{ color: MILIK_GREEN }} />
-                  Income Statement
-                </h1>
-                <p className="text-gray-700 mt-1 font-medium">
-                  Property manager income and operating expenses only.
-                </p>
-              </div>
-              <div className="flex gap-3 print:hidden flex-wrap">
-                <button
-                  onClick={loadReport}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition"
-                >
-                  <FaSyncAlt /> Refresh
-                </button>
-                <button
-                  onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition"
-                >
-                  <FaFileDownload /> Export CSV
-                </button>
-                <button
-                  onClick={handlePrintPDF} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"}
-                  className={`flex items-center gap-2 px-4 py-2 ${MILIK_GREEN_BG} hover:bg-[#0A3127] text-white rounded-lg font-bold transition`}
-                >
-                  <FaFilePdf /> Print PDF
-                </button>
-              </div>
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-100 p-2">
+        <div className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
+          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur print:hidden">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto_auto_auto]">
+              <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]" />
+              <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]" />
+              <button onClick={loadReport} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700"><FaSyncAlt /> Refresh</button>
+              <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"><FaFileDownload /> Export CSV</button>
+              <button onClick={handlePrintPDF} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:opacity-50 ${MILIK_GREEN_BG} hover:bg-[#0A3127]`}><FaFilePdf /> Print PDF</button>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Business: <span className="text-slate-900">{businessName}</span></span>
+              <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Basis: <span className="text-slate-900">{report.reportBasis || "Property manager income and operating expenses only"}</span></span>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6 mb-6 print:hidden">
-            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <FaFilter style={{ color: MILIK_ORANGE }} />
-              Filters
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-2">Start Date</label>
                 <input
@@ -648,27 +623,26 @@ const IncomeStatementReport = () => {
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-white rounded-lg shadow p-6">
+          <div className="grid flex-shrink-0 grid-cols-1 gap-2 md:grid-cols-3">
+            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
               <div className="text-sm font-bold text-gray-700 mb-1">Total Income</div>
-              <div className="text-4xl font-extrabold tracking-tight text-green-700">
+              <div className="text-sm font-black tracking-tight text-green-700">
                 KES {formatMoney(report.summary?.totalIncome)}
               </div>
             </div>
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
               <div className="text-sm font-bold text-gray-700 mb-1">Total Expenses</div>
-              <div className="text-4xl font-extrabold tracking-tight text-red-600">
+              <div className="text-sm font-black tracking-tight text-red-600">
                 KES {formatMoney(report.summary?.totalExpenses)}
               </div>
             </div>
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
               <div className="text-sm font-bold text-gray-700 mb-1">
                 {report.summary?.resultLabel || "Net Profit"}
               </div>
               <div
-                className="text-4xl font-extrabold tracking-tight"
+                className="text-sm font-black tracking-tight"
                 style={{ color: Number(report.summary?.netProfit || 0) >= 0 ? MILIK_GREEN : MILIK_RED }}
               >
                 KES {formatMoney(report.summary?.netProfit)}
@@ -681,17 +655,17 @@ const IncomeStatementReport = () => {
               Loading income statement...
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-auto lg:grid-cols-2">
               {renderSection("Income", report.income?.sections || [], report.summary?.totalIncome || 0, "text-green-700")}
               {renderSection("Expenses", report.expenses?.sections || [], report.summary?.totalExpenses || 0, "text-red-600")}
             </div>
           )}
 
-          <div className="bg-white rounded-lg shadow overflow-hidden mb-6">
+          <div className="flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className={`${MILIK_GREEN_BG} text-white px-6 py-4`}>
-              <h3 className="text-lg font-extrabold tracking-wide">Summary</h3>
+              <h3 className="text-sm font-extrabold tracking-wide">Summary</h3>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-3 space-y-4">
               <div className="flex items-center justify-between text-base">
                 <span className="font-bold text-gray-800">Total Income</span>
                 <span className="font-extrabold text-green-700">KES {formatMoney(report.summary?.totalIncome)}</span>
@@ -714,11 +688,11 @@ const IncomeStatementReport = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className={`${MILIK_GREEN_BG} text-white px-6 py-4`}>
-              <h3 className="text-lg font-extrabold tracking-wide">Excluded From This Report</h3>
+              <h3 className="text-sm font-extrabold tracking-wide">Excluded From This Report</h3>
             </div>
-            <div className="p-6">
+            <div className="p-3">
               <ul className="space-y-2 text-sm font-medium text-gray-800 list-disc pl-5">
                 {(report.exclusions || []).map((item) => (
                   <li key={item}>{item}</li>

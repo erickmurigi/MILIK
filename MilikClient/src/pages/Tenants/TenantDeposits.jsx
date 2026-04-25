@@ -449,35 +449,7 @@ const TenantDeposits = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#0B3B2E]">Tenant Deposits</p>
-                <h1 className="mt-0.5 text-lg font-black leading-tight text-slate-900">Tenants Deposits</h1>
-                <p className="mt-0.5 text-[11px] leading-tight text-slate-500">
-                  {isLandlordWorkspace
-                    ? "Tighter owner-side deposit monitoring with invoice-style filters, compact actions, and a stable table layout."
-                    : "Tighter deposit monitoring with invoice-style filters, compact actions, and a stable table layout."}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={loadInvoices}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
-                >
-                  <FaRedoAlt /> Refresh
-                </button>
-                <button
-                  onClick={() => navigate("/receipts")}
-                  className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-black text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaReceipt /> Deposit Receipts
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Configured Deposits</p>
               <p className="text-sm font-black leading-tight text-slate-900">KES {totals.configured.toLocaleString()}</p>
@@ -497,7 +469,7 @@ const TenantDeposits = () => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-2 py-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[240px] flex-1">
                   <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
@@ -506,14 +478,14 @@ const TenantDeposits = () => {
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                     placeholder="Tenant, property, or unit"
-                    className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[11px] shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[11px] shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
                   />
                 </div>
 
                 <select
                   value={filters.propertyId}
                   onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                  className="h-8 rounded-md border border-slate-300 bg-[#DDEFE1] px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
                 >
                   <option value="all">All properties</option>
                   {activeProperties.map((property) => (
@@ -526,7 +498,7 @@ const TenantDeposits = () => {
                 <select
                   value={filters.holder}
                   onChange={(e) => setFilters((prev) => ({ ...prev, holder: e.target.value }))}
-                  className="h-8 rounded-md border border-slate-300 bg-[#DDEFE1] px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
                 >
                   <option value="all">All holders</option>
                   {!isLandlordWorkspace && <option value="Management Company">Management Company</option>}
@@ -536,7 +508,7 @@ const TenantDeposits = () => {
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="h-8 rounded-md border border-slate-300 bg-[#DDEFE1] px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
                 >
                   <option value="all">All statuses</option>
                   <option value="not configured">Not configured</option>
@@ -553,7 +525,21 @@ const TenantDeposits = () => {
                   <FaRedoAlt /> Reset
                 </button>
 
-                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 shadow-sm">
+                <button
+                  onClick={loadInvoices}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+                >
+                  <FaRedoAlt /> Refresh
+                </button>
+
+                <button
+                  onClick={() => navigate("/receipts")}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-black text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                >
+                  <FaReceipt /> Deposit Receipts
+                </button>
+
+                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 shadow-sm">
                   Rows
                   <span className="text-sm text-slate-900">{depositRows.length}</span>
                 </div>
@@ -561,19 +547,19 @@ const TenantDeposits = () => {
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1280px] text-sm">
+              <table className="w-full min-w-[1280px] table-fixed text-[11px]">
                 <thead>
                   <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Tenant</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Property / Unit</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">{holderColumnLabel}</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Deposit Invoice</th>
-                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Configured</th>
-                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Billed</th>
-                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Paid</th>
-                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Outstanding</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Status</th>
-                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Actions</th>
+                    <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.12em]">Tenant</th>
+                    <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.12em]">Property / Unit</th>
+                    <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.12em]">{holderColumnLabel}</th>
+                    <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.12em]">Deposit Invoice</th>
+                    <th className="px-2 py-1.5 text-right text-[10px] font-black uppercase tracking-[0.12em]">Configured</th>
+                    <th className="px-2 py-1.5 text-right text-[10px] font-black uppercase tracking-[0.12em]">Billed</th>
+                    <th className="px-2 py-1.5 text-right text-[10px] font-black uppercase tracking-[0.12em]">Paid</th>
+                    <th className="px-2 py-1.5 text-right text-[10px] font-black uppercase tracking-[0.12em]">Outstanding</th>
+                    <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.12em]">Status</th>
+                    <th className="px-2 py-1.5 text-right text-[10px] font-black uppercase tracking-[0.12em]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -586,36 +572,36 @@ const TenantDeposits = () => {
                   ) : (
                     paginatedRows.map((row, index) => (
                       <tr key={row.tenantId} className={`border-t border-slate-100 align-top ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-slate-50`}>
-                        <td className="px-4 py-3">
+                        <td className="px-2 py-1.5">
                           <div className="font-semibold text-slate-900">{row.tenantName}</div>
                           <div className="text-xs text-slate-500">Tenant ID: {row.tenantId}</div>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-2 py-1.5">
                           <div className="font-semibold text-slate-900">{row.propertyName}</div>
                           <div className="text-xs text-slate-500">Unit: {row.unitName}</div>
                         </td>
-                        <td className="px-4 py-3 text-slate-700">{row.depositHolder}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-2 py-1.5 text-slate-700">{row.depositHolder}</td>
+                        <td className="px-2 py-1.5">
                           <div className="font-semibold text-slate-900">{row.latestInvoiceNumber}</div>
                           <div className="text-xs text-slate-500">{row.latestInvoiceDescription}</div>
                           <div className="text-[11px] text-slate-400">{row.latestInvoiceDate ? new Date(row.latestInvoiceDate).toLocaleDateString() : "Not billed yet"}</div>
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-900">KES {row.depositAmount.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right text-slate-700">KES {row.billed.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right text-slate-700">KES {row.paid.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-900">KES {row.outstanding.toLocaleString()}</td>
-                        <td className="px-4 py-3">
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{row.status}</span>
+                        <td className="px-2 py-1.5 text-right font-semibold text-slate-900">KES {row.depositAmount.toLocaleString()}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-700">KES {row.billed.toLocaleString()}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-700">KES {row.paid.toLocaleString()}</td>
+                        <td className="px-2 py-1.5 text-right font-semibold text-slate-900">KES {row.outstanding.toLocaleString()}</td>
+                        <td className="px-2 py-1.5">
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-700">{row.status}</span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-2 py-1.5">
                           <div className="flex flex-wrap justify-end gap-2">
-                            <button onClick={() => navigate(`/tenant/${row.tenantId}/statement`)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-100">
+                            <button onClick={() => navigate(`/tenant/${row.tenantId}/statement`)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-black text-slate-700 transition hover:bg-slate-100">
                               <FaFileInvoiceDollar /> Statement
                             </button>
-                            <button onClick={() => navigate(`/receipts/new?tenant=${row.tenantId}`)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-100">
+                            <button onClick={() => navigate(`/receipts/new?tenant=${row.tenantId}`)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-black text-slate-700 transition hover:bg-slate-100">
                               <FaReceipt /> Receipt
                             </button>
-                            <button onClick={() => openBillDepositModal(row)} disabled={!row.canBill} className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-black text-white transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:cursor-not-allowed disabled:opacity-50`}>
+                            <button onClick={() => openBillDepositModal(row)} disabled={!row.canBill} className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-black text-white transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:cursor-not-allowed disabled:opacity-50`}>
                               <FaPlus /> Bill Deposit
                             </button>
                           </div>
@@ -626,7 +612,7 @@ const TenantDeposits = () => {
                 </tbody>
               </table>
             </div>
-            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-2 py-1.5">
               <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
                 <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, depositRows.length)}</span> of <span className="font-bold text-slate-900">{depositRows.length}</span> tenant deposit rows</div>
                 <div className="flex items-center gap-2">
@@ -684,7 +670,7 @@ const TenantDeposits = () => {
                     step="0.01"
                     value={billingForm.amount}
                     onChange={(e) => setBillingForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                   />
                 </div>
                 <div>
@@ -693,7 +679,7 @@ const TenantDeposits = () => {
                     type="date"
                     value={billingForm.invoiceDate}
                     onChange={(e) => setBillingForm((prev) => ({ ...prev, invoiceDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                   />
                 </div>
                 <div>
@@ -702,7 +688,7 @@ const TenantDeposits = () => {
                     type="date"
                     value={billingForm.dueDate}
                     onChange={(e) => setBillingForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -711,7 +697,7 @@ const TenantDeposits = () => {
                     value={billingForm.description}
                     onChange={(e) => setBillingForm((prev) => ({ ...prev, description: e.target.value }))}
                     rows="3"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                   />
                 </div>
               </div>
@@ -721,7 +707,7 @@ const TenantDeposits = () => {
               <button
                 type="button"
                 onClick={() => setBillingModal({ open: false, row: null })}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                className="px-2 py-1.5 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100"
               >
                 Cancel
               </button>
@@ -729,7 +715,7 @@ const TenantDeposits = () => {
                 type="button"
                 onClick={handleCreateDepositInvoice}
                 disabled={isSaving}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-60`}
+                className={`inline-flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-60`}
               >
                 <FaMoneyBillWave /> {isSaving ? "Saving..." : "Create Deposit Invoice"}
               </button>

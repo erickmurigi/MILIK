@@ -546,54 +546,8 @@ const LandlordStandingOrders = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Landlord Payments</p>
-                <h1 className="mt-0.5 text-xl font-black text-slate-900">Landlord Standing Orders</h1>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Manage recurring landlord deductions safely. Runs now respect active status, keep cashbook and payout destination details, update ledger balances, and allow controlled reversal while statement periods are still open.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={handleRunSelected}
-                  disabled={bulkRunning || selectedIds.length === 0}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-300 bg-indigo-50 px-3 text-[11px] font-bold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <FaCheck /> {bulkRunning ? "Running..." : `Run Selected${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
-                </button>
-                <button
-                  onClick={openCreate}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"
-                >
-                  <FaPlus /> Add Standing Order
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Orders</p>
-              <p className="mt-1 text-base font-black text-slate-900">{stats.total}</p>
-            </div>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Active</p>
-              <p className="mt-1 text-base font-black text-emerald-700">{stats.active}</p>
-            </div>
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Processed Value</p>
-              <p className="mt-1 text-base font-black text-blue-700">{money(stats.processed)}</p>
-            </div>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Pending Eligible Periods</p>
-              <p className="mt-1 text-base font-black text-amber-700">{stats.pendingPeriods}</p>
-            </div>
-          </div>
-
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-2 shadow-sm backdrop-blur">
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
                 <div className="relative xl:col-span-2">
                   <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
@@ -601,14 +555,14 @@ const LandlordStandingOrders = () => {
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                     placeholder="Search order number, title, narration"
-                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 pl-9 text-xs"
+                    className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-3 py-1.5 pl-9 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]"
                   />
                 </div>
                 <div>
                   <select
                     value={filters.landlordId}
                     onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))}
-                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs"
+                    className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]"
                   >
                     <option value="all">All Landlords</option>
                     {activeLandlords.map((landlord) => (
@@ -622,7 +576,7 @@ const LandlordStandingOrders = () => {
                   <select
                     value={filters.propertyId}
                     onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs"
+                    className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]"
                   >
                     <option value="all">All Properties</option>
                     {activeProperties.map((property) => (
@@ -637,7 +591,7 @@ const LandlordStandingOrders = () => {
                   <select
                     value={filters.status}
                     onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                    className="h-8 w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs"
+                    className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]"
                   >
                     <option value="all">All Statuses</option>
                     <option value="draft">Draft</option>
@@ -648,7 +602,13 @@ const LandlordStandingOrders = () => {
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Orders: <span className="text-slate-900">{stats.total}</span></span>
+                <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-700">Active: {stats.active}</span>
+                <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-blue-700">Processed: {money(stats.processed)}</span>
+                <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">Pending: {stats.pendingPeriods}</span>
+              </div>
+              <div className="mt-2 flex flex-wrap justify-end gap-2">
                 <button
                   onClick={handleRunSelected}
                   disabled={bulkRunning || selectedIds.length === 0}

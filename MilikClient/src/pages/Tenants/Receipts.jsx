@@ -1,3 +1,4 @@
+import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -1599,19 +1600,37 @@ const visibleReceiptIds = useMemo(
     <DashboardLayout>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
         <div className="mx-auto" style={{ maxWidth: "96%" }}>
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-2.5 mb-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <button
-                onClick={() => navigate(backPath)}
-                className="text-slate-600 hover:text-slate-900 flex items-center gap-2 font-semibold text-xs"
-              >
-                <FaArrowLeft /> {isLandlordReceiptView ? "Back to Landlords" : "Back to Tenants"}
-              </button>
+          <div className="sticky top-0 z-30 mb-2 rounded-lg border border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
+            <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-[180px]">
+                <button
+                  onClick={() => navigate(backPath)}
+                  className="mb-1 flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                >
+                  <FaArrowLeft /> {isLandlordReceiptView ? "Back to Landlords" : "Back to Tenants"}
+                </button>
+                <div className="text-sm font-black tracking-tight text-slate-900">{pageLabel}</div>
+              </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
+                  <span className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 font-semibold text-slate-700">
+                    Receipts: <strong className="text-slate-900">{stats.count}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded border border-green-300 bg-green-50 px-2 py-0.5 font-semibold text-green-700">
+                    Total: <strong>Ksh {stats.total.toLocaleString()}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2 py-0.5 font-semibold text-blue-700">
+                    Confirmed: <strong>{stats.confirmedCount}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded border border-orange-300 bg-orange-50 px-2 py-0.5 font-semibold text-orange-700">
+                    Pending: <strong>{stats.pendingCount}</strong>
+                  </span>
+                </div>
+
                 <button
                   onClick={loadData}
-                  className="px-3 py-1 text-xs border border-slate-300 rounded-md hover:bg-slate-50 font-semibold flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold hover:bg-slate-50"
                 >
                   <FaRedoAlt /> Refresh
                 </button>
@@ -1619,49 +1638,29 @@ const visibleReceiptIds = useMemo(
                   onClick={openCreateForm}
                   disabled={!canCreateReceipt}
                   title={canCreateReceipt ? pageCreateLabel : "You do not have permission to record receipts"}
-                  className={`px-3 py-1 text-xs text-white rounded-md font-semibold flex items-center gap-2 ${canCreateReceipt ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}
+                  className={`flex items-center gap-2 rounded-md px-3 py-1 text-xs font-semibold text-white ${canCreateReceipt ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}
                 >
                   <FaPlus /> {pageCreateLabel}
                 </button>
               </div>
             </div>
 
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <div className="text-sm font-black tracking-tight text-slate-900">{pageLabel}</div>
-              <div className="flex flex-wrap items-center gap-2 text-[11px]">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-slate-300 bg-slate-50 font-semibold text-slate-700">
-                Receipts: <strong className="text-slate-900">{stats.count}</strong>
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-green-300 bg-green-50 font-semibold text-green-700">
-                Total: <strong>Ksh {stats.total.toLocaleString()}</strong>
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-blue-300 bg-blue-50 font-semibold text-blue-700">
-                Confirmed: <strong>{stats.confirmedCount}</strong>
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-orange-300 bg-orange-50 font-semibold text-orange-700">
-                Pending: <strong>{stats.pendingCount}</strong>
-              </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-4">
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
-              <div className="md:col-span-2 relative">
-                <FaSearch className="absolute left-3 top-2.5 text-slate-400 text-xs" />
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
+              <div className="relative md:col-span-2">
+                <FaSearch className="absolute left-3 top-2.5 text-xs text-slate-400" />
                 <input
                   value={draftFilters.search}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(e.target.value) }))}
                   placeholder="Search tenant, receipt, reference"
-                  className="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-md"
+                  className="w-full rounded-md border border-slate-300 py-2 pl-8 pr-3 text-xs uppercase"
                 />
               </div>
 
               <input
                 value={draftFilters.tenantSearch}
-                onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: e.target.value }))}
+                onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))}
                 placeholder="Filter tenant by name"
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
               />
 
               <select
@@ -1673,7 +1672,7 @@ const visibleReceiptIds = useMemo(
                     unit: "all",
                   }))
                 }
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
               >
                 {propertyOptions.map((property) => (
                   <option key={property} value={property}>
@@ -1685,7 +1684,7 @@ const visibleReceiptIds = useMemo(
               <select
                 value={draftFilters.unit}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
               >
                 {unitOptions.map((unit) => (
                   <option key={unit} value={unit}>
@@ -1697,7 +1696,7 @@ const visibleReceiptIds = useMemo(
               <select
                 value={draftFilters.ledger}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, ledger: e.target.value }))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
               >
                 <option value="all">All Ledgers</option>
                 <option value="receipts">Receipts Ledger</option>
@@ -1707,7 +1706,7 @@ const visibleReceiptIds = useMemo(
               <select
                 value={draftFilters.status}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
               >
                 <option value="active">Active Receipts</option>
                 <option value="confirmed">Confirmed</option>
@@ -1719,7 +1718,7 @@ const visibleReceiptIds = useMemo(
               <select
                 value={draftFilters.paymentType}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, paymentType: e.target.value }))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-md"
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
               >
                 <option value="all">All Types</option>
                 <option value="rent">Rent</option>
@@ -1734,45 +1733,45 @@ const visibleReceiptIds = useMemo(
                   type="date"
                   value={draftFilters.from}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, from: e.target.value }))}
-                  className="w-full px-2 py-2 text-xs border border-slate-300 rounded-md"
+                  className="w-full rounded-md border border-slate-300 px-2 py-2 text-xs"
                 />
                 <input
                   type="date"
                   value={draftFilters.to}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, to: e.target.value }))}
-                  className="w-full px-2 py-2 text-xs border border-slate-300 rounded-md"
+                  className="w-full rounded-md border border-slate-300 px-2 py-2 text-xs"
                 />
               </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               <button
                 onClick={() => applyDatePreset("today")}
-                className="px-3 py-1.5 text-xs rounded-md bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold"
+                className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-200"
               >
                 Today
               </button>
               <button
                 onClick={() => applyDatePreset("thisMonth")}
-                className="px-3 py-1.5 text-xs rounded-md bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold"
+                className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-200"
               >
                 This Month
               </button>
               <button
                 onClick={() => applyDatePreset("lastMonth")}
-                className="px-3 py-1.5 text-xs rounded-md bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold"
+                className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-200"
               >
                 Last Month
               </button>
               <button
                 onClick={applySearchFilters}
-                className={`px-3 py-1.5 text-xs rounded-md text-white font-semibold flex items-center gap-2 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
               >
                 <FaSearch /> Search
               </button>
               <button
                 onClick={resetSearchFilters}
-                className="px-3 py-1.5 text-xs rounded-md bg-slate-500 hover:bg-slate-600 text-white font-semibold flex items-center gap-2"
+                className="flex items-center gap-2 rounded-md bg-slate-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
               >
                 <FaRedoAlt /> Reset Filters
               </button>
@@ -1780,7 +1779,7 @@ const visibleReceiptIds = useMemo(
                 onClick={handleConfirmSelected}
                 disabled={!canProcessReceipt}
                 title={canProcessReceipt ? "Confirm selected receipts" : "You do not have permission to confirm receipts"}
-                className="px-3 py-1.5 text-xs rounded-md bg-green-600 hover:bg-green-700 text-white font-semibold flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center gap-2 rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FaCheck /> Confirm Selected
               </button>
@@ -1788,7 +1787,7 @@ const visibleReceiptIds = useMemo(
                 onClick={handleReverseSelected}
                 disabled={!canReverseReceipt}
                 title={canReverseReceipt ? "Reverse selected receipts" : "You do not have permission to reverse receipts"}
-                className="px-3 py-1.5 text-xs rounded-md bg-orange-600 hover:bg-orange-700 text-white font-semibold flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center gap-2 rounded-md bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FaUndo /> Reverse Selected
               </button>
@@ -1796,7 +1795,7 @@ const visibleReceiptIds = useMemo(
                 onClick={handleDeleteSelected}
                 disabled={!canDeleteReceipt}
                 title={canDeleteReceipt ? "Delete selected receipts" : "You do not have permission to delete receipts"}
-                className="px-3 py-1.5 text-xs rounded-md bg-red-600 hover:bg-red-700 text-white font-semibold flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FaTrash /> Delete Selected
               </button>
@@ -1804,7 +1803,7 @@ const visibleReceiptIds = useMemo(
                 onClick={handlePrintList}
                 disabled={!canExportReceipt}
                 title={canExportReceipt ? "Print receipt list" : "You do not have permission to print receipts"}
-                className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FaPrint /> Print List
               </button>

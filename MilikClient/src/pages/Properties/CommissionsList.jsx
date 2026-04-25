@@ -23,6 +23,7 @@ const CommissionsList = () => {
   const [filterMode, setFilterMode] = useState('all'); // all, configured, unconfigured
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [expandedPropertyId, setExpandedPropertyId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -211,15 +212,15 @@ const CommissionsList = () => {
           <div className="flex-shrink-0 grid grid-cols-1 gap-2 md:grid-cols-3">
             <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Total Properties</p>
-              <p className="text-sm font-black leading-tight text-slate-900">{stats.total}</p>
+              <p className="text-[11px] font-black leading-tight text-slate-900">{stats.total}</p>
             </div>
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 shadow-sm">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Configured</p>
-              <p className="text-sm font-black leading-tight text-emerald-800">{stats.configured}</p>
+              <p className="text-[11px] font-black leading-tight text-emerald-800">{stats.configured}</p>
             </div>
             <div className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1.5 shadow-sm">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-700">Unconfigured</p>
-              <p className="text-sm font-black leading-tight text-orange-800">{stats.unconfigured}</p>
+              <p className="text-[11px] font-black leading-tight text-orange-800">{stats.unconfigured}</p>
             </div>
           </div>
 
@@ -256,22 +257,22 @@ const CommissionsList = () => {
 
                 <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 shadow-sm">
                   Visible
-                  <span className="text-sm text-slate-900">{filteredProperties.length}</span>
+                  <span className="text-[11px] text-slate-900">{filteredProperties.length}</span>
                 </div>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1120px] text-sm">
+              <table className="w-full min-w-[1120px] text-[11px]">
                 <thead>
                   <tr className={`${MILIK_GREEN_BG} sticky top-0 z-10 text-white`}>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Property</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Commission</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Recognition Basis</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Tenants Pay To</th>
-                    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em]">Deposits Held By</th>
-                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-[0.16em]">Actions</th>
+                    <th className="sticky left-0 z-20 bg-[#0B3B2E] px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em]">Code</th>
+                    <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.14em]">Property</th>
+                    <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.14em]">Commission</th>
+                    <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.14em]">Recognition Basis</th>
+                    <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.14em]">Tenants Pay To</th>
+                    <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.14em]">Deposits Held By</th>
+                    <th className="px-3 py-1.5 text-right text-[10px] font-black uppercase tracking-[0.14em]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -279,7 +280,7 @@ const CommissionsList = () => {
                     <tr>
                       <td colSpan="7" className="px-4 py-10 text-center text-slate-500">
                         <FaSearch className="mx-auto mb-3 text-3xl text-slate-300" />
-                        <p className="text-sm font-semibold">No commission rows matched the current filters.</p>
+                        <p className="text-[11px] font-semibold">No commission rows matched the current filters.</p>
                       </td>
                     </tr>
                   ) : (
@@ -291,7 +292,7 @@ const CommissionsList = () => {
                               <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
                                 <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <div>
-                                    <p className="text-sm font-black text-slate-900">
+                                    <p className="text-[11px] font-black text-slate-900">
                                       {property.propertyCode || '—'} • {property.propertyName || property.name || 'Property'}
                                     </p>
                                     <p className="text-xs text-slate-500">Edit commission and collection settings for this property.</p>
@@ -300,7 +301,7 @@ const CommissionsList = () => {
 
                                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                                   <div>
-                                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-slate-500">Commission %</label>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Commission %</label>
                                     <input
                                       type="number"
                                       value={editFormData.commissionPercentage}
@@ -308,16 +309,16 @@ const CommissionsList = () => {
                                       min="0"
                                       max="100"
                                       step="0.01"
-                                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                                      className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-[11px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                                     />
                                   </div>
 
                                   <div>
-                                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-slate-500">Recognition Basis</label>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Recognition Basis</label>
                                     <select
                                       value={editFormData.commissionRecognitionBasis}
                                       onChange={(e) => handleEditChange('commissionRecognitionBasis', e.target.value)}
-                                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                                      className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-[11px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                                     >
                                       <option value="received">Rent Collected (Cash)</option>
                                       <option value="invoiced">Rent Expected (Accrual)</option>
@@ -325,11 +326,11 @@ const CommissionsList = () => {
                                   </div>
 
                                   <div>
-                                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-slate-500">Tenants Pay To</label>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Tenants Pay To</label>
                                     <select
                                       value={editFormData.tenantsPaysTo}
                                       onChange={(e) => handleEditChange('tenantsPaysTo', e.target.value)}
-                                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                                      className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-[11px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                                     >
                                       <option value="propertyManager">Manager</option>
                                       <option value="landlord">Landlord</option>
@@ -337,11 +338,11 @@ const CommissionsList = () => {
                                   </div>
 
                                   <div>
-                                    <label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-slate-500">Deposits Held By</label>
+                                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Deposits Held By</label>
                                     <select
                                       value={editFormData.depositHeldBy}
                                       onChange={(e) => handleEditChange('depositHeldBy', e.target.value)}
-                                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                                      className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-[11px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                                     >
                                       <option value="propertyManager">Manager</option>
                                       <option value="landlord">Landlord</option>
@@ -355,13 +356,13 @@ const CommissionsList = () => {
                                       setEditingId(null);
                                       setEditFormData(null);
                                     }}
-                                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-100"
+                                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-[11px] font-black text-slate-700 transition hover:bg-slate-100"
                                   >
                                     <FaTimes /> Cancel
                                   </button>
                                   <button
                                     onClick={() => handleSaveEdit(property._id)}
-                                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black text-white transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
+                                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[11px] font-black text-white transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
                                   >
                                     <FaCheck /> Save Changes
                                   </button>
@@ -370,50 +371,64 @@ const CommissionsList = () => {
                             </td>
                           </tr>
                         ) : (
-                          <tr className={`border-t border-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-slate-50`}>
-                            <td className="px-4 py-3 text-sm font-semibold text-slate-900">{property.propertyCode || '-'}</td>
-                            <td className="px-4 py-3 text-sm text-slate-700">
-                              <div className="font-semibold text-slate-900">{property.propertyName || property.name || '-'}</div>
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {property.commissionPercentage && property.commissionPercentage > 0 ? (
-                                <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-orange-700">
-                                  {property.commissionPercentage}%
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">Not set</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-slate-700">
-                              {property.commissionRecognitionBasis
-                                ? property.commissionRecognitionBasis === 'received'
-                                  ? 'Rent Collected (Cash)'
-                                  : 'Rent Expected (Accrual)'
-                                : '-'}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-slate-700">
-                              {property.tenantsPaysTo ? (property.tenantsPaysTo === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-slate-700">
-                              {property.depositHeldBy ? (property.depositHeldBy === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="inline-flex flex-wrap justify-end gap-2">
-                                <button
-                                  onClick={() => handleEdit(property)}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 transition hover:bg-blue-100"
-                                >
-                                  <FaEdit /> Edit
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(property._id)}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-100"
-                                >
-                                  <FaTrash /> Remove
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
+                          <>
+                            <tr onClick={() => setExpandedPropertyId((prev) => (prev === property._id ? null : property._id))} className={`cursor-pointer border-t border-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} transition hover:bg-slate-50`}>
+                              <td className="sticky left-0 z-10 bg-inherit px-3 py-1.5 text-[11px] font-semibold text-slate-900">{expandedPropertyId === property._id ? '▾' : '▸'} {property.propertyCode || '-'}</td>
+                              <td className="px-3 py-1.5 text-[11px] text-slate-700">
+                                <div className="font-semibold text-slate-900">{property.propertyName || property.name || '-'}</div>
+                              </td>
+                              <td className="px-3 py-1.5 text-[11px]">
+                                {property.commissionPercentage && property.commissionPercentage > 0 ? (
+                                  <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-orange-700">
+                                    {property.commissionPercentage}%
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400">Not set</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-1.5 text-[11px] text-slate-700">
+                                {property.commissionRecognitionBasis
+                                  ? property.commissionRecognitionBasis === 'received'
+                                    ? 'Rent Collected (Cash)'
+                                    : 'Rent Expected (Accrual)'
+                                  : '-'}
+                              </td>
+                              <td className="px-3 py-1.5 text-[11px] text-slate-700">
+                                {property.tenantsPaysTo ? (property.tenantsPaysTo === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
+                              </td>
+                              <td className="px-3 py-1.5 text-[11px] text-slate-700">
+                                {property.depositHeldBy ? (property.depositHeldBy === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
+                              </td>
+                              <td className="px-3 py-1.5 text-right">
+                                <div className="inline-flex flex-wrap justify-end gap-2">
+                                  <button
+                                    onClick={(event) => { event.stopPropagation(); handleEdit(property); }}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 transition hover:bg-blue-100"
+                                  >
+                                    <FaEdit /> Edit
+                                  </button>
+                                  <button
+                                    onClick={(event) => { event.stopPropagation(); handleDelete(property._id); }}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-100"
+                                  >
+                                    <FaTrash /> Remove
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            {expandedPropertyId === property._id && editingId !== property._id && (
+                              <tr className="border-t border-slate-100 bg-slate-50">
+                                <td colSpan="7" className="px-3 py-2">
+                                  <div className="grid gap-2 text-[11px] md:grid-cols-4">
+                                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Property</span><p className="font-semibold text-slate-900">{property.propertyName || property.name || '-'}</p></div>
+                                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Commission</span><p className="font-semibold text-orange-700">{property.commissionPercentage ? `${property.commissionPercentage}%` : 'Not set'}</p></div>
+                                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Recognition</span><p className="font-semibold text-slate-900">{property.commissionRecognitionBasis === 'received' ? 'Rent Collected (Cash)' : property.commissionRecognitionBasis === 'invoiced' ? 'Rent Expected (Accrual)' : '-'}</p></div>
+                                    <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Collections / Deposits</span><p className="font-semibold text-slate-900">Tenants pay {property.tenantsPaysTo === 'landlord' ? 'Landlord' : 'Manager'} · Deposits held by {property.depositHeldBy === 'landlord' ? 'Landlord' : 'Manager'}</p></div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
                         )}
                       </React.Fragment>
                     ))
@@ -455,16 +470,16 @@ const CommissionsList = () => {
           <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
             <div className={`${MILIK_GREEN_BG} px-6 py-4 text-white`}>
               <h3 className="text-xl font-black">Add Commission Settings</h3>
-              <p className="mt-1 text-sm text-emerald-100">Apply a commission structure to a property that is still unconfigured.</p>
+              <p className="mt-1 text-[11px] text-emerald-100">Apply a commission structure to a property that is still unconfigured.</p>
             </div>
 
             <div className="grid gap-4 p-6 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-bold text-slate-700">Property</label>
+                <label className="mb-2 block text-[11px] font-bold text-slate-700">Property</label>
                 <select
                   value={addFormData.property || ''}
                   onChange={(e) => setAddFormData(prev => ({ ...prev, property: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-[11px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="">-- Select Property --</option>
                   {unconfiguredProperties.map((prop) => (
@@ -476,7 +491,7 @@ const CommissionsList = () => {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-bold text-slate-700">Commission (%)</label>
+                <label className="mb-2 block text-[11px] font-bold text-slate-700">Commission (%)</label>
                 <input
                   type="number"
                   value={addFormData.commissionPercentage}
@@ -484,16 +499,16 @@ const CommissionsList = () => {
                   min="0"
                   max="100"
                   step="0.01"
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-[11px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-bold text-slate-700">Recognition Basis</label>
+                <label className="mb-2 block text-[11px] font-bold text-slate-700">Recognition Basis</label>
                 <select
                   value={addFormData.commissionRecognitionBasis}
                   onChange={(e) => setAddFormData(prev => ({ ...prev, commissionRecognitionBasis: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-[11px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="received">Rent Collected (Cash)</option>
                   <option value="invoiced">Rent Expected (Accrual)</option>
@@ -501,11 +516,11 @@ const CommissionsList = () => {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-bold text-slate-700">Tenants Pay To</label>
+                <label className="mb-2 block text-[11px] font-bold text-slate-700">Tenants Pay To</label>
                 <select
                   value={addFormData.tenantsPaysTo}
                   onChange={(e) => setAddFormData(prev => ({ ...prev, tenantsPaysTo: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-[11px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="propertyManager">Manager</option>
                   <option value="landlord">Landlord</option>
@@ -513,11 +528,11 @@ const CommissionsList = () => {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-bold text-slate-700">Deposits Held By</label>
+                <label className="mb-2 block text-[11px] font-bold text-slate-700">Deposits Held By</label>
                 <select
                   value={addFormData.depositHeldBy}
                   onChange={(e) => setAddFormData(prev => ({ ...prev, depositHeldBy: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-[11px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="propertyManager">Manager</option>
                   <option value="landlord">Landlord</option>
@@ -528,13 +543,13 @@ const CommissionsList = () => {
             <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
               <button
                 onClick={() => setShowAddModal(false)}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-100"
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-[11px] font-black text-slate-700 transition hover:bg-slate-100"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAddCommission}
-                className={`rounded-xl px-4 py-2.5 text-sm font-black text-white transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
+                className={`rounded-xl px-4 py-2.5 text-[11px] font-black text-white transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
               >
                 Add Commission
               </button>

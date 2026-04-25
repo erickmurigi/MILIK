@@ -954,17 +954,17 @@ const Vacants = () => {
                 </colgroup>
                 <thead>
                   <tr className="sticky top-0 z-10 border-b border-gray-300 bg-[#0B3B2E]">
-                    <th className="border-r border-gray-300 px-1 py-2 text-center font-bold text-white"></th>
-                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Property</th>
-                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Unit No</th>
-                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Code</th>
-                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Unit Type</th>
-                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Availability</th>
-                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Current Tenant</th>
-                    <th className="border-r border-gray-300 px-2 py-2 text-left font-bold text-white whitespace-nowrap">Available From</th>
-                    <th className="border-r border-gray-300 px-2 py-2 text-right font-bold text-white whitespace-nowrap">Days Vacant</th>
-                    <th className="border-r border-gray-300 px-2 py-2 text-right font-bold text-white whitespace-nowrap">Rent</th>
-                    <th className="px-2 py-2 text-left font-bold text-white whitespace-nowrap">Actions</th>
+                    <th className="border-r border-gray-300 px-1 py-1.5 text-center font-bold text-white"></th>
+                    <th className="sticky left-[42px] z-20 border-r border-gray-300 bg-[#0B3B2E] px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Property</th>
+                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Unit No</th>
+                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Code</th>
+                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Unit Type</th>
+                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Availability</th>
+                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Current Tenant</th>
+                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Available From</th>
+                    <th className="border-r border-gray-300 px-2 py-1.5 text-right font-bold text-white whitespace-nowrap">Days Vacant</th>
+                    <th className="border-r border-gray-300 px-2 py-1.5 text-right font-bold text-white whitespace-nowrap">Rent</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -996,7 +996,7 @@ const Vacants = () => {
                           )}
 
                           <tr className={`border-b border-gray-200 transition-colors hover:bg-[#f8fbf9] ${isExpanded ? "bg-[#fcfdfc]" : "bg-white"}`}>
-                            <td className="border-r border-gray-200 px-1 py-2 text-center align-top">
+                            <td className="border-r border-gray-200 px-1 py-1.5 text-center align-top">
                               <button
                                 onClick={() => toggleRow(row.id)}
                                 className="rounded border border-gray-300 bg-white p-1 text-slate-600 transition-colors hover:bg-gray-50"
@@ -1005,42 +1005,42 @@ const Vacants = () => {
                                 {isExpanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
                               </button>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 align-top font-bold text-slate-800">
+                            <td className="border-r border-gray-200 px-2 py-1.5 align-top font-bold text-slate-800">
                               <div className="truncate whitespace-nowrap" title={row.propertyName}>
                                 {row.propertyName}
                               </div>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 align-top font-bold text-slate-900 whitespace-nowrap">
+                            <td className="border-r border-gray-200 px-2 py-1.5 align-top font-bold text-slate-900 whitespace-nowrap">
                               {row.unitNo}
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 align-top font-semibold text-slate-600 whitespace-nowrap">
+                            <td className="border-r border-gray-200 px-2 py-1.5 align-top font-semibold text-slate-600 whitespace-nowrap">
                               {row.unitCode}
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 align-top">
+                            <td className="border-r border-gray-200 px-2 py-1.5 align-top">
                               <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-800">
                                 {row.unitTypeLabel}
                               </span>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 align-top">
+                            <td className="border-r border-gray-200 px-2 py-1.5 align-top">
                               <span className={`inline-flex max-w-full truncate whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${getAvailabilityTone(row.status)}`}>
                                 {row.statusLabel}
                               </span>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 align-top font-semibold text-slate-700">
+                            <td className="border-r border-gray-200 px-2 py-1.5 align-top font-semibold text-slate-700">
                               <div className="truncate whitespace-nowrap" title={row.tenantName}>
                                 {row.tenantName}
                               </div>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 align-top font-semibold text-slate-700 whitespace-nowrap">
+                            <td className="border-r border-gray-200 px-2 py-1.5 align-top font-semibold text-slate-700 whitespace-nowrap">
                               {row.availableFromLabel}
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 text-right align-top font-bold text-slate-700 whitespace-nowrap">
+                            <td className="border-r border-gray-200 px-2 py-1.5 text-right align-top font-bold text-slate-700 whitespace-nowrap">
                               {row.daysVacantLabel}
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-2 text-right align-top font-bold text-slate-900 whitespace-nowrap">
+                            <td className="border-r border-gray-200 px-2 py-1.5 text-right align-top font-bold text-slate-900 whitespace-nowrap">
                               {row.rentLabel}
                             </td>
-                            <td className="px-2 py-2 align-top">
+                            <td className="px-2 py-1.5 align-top">
                               <div className="flex min-w-0 flex-wrap gap-1.5">
                                 <button
                                   onClick={() => navigate(`/units/${row.id}`)}

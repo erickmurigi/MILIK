@@ -36,6 +36,7 @@ import {
 } from "../../utils/excelTemplates";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
+import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -823,13 +824,13 @@ const Units = () => {
       <div className="flex flex-col h-full min-h-0 p-0 bg-gray-50 overflow-hidden">
         {/* Filters Card (consistent style) */}
         <div className="flex-shrink-0 sticky top-0 z-30 bg-gray-50 pt-2 px-2">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-2">
+          <div className={LISTING_UI.toolbarCard}>
             {/* Row 1: dropdowns + action buttons */}
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={draftFilters.property}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, property: e.target.value }))}
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-[#DDEFE1] text-gray-800 hover:bg-white transition-colors"
+                className={LISTING_UI.filterSelect}
               >
                 {uniqueProperties.map((p) => (
                   <option key={p.value} value={p.value}>
@@ -841,7 +842,7 @@ const Units = () => {
               <select
                 value={draftFilters.status}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-[#DDEFE1] text-gray-800 hover:bg-white transition-colors"
+                className={LISTING_UI.filterSelect}
               >
                 <option value="active">Active</option>
                 <option value="any">All Statuses</option>
@@ -854,7 +855,7 @@ const Units = () => {
               <select
                 value={draftFilters.unitType}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, unitType: e.target.value }))}
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-[#DDEFE1] text-gray-800 hover:bg-white transition-colors"
+                className={LISTING_UI.filterSelect}
               >
                 <option value="any">Unit Type</option>
                 {unitTypeOptions.map((type) => (
@@ -1020,17 +1021,17 @@ const Units = () => {
             <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
               <input
                 value={draftFilters.unitNo}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, unitNo: e.target.value }))}
+                onChange={(e) => setDraftFilters((p) => ({ ...p, unitNo: normalizeUppercaseInput(e.target.value) }))}
                 onKeyDown={onFilterEnter}
                 placeholder="Unit/Space No"
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className={LISTING_UI.filterInput}
               />
               <input
                 value={draftFilters.tenant}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, tenant: e.target.value }))}
+                onChange={(e) => setDraftFilters((p) => ({ ...p, tenant: normalizeUppercaseInput(e.target.value) }))}
                 onKeyDown={onFilterEnter}
                 placeholder="Tenant"
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className={LISTING_UI.filterInput}
               />
               <div className="hidden md:block" />
               <div className="hidden md:block" />
@@ -1082,7 +1083,7 @@ const Units = () => {
                             <tr className="bg-transparent">
                               <td colSpan={12} className="px-2 pt-1.5 pb-1">
                                 <h3 className="text-sm font-extrabold text-black tracking-normal uppercase">
-                                  {u.propertyName}
+                                  {toListingCaps(u.propertyName)}
                                 </h3>
                                 <div className="mt-1 h-[2px] w-full bg-[#FF8C00]" />
                               </td>
@@ -1131,17 +1132,17 @@ const Units = () => {
 
                             {/* Property Name */}
                             <td className="px-2 py-1 border-r border-gray-200 font-bold text-slate-900 text-xs">
-                              {u.propertyName}
+                              {toListingCaps(u.propertyName)}
                             </td>
 
                             {/* Unit/Space No */}
                             <td className="px-2 py-1 border-r border-gray-200 font-bold text-slate-900 text-xs">
-                              {u.unitNo}
+                              {toListingCaps(u.unitNo)}
                             </td>
 
                             {/* Unit Code - 2 letters + 4 digits */}
                             <td className="px-2 py-1 border-r border-gray-200 font-bold font-mono text-slate-900 text-xs bg-gray-50">
-                              {u.unitCode}
+                              {toListingCaps(u.unitCode)}
                             </td>
 
                             {/* Unit Type */}

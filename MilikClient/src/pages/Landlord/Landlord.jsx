@@ -36,6 +36,7 @@ import { downloadLandlordsTemplate, exportLandlordsToExcel } from "../../utils/e
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
+import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 
 const STORAGE_KEY = "milik_landlords_v1";
 const ITEMS_PER_PAGE = 50;
@@ -337,8 +338,8 @@ const Landlords = () => {
 
   // Zebra + selection styling
   const getRowClass = (index, landlordId) => {
-    if (selectedLandlords.includes(landlordId)) return "bg-[#CDE7D3] hover:bg-[#DFF1E3]";
-    return index % 2 === 0 ? "bg-white hover:bg-[#f8f8f8]" : "bg-[#f9f9f9] hover:bg-[#f0f0f0]";
+    if (selectedLandlords.includes(landlordId)) return "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50";
+    return index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50 hover:bg-blue-50/40";
   };
 
   // Column resizing
@@ -799,16 +800,16 @@ const Landlords = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex flex-col h-full min-h-0 bg-white overflow-hidden">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         {/* Filters Row */}
-        <div className="flex-shrink-0 sticky top-0 z-30 bg-white pt-2 px-2">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-2">
+        <div className="sticky top-0 z-30 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm">
+          <div className="space-y-2">
             {/* Row 1: dropdown filters */}
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={draftFilters.status}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-[#DDEFE1] text-gray-800 hover:bg-white transition-colors"
+                className="rounded border border-[#FF8C00]/70 bg-white px-3 py-2 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
               >
                 <option value="Active">Active</option>
                 <option value="any">All Status</option>
@@ -818,7 +819,7 @@ const Landlords = () => {
               <select
                 value={draftFilters.portal}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, portal: e.target.value }))}
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-[#DDEFE1] text-gray-800 hover:bg-white transition-colors"
+                className="rounded border border-[#FF8C00]/70 bg-white px-3 py-2 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
               >
                 <option value="any">Portal Access</option>
                 <option value="Enabled">Enabled</option>
@@ -828,7 +829,7 @@ const Landlords = () => {
               <select
                 value={draftFilters.propsCount}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, propsCount: e.target.value }))}
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-[#DDEFE1] text-gray-800 hover:bg-white transition-colors"
+                className="rounded border border-[#FF8C00]/70 bg-white px-3 py-2 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
               >
                 <option value="any">Properties Count</option>
                 <option value="1-5">1-5 Properties</option>
@@ -839,7 +840,7 @@ const Landlords = () => {
               <select
                 value={draftFilters.location}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, location: e.target.value }))}
-                className="px-3 py-1 text-xs border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-[#DDEFE1] text-gray-800 hover:bg-white transition-colors"
+                className="rounded border border-[#FF8C00]/70 bg-white px-3 py-2 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
               >
                 {uniqueLocations.map((loc) => (
                   <option key={loc} value={loc}>
@@ -1015,57 +1016,57 @@ const Landlords = () => {
             <div className="mt-2 grid grid-cols-2 md:grid-cols-6 gap-2">
               <input
                 value={draftFilters.code}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, code: e.target.value }))}
+                onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))}
                 onKeyDown={onFilterEnter}
                 placeholder="Landlord Code"
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <input
                 value={draftFilters.name}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, name: e.target.value }))}
+                onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
                 onKeyDown={onFilterEnter}
                 placeholder="Landlord Name"
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <input
                 value={draftFilters.regId}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, regId: e.target.value }))}
+                onChange={(e) => setDraftFilters((p) => ({ ...p, regId: normalizeUppercaseInput(e.target.value) }))}
                 onKeyDown={onFilterEnter}
                 placeholder="Reg/ID No."
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <input
                 value={draftFilters.email}
                 onChange={(e) => setDraftFilters((p) => ({ ...p, email: e.target.value }))}
                 onKeyDown={onFilterEnter}
                 placeholder="Email"
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <input
                 value={draftFilters.phone}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, phone: e.target.value }))}
+                onChange={(e) => setDraftFilters((p) => ({ ...p, phone: normalizeUppercaseInput(e.target.value) }))}
                 onKeyDown={onFilterEnter}
                 placeholder="Phone"
-                className="px-3 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
             </div>
           </div>
         </div>
 
         {/* Table */}
-        <div className="flex-1 min-h-0 px-2 pb-2 overflow-hidden">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm h-full flex flex-col">
+        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col overflow-hidden px-0 pb-0">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             {/* Make THIS the scroll area so the footer stays visible */}
-            <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
+            <div className="min-h-0 flex-1 overflow-auto">
               <table
-                className="min-w-full text-xs border-collapse border border-gray-200 font-bold bg-white"
+                className="min-w-[1180px] w-full text-xs font-bold bg-white"
                 ref={tableRef}
                 style={{ tableLayout: "fixed" }}
               >
                 <thead>
-                  <tr className="sticky top-0 z-10">
+                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                     <th
-                      className="px-3 py-1 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
+                      className="px-3 py-2 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
                       style={{ width: "50px", minWidth: "50px", maxWidth: "50px" }}
                     >
                       <input
@@ -1082,7 +1083,7 @@ const Landlords = () => {
                       return (
                         <th
                           key={column.key}
-                          className="relative px-3 py-1 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
+                          className="relative px-3 py-2 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
                           style={{
                             width: `${width}px`,
                             minWidth: "80px",
@@ -1128,7 +1129,7 @@ const Landlords = () => {
                         onClick={() => handleSelectLandlord(landlord._id)}
                       >
                         <td
-                          className="px-3 py-1 border border-gray-200 align-top"
+                          className="px-3 py-2 border border-gray-200 align-top"
                           style={{ width: "50px", minWidth: "50px", maxWidth: "50px" }}
                           onClick={handleCheckboxClick}
                         >
@@ -1141,14 +1142,14 @@ const Landlords = () => {
                           />
                         </td>
 
-                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
-                          {landlord.landlordCode || landlord.code}
+                        <td className="px-3 py-2 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
+                          {toListingCaps(landlord.landlordCode || landlord.code)}
                         </td>
-                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
-                          {landlord.fullName || landlord.landlordName || landlord.name || landlord.firstName || "-"}
+                        <td className="px-3 py-2 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
+                          {toListingCaps(landlord.fullName || landlord.landlordName || landlord.name || landlord.firstName || "-")}
                         </td>
 
-                        <td className="px-3 py-1 border border-gray-200 align-top">
+                        <td className="px-3 py-2 border border-gray-200 align-top">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap border ${
                               String(landlord.status || "Active") === "Active"
@@ -1164,17 +1165,17 @@ const Landlords = () => {
                           </span>
                         </td>
 
-                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
-                          {landlord.location || "—"}
+                        <td className="px-3 py-2 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
+                          {toListingCaps(landlord.location || "—")}
                         </td>
-                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
+                        <td className="px-3 py-2 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
                           {landlord.email || "—"}
                         </td>
-                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
+                        <td className="px-3 py-2 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
                           {landlord.phoneNumber || landlord.phone || "—"}
                         </td>
 
-                        <td className="px-3 py-1 text-center font-bold text-gray-900 border border-gray-200 align-top">
+                        <td className="px-3 py-2 text-center font-bold text-gray-900 border border-gray-200 align-top">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${
                               selectedLandlords.includes(landlord._id)
@@ -1186,7 +1187,7 @@ const Landlords = () => {
                           </span>
                         </td>
 
-                        <td className="px-3 py-1 text-center font-bold text-gray-900 border border-gray-200 align-top">
+                        <td className="px-3 py-2 text-center font-bold text-gray-900 border border-gray-200 align-top">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${
                               selectedLandlords.includes(landlord._id)
@@ -1198,7 +1199,7 @@ const Landlords = () => {
                           </span>
                         </td>
 
-                        <td className="px-3 py-1 border border-gray-200 align-top">
+                        <td className="px-3 py-2 border border-gray-200 align-top">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap border ${
                               landlord.portalAccess === "Enabled"
@@ -1241,8 +1242,8 @@ const Landlords = () => {
             </div>
 
             {/* Footer (STICKY bottom inside the card) */}
-            <div className="sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20 shadow-sm">
-              <div className="flex items-center justify-between px-3 py-2">
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
+              <div className="flex w-full flex-wrap items-center justify-between gap-3">
                 <div className="text-xs text-gray-600">
                   <div className="flex items-center gap-4">
                     <span className="font-bold">
@@ -1265,7 +1266,7 @@ const Landlords = () => {
                   <button
                     onClick={() => goToPage(safeCurrentPage - 1)}
                     disabled={safeCurrentPage === 1}
-                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
+                    className="px-3 py-2.5 text-xs border border-gray-300 rounded-lg flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
                   >
                     <FaChevronLeft size={10} />
                     Previous
@@ -1283,7 +1284,7 @@ const Landlords = () => {
                           <button
                             key={page}
                             onClick={() => goToPage(page)}
-                            className={`px-3 py-1.5 min-w-[32px] text-xs rounded-lg border transition-colors font-bold ${
+                            className={`px-3 py-2.5 min-w-[32px] text-xs rounded-lg border transition-colors font-bold ${
                               safeCurrentPage === page
                                 ? "bg-[#0B3B2E] text-white border-[#0B3B2E] hover:bg-[#0A3127]"
                                 : "border-gray-300 hover:bg-gray-50"
@@ -1307,7 +1308,7 @@ const Landlords = () => {
                   <button
                     onClick={() => goToPage(safeCurrentPage + 1)}
                     disabled={safeCurrentPage === totalPages}
-                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
+                    className="px-3 py-2.5 text-xs border border-gray-300 rounded-lg flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
                   >
                     Next
                     <FaChevronRight size={10} />

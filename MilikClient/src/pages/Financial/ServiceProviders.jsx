@@ -25,6 +25,8 @@ const blankForm = {
   notes: "",
 };
 
+const ITEMS_PER_PAGE = 50;
+
 const CATEGORY_OPTIONS = [
   { value: "all", label: "All categories" },
   { value: "general", label: "General" },
@@ -48,6 +50,7 @@ const ServiceProviders = () => {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(blankForm);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const closeModal = () => {
     setShowModal(false);
@@ -99,6 +102,21 @@ const ServiceProviders = () => {
       return true;
     });
   }, [rows, search, nameFilter, categoryFilter]);
+
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentPageRows = filtered.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, nameFilter, categoryFilter]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
+  }, [currentPage, safeCurrentPage]);
 
   const openCreate = () => {
     setEditingId("");
@@ -178,167 +196,48 @@ const ServiceProviders = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 p-4">
-        <div className="mx-auto max-w-[96%] space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0B3B2E]">
-                  Financial Master Data
-                </p>
-                <h1 className="mt-1 text-2xl font-black text-slate-900">Service Providers</h1>
-                <p className="mt-1 text-sm text-slate-500">
-                  Maintain vendors and service providers for expenses, requisitions, and operational reference.
-                </p>
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[240px] flex-1">
+                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Provider code, contact, phone, email" className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] pl-8 pr-3 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               </div>
-              <button
-                onClick={openCreate}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white hover:bg-[#0A3127]"
-              >
-                <FaPlus /> Add Service Provider
-              </button>
+              <input value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} placeholder="Provider name" className="h-8 min-w-[180px] rounded border border-gray-300 bg-[#DDEFE1] px-3 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="h-8 min-w-[170px] rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
+                {CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <button onClick={clearFilters} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100">Clear Filters</button>
+              <button onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00]"><FaPlus /> Add Service Provider</button>
             </div>
           </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-[1.3fr_1fr_220px_auto] xl:items-end">
-              <label className="block">
-                <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
-                  Search
-                </span>
-                <div className="relative mt-1">
-                  <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Provider code, contact, phone, email"
-                    className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                  />
-                </div>
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
-                  Name Filter
-                </span>
-                <input
-                  value={nameFilter}
-                  onChange={(e) => setNameFilter(e.target.value)}
-                  placeholder="Filter by provider name"
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
-                  Category Filter
-                </span>
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                >
-                  {CATEGORY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <button
-                onClick={clearFilters}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50"
-              >
-                Clear Filters
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-[#0B3B2E] text-white">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Code</th>
-                    <th className="px-4 py-3 text-left">Name</th>
-                    <th className="px-4 py-3 text-left">Contact</th>
-                    <th className="px-4 py-3 text-left">Category</th>
-                    <th className="px-4 py-3 text-left">Settlement</th>
-                    <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+          <div className="min-h-0 flex-1 overflow-auto">
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                  <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Code</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Name</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Contact</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Category</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Settlement</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Status</th><th className="px-3 py-2 text-right font-black uppercase tracking-[0.14em]">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (<tr><td colSpan="7" className="px-3 py-8 text-center text-slate-500">Loading service providers...</td></tr>) : filtered.length === 0 ? (<tr><td colSpan="7" className="px-3 py-8 text-center text-slate-500">No service providers found.</td></tr>) : (currentPageRows.map((row, index) => (
+                  <tr key={row._id} className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-slate-50`}>
+                    <td className="px-3 py-1.5 font-mono font-bold text-slate-900">{row.providerCode}</td>
+                    <td className="px-3 py-1.5"><div className="font-bold text-slate-900">{row.name}</div><div className="text-[11px] text-slate-500">{row.notes || "No notes"}</div></td>
+                    <td className="px-3 py-1.5 text-slate-700"><div>{row.contactPerson || "-"}</div><div className="text-[11px] text-slate-500">{row.phone || row.email || "No contact"}</div></td>
+                    <td className="px-3 py-1.5 text-slate-700">{row.category || "general"}</td>
+                    <td className="px-3 py-1.5 text-slate-700">{row.bankName || row.paybillNumber || row.accountNumber || "-"}</td>
+                    <td className="px-3 py-1.5"><span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${row.isActive !== false ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{row.isActive !== false ? "Active" : "Inactive"}</span></td>
+                    <td className="px-3 py-1.5 text-right"><div className="inline-flex gap-1.5"><button onClick={() => openEdit(row)} className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700"><FaEdit /> Edit</button><button onClick={() => handleDelete(row)} className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700"><FaTrash /> Delete</button></div></td>
                   </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan="7" className="px-4 py-10 text-center text-slate-500">
-                        Loading service providers...
-                      </td>
-                    </tr>
-                  ) : filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan="7" className="px-4 py-10 text-center text-slate-500">
-                        No service providers found.
-                      </td>
-                    </tr>
-                  ) : (
-                    filtered.map((row, index) => (
-                      <tr
-                        key={row._id}
-                        className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}
-                      >
-                        <td className="px-4 py-3 font-mono font-bold text-slate-900">
-                          {row.providerCode}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="font-bold text-slate-900">{row.name}</div>
-                          <div className="text-xs text-slate-500">{row.notes || "No notes"}</div>
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          <div>{row.contactPerson || "-"}</div>
-                          <div className="text-xs text-slate-500">
-                            {row.phone || row.email || "No contact"}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">{row.category || "general"}</td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {row.bankName || row.paybillNumber || row.accountNumber || "-"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
-                              row.isActive !== false
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-slate-200 text-slate-600"
-                            }`}
-                          >
-                            {row.isActive !== false ? "Active" : "Inactive"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="inline-flex gap-2">
-                            <button
-                              onClick={() => openEdit(row)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"
-                            >
-                              <FaEdit /> Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete(row)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"
-                            >
-                              <FaTrash /> Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                )))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+            <div className="font-semibold">Showing <span className="font-bold text-slate-900">{filtered.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filtered.length)}</span> of <span className="font-bold text-slate-900">{filtered.length}</span> provider(s)</div>
+            <div className="flex items-center gap-2"><span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
           </div>
         </div>
       </div>

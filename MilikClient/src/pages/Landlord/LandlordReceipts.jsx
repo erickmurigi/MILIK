@@ -414,183 +414,158 @@ const LandlordReceipts = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6 px-2 pb-8 sm:px-4 lg:px-6 xl:px-8">
-        <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <button
-              type="button"
-              onClick={() => window.history.back()}
-              className="rounded-2xl border border-slate-200 p-3 text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
-            >
-              <FaArrowLeft />
-            </button>
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.28em] text-slate-400">Rental Receipting</p>
-              <h1 className="text-2xl font-black text-slate-900">Landlord Receipts</h1>
-              <p className="mt-1 max-w-3xl text-sm text-slate-600">
-                Record money received from landlords as a separate controlled receipt type. These entries do not touch tenant balances or rental collections.
-              </p>
+    <DashboardLayout lockContentScroll>
+      <div className="no-print flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full w-full max-w-[96%] min-h-0 flex-1 flex-col gap-2">
+          <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">Receipts: {stats.count}</span>
+              <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Posted: {formatMoney(stats.posted)}</span>
+              <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">Drafts: {formatMoney(stats.draft)}</span>
+              <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">Total: {formatMoney(stats.total)}</span>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={loadData}
-              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black text-white shadow-sm transition ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-            >
-              <FaRedoAlt /> Refresh
-            </button>
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-            >
-              <FaPlus /> Add Landlord Receipt
-            </button>
-          </div>
-        </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">Receipts</p>
-            <p className="mt-2 text-3xl font-black text-slate-900">{stats.count}</p>
-            <p className="mt-2 text-sm text-slate-500">Controlled landlord funding entries</p>
-          </div>
-          <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-700">Posted</p>
-            <p className="mt-2 text-3xl font-black text-emerald-900">{formatMoney(stats.posted)}</p>
-            <p className="mt-2 text-sm text-emerald-700">Cash received and posted to ledgers</p>
-          </div>
-          <div className="rounded-3xl border border-amber-100 bg-amber-50 p-5 shadow-sm">
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-amber-700">Drafts</p>
-            <p className="mt-2 text-3xl font-black text-amber-900">{formatMoney(stats.draft)}</p>
-            <p className="mt-2 text-sm text-amber-700">Pending review and posting</p>
-          </div>
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">Total Tracked</p>
-            <p className="mt-2 text-3xl font-black text-slate-900">{formatMoney(stats.total)}</p>
-            <p className="mt-2 text-sm text-slate-500">Includes draft, posted, and reversed entries</p>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid gap-4 lg:grid-cols-5">
-            <label className="relative block lg:col-span-2">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"><FaSearch /></span>
-              <input
-                value={filters.search}
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="relative block min-w-[260px] flex-1">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400"><FaSearch /></span>
+                <input
+                  value={filters.search}
+                  onChange={(e) => {
+                    setCurrentPage(1);
+                    setFilters((prev) => ({ ...prev, search: e.target.value }));
+                  }}
+                  placeholder="Search by receipt no, reference, landlord, or property"
+                  className="h-8 w-full rounded border border-[#FF8C00]/70 bg-white py-1.5 pl-8 pr-3 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
+                />
+              </label>
+              <select
+                value={filters.status}
                 onChange={(e) => {
                   setCurrentPage(1);
-                  setFilters((prev) => ({ ...prev, search: e.target.value }));
+                  setFilters((prev) => ({ ...prev, status: e.target.value }));
                 }}
-                placeholder="Search by receipt no, reference, landlord, or property"
-                className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 text-sm font-medium text-slate-700 outline-none transition focus:border-[#0B3B2E]"
-              />
-            </label>
-            <select
-              value={filters.status}
-              onChange={(e) => {
-                setCurrentPage(1);
-                setFilters((prev) => ({ ...prev, status: e.target.value }));
-              }}
-              className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="all">All Statuses</option>
-              <option value="draft">Draft</option>
-              <option value="posted">Posted</option>
-              <option value="reversed">Reversed</option>
-            </select>
-            <select
-              value={filters.category}
-              onChange={(e) => {
-                setCurrentPage(1);
-                setFilters((prev) => ({ ...prev, category: e.target.value }));
-              }}
-              className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="all">All Categories</option>
-              {CATEGORY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-            <select
-              value={filters.landlord}
-              onChange={(e) => {
-                setCurrentPage(1);
-                setFilters((prev) => ({ ...prev, landlord: e.target.value }));
-              }}
-              className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="all">All Landlords</option>
-              {activeLandlords.map((landlord) => (
-                <option key={landlord._id} value={landlord._id}>{landlord.landlordName}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  {["Date", "Receipt No", "Landlord", "Property", "Category", "Amount", "Status", "Actions"].map((label) => (
-                    <th key={label} className="px-4 py-3 text-left text-xs font-black uppercase tracking-[0.24em] text-slate-500">{label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {pagedRows.map((row) => (
-                  <tr key={row._id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm font-semibold text-slate-700">{formatDate(row.receiptDate)}</td>
-                    <td className="px-4 py-3 text-sm font-black text-slate-900">{row.receiptNumber || "-"}</td>
-                    <td className="px-4 py-3 text-sm text-slate-700">
-                      <div className="font-bold text-slate-900">{row?.landlord?.landlordName || "-"}</div>
-                      <div className="text-xs text-slate-500">{row?.landlord?.landlordCode || ""}</div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-700">{row?.property?.propertyName || "-"}</td>
-                    <td className="px-4 py-3 text-sm text-slate-700">{CATEGORY_OPTIONS.find((item) => item.value === row?.category)?.label || row?.category || "-"}</td>
-                    <td className="px-4 py-3 text-sm font-black text-slate-900">{formatMoney(row?.amount || 0)}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${row?.status === "posted" ? "bg-emerald-100 text-emerald-700" : row?.status === "reversed" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>
-                        {row?.status || "draft"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => { setActiveReceipt(row); setShowDetailModal(true); }} className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-100"><FaEye /></button>
-                        <button type="button" onClick={() => handlePrint(row)} className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-100"><FaPrint /></button>
-                        {row?.status === "draft" && (
-                          <>
-                            <button type="button" onClick={() => openEditModal(row)} className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-100"><FaEdit /></button>
-                            <button type="button" onClick={() => handlePost(row)} className="rounded-xl border border-emerald-200 p-2 text-emerald-700 hover:bg-emerald-50"><FaCheck /></button>
-                            <button type="button" onClick={() => handleDelete(row)} className="rounded-xl border border-rose-200 p-2 text-rose-700 hover:bg-rose-50"><FaTrash /></button>
-                          </>
-                        )}
-                        {row?.status === "posted" && (
-                          <button type="button" onClick={() => handleReverse(row)} className="rounded-xl border border-amber-200 p-2 text-amber-700 hover:bg-amber-50"><FaUndo /></button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
+              >
+                <option value="all">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="posted">Posted</option>
+                <option value="reversed">Reversed</option>
+              </select>
+              <select
+                value={filters.category}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setFilters((prev) => ({ ...prev, category: e.target.value }));
+                }}
+                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
+              >
+                <option value="all">All Categories</option>
+                {CATEGORY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
-                {!isLoading && pagedRows.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-sm font-semibold text-slate-500">
-                      No landlord receipts found for the selected filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+              </select>
+              <select
+                value={filters.landlord}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setFilters((prev) => ({ ...prev, landlord: e.target.value }));
+                }}
+                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
+              >
+                <option value="all">All Landlords</option>
+                {activeLandlords.map((landlord) => (
+                  <option key={landlord._id} value={landlord._id}>{landlord.landlordName}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={loadData}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-4 py-1 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
+              >
+                <FaRedoAlt /> Refresh
+              </button>
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-4 py-1 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+              >
+                <FaPlus /> Add Landlord Receipt
+              </button>
+            </div>
           </div>
-          <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-semibold text-slate-600">Showing {pagedRows.length} of {filteredReceipts.length} landlord receipts</p>
-            <div className="flex items-center gap-2">
-              <button type="button" disabled={currentPage <= 1} onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Prev</button>
-              <span className="text-sm font-black text-slate-700">Page {currentPage} / {totalPages}</span>
-              <button type="button" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+            <div className="min-h-0 flex-1 overflow-auto">
+              <table className="min-w-[1180px] w-full text-xs">
+                <thead>
+                  <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                    {["Date", "Receipt No", "Landlord", "Property", "Category", "Amount", "Status", "Actions"].map((label) => (
+                      <th key={label} className={`px-3 py-2 text-xs font-semibold ${label === "Amount" || label === "Actions" ? "text-right" : "text-left"}`}>{label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedRows.map((row, index) => (
+                    <tr key={row._id} className={`border-b border-slate-200 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50 hover:bg-blue-50/40"}`}>
+                      <td className="px-3 py-2 font-semibold text-slate-700">{formatDate(row.receiptDate)}</td>
+                      <td className="px-3 py-2 font-bold text-blue-700">{row.receiptNumber || "-"}</td>
+                      <td className="px-3 py-2 text-slate-700">
+                        <div className="font-bold text-slate-900">{row?.landlord?.landlordName || "-"}</div>
+                        <div className="text-[10px] text-slate-500">{row?.landlord?.landlordCode || ""}</div>
+                      </td>
+                      <td className="px-3 py-2 font-semibold text-slate-900">{row?.property?.propertyName || "-"}</td>
+                      <td className="px-3 py-2 text-slate-700">{CATEGORY_OPTIONS.find((item) => item.value === row?.category)?.label || row?.category || "-"}</td>
+                      <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(row?.amount || 0)}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${row?.status === "posted" ? "bg-emerald-100 text-emerald-700" : row?.status === "reversed" ? "bg-rose-100 text-rose-700" : "bg-orange-100 text-orange-700"}`}>
+                          {row?.status || "draft"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="inline-flex flex-wrap justify-end gap-1">
+                          <button type="button" onClick={() => { setActiveReceipt(row); setShowDetailModal(true); }} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="View"><FaEye size={12} /></button>
+                          <button type="button" onClick={() => handlePrint(row)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print"><FaPrint size={12} /></button>
+                          {row?.status === "draft" && (
+                            <>
+                              <button type="button" onClick={() => openEditModal(row)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title="Edit"><FaEdit size={12} /></button>
+                              <button type="button" onClick={() => handlePost(row)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Post"><FaCheck size={12} /></button>
+                              <button type="button" onClick={() => handleDelete(row)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Delete"><FaTrash size={12} /></button>
+                            </>
+                          )}
+                          {row?.status === "posted" && (
+                            <button type="button" onClick={() => handleReverse(row)} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800" title="Reverse"><FaUndo size={12} /></button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {!isLoading && pagedRows.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                        No landlord receipts found for the selected filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
+              <p>
+                <span className="font-semibold">Showing:</span> {filteredReceipts.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1}
+                {" - "}
+                {Math.min(currentPage * ITEMS_PER_PAGE, filteredReceipts.length)} of {filteredReceipts.length} landlord receipt(s)
+              </p>
+              <p><span className="font-semibold">Per page:</span> {ITEMS_PER_PAGE}</p>
+            </div>
+
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
+              <p><span className="font-semibold">Page:</span> {currentPage} of {totalPages}</p>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={currentPage <= 1} onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 font-semibold text-slate-700">Page {currentPage} of {totalPages}</span>
+                <button type="button" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+              </div>
             </div>
           </div>
         </div>
@@ -774,5 +749,4 @@ const LandlordReceipts = () => {
     </DashboardLayout>
   );
 };
-
 export default LandlordReceipts;

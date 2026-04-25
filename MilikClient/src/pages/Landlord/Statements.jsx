@@ -1163,18 +1163,18 @@ const Statements = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 px-3 py-5 sm:px-4 lg:px-5">
-        <div className="mx-auto w-full max-w-[98%] space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
+          <div className="sticky top-0 z-30 flex-shrink-0 rounded-lg border border-slate-200 bg-white/95 shadow-sm backdrop-blur">
 
-            <div className="grid grid-cols-1 gap-4 px-6 py-5 md:grid-cols-2 xl:grid-cols-7">
+            <div className="grid grid-cols-1 gap-2 px-2 py-2 md:grid-cols-2 xl:grid-cols-7">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Statement Type</label>
                 <select
                   value={statementType}
                   onChange={(e) => setStatementType(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
                 >
                   <option value="provisional">Provisional</option>
                   <option value="final">Final</option>
@@ -1186,7 +1186,7 @@ const Statements = () => {
                 <select
                   value={selectedPropertyId}
                   onChange={(e) => setSelectedPropertyId(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
                 >
                   <option value="">Select property</option>
                   {properties.map((property) => (
@@ -1202,7 +1202,7 @@ const Statements = () => {
                 <select
                   value={month}
                   onChange={(e) => setMonth(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
                 >
                   {monthOptions.map((label, index) => (
                     <option key={label} value={String(index + 1)}>
@@ -1218,7 +1218,7 @@ const Statements = () => {
                   type="number"
                   value={year}
                   onChange={(e) => setYear(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
                 />
               </div>
 
@@ -1229,7 +1229,7 @@ const Statements = () => {
                   value={periodStart}
                   max={todayIso}
                   onChange={(e) => setPeriodStart(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
                 />
               </div>
 
@@ -1241,7 +1241,7 @@ const Statements = () => {
                   min={periodStart || undefined}
                   max={todayIso}
                   onChange={(e) => setPeriodEnd(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
                 />
               </div>
 
@@ -1257,13 +1257,13 @@ const Statements = () => {
                 </button>
               </div>
             </div>
-            <div className="border-t border-slate-200 px-6 py-4">
+            <div className="border-t border-slate-200 px-2 py-2">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setActiveTab("workspace")}
-                    className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                    className={`rounded-md px-3 py-1.5 text-xs font-bold ${
                       activeTab === "workspace"
                         ? "bg-slate-900 text-white"
                         : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -1274,7 +1274,7 @@ const Statements = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab("summary")}
-                    className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                    className={`rounded-md px-3 py-1.5 text-xs font-bold ${
                       activeTab === "summary"
                         ? "bg-slate-900 text-white"
                         : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -1289,7 +1289,7 @@ const Statements = () => {
                     type="button"
                     onClick={handleRegenerateDraft}
                     disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
                     <FaSyncAlt />
                     Regenerate Draft
@@ -1299,7 +1299,7 @@ const Statements = () => {
                     type="button"
                     onClick={handleApprove}
                     disabled={!canApproveStatement || !draftStatement?._id}
-                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
                   >
                     <FaCheckCircle />
                     Approve
@@ -1309,7 +1309,7 @@ const Statements = () => {
                     type="button"
                     onClick={handlePrint}
                     disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
                     <FaPrint className={loadingPdfPreview ? "animate-pulse" : ""} />
                     {loadingPdfPreview ? "Printing..." : "Print"}
@@ -1319,7 +1319,7 @@ const Statements = () => {
                     type="button"
                     onClick={handleDownload}
                     disabled={!canExportStatement || !draftStatement?._id}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
                     <FaDownload />
                     PDF
@@ -1329,7 +1329,7 @@ const Statements = () => {
                     type="button"
                     onClick={handleProcessStatement}
                     disabled={!canApproveStatement || !draftStatement?._id || processing || !hasValidPeriodSelection}
-                    className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[11px] font-bold text-white hover:bg-slate-800 disabled:opacity-60"
                   >
                     <FaFileAlt />
                     {processing ? "Processing..." : "Process Statement"}

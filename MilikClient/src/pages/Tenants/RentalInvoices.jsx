@@ -1,3 +1,4 @@
+import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -3048,45 +3049,33 @@ const createInvoiceForTenant = async (
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-3">
-        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-3">
-          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-            <div className="mb-2 flex items-center justify-between">
-              {tenantId ? (
-                <button
-                  onClick={() => navigate("/tenants")}
-                  className="flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-gray-900"
-                  title="Back to Tenants"
-                >
-                  <FaArrowLeft size={12} />
-                  Back to tenant list
-                </button>
-              ) : (
-                <div />
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
-              <div className="rounded border border-blue-200 bg-blue-50 p-2.5">
-                <p className="text-[11px] font-semibold text-blue-600">Total Invoices</p>
-                <p className="text-xl font-bold leading-tight text-blue-900">{totalFilteredCount}</p>
-              </div>
-              <div className="rounded border border-green-200 bg-green-50 p-2.5">
-                <p className="text-[11px] font-semibold text-green-600">Page Total</p>
-                <p className="text-xl font-bold leading-tight text-green-900">
-                  KES {totalAmount.toLocaleString()}
-                </p>
-              </div>
-              <div className="rounded border border-orange-200 bg-orange-50 p-2.5">
-                <p className="text-[11px] font-semibold text-orange-600">Page Pending</p>
-                <p className="text-xl font-bold leading-tight text-orange-900">
-                  KES {pendingAmount.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </div>
-
+        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-3">
+            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2">
+              {tenantId && (
+                <div className="mb-2 flex items-center justify-between">
+                  <button
+                    onClick={() => navigate("/tenants")}
+                    className="flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-gray-900"
+                    title="Back to Tenants"
+                  >
+                    <FaArrowLeft size={12} />
+                    Back to tenant list
+                  </button>
+                </div>
+              )}
+
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                  Total Invoices: {invoiceListPagination.totalItems || 0}
+                </span>
+                <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  Page Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}
+                </span>
+                <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                  Page Pending: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}
+                </span>
+              </div>
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setDraftFilters((prev) => ({ ...prev, status: "ACTIVE" }))}
@@ -3124,7 +3113,7 @@ const createInvoiceForTenant = async (
                 <input
                   type="text"
                   value={draftFilters.invoiceNo}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: e.target.value }))}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))}
                   placeholder="Invoice #"
                   className="rounded border border-gray-300 px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
@@ -3148,7 +3137,7 @@ const createInvoiceForTenant = async (
                       unit: "any",
                     }))
                   }
-                  className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm"
+                  className={LISTING_UI.filterSelect}
                 >
                   {uniqueProperties.map((property) => (
                     <option key={property} value={property}>
@@ -3160,7 +3149,7 @@ const createInvoiceForTenant = async (
                 <select
                   value={draftFilters.unit}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))}
-                  className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm"
+                  className={LISTING_UI.filterSelect}
                 >
                   {unitsForSelectedProperty.map((unit) => (
                     <option key={unit} value={unit}>
@@ -3173,7 +3162,7 @@ const createInvoiceForTenant = async (
                   type="date"
                   value={draftFilters.fromDate}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
-                  className="rounded border border-gray-300 px-3 py-1 text-xs shadow-sm"
+                  className={LISTING_UI.filterInput}
                   title="From date"
                 />
 
@@ -3181,7 +3170,7 @@ const createInvoiceForTenant = async (
                   type="date"
                   value={draftFilters.toDate}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))}
-                  className="rounded border border-gray-300 px-3 py-1 text-xs shadow-sm"
+                  className={LISTING_UI.filterInput}
                   title="To date"
                 />
 
