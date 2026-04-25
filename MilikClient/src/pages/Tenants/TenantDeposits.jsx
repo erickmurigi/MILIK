@@ -449,22 +449,22 @@ const TenantDeposits = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Configured Deposits</p>
-              <p className="text-sm font-black leading-tight text-slate-900">KES {totals.configured.toLocaleString()}</p>
+          <div className="grid grid-cols-4 gap-1">
+            <div className="rounded-md border border-slate-200 bg-white px-2 py-1 shadow-sm">
+              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Configured Deposits</p>
+              <p className="text-[10px] font-black leading-tight text-slate-900">KES {totals.configured.toLocaleString()}</p>
             </div>
-            <div className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 shadow-sm">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">Billed</p>
-              <p className="text-sm font-black leading-tight text-blue-800">KES {totals.billed.toLocaleString()}</p>
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 shadow-sm">
+              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-blue-700">Billed</p>
+              <p className="text-[10px] font-black leading-tight text-blue-800">KES {totals.billed.toLocaleString()}</p>
             </div>
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 shadow-sm">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Paid</p>
-              <p className="text-sm font-black leading-tight text-emerald-800">KES {totals.paid.toLocaleString()}</p>
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 shadow-sm">
+              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700">Paid</p>
+              <p className="text-[10px] font-black leading-tight text-emerald-800">KES {totals.paid.toLocaleString()}</p>
             </div>
-            <div className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1.5 shadow-sm">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-700">Outstanding</p>
-              <p className="text-sm font-black leading-tight text-orange-800">KES {totals.outstanding.toLocaleString()}</p>
+            <div className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 shadow-sm">
+              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-orange-700">Outstanding</p>
+              <p className="text-[10px] font-black leading-tight text-orange-800">KES {totals.outstanding.toLocaleString()}</p>
             </div>
           </div>
 
@@ -478,14 +478,14 @@ const TenantDeposits = () => {
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                     placeholder="Tenant, property, or unit"
-                    className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[11px] shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[10px] shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
                   />
                 </div>
 
                 <select
                   value={filters.propertyId}
                   onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                  className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                  className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
                 >
                   <option value="all">All properties</option>
                   {activeProperties.map((property) => (
@@ -498,7 +498,7 @@ const TenantDeposits = () => {
                 <select
                   value={filters.holder}
                   onChange={(e) => setFilters((prev) => ({ ...prev, holder: e.target.value }))}
-                  className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                  className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
                 >
                   <option value="all">All holders</option>
                   {!isLandlordWorkspace && <option value="Management Company">Management Company</option>}
@@ -508,7 +508,7 @@ const TenantDeposits = () => {
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-[11px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                  className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
                 >
                   <option value="all">All statuses</option>
                   <option value="not configured">Not configured</option>
@@ -520,26 +520,26 @@ const TenantDeposits = () => {
 
                 <button
                   onClick={resetFilters}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
                 >
                   <FaRedoAlt /> Reset
                 </button>
 
                 <button
                   onClick={loadInvoices}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
                 >
                   <FaRedoAlt /> Refresh
                 </button>
 
                 <button
                   onClick={() => navigate("/receipts")}
-                  className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-black text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                  className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-black text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                 >
                   <FaReceipt /> Deposit Receipts
                 </button>
 
-                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 shadow-sm">
+                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 shadow-sm">
                   Rows
                   <span className="text-sm text-slate-900">{depositRows.length}</span>
                 </div>
@@ -547,7 +547,7 @@ const TenantDeposits = () => {
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1280px] table-fixed text-[11px]">
+              <table className="w-full min-w-[1100px] table-fixed text-[10px]">
                 <thead>
                   <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
                     <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.12em]">Tenant</th>
@@ -584,14 +584,14 @@ const TenantDeposits = () => {
                         <td className="px-2 py-1.5">
                           <div className="font-semibold text-slate-900">{row.latestInvoiceNumber}</div>
                           <div className="text-xs text-slate-500">{row.latestInvoiceDescription}</div>
-                          <div className="text-[11px] text-slate-400">{row.latestInvoiceDate ? new Date(row.latestInvoiceDate).toLocaleDateString() : "Not billed yet"}</div>
+                          <div className="text-[10px] text-slate-400">{row.latestInvoiceDate ? new Date(row.latestInvoiceDate).toLocaleDateString() : "Not billed yet"}</div>
                         </td>
                         <td className="px-2 py-1.5 text-right font-semibold text-slate-900">KES {row.depositAmount.toLocaleString()}</td>
                         <td className="px-2 py-1.5 text-right text-slate-700">KES {row.billed.toLocaleString()}</td>
                         <td className="px-2 py-1.5 text-right text-slate-700">KES {row.paid.toLocaleString()}</td>
                         <td className="px-2 py-1.5 text-right font-semibold text-slate-900">KES {row.outstanding.toLocaleString()}</td>
                         <td className="px-2 py-1.5">
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-700">{row.status}</span>
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-700">{row.status}</span>
                         </td>
                         <td className="px-2 py-1.5">
                           <div className="flex flex-wrap justify-end gap-2">

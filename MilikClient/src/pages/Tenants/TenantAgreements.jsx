@@ -459,7 +459,7 @@ const TenantAgreements = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
         <div className="sticky top-0 z-20 bg-gray-50 px-2 pt-2">
           <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-5">
+            <div className="grid grid-cols-5 gap-1">
               {[
                 { label: "Total", value: summary.total, tone: "bg-slate-50 border-slate-200 text-slate-800" },
                 { label: "Active", value: summary.active, tone: "bg-emerald-50 border-emerald-200 text-emerald-800" },
@@ -467,9 +467,9 @@ const TenantAgreements = () => {
                 { label: "Expiring Soon", value: summary.expiring, tone: "bg-amber-50 border-amber-200 text-amber-800" },
                 { label: "Terminated", value: summary.terminated, tone: "bg-red-50 border-red-200 text-red-700" },
               ].map((card) => (
-                <div key={card.label} className={`rounded-lg border px-2 py-1.5 ${card.tone}`}>
+                <div key={card.label} className={`rounded-md border px-2 py-1 ${card.tone}`}>
                   <div className="text-[10px] font-black uppercase tracking-[0.18em]">{card.label}</div>
-                  <div className="mt-1 text-[13px] font-black">{card.value}</div>
+                  <div className="mt-1 text-[11px] font-black">{card.value}</div>
                 </div>
               ))}
             </div>
@@ -479,13 +479,13 @@ const TenantAgreements = () => {
         <div className="px-2 pt-2">
           <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs text-gray-800 shadow-sm">
+              <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-1.5 py-1 text-[11px] text-gray-800 shadow-sm">
                 <FaSearch className="text-[11px]" />
                 <input
                   value={filters.search}
                   onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
                   placeholder="Search agreement, tenant, property or unit"
-                  className="w-full bg-transparent text-xs outline-none"
+                  className="w-full bg-transparent text-[11px] outline-none"
                 />
               </div>
 
@@ -528,21 +528,21 @@ const TenantAgreements = () => {
                 onClick={() => setFilters({ status: "any", property: "any", search: "", expiringOnly: false })}
                 className={`flex items-center gap-2 rounded-md px-3 py-1 text-[11px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
               >
-                <FaRedoAlt className="text-xs" />
+                <FaRedoAlt className="text-[11px]" />
                 Reset
               </button>
 
 
               <button
                 onClick={() => loadData()}
-                className={`flex h-8 items-center gap-2 rounded-md px-3 text-[11px] font-black text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                className={`flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-black text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
               >
                 <FaSyncAlt className="text-[11px]" /> Refresh
               </button>
 
               <button
                 onClick={() => openNewModal()}
-                className={`flex h-8 items-center gap-2 rounded-md px-3 text-[11px] font-black text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
+                className={`flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-black text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
               >
                 <FaPlus className="text-[11px]" /> New Agreement
               </button>            </div>
@@ -552,31 +552,31 @@ const TenantAgreements = () => {
         <div className="min-h-0 flex-1 overflow-hidden px-2 py-2">
           <div className="flex h-full min-h-0 flex-col rounded-lg border border-gray-200 bg-white shadow-sm">
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1500px] table-fixed border-collapse text-[11px]" style={{ tableLayout: "fixed" }}>
+              <table className="w-full min-w-[1180px] table-fixed border-collapse text-[11px]" style={{ tableLayout: "fixed" }}>
                 <colgroup>
-                  <col style={{ width: "150px" }} />
-                  <col style={{ width: "180px" }} />
-                  <col style={{ width: "160px" }} />
-                  <col style={{ width: "120px" }} />
-                  <col style={{ width: "110px" }} />
-                  <col style={{ width: "105px" }} />
-                  <col style={{ width: "105px" }} />
-                  <col style={{ width: "105px" }} />
-                  <col style={{ width: "100px" }} />
-                  <col style={{ width: "360px" }} />
+                  <col style={{ width: "90px" }} />
+                  <col style={{ width: "130px" }} />
+                  <col style={{ width: "145px" }} />
+                  <col style={{ width: "90px" }} />
+                  <col style={{ width: "88px" }} />
+                  <col style={{ width: "82px" }} />
+                  <col style={{ width: "82px" }} />
+                  <col style={{ width: "82px" }} />
+                  <col style={{ width: "80px" }} />
+                  <col style={{ width: "255px" }} />
                 </colgroup>
                 <thead>
                   <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                    <th className="px-2 py-1.5 text-left font-bold">Agreement</th>
-                    <th className="px-2 py-1.5 text-left font-bold">Tenant</th>
-                    <th className="px-2 py-1.5 text-left font-bold">Property / Unit</th>
-                    <th className="px-2 py-1.5 text-left font-bold">Status</th>
-                    <th className="px-2 py-1.5 text-left font-bold">Start</th>
-                    <th className="px-2 py-1.5 text-left font-bold">End</th>
-                    <th className="px-2 py-1.5 text-right font-bold">Rent</th>
-                    <th className="px-2 py-1.5 text-right font-bold">Deposit</th>
-                    <th className="px-2 py-1.5 text-left font-bold">Signatures</th>
-                    <th className="px-2 py-1.5 text-left font-bold">Actions</th>
+                    <th className="px-1.5 py-1 text-left font-bold">Agreement</th>
+                    <th className="px-1.5 py-1 text-left font-bold">Tenant</th>
+                    <th className="px-1.5 py-1 text-left font-bold">Property / Unit</th>
+                    <th className="px-1.5 py-1 text-left font-bold">Status</th>
+                    <th className="px-1.5 py-1 text-left font-bold">Start</th>
+                    <th className="px-1.5 py-1 text-left font-bold">End</th>
+                    <th className="px-1.5 py-1 text-right font-bold">Rent</th>
+                    <th className="px-1.5 py-1 text-right font-bold">Deposit</th>
+                    <th className="px-1.5 py-1 text-left font-bold">Signatures</th>
+                    <th className="px-1.5 py-1 text-left font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -601,7 +601,7 @@ const TenantAgreements = () => {
                       return (
                       <React.Fragment key={row.id}>
                       <tr onClick={() => setExpandedAgreementId((prev) => (prev === row.id ? null : row.id))} className="cursor-pointer border-b border-gray-200 transition hover:bg-[#f9fbfa]">
-                        <td className="px-2 py-1.5 align-top">
+                        <td className="px-1.5 py-1 align-top">
                           <div className="font-black text-[#0B3B2E]">{row.agreementNumber}</div>
                           <div className="mt-1 text-[11px] text-slate-500">{getStatusLabel(row.leaseType)}</div>
                           {row.isExpiring && (
@@ -610,11 +610,11 @@ const TenantAgreements = () => {
                             </div>
                           )}
                         </td>
-                        <td className="px-2 py-1.5 align-top">
+                        <td className="px-1.5 py-1 align-top">
                           <div className="font-bold text-gray-900">{row.tenantName}</div>
                           <div className="mt-1 text-[11px] text-slate-500">{row.tenantCode || "No code"}</div>
                         </td>
-                        <td className="px-2 py-1.5 align-top">
+                        <td className="px-1.5 py-1 align-top">
                           <div className="font-semibold text-gray-900">{row.propertyCode ? `${row.propertyCode} • ${row.propertyName}` : row.propertyName}</div>
                           <div className="mt-1 text-[11px] text-slate-500">{row.unitLabel !== "-" ? row.unitLabel : "No unit linked"}</div>
                           {hasDocument && (
@@ -628,16 +628,16 @@ const TenantAgreements = () => {
                             </a>
                           )}
                         </td>
-                        <td className="px-2 py-1.5 align-top">
+                        <td className="px-1.5 py-1 align-top">
                           <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${getStatusTone(row.status)}`}>
                             {getStatusLabel(row.status)}
                           </span>
                         </td>
-                        <td className="px-2 py-1.5 align-top whitespace-nowrap">{formatDateLabel(row.startDate)}</td>
-                        <td className="px-2 py-1.5 align-top whitespace-nowrap">{formatDateLabel(row.endDate)}</td>
-                        <td className="px-2 py-1.5 text-right align-top whitespace-nowrap font-bold">{formatCurrency(row.rentAmount)}</td>
-                        <td className="px-2 py-1.5 text-right align-top whitespace-nowrap font-bold">{formatCurrency(row.depositAmount)}</td>
-                        <td className="px-2 py-1.5 align-top">
+                        <td className="px-1.5 py-1 align-top whitespace-nowrap">{formatDateLabel(row.startDate)}</td>
+                        <td className="px-1.5 py-1 align-top whitespace-nowrap">{formatDateLabel(row.endDate)}</td>
+                        <td className="px-1.5 py-1 text-right align-top whitespace-nowrap font-bold">{formatCurrency(row.rentAmount)}</td>
+                        <td className="px-1.5 py-1 text-right align-top whitespace-nowrap font-bold">{formatCurrency(row.depositAmount)}</td>
+                        <td className="px-1.5 py-1 align-top">
                           <div className="space-y-1 text-[11px]">
                             <div className={row.signedByTenant ? "text-emerald-700 font-semibold" : "text-slate-500"}>
                               Tenant: {row.signedByTenant ? "Signed" : "Pending"}
@@ -647,7 +647,7 @@ const TenantAgreements = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="px-2 py-1.5 align-top">
+                        <td className="px-1.5 py-1 align-top">
                           <div className="flex flex-wrap gap-1.5">
                             {canEdit && (
                               <button
@@ -708,7 +708,7 @@ const TenantAgreements = () => {
                       </tr>
                         {expandedAgreementId === row.id && (
                           <tr className="border-b border-gray-200 bg-slate-50">
-                            <td colSpan={10} className="px-2 py-1.5">
+                            <td colSpan={10} className="px-1.5 py-1">
                               <div className="grid gap-2 text-[11px] md:grid-cols-4">
                                 <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Lease period</span><p className="font-semibold text-slate-900">{formatDateLabel(row.startDate)} → {formatDateLabel(row.endDate)}</p></div>
                                 <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Rent</span><p className="font-semibold text-slate-900">{formatCurrency(row.rentAmount)}</p></div>
@@ -726,7 +726,7 @@ const TenantAgreements = () => {
               </table>
             </div>
 
-            <div className="flex items-center justify-between border-t border-gray-200 px-2 py-1.5 text-xs text-slate-600">
+            <div className="flex items-center justify-between border-t border-gray-200 px-1.5 py-1 text-[11px] text-slate-600">
               <div>
                 Showing {pagedRows.length ? (safeCurrentPage - 1) * ITEMS_PER_PAGE + 1 : 0} to {Math.min(safeCurrentPage * ITEMS_PER_PAGE, filteredRows.length)} of {filteredRows.length} agreement(s)
               </div>
@@ -767,11 +767,11 @@ const TenantAgreements = () => {
               <form onSubmit={handleSave} className="px-5 py-5">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Tenant</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Tenant</label>
                     <select
                       value={form.tenant}
                       onChange={(event) => handleTenantChange(event.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     >
                       <option value="">Select tenant</option>
                       {(Array.isArray(tenants) ? tenants : []).map((tenant) => (
@@ -780,11 +780,11 @@ const TenantAgreements = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Unit</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Unit</label>
                     <select
                       value={form.unit}
                       onChange={(event) => setForm((prev) => ({ ...prev, unit: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     >
                       <option value="">Select unit</option>
                       {(Array.isArray(units) ? units : []).map((unit) => (
@@ -793,11 +793,11 @@ const TenantAgreements = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Status</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Status</label>
                     <select
                       value={form.status}
                       onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     >
                       {AGREEMENT_STATUS_OPTIONS.map((status) => (
                         <option key={status} value={status}>{getStatusLabel(status)}</option>
@@ -806,29 +806,29 @@ const TenantAgreements = () => {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Start Date</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Start Date</label>
                     <input
                       type="date"
                       value={form.startDate}
                       onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">End Date</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">End Date</label>
                     <input
                       type="date"
                       value={form.endDate}
                       onChange={(event) => setForm((prev) => ({ ...prev, endDate: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Lease Type</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Lease Type</label>
                     <select
                       value={form.leaseType}
                       onChange={(event) => setForm((prev) => ({ ...prev, leaseType: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     >
                       <option value="fixed">Fixed Term</option>
                       <option value="at_will">At Will</option>
@@ -836,79 +836,79 @@ const TenantAgreements = () => {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Monthly Rent</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Monthly Rent</label>
                     <input
                       type="number"
                       min="0"
                       step="0.01"
                       value={form.rentAmount}
                       onChange={(event) => setForm((prev) => ({ ...prev, rentAmount: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Deposit Amount</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Deposit Amount</label>
                     <input
                       type="number"
                       min="0"
                       step="0.01"
                       value={form.depositAmount}
                       onChange={(event) => setForm((prev) => ({ ...prev, depositAmount: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Payment Due Day</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Payment Due Day</label>
                     <input
                       type="number"
                       min="1"
                       max="28"
                       value={form.paymentDueDay}
                       onChange={(event) => setForm((prev) => ({ ...prev, paymentDueDay: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Notice Period (Days)</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Notice Period (Days)</label>
                     <input
                       type="number"
                       min="0"
                       value={form.noticePeriodDays}
                       onChange={(event) => setForm((prev) => ({ ...prev, noticePeriodDays: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Late Fee</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Late Fee</label>
                     <input
                       type="number"
                       min="0"
                       step="0.01"
                       value={form.lateFee}
                       onChange={(event) => setForm((prev) => ({ ...prev, lateFee: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Document URL</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Document URL</label>
                     <input
                       type="text"
                       value={form.documentUrl}
                       onChange={(event) => setForm((prev) => ({ ...prev, documentUrl: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                       placeholder="Optional link to signed PDF"
                     />
                   </div>
                 </div>
 
                 <div className="mt-4">
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-600">Terms / Notes</label>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Terms / Notes</label>
                   <textarea
                     rows={4}
                     value={form.terms}
                     onChange={(event) => setForm((prev) => ({ ...prev, terms: event.target.value }))}
-                    className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     placeholder="Capture notice terms, utility arrangement, renewal notes, or special clauses."
                   />
                 </div>
@@ -917,14 +917,14 @@ const TenantAgreements = () => {
                   <button
                     type="button"
                     onClick={() => { setModalOpen(false); setForm(buildInitialForm()); }}
-                    className="rounded-lg border border-gray-300 px-2 py-1.5 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50"
+                    className="rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className={`rounded-lg px-2 py-1.5 text-[11px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER} ${submitting ? "opacity-70 cursor-not-allowed" : ""}`}
+                    className={`rounded-lg px-1.5 py-1 text-[11px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER} ${submitting ? "opacity-70 cursor-not-allowed" : ""}`}
                   >
                     {submitting ? "Saving..." : form._id ? "Update Agreement" : "Create Agreement"}
                   </button>

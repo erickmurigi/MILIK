@@ -778,7 +778,7 @@ const Vacants = () => {
               <select
                 value={draftFilters.property}
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, property: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-[11px] text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               >
                 {uniqueProperties.map((property) => (
                   <option key={property.value} value={property.value}>{property.label}</option>
@@ -788,7 +788,7 @@ const Vacants = () => {
               <select
                 value={draftFilters.status}
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-[11px] text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               >
                 <option value="any">All Statuses</option>
                 <option value="occupied">Occupied</option>
@@ -802,7 +802,7 @@ const Vacants = () => {
               <select
                 value={draftFilters.unitType}
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, unitType: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-[11px] text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               >
                 <option value="any">Unit Type</option>
                 {unitTypeOptions.map((type) => (
@@ -813,7 +813,7 @@ const Vacants = () => {
               <select
                 value={draftFilters.window}
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, window: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-[11px] text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               >
                 <option value="all">Availability Window</option>
                 <option value="now">Available Now</option>
@@ -823,26 +823,26 @@ const Vacants = () => {
 
               <button
                 onClick={applySearch}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
                 title="Search using the selected filters"
               >
-                <FaSearch className="text-xs" />
+                <FaSearch className="text-[11px]" />
                 Search
               </button>
 
               <button
                 onClick={resetFilters}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                 title="Reset filters"
               >
-                <FaRedoAlt className="text-xs" />
+                <FaRedoAlt className="text-[11px]" />
                 Reset
               </button>
 
               <button
                 onClick={allExpanded ? collapseAll : expandAll}
                 disabled={!currentRows.length}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white shadow-sm ${
                   currentRows.length
                     ? allExpanded
                       ? "bg-orange-600 hover:bg-orange-700"
@@ -850,43 +850,43 @@ const Vacants = () => {
                     : "cursor-not-allowed bg-gray-400"
                 }`}
               >
-                {allExpanded ? <FaCompressAlt className="text-xs" /> : <FaExpandAlt className="text-xs" />}
+                {allExpanded ? <FaCompressAlt className="text-[11px]" /> : <FaExpandAlt className="text-[11px]" />}
                 {allExpanded ? "Collapse All" : "Expand All"}
               </button>
 
               <button
                 onClick={() => navigate("/tenant/new")}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                 title="Open tenant take-on"
               >
-                <FaUserPlus className="text-xs" />
+                <FaUserPlus className="text-[11px]" />
                 Add Tenant
               </button>
 
               <button
                 onClick={() => navigate("/units/new")}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                 title="Add new unit"
               >
-                <FaPlus className="text-xs" />
+                <FaPlus className="text-[11px]" />
                 Add Unit
               </button>
 
               <button
                 onClick={handlePrint}
-                className="flex items-center gap-2 rounded-lg bg-slate-700 px-4 py-1 text-xs text-white shadow-sm transition-colors hover:bg-slate-800"
+                className="flex items-center gap-1 rounded-md bg-slate-700 px-2 py-1 text-[10px] text-white shadow-sm transition-colors hover:bg-slate-800"
                 title="Print availability list"
               >
-                <FaPrint className="text-xs" />
+                <FaPrint className="text-[11px]" />
                 Print List
               </button>
 
               <button
                 onClick={handleExport}
-                className="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-1 text-xs shadow-sm transition-colors hover:bg-gray-50"
+                className="flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-[10px] shadow-sm transition-colors hover:bg-gray-50"
                 title="Export current availability list"
               >
-                <FaFileExport className="text-xs" />
+                <FaFileExport className="text-[11px]" />
                 Export
               </button>
             </div>
@@ -897,14 +897,14 @@ const Vacants = () => {
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))}
                 onKeyDown={handleFilterEnter}
                 placeholder="Search unit, property or code"
-                className="rounded border border-gray-300 bg-white px-3 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-white px-3 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <input
                 value={draftFilters.tenant}
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, tenant: event.target.value }))}
                 onKeyDown={handleFilterEnter}
                 placeholder="Tenant name"
-                className="rounded border border-gray-300 bg-white px-3 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-white px-3 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <div className="hidden md:block" />
               <div className="hidden md:block" />
@@ -915,7 +915,7 @@ const Vacants = () => {
         <div className="min-h-0 flex-1 overflow-hidden px-2 pb-2">
           <div className="flex h-full min-h-0 flex-col rounded-lg border border-gray-200 bg-white shadow-sm">
             <div className="border-b border-gray-200 bg-white px-3 py-3">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <div className="grid grid-cols-3 gap-1.5 md:grid-cols-6">
                 {[
                   { label: "Rentable Units", value: summary.rentable, tone: "bg-emerald-50 border border-emerald-200 text-emerald-900", icon: <FaBuilding className="text-emerald-700" /> },
                   { label: "Vacant", value: summary.vacant, tone: "bg-orange-50 border border-orange-200 text-orange-900", icon: <FaHome className="text-orange-700" /> },
@@ -924,13 +924,13 @@ const Vacants = () => {
                   { label: "Maintenance", value: summary.maintenance, tone: "bg-amber-50 border border-amber-200 text-amber-900", icon: <FaTools className="text-amber-700" /> },
                   { label: "Occupancy Rate", value: `${summary.occupancyRate}%`, tone: "bg-slate-50 border border-slate-200 text-slate-900", icon: <FaCheckCircle className="text-[#0B3B2E]" /> },
                 ].map((card) => (
-                  <div key={card.label} className={`rounded-lg px-3 py-3 ${card.tone}`}>
+                  <div key={card.label} className={`rounded-md px-2 py-1 ${card.tone}`}>
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="text-[10px] font-black uppercase tracking-[0.18em]">{card.label}</div>
-                        <div className="mt-1 text-xl font-black">{card.value}</div>
+                        <div className="mt-0.5 text-[13px] font-black">{card.value}</div>
                       </div>
-                      <div className="rounded-full bg-white/80 p-2 shadow-sm">{card.icon}</div>
+                      <div className="hidden rounded-full bg-white/80 p-1 shadow-sm">{card.icon}</div>
                     </div>
                   </div>
                 ))}
@@ -938,33 +938,33 @@ const Vacants = () => {
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1600px] border-collapse bg-white text-xs" style={{ tableLayout: "fixed" }}>
+              <table className="w-full min-w-[1180px] border-collapse bg-white text-[11px]" style={{ tableLayout: "fixed" }}>
                 <colgroup>
                   <col style={{ width: "42px" }} />
-                  <col style={{ width: "160px" }} />
-                  <col style={{ width: "110px" }} />
-                  <col style={{ width: "95px" }} />
-                  <col style={{ width: "130px" }} />
-                  <col style={{ width: "150px" }} />
-                  <col style={{ width: "170px" }} />
-                  <col style={{ width: "130px" }} />
-                  <col style={{ width: "90px" }} />
-                  <col style={{ width: "110px" }} />
-                  <col style={{ width: "413px" }} />
+                  <col style={{ width: "120px" }} />
+                  <col style={{ width: "85px" }} />
+                  <col style={{ width: "80px" }} />
+                  <col style={{ width: "105px" }} />
+                  <col style={{ width: "115px" }} />
+                  <col style={{ width: "105px" }} />
+                  <col style={{ width: "105px" }} />
+                  <col style={{ width: "75px" }} />
+                  <col style={{ width: "85px" }} />
+                  <col style={{ width: "180px" }} />
                 </colgroup>
                 <thead>
                   <tr className="sticky top-0 z-10 border-b border-gray-300 bg-[#0B3B2E]">
                     <th className="border-r border-gray-300 px-1 py-1.5 text-center font-bold text-white"></th>
-                    <th className="sticky left-[42px] z-20 border-r border-gray-300 bg-[#0B3B2E] px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Property</th>
-                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Unit No</th>
-                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Code</th>
-                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Unit Type</th>
-                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Availability</th>
-                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Current Tenant</th>
-                    <th className="border-r border-gray-300 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Available From</th>
-                    <th className="border-r border-gray-300 px-2 py-1.5 text-right font-bold text-white whitespace-nowrap">Days Vacant</th>
-                    <th className="border-r border-gray-300 px-2 py-1.5 text-right font-bold text-white whitespace-nowrap">Rent</th>
-                    <th className="px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">Actions</th>
+                    <th className="sticky left-[42px] z-20 border-r border-gray-300 bg-[#0B3B2E] px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Property</th>
+                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Unit No</th>
+                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Code</th>
+                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Unit Type</th>
+                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Availability</th>
+                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Current Tenant</th>
+                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Available From</th>
+                    <th className="border-r border-gray-300 px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Days Vacant</th>
+                    <th className="border-r border-gray-300 px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Rent</th>
+                    <th className="px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1005,46 +1005,46 @@ const Vacants = () => {
                                 {isExpanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
                               </button>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-1.5 align-top font-bold text-slate-800">
+                            <td className="border-r border-gray-200 px-1.5 py-1 align-top font-bold text-slate-800">
                               <div className="truncate whitespace-nowrap" title={row.propertyName}>
                                 {row.propertyName}
                               </div>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-1.5 align-top font-bold text-slate-900 whitespace-nowrap">
+                            <td className="border-r border-gray-200 px-1.5 py-1 align-top font-bold text-slate-900 whitespace-nowrap">
                               {row.unitNo}
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-1.5 align-top font-semibold text-slate-600 whitespace-nowrap">
+                            <td className="border-r border-gray-200 px-1.5 py-1 align-top font-semibold text-slate-600 whitespace-nowrap">
                               {row.unitCode}
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-1.5 align-top">
-                              <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-800">
+                            <td className="border-r border-gray-200 px-1.5 py-1 align-top">
+                              <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
                                 {row.unitTypeLabel}
                               </span>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-1.5 align-top">
-                              <span className={`inline-flex max-w-full truncate whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${getAvailabilityTone(row.status)}`}>
+                            <td className="border-r border-gray-200 px-1.5 py-1 align-top">
+                              <span className={`inline-flex max-w-full truncate whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${getAvailabilityTone(row.status)}`}>
                                 {row.statusLabel}
                               </span>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-1.5 align-top font-semibold text-slate-700">
+                            <td className="border-r border-gray-200 px-1.5 py-1 align-top font-semibold text-slate-700">
                               <div className="truncate whitespace-nowrap" title={row.tenantName}>
                                 {row.tenantName}
                               </div>
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-1.5 align-top font-semibold text-slate-700 whitespace-nowrap">
+                            <td className="border-r border-gray-200 px-1.5 py-1 align-top font-semibold text-slate-700 whitespace-nowrap">
                               {row.availableFromLabel}
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-1.5 text-right align-top font-bold text-slate-700 whitespace-nowrap">
+                            <td className="border-r border-gray-200 px-1.5 py-1 text-right align-top font-bold text-slate-700 whitespace-nowrap">
                               {row.daysVacantLabel}
                             </td>
-                            <td className="border-r border-gray-200 px-2 py-1.5 text-right align-top font-bold text-slate-900 whitespace-nowrap">
+                            <td className="border-r border-gray-200 px-1.5 py-1 text-right align-top font-bold text-slate-900 whitespace-nowrap">
                               {row.rentLabel}
                             </td>
-                            <td className="px-2 py-1.5 align-top">
+                            <td className="px-1.5 py-1 align-top">
                               <div className="flex min-w-0 flex-wrap gap-1.5">
                                 <button
                                   onClick={() => navigate(`/units/${row.id}`)}
-                                  className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                                  className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[10px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                                 >
                                   <FaUserEdit size={10} />
                                   View Unit
@@ -1053,7 +1053,7 @@ const Vacants = () => {
                                 {row.tenantId ? (
                                   <button
                                     onClick={() => navigate(`/tenant/${row.tenantId}/statement`, { state: { tabTitle: `${row.unitNo} Tenant` } })}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-slate-700 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-slate-800"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-slate-700 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-slate-800"
                                   >
                                     <FaUserEdit size={10} />
                                     Review Tenant
@@ -1062,7 +1062,7 @@ const Vacants = () => {
                                   <button
                                     onClick={() => openTenantTakeOn(row)}
                                     disabled={!canAddTenant}
-                                    className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] text-white shadow-sm ${
+                                    className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[10px] text-white shadow-sm ${
                                       canAddTenant ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "cursor-not-allowed bg-gray-400"
                                     }`}
                                   >
@@ -1074,7 +1074,7 @@ const Vacants = () => {
                                 {["vacant", "notice_given"].includes(row.status) && (
                                   <button
                                     onClick={() => handleReserve(row)}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-violet-700"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-violet-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-violet-700"
                                   >
                                     <FaTag size={10} />
                                     Reserve
@@ -1084,7 +1084,7 @@ const Vacants = () => {
                                 {["vacant", "notice_given", "reserved"].includes(row.status) && (
                                   <button
                                     onClick={() => handleMaintenance(row)}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-amber-700"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-amber-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-amber-700"
                                   >
                                     <FaWrench size={10} />
                                     Maintenance
@@ -1094,7 +1094,7 @@ const Vacants = () => {
                                 {row.status === "off_market" ? (
                                   <button
                                     onClick={() => handleRestore(row)}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-emerald-700"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-emerald-700"
                                   >
                                     <FaUndo size={10} />
                                     Restore
@@ -1102,7 +1102,7 @@ const Vacants = () => {
                                 ) : (
                                   <button
                                     onClick={() => handleOffMarket(row)}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-slate-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-slate-700"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-slate-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-slate-700"
                                   >
                                     <FaArchive size={10} />
                                     Off Market
@@ -1112,7 +1112,7 @@ const Vacants = () => {
                                 {["reserved", "under_maintenance"].includes(row.status) && (
                                   <button
                                     onClick={() => handleReady(row)}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-green-600 px-2.5 py-1 text-[11px] text-white shadow-sm transition-colors hover:bg-green-700"
+                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-green-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-green-700"
                                   >
                                     <FaCheckCircle size={10} />
                                     Mark Ready
@@ -1129,15 +1129,15 @@ const Vacants = () => {
                                   <div className="space-y-3 rounded-lg border-2 border-[#0B3B2E]/20 bg-white p-4 shadow-md">
                                     <h4 className="border-b-2 border-[#0B3B2E] pb-2 text-sm font-black text-gray-900">🏢 Inventory Snapshot</h4>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Property</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Property</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{row.propertyName}</p>
                                     </div>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Unit / Space</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit / Space</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{row.unitNo}</p>
                                     </div>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Unit Type</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit Type</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{row.unitTypeLabel}</p>
                                     </div>
                                   </div>
@@ -1145,15 +1145,15 @@ const Vacants = () => {
                                   <div className="space-y-3 rounded-lg border-2 border-orange-200 bg-white p-4 shadow-md">
                                     <h4 className="border-b-2 border-[#FF8C00] pb-2 text-sm font-black text-gray-900">📍 Availability Details</h4>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Availability Status</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Availability Status</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{row.statusLabel}</p>
                                     </div>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Available From</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Available From</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{row.availableFromLabel}</p>
                                     </div>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Days Vacant</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Days Vacant</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{row.daysVacantLabel}</p>
                                     </div>
                                   </div>
@@ -1161,15 +1161,15 @@ const Vacants = () => {
                                   <div className="space-y-3 rounded-lg border-2 border-blue-200 bg-white p-4 shadow-md">
                                     <h4 className="border-b-2 border-blue-600 pb-2 text-sm font-black text-gray-900">👥 Occupancy Context</h4>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Current Tenant</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Current Tenant</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{row.tenantName}</p>
                                     </div>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Move-out Date</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Move-out Date</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{formatDate(row.moveOutDate)}</p>
                                     </div>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Operational Notes</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Operational Notes</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{row.notes}</p>
                                     </div>
                                   </div>
@@ -1177,15 +1177,15 @@ const Vacants = () => {
                                   <div className="space-y-3 rounded-lg border-2 border-green-200 bg-white p-4 shadow-md">
                                     <h4 className="border-b-2 border-green-600 pb-2 text-sm font-black text-gray-900">💰 Letting Snapshot</h4>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Monthly Rent</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Monthly Rent</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{row.rentLabel}</p>
                                     </div>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Unit Code</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Unit Code</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{row.unitCode}</p>
                                     </div>
                                     <div>
-                                      <span className="text-xs font-black uppercase tracking-wide text-gray-700">Open Maintenance</span>
+                                      <span className="text-[11px] font-black uppercase tracking-wide text-gray-700">Open Maintenance</span>
                                       <p className="mt-2 text-sm font-black text-gray-900">{row.maintenanceCount}</p>
                                     </div>
                                   </div>
@@ -1214,7 +1214,7 @@ const Vacants = () => {
 
             <div className="sticky bottom-0 z-20 flex-shrink-0 border-t border-gray-200 bg-white shadow-sm">
               <div className="flex items-center justify-between px-3 py-2">
-                <div className="text-xs text-gray-600">
+                <div className="text-[11px] text-gray-600">
                   <div className="flex items-center gap-4">
                     <span className="font-bold">
                       Showing <span className="font-bold text-slate-900">{currentRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> unit(s) across <span className="font-bold text-slate-900">{groupedRows.length}</span> propert{groupedRows.length === 1 ? "y" : "ies"}
@@ -1222,11 +1222,11 @@ const Vacants = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs text-slate-500">
+                <div className="flex items-center gap-2 text-[11px] text-slate-500">
                   <button
                     onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                     disabled={safeCurrentPage === 1}
-                    className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-[11px] font-bold transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <FaChevronLeft size={10} />
                     Previous
@@ -1240,7 +1240,7 @@ const Vacants = () => {
                           <button
                             key={page}
                             onClick={() => setCurrentPage(page)}
-                            className={`min-w-[32px] rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
+                            className={`min-w-[32px] rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors ${
                               safeCurrentPage === page
                                 ? "border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]"
                                 : "border-gray-300 hover:bg-gray-50"
@@ -1251,7 +1251,7 @@ const Vacants = () => {
                         );
                       }
                       if (page === safeCurrentPage - 2 || page === safeCurrentPage + 2) {
-                        return <span key={page} className="px-1 text-xs text-gray-400">...</span>;
+                        return <span key={page} className="px-1 text-[11px] text-gray-400">...</span>;
                       }
                       return null;
                     })}
@@ -1260,7 +1260,7 @@ const Vacants = () => {
                   <button
                     onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                     disabled={safeCurrentPage === totalPages}
-                    className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-[11px] font-bold transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Next
                     <FaChevronRight size={10} />

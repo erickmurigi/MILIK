@@ -160,7 +160,7 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
       />
 
       <div
-        className={`fixed top-0 left-0 right-0 z-50 ${
+        className={`sticky top-0 left-0 right-0 z-50 ${
           darkMode ? "bg-gray-800" : "bg-white"
         } border-b ${darkMode ? "border-gray-700" : "border-gray-200"}`}
       >
@@ -173,21 +173,22 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
           currentUser={currentUser}
           activeCompanyContext={activeCompanyContext}
         />
-      </div>
-
-      <div className="fixed top-[88px] left-0 right-0 z-40">
-        <TabManager darkMode={darkMode} />
+        <div className={`${darkMode ? "border-gray-700 bg-gray-800" : "border-gray-200 bg-white"} border-t`}>
+          <div className="max-w-full overflow-x-auto overflow-y-hidden whitespace-nowrap">
+            <TabManager darkMode={darkMode} />
+          </div>
+        </div>
       </div>
 
       <div
-        className={`flex flex-1 pt-36 bg-white ${
+        className={`flex flex-1 overflow-x-hidden bg-white ${
           lockContentScroll
-            ? "h-full min-h-0 overflow-hidden pb-9"
+            ? "h-[calc(100vh-var(--milik-header-offset,0px))] min-h-0 overflow-hidden pb-9"
             : "min-h-screen pb-20"
         }`}
       >
         <main
-          className={`flex-1 pt-4 overflow-x-hidden bg-white ${
+          className={`flex-1 pt-2 overflow-x-hidden bg-white ${
             lockContentScroll
               ? "overflow-y-hidden min-h-0 h-full"
               : "overflow-y-auto min-h-[calc(100vh-9rem)]"
@@ -973,7 +974,7 @@ const TopToolbar = ({
           <img
             src="/logo (2).png"
             alt="Milik Logo"
-            className="h-12 w-20 object-contain border border-white/20"
+            className="h-9 w-14 object-contain border border-white/20 sm:h-12 sm:w-20"
           />
         </div>
 
@@ -983,7 +984,7 @@ const TopToolbar = ({
               onClick={() => {
                 setActiveMenu(activeMenu === item.id ? null : item.id);
               }}
-              className={`px-4 py-2 text-sm font-bold text-white transition-colors ${
+              className={`whitespace-nowrap px-3 py-2 text-xs font-bold text-white transition-colors sm:px-4 sm:text-sm ${
                 activeMenu === item.id
                   ? darkMode
                     ? "bg-gray-700 text-white"
