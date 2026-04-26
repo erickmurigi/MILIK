@@ -44,7 +44,7 @@ const moduleRegistry = [
   {
     id: "milik",
     moduleKey: "propertyManagement",
-    label: "Milik Property Management System",
+    label: "Property Management",
     icon: <FaHome />,
     to: "/dashboard",
     status: "active",
@@ -108,7 +108,7 @@ const moduleRegistry = [
   },
 ];
 
-const StartMenu = ({ darkMode = false }) => {
+const StartMenu = ({ darkMode = false, variant = "floating" }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { currentUser } = useSelector((state) => state.auth || {});
@@ -131,6 +131,7 @@ const StartMenu = ({ darkMode = false }) => {
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
   const operatingModeLabel = getCompanyOperatingModeLabel(activeCompanyContext?.companyMode);
+  const isHeaderVariant = variant === "header";
 
   useEffect(() => {
     const onDown = (e) => {
@@ -169,16 +170,7 @@ const StartMenu = ({ darkMode = false }) => {
       .filter((item) => hasCompanyModule(activeCompanyContext, item.moduleKey));
   }, [activeCompanyContext, isLandlordMode]);
 
-  const secondaryTop = useMemo(
-    () => [
-      { label: "SMS Manager", icon: <FaSms />, onClick: () => toast.info("SMS Manager is coming soon") },
-      { label: "Email Manager", icon: <FaEnvelope />, onClick: () => toast.info("Email Manager is coming soon") },
-      { label: "Sticky Notes", icon: <FaStickyNote />, onClick: () => toast.info("Sticky Notes are coming soon") },
-      { label: "Calculator", icon: <FaCalculator />, onClick: () => window.open("https://www.google.com/search?q=calculator", "_blank", "noopener,noreferrer") },
-      { label: "Help", icon: <FaQuestionCircle />, onClick: () => toast.info("Help is coming soon") },
-    ],
-    []
-  );
+  const secondaryTop = useMemo(() => [], []);
 
   const openSwitchCompany = async ({ forceRefresh = false } = {}) => {
     setSearch("");
@@ -226,7 +218,7 @@ const StartMenu = ({ darkMode = false }) => {
 
     if (isSystemAdmin) {
       items.push({
-        label: "System Admin",
+        label: "System Administration",
         icon: <FaUserShield />,
         onClick: () => {
           setOpen(false);
@@ -236,7 +228,7 @@ const StartMenu = ({ darkMode = false }) => {
     }
 
     items.push({
-      label: "Switch Company",
+      label: "Switch Active Company",
       icon: <FaBuilding />,
       onClick: async (e) => {
         e?.preventDefault?.();
@@ -322,37 +314,41 @@ const StartMenu = ({ darkMode = false }) => {
 
   return (
     <>
-      <div className="fixed bottom-4 left-1/2 z-[120] -translate-x-1/2 sm:bottom-12">
+      <div className={isHeaderVariant ? "relative z-[120] flex items-center border-r border-white/10" : "fixed bottom-4 left-1/2 z-[120] -translate-x-1/2 sm:bottom-12"}>
         <button
           ref={anchorRef}
           onClick={() => setOpen((v) => !v)}
           className={[
-            "group relative flex items-center gap-2 rounded-2xl border px-4 py-2 shadow-lg",
+            isHeaderVariant
+              ? "group relative flex h-full items-center gap-2 border-0 border-r border-white/10 px-3 py-2 text-white transition hover:bg-white/10"
+              : "group relative flex items-center gap-2 rounded-2xl border px-4 py-2 shadow-lg",
             "backdrop-blur-xl transition active:scale-[0.98]",
-            darkMode
-              ? "border-white/20 bg-white/25 text-white"
-              : "border-emerald-100 bg-white/85 text-slate-900",
-          ].join(" ")}
+            isHeaderVariant
+              ? "bg-transparent text-white"
+              : darkMode
+                ? "border-white/20 bg-white/25 text-white"
+                : "border-emerald-100 bg-white/85 text-slate-900",
+          ].join(" " )}
           aria-label="Open Start Menu"
         >
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white shadow-inner">
+          <span className={isHeaderVariant ? "flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-white" : "flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white shadow-inner"}>
             <FaThLarge />
           </span>
-          <span className="text-sm font-extrabold tracking-wide">MENU</span>
+          <span className={isHeaderVariant ? "hidden text-xs font-extrabold tracking-wide sm:inline" : "text-sm font-extrabold tracking-wide"}>MENU</span>
           <span className="absolute -inset-1 rounded-3xl bg-white/10 opacity-0 transition group-hover:opacity-100" />
         </button>
 
         {open && (
-          <div ref={menuRef} className="absolute bottom-[60px] left-1/2 w-[94vw] max-w-[860px] -translate-x-1/2">
+          <div ref={menuRef} className={isHeaderVariant ? "absolute left-0 top-full w-[94vw] max-w-[720px]" : "absolute bottom-[60px] left-1/2 w-[94vw] max-w-[720px] -translate-x-1/2"}>
             <div
               className={[
-                "overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-2xl",
+                "overflow-hidden rounded-2xl border shadow-2xl backdrop-blur-2xl",
                 darkMode ? "border-white/15 bg-black/30" : "border-white/40 bg-white/80",
               ].join(" ")}
             >
-              <div className="flex items-center justify-between bg-gradient-to-r from-[#0A400C] via-[#0f766e] to-[#F97316] px-5 py-4">
+              <div className="flex items-center justify-between bg-gradient-to-r from-[#0A400C] via-[#0f766e] to-[#0A400C] px-4 py-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white/15 text-white shadow-inner">
+                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-white/20 bg-white/15 text-white shadow-inner">
                     {companyLogo ? (
                       <img src={companyLogo} alt={companyName} className="h-full w-full object-contain p-1.5" />
                     ) : (
@@ -360,9 +356,9 @@ const StartMenu = ({ darkMode = false }) => {
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate text-white font-extrabold">{userName}</div>
-                    <div className="truncate text-xs text-white/80">{companyName}</div>
-                    <div className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">{operatingModeLabel}</div>
+                    <div className="truncate text-white font-extrabold">{companyName}</div>
+                    <div className="truncate text-xs text-white/80">{operatingModeLabel}</div>
+                    <div className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">{userName}</div>
                   </div>
                 </div>
 
@@ -374,11 +370,9 @@ const StartMenu = ({ darkMode = false }) => {
                 </button>
               </div>
 
-              <div className="max-h-[78vh] overflow-y-auto"><div className="grid grid-cols-1 md:grid-cols-3">
-                <div className={["p-4 md:col-span-2", darkMode ? "bg-white/5" : "bg-white/40"].join(" ")}>
-                  <div className={darkMode ? "mb-3 text-xs font-bold text-white/80" : "mb-3 text-xs font-bold text-slate-700"}>
-                    MODULES
-                  </div>
+              <div className="max-h-[76vh] overflow-y-auto"><div className="grid grid-cols-1 md:grid-cols-[1fr_220px]">
+                <div className={["p-4", darkMode ? "bg-white/5" : "bg-white/40"].join(" ")}>
+                  <div className={darkMode ? "mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-white/75" : "mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600"}>Modules</div>
 
                   {primary.length > 0 ? (
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -388,18 +382,16 @@ const StartMenu = ({ darkMode = false }) => {
                           type="button"
                           onClick={() => handlePrimaryModuleClick(item)}
                           className={[
-                            "flex items-center gap-3 rounded-2xl border px-3 py-3 text-left transition",
+                            "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition",
                             darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
                           ].join(" ")}
                         >
-                          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white">
                             {item.icon}
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-semibold">{item.label}</div>
-                            <div className={darkMode ? "text-[11px] text-white/60" : "text-[11px] text-slate-500"}>
-                              {item.status === "active" ? "Live workspace" : "Enabled for company"}
-                            </div>
+                            
                           </div>
                         </button>
                       ))}
@@ -415,13 +407,14 @@ const StartMenu = ({ darkMode = false }) => {
 
                   <div className="mt-4 h-px bg-black/10" />
 
-                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <div className={darkMode ? "mt-4 mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-white/75" : "mt-4 mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600"}>Configuration</div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {secondaryBottom.map((item) => (
                       <button
                         key={item.label}
                         onClick={item.onClick}
                         className={[
-                          "flex items-center gap-2 rounded-2xl border px-3 py-3 text-left transition",
+                          "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition",
                           darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
                         ].join(" ")}
                       >
@@ -433,45 +426,27 @@ const StartMenu = ({ darkMode = false }) => {
                 </div>
 
                 <div className={["p-4", darkMode ? "bg-black/10" : "bg-white/55"].join(" ")}>
-                  <div className={darkMode ? "mb-3 text-xs font-bold text-white/80" : "mb-3 text-xs font-bold text-slate-700"}>TOOLS</div>
+                  <div className={darkMode ? "mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-white/75" : "mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600"}>Account</div>
                   <div className="space-y-2">
-                    {secondaryTop.map((item) => (
-                      <button
-                        key={item.label}
-                        onClick={item.onClick}
-                        className={[
-                          "w-full flex items-center gap-3 rounded-2xl border px-3 py-3 transition",
-                          darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
-                        ].join(" ")}
-                      >
-                        <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white">{item.icon}</span>
-                        <div className="text-sm font-semibold">{item.label}</div>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="mt-4 h-px bg-black/10" />
-
-                  <div className="mt-4 space-y-2">
                     <button
                       onClick={() => toast.info("My Account is coming soon")}
                       className={[
-                        "w-full flex items-center gap-3 rounded-2xl border px-3 py-3 transition",
+                        "w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 transition",
                         darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
                       ].join(" ")}
                     >
-                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900/90 text-white"><FaUserCircle /></span>
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900/90 text-white"><FaUserCircle /></span>
                       <div className="text-sm font-semibold">My Account</div>
                     </button>
 
                     <button
                       onClick={onSignOut}
                       className={[
-                        "w-full flex items-center gap-3 rounded-2xl border px-3 py-3 transition",
+                        "w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 transition",
                         darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
                       ].join(" ")}
                     >
-                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-600/90 text-white"><FaSignOutAlt /></span>
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-600/90 text-white"><FaSignOutAlt /></span>
                       <div className="text-sm font-semibold">Sign Out</div>
                     </button>
                   </div>
@@ -480,9 +455,11 @@ const StartMenu = ({ darkMode = false }) => {
 
               </div>
 
-              <div className="relative">
-                <div className="absolute left-1/2 -bottom-2 h-4 w-4 -translate-x-1/2 rotate-45 border border-white/30 bg-white/70 backdrop-blur-xl" />
-              </div>
+              {!isHeaderVariant ? (
+                <div className="relative">
+                  <div className="absolute left-1/2 -bottom-2 h-4 w-4 -translate-x-1/2 rotate-45 border border-white/30 bg-white/70 backdrop-blur-xl" />
+                </div>
+              ) : null}
             </div>
           </div>
         )}
@@ -493,8 +470,7 @@ const StartMenu = ({ darkMode = false }) => {
           <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-emerald-100 bg-white shadow-2xl">
             <div className="flex items-center justify-between bg-gradient-to-r from-[#0A400C] via-[#16A34A] to-[#F97316] px-6 py-4 text-white">
               <div>
-                <div className="text-lg font-extrabold">Switch Company</div>
-                <div className="text-xs text-white/80">Choose the company context you want to work in.</div>
+                <div className="text-lg font-extrabold">Switch Active Company</div>
               </div>
               <button onClick={() => setShowSwitchModal(false)} className="rounded-xl border border-white/20 px-3 py-2 text-xs font-semibold hover:bg-white/10">Close</button>
             </div>
@@ -529,7 +505,7 @@ const StartMenu = ({ darkMode = false }) => {
                       >
                         <div className="flex items-center justify-between gap-4">
                           <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                               {company?.logo ? (
                                 <img src={company.logo} alt={company.companyName} className="h-full w-full object-contain p-1.5" />
                               ) : (

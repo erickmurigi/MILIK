@@ -42,10 +42,8 @@ const SMS_DRAFT_ID = "__new_sms_profile__";
 const validSmsSections = new Set(["configuration", "templates"]);
 
 const tabs = [
-  { key: "details", label: "COMPANY PROFILE", icon: <FaBuilding /> },
-  { key: "structure", label: "OPERATING MODEL", icon: <FaSitemap /> },
-  { key: "modules", label: "MODULES", icon: <FaThLarge /> },
-  { key: "payments", label: "PAYMENTS & COLLECTIONS", icon: <FaMoneyCheckAlt /> },
+  { key: "details", label: "PROFILE", icon: <FaBuilding /> },
+  { key: "payments", label: "PAYMENTS", icon: <FaMoneyCheckAlt /> },
   { key: "email", label: "EMAIL", icon: <FaEnvelope /> },
   { key: "sms", label: "SMS", icon: <FaSms /> },
 ];
@@ -980,6 +978,26 @@ export default function CompanySetupPage() {
     });
   };
 
+  const buildCompanySetupPayload = () => ({
+    companyName: company.companyName,
+    registrationNo: company.registrationNo,
+    taxPIN: company.taxPIN,
+    taxExemptCode: company.taxExemptCode,
+    postalAddress: company.postalAddress,
+    country: company.country,
+    town: company.town,
+    roadStreet: company.roadStreet,
+    email: company.email,
+    phoneNo: company.phoneNo,
+    slogan: company.slogan,
+    logo: company.logo,
+    baseCurrency: company.baseCurrency,
+    taxRegime: company.taxRegime,
+    fiscalStartMonth: company.fiscalStartMonth,
+    fiscalStartYear: company.fiscalStartYear,
+    operationPeriodType: company.operationPeriodType,
+  });
+
   const beginCreatePaymentConfig = () => {
     setSelectedPaymentConfigId(PAYMENT_DRAFT_ID);
     setPaymentForm(createBlankPaymentForm(paymentConfigs.length + 1));
@@ -1010,8 +1028,8 @@ export default function CompanySetupPage() {
 
     setSavingDetails(true);
     try {
-      await dispatch(updateCompany(currentCompany._id, company));
-      toast.success("Company details saved successfully");
+      await dispatch(updateCompany(currentCompany._id, buildCompanySetupPayload()));
+      toast.success("Company profile saved");
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to save company details");
     } finally {
@@ -2899,16 +2917,12 @@ export default function CompanySetupPage() {
     switch (activeTab) {
       case "details":
         return renderDetailsTab();
-      case "structure":
-        return renderStructureTab();
       case "payments":
         return renderPaymentsTab();
       case "email":
         return renderEmailTab();
       case "sms":
         return renderSmsTab();
-      case "modules":
-        return renderModulesTab();
       default:
         return (
           <Card title="Coming Soon" subtitle="This tab is preserved and ready for the next implementation pass.">
@@ -2921,10 +2935,13 @@ export default function CompanySetupPage() {
   return (
     <DashboardLayout>
       <div className="mx-auto max-w-[1200px] px-4 py-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="text-xl font-extrabold text-slate-900">Company Setup</div>
-            <div className="max-w-3xl text-sm leading-6 text-slate-600">Use this workspace for company identity, operating mode, enabled modules, payment integrations and communication channels. Future-facing tax, billing and accounting defaults live in Operational Settings.</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{normalizeCompanyOperatingMode(company.companyMode) === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD ? 'Self-Managing Landlord' : 'Property Manager'}</span>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{Object.values(applyCompanyModeBaseModules(company.modules || {}, company.companyMode)).filter(Boolean).length} modules assigned</span>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -2945,40 +2962,26 @@ export default function CompanySetupPage() {
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <button onClick={() => switchTab('details')} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Company Profile</div>
-            <div className="mt-2 text-base font-extrabold text-slate-900">Identity, statutory details and fiscal basics</div>
-            <div className="mt-1 text-sm leading-6 text-slate-600">Maintain the company name, logo, contacts, statutory identifiers and base operating profile used across the workspace.</div>
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
+          <button onClick={() => switchTab('details')} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+            <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">Profile</div>
+            <div className="mt-1 text-base font-extrabold text-slate-900">Company details</div>
           </button>
-          <button onClick={() => switchTab('structure')} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Operating Model</div>
-            <div className="mt-2 text-base font-extrabold text-slate-900">{normalizeCompanyOperatingMode(company.companyMode) === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD ? 'Self-Managing Landlord' : 'Property Manager'}</div>
-            <div className="mt-1 text-sm leading-6 text-slate-600">Set company posture, workspace wording and future-facing defaults without touching posted operational history.</div>
+          <button onClick={() => switchTab('payments')} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+            <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">Payments</div>
+            <div className="mt-1 text-base font-extrabold text-slate-900">{paymentSummary.active} active / {paymentSummary.total}</div>
           </button>
-          <button onClick={() => switchTab('modules')} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Modules</div>
-            <div className="mt-2 text-base font-extrabold text-slate-900">{Object.values(applyCompanyModeBaseModules(company.modules || {}, company.companyMode)).filter(Boolean).length} enabled</div>
-            <div className="mt-1 text-sm leading-6 text-slate-600">Keep the workspace lean by showing only the modules this company truly uses while preserving data safely.</div>
+          <button onClick={() => switchTab('email')} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+            <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">Email</div>
+            <div className="mt-1 text-base font-extrabold text-slate-900">{emailSummary.active} active / {emailSummary.total}</div>
           </button>
-          <button onClick={() => switchTab('payments')} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Payments & Collections</div>
-            <div className="mt-2 text-base font-extrabold text-slate-900">{paymentSummary.active} active / {paymentSummary.total} total</div>
-            <div className="mt-1 text-sm leading-6 text-slate-600">Manage M-Pesa Paybill credentials, posting behaviour and default collection cashbook mapping for the active company.</div>
-          </button>
-          <button onClick={() => switchTab('email')} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Email</div>
-            <div className="mt-2 text-base font-extrabold text-slate-900">{emailSummary.active} active / {emailSummary.total} total</div>
-            <div className="mt-1 text-sm leading-6 text-slate-600">Configure SMTP sender identities and operational email profiles for invoices, receipts, statements and alerts.</div>
-          </button>
-          <button onClick={() => navigate('/settings')} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-left shadow-sm transition hover:border-amber-300 hover:bg-amber-100/70">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-amber-700">Operational Settings</div>
-            <div className="mt-2 text-base font-extrabold text-slate-900">Tax {taxSetupSummary.enabled ? 'enabled' : 'disabled'} • {taxSetupSummary.defaultCodeLabel}</div>
-            <div className="mt-1 text-sm leading-6 text-slate-700">Utilities, billing periods, expense items, tax configuration and accounting defaults are maintained in their own workspace.</div>
+          <button onClick={() => navigate('/settings')} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left shadow-sm transition hover:border-amber-300 hover:bg-amber-100/70">
+            <div className="text-[11px] font-black uppercase tracking-wide text-amber-700">Operational</div>
+            <div className="mt-1 text-base font-extrabold text-slate-900">Tax {taxSetupSummary.enabled ? 'enabled' : 'disabled'}</div>
           </button>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-white/40 bg-white/50 p-2 backdrop-blur-xl">
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
           <div className="flex gap-2 overflow-x-auto">
             {tabs.map((tab) => {
               const isActive = tab.key === activeTab;
@@ -3008,7 +3011,7 @@ export default function CompanySetupPage() {
         open={smsConfigModalOpen}
         onClose={closeSmsConfigModal}
         title={selectedSmsProfileId === SMS_DRAFT_ID ? "New SMS Configuration" : "SMS Configuration Details"}
-        subtitle="Add provider credentials, sender identity and company delivery defaults for this SMS profile."
+        subtitle=""
         footer={
           <div className="flex flex-wrap justify-end gap-2">
             <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={resetSmsEditor}>

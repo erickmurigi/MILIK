@@ -43,7 +43,7 @@ const BillingScheduleAdjustmentSchema = new mongoose.Schema(
 
 const LeaseSchema = new mongoose.Schema(
   {
-    agreementNumber: { type: String, trim: true },
+    agreementNumber: { type: String, trim: true, default: "" },
     tenant: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Tenant",
@@ -124,12 +124,24 @@ LeaseSchema.index({ business: 1, tenant: 1, status: 1 });
 LeaseSchema.index({ business: 1, unit: 1, status: 1 });
 LeaseSchema.index({ tenant: 1, startDate: -1 });
 LeaseSchema.index({ unit: 1, endDate: 1 });
-LeaseSchema.index({ business: 1, agreementNumber: 1 }, { unique: true, sparse: true });
+LeaseSchema.index(
+  { business: 1, agreementNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      agreementNumber: { $type: "string", $ne: "" },
+    },
+  }
+);
 LeaseSchema.index({ business: 1, "billingScheduleAdjustments.periodKey": 1 });
 
 LeaseSchema.pre("validate", function normalizeLease(next) {
   if (typeof this.agreementNumber === "string") {
     this.agreementNumber = this.agreementNumber.trim();
+  }
+
+  if (this.isNew && !this.agreementNumber) {
+    return next(new Error("Agreement number is required before saving a lease."));
   }
 
   if (typeof this.documentUrl === "string") {

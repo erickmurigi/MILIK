@@ -12,6 +12,10 @@ const router = express.Router();
 
 const COMPANY_SELECT = 'companyName companyCode baseCurrency logo country town email phoneNo slogan companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus';
 const isSystemAdmin = (user = {}) => Boolean(user?.isSystemAdmin || user?.superAdminAccess);
+const SYSTEM_ACCESS_FIELDS = ['superAdminAccess', 'isSystemAdmin'];
+const userId = (user = {}) => String(user?._id || user?.id || '');
+const hasSystemAccessPayload = (payload = {}) => SYSTEM_ACCESS_FIELDS.some((field) => payload[field] === true);
+const hasRequiredUserFields = (body = {}) => ['surname', 'otherNames', 'email', 'phoneNumber', 'profile'].every((field) => String(body[field] || '').trim());
 
 const userAccessibleCompanyIds = (user = {}) => {
   if (isSystemAdmin(user)) return [];
@@ -259,6 +263,12 @@ router.get('/:id', verifyUser, async (req, res) => {
 router.post('/', verifyUser, async (req, res) => {
   try {
     const normalizedEmail = String(req.body.email || '').toLowerCase().trim();
+    if (!hasRequiredUserFields(req.body)) {
+      return res.status(400).json({ message: 'Surname, other names, email, phone number and profile are required' });
+    }
+    if (!isSystemAdmin(req.user) && hasSystemAccessPayload(req.body)) {
+      return res.status(403).json({ message: 'Only Milik Admin can grant system admin access' });
+    }
     const companyIds = buildCompanyIds(req.body);
     const primaryCompany = String(req.body.primaryCompany || req.body.company || companyIds[0] || '');
 
@@ -373,6 +383,15 @@ router.put('/:id', verifyUser, async (req, res) => {
     }
 
     const updatePayload = { ...req.body };
+    if (!hasRequiredUserFields({ ...existingUser.toObject(), ...updatePayload })) {
+      return res.status(400).json({ message: 'Surname, other names, email, phone number and profile are required' });
+    }
+    if (!isSystemAdmin(req.user) && hasSystemAccessPayload(updatePayload)) {
+      return res.status(403).json({ message: 'Only Milik Admin can grant system admin access' });
+    }
+    if (!isSystemAdmin(req.user) && isSystemAdmin(existingUser)) {
+      return res.status(403).json({ message: 'Normal company users cannot edit Milik/System Admin accounts' });
+    }
     if (updatePayload.password === '') delete updatePayload.password;
     if (updatePayload.password) {
       const salt = await bcrypt.genSalt(10);
@@ -418,7 +437,7 @@ router.delete('/:id', verifyUser, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user || user.isSystemAuditUser) return res.status(404).json({ message: 'User not found' });
-    if (String(user._id) === String(req.user?.id)) {
+    if (String(user._id) === userId(req.user)) {
       return res.status(400).json({ message: 'You cannot delete your own account.' });
     }
     if (user.superAdminAccess || user.isSystemAdmin) {
@@ -439,7 +458,7 @@ router.patch('/:id/toggle-lock', verifyUser, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user || user.isSystemAuditUser) return res.status(404).json({ message: 'User not found' });
-    if (String(user._id) === String(req.user?.id)) {
+    if (String(user._id) === userId(req.user)) {
       return res.status(400).json({ message: 'You cannot lock or unlock your own account.' });
     }
     if (user.superAdminAccess || user.isSystemAdmin) {

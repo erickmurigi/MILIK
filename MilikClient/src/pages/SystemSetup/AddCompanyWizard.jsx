@@ -33,43 +33,43 @@ const MODULE_OPTIONS = [
   {
     key: "propertyManagement",
     label: "Property Management",
-    description: "Landlords, properties, units, tenants, statements, and operations.",
+    description: "",
     icon: FaBuilding,
   },
   {
     key: "billing",
     label: "Billing",
-    description: "Invoicing, charging schedules, and receipting flows tied to the company modules.",
+    description: "",
     icon: FaEnvelope,
   },
   {
     key: "accounts",
     label: "Accounting",
-    description: "General ledger, journals, reports, and financial controls.",
+    description: "",
     icon: FaCalculator,
   },
   {
     key: "hr",
     label: "Human Resource",
-    description: "Employees, staffing workflows, and people administration.",
+    description: "",
     icon: FaUsers,
   },
   {
     key: "inventory",
     label: "Inventory",
-    description: "Items, stores, stock movement, and supply visibility.",
+    description: "",
     icon: FaBoxes,
   },
   {
     key: "pos",
     label: "POS",
-    description: "Point of sale operations for walk-in transactions and tills.",
+    description: "",
     icon: FaStore,
   },
   {
     key: "securityServices",
     label: "Security Services",
-    description: "Guarding and security service operations for managed clients.",
+    description: "",
     icon: FaShieldAlt,
   },
 ];
@@ -104,13 +104,13 @@ const COMPANY_MODE_OPTIONS = [
   {
     key: COMPANY_OPERATING_MODES.PROPERTY_MANAGER,
     label: "Property Manager",
-    description: "For agencies or teams managing properties on behalf of landlords, with landlord-facing workflows visible.",
+    description: "",
     accent: "emerald",
   },
   {
     key: COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD,
     label: "Self-Managing Landlord",
-    description: "For landlords managing their own portfolio directly, with landlord-focused wording and PM-only screens hidden.",
+    description: "",
     accent: "orange",
   },
 ];
@@ -187,10 +187,7 @@ const AddCompanyWizard = () => {
   const [loading, setLoading] = useState(isEditMode);
   const [error, setError] = useState("");
 
-  const pageTitle = isEditMode ? "Company Details" : "New Company";
-  const pageSubtitle = isEditMode
-    ? "Review and update the selected company without losing the current setup."
-    : "Create a new company quickly, then continue configuration inside Company Setup using the active company context.";
+  const pageTitle = isEditMode ? "Company Details" : "Register Company";
 
   const selectedModulesCount = useMemo(
     () => MODULE_OPTIONS.filter((option) => formData.modules?.[option.key]).length,
@@ -366,26 +363,25 @@ const validateForm = () => {
           <div className="grid gap-6 px-6 py-7 text-white md:grid-cols-[1.4fr_0.8fr] md:px-8">
             <div>
               <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-white/90">
-                <FaBuilding /> Milik System Admin
+                <FaBuilding /> System Administration
               </div>
               <h1 className="text-2xl font-black md:text-3xl">{pageTitle}</h1>
-              <p className="mt-2 max-w-2xl text-sm text-white/85">{pageSubtitle}</p>
             </div>
             <div className="grid grid-cols-1 gap-3 self-start sm:grid-cols-3">
               <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
                 <div className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-200">Module set</div>
                 <div className="mt-2 text-2xl font-black">{selectedModulesCount}</div>
-                <div className="text-xs text-white/80">Selected for this company</div>
+                
               </div>
               <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
                 <div className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-200">Operating mode</div>
                 <div className="mt-2 text-sm font-black leading-snug">{getCompanyOperatingModeLabel(formData.companyMode)}</div>
-                <div className="text-xs text-white/80">Controls landlord vs PM workspace behaviour</div>
+                
               </div>
               <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
                 <div className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-200">Logo</div>
                 <div className="mt-2 text-2xl font-black">{formData.logo ? "Yes" : "No"}</div>
-                <div className="text-xs text-white/80">Branding ready</div>
+                
               </div>
             </div>
           </div>
@@ -400,7 +396,7 @@ const validateForm = () => {
             <FaArrowLeft /> Back to companies
           </button>
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-            {isEditMode ? "Editing selected company" : "Fresh company onboarding"}
+            {isEditMode ? "Editing selected company" : "New company"}
           </div>
         </div>
 
@@ -424,7 +420,7 @@ const validateForm = () => {
                     <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-700"><FaBuilding /></div>
                     <div>
                       <h2 className="text-lg font-black text-slate-900">Company profile</h2>
-                      <p className="text-sm text-slate-500">Core identity, registration, and business contact details.</p>
+                      
                     </div>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -466,7 +462,7 @@ const validateForm = () => {
                     <div className="rounded-2xl bg-orange-50 p-3 text-orange-600"><FaMapMarkerAlt /></div>
                     <div>
                       <h2 className="text-lg font-black text-slate-900">Location and statutory setup</h2>
-                      <p className="text-sm text-slate-500">Address, tax, and operating defaults for this company.</p>
+                      
                     </div>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -517,7 +513,7 @@ const validateForm = () => {
                     <div className="rounded-2xl bg-slate-100 p-3 text-slate-700"><FaImage /></div>
                     <div>
                       <h2 className="text-lg font-black text-slate-900">Company logo</h2>
-                      <p className="text-sm text-slate-500">Browse a local image. This will later be used on documents across the system.</p>
+                      
                     </div>
                   </div>
                   <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoSelect} />
@@ -539,8 +535,8 @@ const validateForm = () => {
                   <div className="mb-4 flex items-center gap-3">
                     <div className="rounded-2xl bg-amber-50 p-3 text-amber-700"><FaUsers /></div>
                     <div>
-                      <h2 className="text-lg font-black text-slate-900">Company operating mode</h2>
-                      <p className="text-sm text-slate-500">This decides whether the same Milik engine behaves like a property manager workspace or a self-managing landlord workspace.</p>
+                      <h2 className="text-lg font-black text-slate-900">Operating model</h2>
+                      
                     </div>
                   </div>
                   <div className="space-y-3">
@@ -556,7 +552,7 @@ const validateForm = () => {
                           <div className="flex items-start justify-between gap-4">
                             <div>
                               <div className="text-sm font-black text-slate-900">{option.label}</div>
-                              <div className="mt-1 text-xs text-slate-500">{option.description}</div>
+                              
                             </div>
                             <div className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${selected ? "bg-orange-600 text-white" : "bg-slate-100 text-slate-500"}`}>
                               {selected ? "Selected" : "Choose"}
@@ -572,12 +568,9 @@ const validateForm = () => {
                   <div className="mb-4 flex items-center gap-3">
                     <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-700"><FaCheckCircle /></div>
                     <div>
-                      <h2 className="text-lg font-black text-slate-900">Modules for this company</h2>
-                      <p className="text-sm text-slate-500">Core Milik modules are kept on for both modes. Optional extras can still be enabled here.</p>
+                      <h2 className="text-lg font-black text-slate-900">Module assignment</h2>
+                      
                     </div>
-                  </div>
-                  <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-                    <span className="font-black text-slate-800">Mode in use:</span> {getCompanyOperatingModeLabel(formData.companyMode)}. Property Management, Billing and Accounting remain enabled because both personas use the same core engine.
                   </div>
                   <div className="space-y-3">
                     {MODULE_OPTIONS.map((module) => {
@@ -596,7 +589,7 @@ const validateForm = () => {
                               <div className={`rounded-2xl p-3 ${enabled ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600"}`}><Icon /></div>
                               <div>
                                 <div className="text-sm font-black text-slate-900">{module.label}</div>
-                                <div className="mt-1 text-xs text-slate-500">{module.description}</div>
+                                
                               </div>
                             </div>
                             <div className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${enabled ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}>
@@ -613,8 +606,8 @@ const validateForm = () => {
 
             <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
               <div>
-                <div className="text-sm font-black text-slate-900">Ready to save</div>
-                <div className="text-xs text-slate-500">Company name, postal address, and operating mode will drive how this company sees Milik. Email and phone are optional but recommended.</div>
+                <div className="text-sm font-black text-slate-900">Save company</div>
+                
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
@@ -630,7 +623,7 @@ const validateForm = () => {
                   className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0A400C] px-5 py-3 text-sm font-black text-white transition hover:bg-[#0d5611] disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {saving ? <FaSpinner className="animate-spin" /> : <FaSave />}
-                  {saving ? "Saving..." : isEditMode ? "Save changes" : "Create company & continue"}
+                  {saving ? "Saving..." : isEditMode ? "Save changes" : "Create company"}
                 </button>
               </div>
             </div>

@@ -42,6 +42,15 @@ const ACTION_ALIASES = {
 
 const normalizeKey = (value = "") => String(value || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 
+export const isSystemAdminUser = (user = {}) => Boolean(user?.isSystemAdmin || user?.superAdminAccess);
+
+export const hasCompanySetupAccess = (user = {}) => Boolean(
+  isSystemAdminUser(user) ||
+  user?.adminAccess ||
+  user?.setupAccess ||
+  user?.companySetupAccess
+);
+
 export const normalizeAction = (action = "view") => ACTION_ALIASES[normalizeKey(action)] || normalizeKey(action) || "view";
 
 export const getCompanyAssignment = (user = {}, companyId) => {
@@ -138,7 +147,7 @@ export const hasCompanyActionPermission = ({ user = {}, company = {}, moduleKey 
   const resourceKey = String(resource || "").trim();
   const companyId = String(company?._id || company || user?.company?._id || user?.company || "");
 
-  if (user?.isSystemAdmin || user?.superAdminAccess) return true;
+  if (isSystemAdminUser(user)) return true;
   if (!companyId) return false;
   if (!getAccessibleCompanyIds(user).includes(companyId)) return false;
 

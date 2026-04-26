@@ -15,6 +15,7 @@ import Maintenance from "../../models/Maintenance.js";
 import Inspection from "../../models/Inspection.js";
 import MeterReading from "../../models/MeterReading.js";
 import { createTenantInvoiceRecord, resolveLeaseAgreementFeeIncomeAccount } from "./tenantInvoices.js";
+import { isAgreementNumberDuplicateError, saveLeaseWithUniqueAgreementNumber } from "../../services/agreementNumberService.js";
 
 
 const ACTIVE_TENANT_STATUSES = ["active", "overdue"];
@@ -281,7 +282,7 @@ const syncTenantLeaseRecord = async ({
     activeLease.endDate = terminationDate;
     activeLease.terminatedAt = terminationDate;
     activeLease.terminationReason = terminationReason || tenantDoc.terminationReason || activeLease.terminationReason || "";
-    return activeLease.save();
+    return saveLeaseWithUniqueAgreementNumber(activeLease, { businessId });
   }
 
   const resolvedUnit =
@@ -325,11 +326,11 @@ const syncTenantLeaseRecord = async ({
 
   if (activeLease) {
     Object.assign(activeLease, payload);
-    return activeLease.save();
+    return saveLeaseWithUniqueAgreementNumber(activeLease, { businessId });
   }
 
   const newLease = new Lease(payload);
-  return newLease.save();
+  return saveLeaseWithUniqueAgreementNumber(newLease, { businessId, dateValue: startDate });
 };
 
 const sanitizeUtilities = (utilities = []) => {
@@ -883,6 +884,13 @@ export const createTenant = async (req, res, next) => {
     console.error("Create tenant error:", err);
 
     if (err?.code === 11000) {
+      if (isAgreementNumberDuplicateError(err)) {
+        return res.status(409).json({
+          success: false,
+          message: "Tenant could not be created because the lease agreement number already exists. Please try again.",
+        });
+      }
+
       const duplicateField = Object.keys(err.keyPattern || {})[0] || "field";
 
       if (duplicateField === "idNumber") {
@@ -1239,6 +1247,13 @@ export const updateTenant = async (req, res, next) => {
     });
   } catch (err) {
     if (err?.code === 11000) {
+      if (isAgreementNumberDuplicateError(err)) {
+        return res.status(409).json({
+          success: false,
+          message: "Tenant could not be created because the lease agreement number already exists. Please try again.",
+        });
+      }
+
       const duplicateField = Object.keys(err.keyPattern || {})[0] || "field";
 
       if (duplicateField === "idNumber") {

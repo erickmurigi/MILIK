@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import Company from "../models/Company.js";
 import { createError } from "../utils/error.js";
 import { hasModuleAccess, serializeCompanyForClient } from "../utils/companyModules.js";
-import { getAccessibleCompanyIds, hasCompanyActionPermission } from "../utils/permissionControl.js";
+import { getAccessibleCompanyIds, hasCompanyActionPermission, isSystemAdminUser } from "../utils/permissionControl.js";
 import { extractAuthCookieToken } from "../utils/authCookie.js";
 
 const getJWTSecret = () => {
@@ -22,7 +22,7 @@ export const normalizeCompanyId = (company) => {
 
 export const canAccessCompanyId = (user, companyId) => {
   if (!companyId) return false;
-  if (user?.isSystemAdmin || user?.superAdminAccess) return true;
+  if (isSystemAdminUser(user)) return true;
   return getAccessibleCompanyIds(user).includes(String(companyId));
 };
 
@@ -126,7 +126,7 @@ export const verifyAdmin = (req, res, next) => {
   verifyToken(req, res, (err) => {
     if (err) return next(err);
 
-    if (!req.user?.adminAccess && !req.user?.superAdminAccess) {
+    if (!req.user?.adminAccess && !isSystemAdminUser(req.user)) {
       return next(createError(403, "Admin access required"));
     }
 
@@ -138,7 +138,7 @@ export const verifySuperAdmin = (req, res, next) => {
   verifyToken(req, res, (err) => {
     if (err) return next(err);
 
-    if (!req.user?.superAdminAccess) {
+    if (!isSystemAdminUser(req.user)) {
       return next(createError(403, "Super Admin access required"));
     }
 
@@ -150,7 +150,7 @@ export const verifyCompanyScope = (req, res, next) => {
   verifyToken(req, res, (err) => {
     if (err) return next(err);
 
-    if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
+    if (isSystemAdminUser(req.user)) {
       return next();
     }
 
@@ -166,7 +166,7 @@ export const verifyCompanyScope = (req, res, next) => {
 export const requireCompanyModule = (moduleKey, options = {}) => {
   return async (req, res, next) => {
     try {
-      if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
+      if (isSystemAdminUser(req.user)) {
         return next();
       }
 
@@ -193,7 +193,7 @@ export const requireCompanyModule = (moduleKey, options = {}) => {
 export const requireCompanyPermission = (resource, action = "view", moduleKey = null) => {
   return async (req, _res, next) => {
     try {
-      if (req.user?.isSystemAdmin || req.user?.superAdminAccess) return next();
+      if (isSystemAdminUser(req.user)) return next();
       const company = await attachResolvedCompany(req);
       const allowed = hasCompanyActionPermission({
         user: req.user,
@@ -223,7 +223,7 @@ export const loadCompanyContext = async (req, res, next) => {
 
 export const enforceRequestedCompanyScope = (req, _res, next) => {
   try {
-    if (!req.user || req.user?.isSystemAdmin || req.user?.superAdminAccess) {
+    if (!req.user || isSystemAdminUser(req.user)) {
       return next();
     }
 

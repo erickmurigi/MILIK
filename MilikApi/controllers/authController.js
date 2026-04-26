@@ -624,6 +624,10 @@ export const switchCompany = async (req, res, next) => {
       return next(createError(404, "Company not found"));
     }
 
+    if ((targetCompany.isActive === false || String(targetCompany.accountStatus || "").toLowerCase() === "archived") && !isSystemAdminUser(req.user)) {
+      return next(createError(403, "This company is not active and cannot be selected. Contact Milik/System Admin."));
+    }
+
     if (targetCompany.isDemoWorkspace && !req.user?.isDemoUser) {
       return next(
         createError(

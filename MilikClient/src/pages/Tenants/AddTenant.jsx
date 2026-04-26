@@ -85,6 +85,23 @@ const parseTakeOnPreselection = (location) => {
   }
 };
 
+
+const sanitizeTenantSaveError = (error, fallback = "Failed to save tenant") => {
+  const rawMessage =
+    error?.response?.data?.message ||
+    error?.response?.data?.error ||
+    error?.data?.message ||
+    error?.message ||
+    error?.error ||
+    fallback;
+
+  if (/E11000|duplicate key|MongoServerError|Milik\.leases|agreementNumber/i.test(String(rawMessage || ""))) {
+    return "Tenant could not be created because the lease agreement number already exists. Please try again.";
+  }
+
+  return String(rawMessage || fallback);
+};
+
 const normalizeDepositHolder = (value = "") => {
   const normalized = String(value || "").trim().toLowerCase();
   if (["landlord", "held_by_landlord"].includes(normalized)) return "landlord";
@@ -1190,11 +1207,10 @@ useEffect(() => {
       setPendingInvoiceContext(nextInvoiceContext);
       setShowInvoicePrompt(true);
     } catch (err) {
-      const errorMsg =
-        err?.message ||
-        err?.error ||
-        err?.data?.message ||
-        `Failed to ${isEditMode ? "update" : "create"} tenant`;
+      const errorMsg = sanitizeTenantSaveError(
+        err,
+        `Failed to ${isEditMode ? "update" : "create"} tenant`
+      );
       setGeneralError(errorMsg);
       toast.error(errorMsg);
     }

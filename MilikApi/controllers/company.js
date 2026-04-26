@@ -1,6 +1,14 @@
 import mongoose from "mongoose";
 import Company from "../models/Company.js";
 import User from "../models/User.js";
+import Tenant from "../models/Tenant.js";
+import Landlord from "../models/Landlord.js";
+import Property from "../models/Property.js";
+import TenantInvoice from "../models/TenantInvoice.js";
+import RentPayment from "../models/RentPayment.js";
+import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
+import LandlordStatement from "../models/LandlordStatement.js";
+import CompanySettings from "../models/CompanySettings.js";
 import ChartOfAccount from "../models/ChartOfAccount.js";
 import { createError } from "../utils/error.js";
 import {
@@ -22,6 +30,7 @@ import {
   serializeCompanyForClient,
 } from "../utils/companyModules.js";
 import { canAccessCompanyId, normalizeCompanyId } from "./verifyToken.js";
+import { isSystemAdminUser, hasCompanySetupAccess } from "../utils/permissionControl.js";
 import { ensureSystemChartOfAccounts } from "../services/chartOfAccountsService.js";
 import {
   buildCompanyInternalCopyRecipients,
@@ -1066,8 +1075,8 @@ const applyMpesaPaybillMutation = async ({ company, payload, actorUserId }) => {
 
 export const createCompany = async (req, res, next) => {
   try {
-    if (!req.user.superAdminAccess) {
-      return next(createError(403, "Only super admin can create companies"));
+    if (!isSystemAdminUser(req.user)) {
+      return next(createError(403, "Only Milik/System Admin can create companies"));
     }
 
     const {
@@ -1180,8 +1189,8 @@ export const createCompany = async (req, res, next) => {
 
 export const getAllCompanies = async (req, res, next) => {
   try {
-    if (!req.user.superAdminAccess) {
-      return next(createError(403, "Only super admin can view all companies"));
+    if (!isSystemAdminUser(req.user)) {
+      return next(createError(403, "Only Milik/System Admin can view all companies"));
     }
 
     const { page = 1, limit = 10, search } = req.query;
@@ -1228,7 +1237,7 @@ export const getAccessibleCompanies = async (req, res, next) => {
     const includeDemoCompanies = shouldIncludeDemoCompanies(req);
     const companyFilter = includeDemoCompanies ? {} : buildLiveCompanyFilter();
 
-    if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
+    if (isSystemAdminUser(req.user)) {
       const companies = await Company.find(companyFilter)
         .select(companySummarySelect)
         .sort({ companyName: 1 })
@@ -1561,8 +1570,8 @@ export const testCompanyEmailProfile = async (req, res, next) => {
 
 export const deleteCompany = async (req, res, next) => {
   try {
-    if (!req.user.superAdminAccess) {
-      return next(createError(403, "Only super admin can delete companies"));
+    if (!isSystemAdminUser(req.user)) {
+      return next(createError(403, "Only Milik/System Admin can delete or archive companies"));
     }
 
     const company = await Company.findById(req.params.id);
@@ -1571,9 +1580,39 @@ export const deleteCompany = async (req, res, next) => {
       return next(createError(404, "Company not found"));
     }
 
-    const userCount = await User.countDocuments({ company: req.params.id });
-    if (userCount > 0) {
-      return next(createError(400, `Cannot delete company with ${userCount} associated users`));
+    const companyId = req.params.id;
+    const dependencyChecks = [
+      ["users", User.countDocuments({
+        $or: [
+          { company: companyId },
+          { primaryCompany: companyId },
+          { accessibleCompanies: companyId },
+          { "companyAssignments.company": companyId },
+        ],
+      })],
+      ["tenants", Tenant.countDocuments({ business: companyId })],
+      ["landlords", Landlord.countDocuments({ company: companyId })],
+      ["properties", Property.countDocuments({ business: companyId })],
+      ["invoices", TenantInvoice.countDocuments({ business: companyId })],
+      ["receipts", RentPayment.countDocuments({ business: companyId })],
+      ["ledger entries", FinancialLedgerEntry.countDocuments({ business: companyId })],
+      ["landlord statements", LandlordStatement.countDocuments({ business: companyId })],
+      ["settings/history", CompanySettings.countDocuments({ company: companyId })],
+    ];
+
+    const resolved = await Promise.all(dependencyChecks.map(async ([label, promise]) => [label, await promise]));
+    const blockers = resolved.filter(([, count]) => count > 0).map(([label, count]) => `${label} (${count})`);
+
+    if (blockers.length) {
+      company.isActive = false;
+      company.accountStatus = "Archived";
+      await company.save();
+      return res.status(200).json({
+        success: true,
+        archived: true,
+        company: serializeCompanyResponse(company, req.user),
+        message: `Company was archived instead of deleted because it has active dependencies: ${blockers.join(", ")}.`,
+      });
     }
 
     await company.deleteOne();
@@ -1587,7 +1626,6 @@ export const deleteCompany = async (req, res, next) => {
     next(err);
   }
 };
-
 export const getCompanyUsers = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search } = req.query;
@@ -1596,13 +1634,27 @@ export const getCompanyUsers = async (req, res, next) => {
       return next(createError(403, "You can only view your company's users"));
     }
 
-    const query = { company: req.params.id };
+    const companyId = req.params.id;
+    const query = {
+      isSystemAuditUser: { $ne: true },
+      $or: [
+        { company: companyId },
+        { primaryCompany: companyId },
+        { accessibleCompanies: companyId },
+        { "companyAssignments.company": companyId },
+      ],
+    };
+
     if (search) {
-      query.$or = [
-        { surname: { $regex: search, $options: "i" } },
-        { otherNames: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { phoneNumber: { $regex: search, $options: "i" } },
+      query.$and = [
+        {
+          $or: [
+            { surname: { $regex: search, $options: "i" } },
+            { otherNames: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+            { phoneNumber: { $regex: search, $options: "i" } },
+          ],
+        },
       ];
     }
 

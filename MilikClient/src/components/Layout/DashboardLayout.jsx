@@ -967,9 +967,9 @@ const TopToolbar = ({
   return (
     <div className="relative bg-[#a5c9b7]">
       <Navbar darkMode={darkMode} setDarkMode={setDarkMode} workspaceLabel={workspaceLabel} />
-      <StartMenu darkMode={darkMode} />
 
       <div className={`flex items-center ${darkMode ? "bg-gray-800" : "bg-[#0A400C]"}`}>
+        <StartMenu darkMode={darkMode} variant="header" />
         <div className="px-2 py-1 border-r border-white/10 flex items-center justify-center">
           <img
             src="/logo (2).png"

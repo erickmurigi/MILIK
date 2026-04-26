@@ -176,17 +176,17 @@ const evaluateCompanySetup = (company = {}, userCount = 0) => {
     },
     {
       key: "modules",
-      label: "Modules",
+      label: "Module assignment",
       ok: enabledModules.length > 0,
     },
     {
       key: "payments",
-      label: "Payments & collections",
+      label: "Payments",
       ok: hasPaymentSetup,
     },
     {
       key: "communications",
-      label: "Communications",
+      label: "Email/SMS",
       ok: emailProfiles.length > 0 || smsProfiles.length > 0,
     },
     {
@@ -212,14 +212,14 @@ const evaluateCompanySetup = (company = {}, userCount = 0) => {
 };
 
 const StatCard = ({ label, value, icon: Icon, hint }) => (
-  <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+  <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
     <div className="flex items-start justify-between gap-3">
       <div>
         <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</div>
-        <div className="mt-2 text-3xl font-black text-slate-900">{value}</div>
-        {hint ? <div className="mt-1 text-sm text-slate-500">{hint}</div> : null}
+        <div className="mt-1 text-2xl font-black text-slate-900">{value}</div>
+        
       </div>
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
         <Icon className="text-lg" />
       </div>
     </div>
@@ -288,7 +288,7 @@ const CompanyAvatar = ({ company }) => {
     return <img src={logo} alt={name} className="h-12 w-12 rounded-2xl border border-slate-200 bg-white object-cover" />;
   }
   return (
-    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-sm font-black text-emerald-700">
+    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-sm font-black text-emerald-700">
       {initialsFromName(name)}
     </div>
   );
@@ -332,23 +332,23 @@ const OverviewPanel = ({
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Quick actions</div>
-              <h2 className="mt-1 text-xl font-black text-slate-900">Run MILIK Admin from one control center</h2>
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Actions</div>
+              <h2 className="mt-1 text-xl font-black text-slate-900">Admin actions</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Company setup stays company-facing. System Admin should create, assign, monitor, and hand off into the right workspace.
+                
               </p>
             </div>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <button onClick={onAddCompany} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left transition hover:bg-emerald-100">
               <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-700 text-white"><FaPlus /></div>
-              <div className="mt-3 text-base font-black text-slate-900">Add company</div>
-              <div className="mt-1 text-sm text-slate-600">Create a new company record, then continue configuration in Company Setup.</div>
+              <div className="mt-3 text-base font-black text-slate-900">Register Company</div>
+              <div className="mt-1 text-sm text-slate-600"></div>
             </button>
             <button onClick={onAddUser} className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-emerald-200 hover:bg-slate-50">
               <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-orange-100 text-orange-700"><FaUserPlus /></div>
               <div className="mt-3 text-base font-black text-slate-900">Add user</div>
-              <div className="mt-1 text-sm text-slate-600">Create a company-aware user and assign access per company.</div>
+              <div className="mt-1 text-sm text-slate-600"></div>
             </button>
             {companies[0] ? (
               <button
@@ -356,24 +356,24 @@ const OverviewPanel = ({
                 className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-emerald-200 hover:bg-slate-50"
               >
                 <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-100 text-sky-700"><FaCog /></div>
-                <div className="mt-3 text-base font-black text-slate-900">Open company setup</div>
-                <div className="mt-1 text-sm text-slate-600">Switch into the selected company and continue company-facing configuration.</div>
+                <div className="mt-3 text-base font-black text-slate-900">Company setup</div>
+                <div className="mt-1 text-sm text-slate-600"></div>
               </button>
             ) : null}
           </div>
         </div>
 
         <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-emerald-50 via-white to-orange-50 p-5 shadow-sm">
-          <div className="text-xs font-black uppercase tracking-[0.18em] text-orange-600">Structure</div>
-          <h2 className="mt-1 text-xl font-black text-slate-900">System Admin boundary</h2>
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-orange-600">Scope</div>
+          <h2 className="mt-1 text-xl font-black text-slate-900">Access Control</h2>
           <div className="mt-4 space-y-3 text-sm text-slate-600">
             <div className="rounded-2xl border border-white/70 bg-white/80 p-3">
-              <div className="font-black text-slate-900">System Admin owns</div>
-              <div className="mt-1">Companies, users, assignments, workspace access, demo oversight, and platform control.</div>
+              <div className="font-black text-slate-900">System Administration</div>
+              <div className="mt-1">Companies, users, access and module assignment.</div>
             </div>
             <div className="rounded-2xl border border-white/70 bg-white/80 p-3">
-              <div className="font-black text-slate-900">Company users own</div>
-              <div className="mt-1">Company Setup, Operational Settings, and day-to-day property management rules.</div>
+              <div className="font-black text-slate-900">Company Setup</div>
+              <div className="mt-1">Company profile, payments, email, SMS and operational settings.</div>
             </div>
           </div>
         </div>
@@ -517,10 +517,10 @@ const CompaniesPanel = ({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Companies</div>
-            <h2 className="mt-1 text-xl font-black text-slate-900">Platform companies and onboarding readiness</h2>
-            <p className="mt-1 text-sm text-slate-500">Create companies here, then hand off into Company Setup and Operational Settings inside the selected company context.</p>
+            <h2 className="mt-1 text-xl font-black text-slate-900">Companies</h2>
+            <p className="mt-1 text-sm text-slate-500"></p>
           </div>
-          <ActionLink icon={FaPlus} label="Add company" onClick={onAddCompany} tone="primary" />
+          <ActionLink icon={FaPlus} label="Register Company" onClick={onAddCompany} tone="primary" />
         </div>
         <div className="mt-4 flex flex-col gap-3 xl:flex-row">
           <SearchInput value={search} onChange={setSearch} placeholder="Search company, code, email, town..." />
@@ -571,7 +571,7 @@ const CompaniesPanel = ({
                     <div className="mt-1 text-xl font-black text-slate-900">{userCount}</div>
                   </div>
                   <div>
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Enabled modules</div>
+                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Assigned modules</div>
                     <div className="mt-1 text-xl font-black text-slate-900">{enabledModules.length}</div>
                   </div>
                   <div>
@@ -584,7 +584,7 @@ const CompaniesPanel = ({
               <div className="mt-5 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
                 <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-black text-slate-900">Setup readiness</div>
+                    <div className="text-sm font-black text-slate-900">Readiness</div>
                     <div className="text-sm font-black text-slate-900">{readiness.score}%</div>
                   </div>
                   <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200">
@@ -598,13 +598,13 @@ const CompaniesPanel = ({
                         </span>
                       ))
                     ) : (
-                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">All key setup areas are covered</span>
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Ready</span>
                     )}
                   </div>
                 </div>
 
                 <div className="rounded-3xl border border-slate-100 bg-white p-4">
-                  <div className="text-sm font-black text-slate-900">Modules</div>
+                  <div className="text-sm font-black text-slate-900">Assigned modules</div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {enabledModules.length ? (
                       enabledModules.map((moduleKey) => (
@@ -613,7 +613,7 @@ const CompaniesPanel = ({
                         </span>
                       ))
                     ) : (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">No modules enabled yet</span>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">No modules assigned</span>
                     )}
                   </div>
                 </div>
@@ -678,7 +678,7 @@ const UsersPanel = ({
           <div>
             <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Users & access</div>
             <h2 className="mt-1 text-xl font-black text-slate-900">Company-aware user access</h2>
-            <p className="mt-1 text-sm text-slate-500">Assign users to one or many companies, then govern what they can access inside each company workspace.</p>
+            <p className="mt-1 text-sm text-slate-500"></p>
           </div>
           <ActionLink icon={FaUserPlus} label="Add user" onClick={onAddUser} tone="primary" />
         </div>
@@ -709,7 +709,7 @@ const UsersPanel = ({
             <div key={userId} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-sm font-black text-orange-700">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 text-sm font-black text-orange-700">
                     {initialsFromName(name)}
                   </div>
                   <div>
@@ -785,7 +785,7 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Trials & demo</div>
         <h2 className="mt-1 text-xl font-black text-slate-900">Demo oversight and activation readiness</h2>
-        <p className="mt-1 text-sm text-slate-500">This area keeps MILIK Admin focused on demo workspaces, inactive companies, and companies that still need setup work before being treated as fully ready.</p>
+        <p className="mt-1 text-sm text-slate-500"></p>
       </div>
 
       <div className="space-y-4">
@@ -894,7 +894,7 @@ const AuditPanel = ({ companies, users, companyMap }) => {
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Audit view</div>
         <h2 className="mt-1 text-xl font-black text-slate-900">Recent platform activity snapshot</h2>
-        <p className="mt-1 text-sm text-slate-500">This view is built from saved company and user records so Milik Admin can quickly see the most recent platform-level movement in one place.</p>
+        <p className="mt-1 text-sm text-slate-500"></p>
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1111,43 +1111,35 @@ export default function SystemSetupPage() {
   const sections = [
     { key: "overview", label: "Overview", icon: FaChartBar },
     { key: "companies", label: "Companies", icon: FaBuilding },
-    { key: "users", label: "Users & Access", icon: FaUsers },
-    { key: "trials", label: "Trials & Demo", icon: FaBoxOpen },
-    { key: "audit", label: "Audit Log", icon: FaHistory },
+    { key: "users", label: "Users", icon: FaUsers },
+    { key: "trials", label: "Trials", icon: FaBoxOpen },
+    { key: "audit", label: "Audit", icon: FaHistory },
   ];
 
   return (
     <DashboardLayout>
-      <div className="mx-auto w-full max-w-[1440px] px-4 py-5">
+      <div className="mx-auto flex h-[calc(100vh-76px)] w-full max-w-[1440px] flex-col overflow-hidden px-3 py-3">
         {!isSystemAdmin ? (
           <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
-            System Admin is reserved for MILIK Admin only.
+            System Administration is restricted to Milik Admin users.
           </div>
         ) : (
           <>
-            <div className="rounded-[28px] border border-slate-200 bg-gradient-to-r from-emerald-50 via-white to-orange-50 p-5 shadow-sm">
+            <div className="sticky top-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div>
-                  <div className="text-xs font-black uppercase tracking-[0.22em] text-emerald-700">System Admin</div>
-                  <h1 className="mt-1 text-2xl font-black text-slate-900">MILIK platform control center</h1>
-                  <p className="mt-2 max-w-3xl text-sm text-slate-600">
-                    System Admin manages companies, user access, demo oversight, and workspace handoff. Company Setup and Operational Settings remain company-facing and should be reached from the selected company context.
-                  </p>
+                  <div className="text-xs font-black uppercase tracking-[0.22em] text-emerald-700">System Administration</div>
+                  <h1 className="mt-1 text-xl font-black text-slate-900">Control Centre</h1>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-3xl border border-white bg-white/90 px-4 py-3 shadow-sm">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Active company context</div>
-                    <div className="mt-1 text-base font-black text-slate-900">{activeCompanyName}</div>
-                  </div>
-                  <div className="rounded-3xl border border-white bg-white/90 px-4 py-3 shadow-sm">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Platform scope</div>
-                    <div className="mt-1 text-base font-black text-slate-900">{companyList.length} companies · {userList.length} users</div>
-                  </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-black text-slate-700">
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{activeCompanyName}</span>
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{companyList.length} companies</span>
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{userList.length} users</span>
                 </div>
               </div>
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-2 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="mt-3 flex shrink-0 flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
               {sections.map((section) => (
                 <SectionButton
                   key={section.key}
@@ -1159,7 +1151,7 @@ export default function SystemSetupPage() {
               ))}
             </div>
 
-            <div className="mt-5">
+            <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
               {companiesFetching && !companyList.length ? (
                 <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Loading companies...</div>
               ) : null}
