@@ -314,13 +314,13 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
 
   return (
     <>
-      <div className={isHeaderVariant ? "relative z-[120] flex items-center border-r border-white/10" : "fixed bottom-4 left-1/2 z-[120] -translate-x-1/2 sm:bottom-12"}>
+      <div className={isHeaderVariant ? "relative z-[120] flex min-h-[34px] items-center border-r border-white/10" : "fixed bottom-4 left-1/2 z-[120] -translate-x-1/2 sm:bottom-12"}>
         <button
           ref={anchorRef}
           onClick={() => setOpen((v) => !v)}
           className={[
             isHeaderVariant
-              ? "group relative flex h-full items-center gap-2 border-0 border-r border-white/10 px-3 py-2 text-white transition hover:bg-white/10"
+              ? "group relative flex h-full items-center gap-2 border-0 border-r border-white/10 px-2.5 py-1 text-white transition hover:bg-white/10"
               : "group relative flex items-center gap-2 rounded-2xl border px-4 py-2 shadow-lg",
             "backdrop-blur-xl transition active:scale-[0.98]",
             isHeaderVariant
@@ -331,7 +331,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
           ].join(" " )}
           aria-label="Open Start Menu"
         >
-          <span className={isHeaderVariant ? "flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-white" : "flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white shadow-inner"}>
+          <span className={isHeaderVariant ? "flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 text-white text-xs" : "flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white shadow-inner"}>
             <FaThLarge />
           </span>
           <span className={isHeaderVariant ? "hidden text-xs font-extrabold tracking-wide sm:inline" : "text-sm font-extrabold tracking-wide"}>MENU</span>

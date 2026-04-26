@@ -342,11 +342,11 @@ const TabManager = ({ darkMode }) => {
         darkMode ? 'border-gray-700' : 'border-[#1f4a35]'
       } overflow-x-auto shadow-lg`}
     >
-      <div className="flex items-center px-2 py-1 space-x-1 min-w-max">
+      <div className="flex min-h-[30px] items-center px-1.5 py-0.5 space-x-1 min-w-max">
         {sortedTabs.map((tab) => (
           <div
             key={tab.id}
-            className={`flex items-center px-3 py-1.5 rounded-t-lg cursor-pointer transition-all duration-200 text-sm font-medium border-t border-l border-r ${
+            className={`flex items-center px-2.5 py-1 rounded-t-md cursor-pointer transition-all duration-200 text-sm font-medium border-t border-l border-r ${
               activeTab === tab.id
                 ? darkMode
                   ? 'bg-gray-900 text-white border-gray-600 shadow-lg'
@@ -358,19 +358,19 @@ const TabManager = ({ darkMode }) => {
             onClick={() => switchTab(tab.id, tab.route)}
             title={tab.title}
           >
-            {tab.route === '/dashboard' && <FaHome className="mr-2 w-4 h-4" />}
+            {tab.route === '/dashboard' && <FaHome className="mr-1.5 h-3.5 w-3.5" />}
             <span className="text-xs truncate max-w-[160px] uppercase" style={{ textTransform: 'uppercase' }}>{tab.title}</span>
             {tab.closable && sortedTabs.length > 1 && (
               <button
                 onClick={(e) => closeTab(tab.id, e)}
-                className={`ml-2 p-1 rounded-full transition-colors duration-200 ${
+                className={`ml-1.5 p-0.5 rounded-full transition-colors duration-200 ${
                   activeTab === tab.id
                     ? 'hover:bg-red-600 hover:text-white text-white'
                     : 'hover:bg-red-500 hover:text-white text-gray-300'
                 }`}
                 title="Close tab"
               >
-                <FaTimes className="w-3 h-3" />
+                <FaTimes className="h-2.5 w-2.5" />
               </button>
             )}
           </div>
@@ -379,28 +379,28 @@ const TabManager = ({ darkMode }) => {
         {currentWorkspace === WORKSPACE_IDS.PROPERTY && (
           <button
             onClick={addNewDashboardTab}
-            className={`ml-2 px-2.5 py-1.5 rounded-lg transition-all duration-200 ${
+            className={`ml-1.5 rounded-md px-2 py-1 transition-all duration-200 ${
               darkMode
                 ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
                 : 'text-gray-300 hover:bg-[#2a5a47] hover:text-white'
             }`}
             title="Open new tab"
           >
-            <FaPlus className="w-4 h-4" />
+            <FaPlus className="h-3.5 w-3.5" />
           </button>
         )}
 
         {sortedTabs.length > 1 && (
           <button
             onClick={closeAllTabs}
-            className={`px-2.5 py-1.5 rounded-lg transition-all duration-200 ${
+            className={`rounded-md px-2 py-1 transition-all duration-200 ${
               darkMode
                 ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
                 : 'text-gray-300 hover:bg-red-600 hover:text-white'
             }`}
             title="Close all tabs"
           >
-            <FaWindowClose className="w-4 h-4" />
+            <FaWindowClose className="h-3.5 w-3.5" />
           </button>
         )}
       </div>

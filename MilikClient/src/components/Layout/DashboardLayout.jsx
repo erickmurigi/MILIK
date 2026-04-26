@@ -183,20 +183,20 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
       <div
         className={`flex flex-1 bg-white min-h-0 ${
           lockContentScroll
-            ? "h-[calc(100vh-120px)] overflow-hidden pb-9"
-            : "min-h-screen overflow-x-hidden pb-20"
+            ? "h-[calc(100vh-64px)] overflow-hidden pb-8"
+            : "min-h-screen overflow-x-hidden pb-16"
         }`}
       >
         <main
           className={`flex-1 min-h-0 overflow-hidden bg-white ${
             lockContentScroll
               ? "h-full"
-              : "min-h-[calc(100vh-9rem)]"
+              : "min-h-[calc(100vh-6rem)]"
           }`}
         >
           <div
             className={`max-w-full ${
-              lockContentScroll ? "h-full min-h-0" : "min-h-[calc(100vh-9rem)]"
+              lockContentScroll ? "h-full min-h-0" : "min-h-[calc(100vh-6rem)]"
             }`}
           >
             {demoBanner && (
@@ -734,7 +734,7 @@ const TopToolbar = ({
 
     return (
       <div
-        className={`absolute left-full top-0 w-96 shadow-2xl z-50 rounded-lg overflow-hidden border pointer-events-auto ${
+        className={`absolute left-full top-0 w-96 shadow-2xl z-[120] rounded-lg overflow-visible border pointer-events-auto ${
           darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
         }`}
         style={{ marginLeft: "0px" }}
@@ -809,7 +809,7 @@ const TopToolbar = ({
 
     return (
       <div
-        className={`absolute left-full top-0 w-96 shadow-2xl z-50 rounded-lg overflow-hidden border pointer-events-auto ${
+        className={`absolute left-full top-0 w-96 shadow-2xl z-[120] rounded-lg overflow-visible border pointer-events-auto ${
           darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
         }`}
         style={{ marginLeft: "0px" }}
@@ -882,7 +882,7 @@ const TopToolbar = ({
       return (
         <div
           key={item.id}
-          className="relative"
+          className="relative overflow-visible"
           onMouseEnter={() => openHoveredFinancialItem(item.id)}
           onMouseLeave={closeHoveredFinancialItem}
         >
@@ -968,15 +968,8 @@ const TopToolbar = ({
     <div className="relative bg-[#a5c9b7]">
       <Navbar darkMode={darkMode} setDarkMode={setDarkMode} workspaceLabel={workspaceLabel} />
 
-      <div className={`flex items-center ${darkMode ? "bg-gray-800" : "bg-[#0A400C]"}`}>
+      <div className={`relative z-50 flex min-h-[26px] items-center overflow-visible ${darkMode ? "bg-gray-800" : "bg-[#0A400C]"}`}>
         <StartMenu darkMode={darkMode} variant="header" />
-        <div className="px-2 py-1 border-r border-white/10 flex items-center justify-center">
-          <img
-            src="/logo (2).png"
-            alt="Milik Logo"
-            className="h-9 w-14 object-contain border border-white/20 sm:h-12 sm:w-20"
-          />
-        </div>
 
         {mainMenuItems.map((item) => (
           <div key={item.id} className="relative group">
@@ -984,7 +977,7 @@ const TopToolbar = ({
               onClick={() => {
                 setActiveMenu(activeMenu === item.id ? null : item.id);
               }}
-              className={`whitespace-nowrap px-3 py-2 text-xs font-bold text-white transition-colors sm:px-4 sm:text-sm ${
+              className={`whitespace-nowrap px-2 py-1 text-[11px] font-bold text-white transition-colors sm:px-2.5 sm:text-xs ${
                 activeMenu === item.id
                   ? darkMode
                     ? "bg-gray-700 text-white"
@@ -999,7 +992,7 @@ const TopToolbar = ({
 
             {activeMenu === item.id && item.submenu && (
               <div
-                className={`absolute left-0 top-full mt-0 w-64 shadow-lg z-50 border ${
+                className={`absolute left-0 top-full mt-0 max-h-[70vh] w-64 overflow-visible shadow-lg z-[90] border ${
                   darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
                 }`}
               >
@@ -1015,39 +1008,39 @@ const TopToolbar = ({
 
         <div className="flex-1" />
 
-        <div className="flex items-center space-x-1 px-4 py-1 text-xs">
+        <div className="flex items-center space-x-1 px-1.5 py-0 text-[11px]">
           <button
             onClick={() => navigate("/tenant/new")}
-            className={`p-2 rounded ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="New Tenant"
           >
             + Tenant
           </button>
           <button
             onClick={() => navigate("/invoices/new")}
-            className={`p-2 rounded ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="New Invoice"
           >
             + Invoice
           </button>
           <button
             onClick={() => navigate("/receipts")}
-            className={`p-2 rounded ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="Receive Payment"
           >
             + Payment
           </button>
-          <div className={`h-6 w-px ${darkMode ? "bg-gray-600" : "bg-gray-300"} mx-2`} />
+          <div className={`h-5 w-px ${darkMode ? "bg-gray-600" : "bg-gray-300"} mx-1`} />
           <button
             onClick={() => window.location.reload()}
-            className={`p-2 rounded ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="Refresh"
           >
             ↻
           </button>
           <button
             onClick={() => navigate("/settings")}
-            className={`p-2 rounded ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="Settings"
           >
             ⚙
@@ -1057,7 +1050,7 @@ const TopToolbar = ({
 
       {activeMenu && (
         <div
-          className="fixed inset-0 z-40"
+          className="fixed inset-0 z-30"
           onClick={() => setActiveMenu(null)}
         />
       )}
