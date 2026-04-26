@@ -296,7 +296,8 @@ export const refreshDraftStatement = async (
   userId,
   notes = "",
   statementType = null,
-  cutoffAt = null
+  cutoffAt = null,
+  statementPeriodEndOverride = null
 ) => {
   if (!statementId || !userId) {
     throw new Error("refreshDraftStatement requires statementId and userId");
@@ -314,12 +315,14 @@ export const refreshDraftStatement = async (
   const resolvedStatementType =
     statementType || draft?.metadata?.statementType || draft?.metadata?.workspace?.statementType || "provisional";
 
+  const resolvedPeriodEnd = statementPeriodEndOverride || draft?.metadata?.workspace?.requestedStatementPeriodEnd || draft.periodEnd;
+
   const statementData = await generateLandlordStatement({
     propertyId: draft.property,
     landlordId: draft.landlord,
     statementPeriodStart: draft.periodStart,
-    statementPeriodEnd: cutoffAt || draft.periodEnd,
-    cutoffAt: cutoffAt || draft.periodEnd,
+    statementPeriodEnd: resolvedPeriodEnd,
+    cutoffAt: cutoffAt || null,
   });
 
   // Replace all existing draft lines with refreshed lines.
@@ -359,6 +362,7 @@ export const refreshDraftStatement = async (
   }
 
   draft.openingBalance = statementData.openingBalance;
+  draft.periodEnd = statementData.periodEnd;
   draft.periodNet = statementData.periodNet;
   draft.closingBalance = statementData.closingBalance;
   draft.currency = statementData.currency;
@@ -380,6 +384,7 @@ export const refreshDraftStatement = async (
     workspace: {
       ...(statementData.metadata || {}),
       statementType: resolvedStatementType,
+      requestedStatementPeriodEnd: statementPeriodEndOverride || draft?.metadata?.workspace?.requestedStatementPeriodEnd || draft.periodEnd,
     },
   };
 

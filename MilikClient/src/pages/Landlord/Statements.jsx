@@ -1165,7 +1165,7 @@ const Statements = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
+        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden gap-2">
           <div className="sticky top-0 z-30 flex-shrink-0 rounded-lg border border-slate-200 bg-white/95 shadow-sm backdrop-blur">
 
             <div className="grid grid-cols-1 gap-2 px-2 py-2 md:grid-cols-2 xl:grid-cols-7">

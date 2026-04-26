@@ -39,7 +39,8 @@ const TenantInvoiceNoteSchema = new mongoose.Schema(
     sourceInvoice: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "TenantInvoice",
-      required: true,
+      required: false,
+      default: null,
       index: true,
     },
     noteNumber: {

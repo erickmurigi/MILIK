@@ -122,6 +122,79 @@ const getInvoiceItemLabel = (invoice) => {
   );
 };
 
+const monthKey = (date) => {
+  const dt = new Date(date);
+  if (Number.isNaN(dt.getTime())) return "";
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+};
+
+const formatMonthLabel = (date) =>
+  new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" }).format(date);
+
+const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
+
+const addMonths = (date, months) => new Date(date.getFullYear(), date.getMonth() + months, 1);
+
+const resolveTenantLeaseStartDate = (tenant) =>
+  tenant?.leaseStartDate ||
+  tenant?.lease?.startDate ||
+  tenant?.agreementStartDate ||
+  tenant?.moveInDate ||
+  tenant?.occupationDate ||
+  tenant?.createdAt ||
+  null;
+
+const STANDALONE_CHARGE_ITEMS = [
+  {
+    key: "standalone-water",
+    label: "Water",
+    category: "UTILITY_CHARGE",
+    metadata: { billItemKey: "utility:water", billItemLabel: "Water", utilityType: "Water", statementUtilityType: "Water" },
+  },
+  {
+    key: "standalone-electricity",
+    label: "Electricity",
+    category: "UTILITY_CHARGE",
+    metadata: { billItemKey: "utility:electricity", billItemLabel: "Electricity", utilityType: "Electricity", statementUtilityType: "Electricity" },
+  },
+  {
+    key: "standalone-garbage",
+    label: "Garbage",
+    category: "UTILITY_CHARGE",
+    metadata: { billItemKey: "utility:garbage", billItemLabel: "Garbage", utilityType: "Garbage", statementUtilityType: "Garbage" },
+  },
+  {
+    key: "standalone-service-charge",
+    label: "Service Charge",
+    category: "OTHER_CHARGE",
+    metadata: { billItemKey: "service_charge", billItemLabel: "Service Charge" },
+  },
+  {
+    key: "standalone-late-payment",
+    label: "Late Payment",
+    category: "LATE_PENALTY_CHARGE",
+    metadata: { billItemKey: "late_payment", billItemLabel: "Late Payment", standaloneDebitNote: true, includeInLandlordStatement: true },
+  },
+  {
+    key: "standalone-deposit",
+    label: "Deposit",
+    category: "DEPOSIT_CHARGE",
+    metadata: { billItemKey: "deposit", billItemLabel: "Deposit" },
+  },
+  {
+    key: "standalone-lease-fee",
+    label: "Lease Fee",
+    category: "OTHER_CHARGE",
+    metadata: { billItemKey: "lease_fee", billItemLabel: "Lease Fee" },
+  },
+  {
+    key: "standalone-other-charge",
+    label: "Other Charge",
+    category: "OTHER_CHARGE",
+    metadata: { billItemKey: "other_charge", billItemLabel: "Other Charge" },
+  },
+];
+
 const InvoiceNotes = () => {
   const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -146,6 +219,7 @@ const InvoiceNotes = () => {
   const [tenantId, setTenantId] = useState("");
   const [sourceInvoiceId, setSourceInvoiceId] = useState("");
   const [invoiceItemSelection, setInvoiceItemSelection] = useState("");
+  const [chargeItemSearch, setChargeItemSearch] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
@@ -238,21 +312,82 @@ const InvoiceNotes = () => {
       });
   }, [noteType, openInvoices, anchorInvoices, tenantId, propertyId]);
 
+  const selectedTenant = useMemo(
+    () => (tenants || []).find((tenant) => String(tenant?._id || "") === String(tenantId)) || null,
+    [tenants, tenantId]
+  );
+
   const debitInvoiceItemOptions = useMemo(() => {
-    const optionMap = new Map();
-    sourceInvoiceOptions.forEach((invoice) => {
-      const key = normalizeInvoiceItemKey(invoice) || String(invoice?._id || "");
-      if (!key || optionMap.has(key)) return;
-      optionMap.set(key, {
-        key,
-        label: getInvoiceItemLabel(invoice),
-        category: String(invoice?.category || ""),
-        anchorInvoiceId: String(invoice?._id || ""),
-        anchorInvoice: invoice,
+    if (!tenantId) return [];
+
+    const rentInvoicesByMonth = new Map();
+    sourceInvoiceOptions
+      .filter((invoice) => String(invoice?.category || "").toUpperCase() === "RENT_CHARGE")
+      .forEach((invoice) => {
+        const key = monthKey(invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt);
+        if (!key || rentInvoicesByMonth.has(key)) return;
+        rentInvoicesByMonth.set(key, invoice);
       });
-    });
-    return Array.from(optionMap.values());
-  }, [sourceInvoiceOptions]);
+
+    const today = new Date();
+    const currentMonth = startOfMonth(today);
+    const twelveMonthsBack = addMonths(currentMonth, -12);
+    const leaseStartRaw = resolveTenantLeaseStartDate(selectedTenant);
+    const leaseStartDate = leaseStartRaw ? startOfMonth(new Date(leaseStartRaw)) : null;
+    const safeLeaseStartDate =
+      leaseStartDate && !Number.isNaN(leaseStartDate.getTime()) ? leaseStartDate : twelveMonthsBack;
+    const firstMonth = safeLeaseStartDate > twelveMonthsBack ? safeLeaseStartDate : twelveMonthsBack;
+
+    const rentOptions = [];
+    for (let cursor = new Date(firstMonth); cursor <= currentMonth; cursor = addMonths(cursor, 1)) {
+      const key = monthKey(cursor);
+      const existingInvoice = rentInvoicesByMonth.get(key);
+      rentOptions.push({
+        key: `rent-${key}`,
+        label: `Rent - ${formatMonthLabel(cursor)} (${existingInvoice ? "Existing Invoice" : "No Invoice"})`,
+        category: "RENT_CHARGE",
+        anchorInvoiceId: existingInvoice?._id ? String(existingInvoice._id) : "",
+        anchorInvoice: existingInvoice || null,
+        metadata: {
+          billItemKey: `rent:${key}`,
+          billItemLabel: `Rent - ${formatMonthLabel(cursor)}`,
+          rentPeriod: key,
+          rentMonth: key,
+          noteSourceMode: existingInvoice ? "invoice" : "standalone",
+          standaloneDebitNote: !existingInvoice,
+          includeInLandlordStatement: true,
+          includeInCategoryTotals: true,
+        },
+      });
+    }
+
+    const otherOptions = STANDALONE_CHARGE_ITEMS.map((item) => ({
+      ...item,
+      anchorInvoiceId: "",
+      anchorInvoice: null,
+      metadata: {
+        ...(item.metadata || {}),
+        noteSourceMode: "standalone",
+        standaloneDebitNote: true,
+        includeInLandlordStatement: true,
+        includeInCategoryTotals: true,
+      },
+    }));
+
+    return [...rentOptions, ...otherOptions];
+  }, [sourceInvoiceOptions, tenantId, selectedTenant]);
+
+  const filteredDebitInvoiceItemOptions = useMemo(() => {
+    const query = String(chargeItemSearch || "").trim().toLowerCase();
+    if (!query) return debitInvoiceItemOptions;
+    return debitInvoiceItemOptions.filter((item) =>
+      [item.label, item.category, item.metadata?.billItemLabel, item.metadata?.utilityType]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [debitInvoiceItemOptions, chargeItemSearch]);
 
   const selectedInvoiceItem = useMemo(
     () => debitInvoiceItemOptions.find((item) => item.key === invoiceItemSelection) || null,
@@ -273,7 +408,7 @@ const InvoiceNotes = () => {
         selectedInvoiceItem?.anchorInvoice?.chartAccount?._id ||
         selectedInvoiceItem?.anchorInvoice?.chartAccount ||
         "";
-      if (sourceAccountId) setChartAccountId(String(sourceAccountId));
+      setChartAccountId(sourceAccountId ? String(sourceAccountId) : "");
       return;
     }
 
@@ -295,6 +430,7 @@ const InvoiceNotes = () => {
     setTenantId("");
     setSourceInvoiceId("");
     setInvoiceItemSelection("");
+    setChargeItemSearch("");
     setAmount("");
     setDescription("");
   }, [propertyId, noteType]);
@@ -302,6 +438,7 @@ const InvoiceNotes = () => {
   useEffect(() => {
     setSourceInvoiceId("");
     setInvoiceItemSelection("");
+    setChargeItemSearch("");
     setAmount("");
     setDescription("");
   }, [tenantId]);
@@ -370,6 +507,7 @@ const InvoiceNotes = () => {
     setTenantId("");
     setSourceInvoiceId("");
     setInvoiceItemSelection("");
+    setChargeItemSearch("");
     setAmount("");
     setCategory("");
     setDescription("");
@@ -400,8 +538,8 @@ const InvoiceNotes = () => {
       return;
     }
 
-    if (!isCreditNote && !invoiceItemSelection) {
-      toast.error("Select an invoice item for the debit note.");
+    if (!isCreditNote && !selectedInvoiceItem) {
+      toast.error("Select a charge item for the debit note.");
       return;
     }
 
@@ -411,7 +549,7 @@ const InvoiceNotes = () => {
         business: currentCompany._id,
         noteType,
         sourceInvoiceId: resolvedSourceInvoiceId || undefined,
-        anchorSourceInvoiceId: !isCreditNote ? resolvedSourceInvoiceId || undefined : undefined,
+        anchorSourceInvoiceId: !isCreditNote && resolvedSourceInvoiceId ? resolvedSourceInvoiceId : undefined,
         tenantId,
         propertyId,
         amount: Number(amount),
@@ -421,9 +559,14 @@ const InvoiceNotes = () => {
         chartAccountId: chartAccountId || undefined,
         metadata: !isCreditNote && selectedInvoiceItem
           ? {
-              billItemKey: selectedInvoiceItem?.anchorInvoice?.metadata?.billItemKey || undefined,
-              billItemLabel: selectedInvoiceItem?.label || undefined,
+              ...(selectedInvoiceItem?.metadata || {}),
+              billItemKey:
+                selectedInvoiceItem?.metadata?.billItemKey ||
+                selectedInvoiceItem?.anchorInvoice?.metadata?.billItemKey ||
+                undefined,
+              billItemLabel: selectedInvoiceItem?.metadata?.billItemLabel || selectedInvoiceItem?.label || undefined,
               utilityType:
+                selectedInvoiceItem?.metadata?.utilityType ||
                 selectedInvoiceItem?.anchorInvoice?.metadata?.utilityType ||
                 selectedInvoiceItem?.anchorInvoice?.metadata?.meterUtilityType ||
                 selectedInvoiceItem?.anchorInvoice?.metadata?.statementUtilityType ||
@@ -643,7 +786,7 @@ const InvoiceNotes = () => {
                 <div>
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-500">Add invoice note</p>
                   <h3 className="mt-1 text-lg font-bold text-slate-900">{noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"}</h3>
-                  <p className="mt-1 text-sm text-slate-500">Select property first, then tenant. Credit notes must point to a source invoice. Debit notes only require the invoice item being adjusted.</p>
+                  <p className="mt-1 text-sm text-slate-500">Select property first, then tenant. Credit notes must point to a source invoice. Debit notes can adjust an existing invoice or create a standalone charge.</p>
                 </div>
                 <button onClick={() => !saving && setShowAddModal(false)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-white hover:text-slate-800">
                   <FaTimes />
@@ -713,12 +856,20 @@ const InvoiceNotes = () => {
                     </label>
                   ) : (
                     <label className="space-y-1.5 text-sm font-medium text-slate-700 md:col-span-2">
-                      <span>Invoice Item</span>
-                      <select value={invoiceItemSelection} onChange={(e) => setInvoiceItemSelection(e.target.value)} disabled={!tenantId} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100">
-                        <option value="">{tenantId ? (debitInvoiceItemOptions.length ? "Select invoice item" : "No matching posted invoice items") : "Select tenant first"}</option>
-                        {debitInvoiceItemOptions.map((item) => (
+                      <span>Charge Item</span>
+                      <input
+                        type="text"
+                        value={chargeItemSearch}
+                        onChange={(e) => setChargeItemSearch(e.target.value)}
+                        disabled={!tenantId}
+                        placeholder="Search rent month, utility, deposit, late payment..."
+                        className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100"
+                      />
+                      <select value={invoiceItemSelection} onChange={(e) => setInvoiceItemSelection(e.target.value)} disabled={!tenantId} size={Math.min(8, Math.max(3, filteredDebitInvoiceItemOptions.length + 1))} className="max-h-56 w-full overflow-y-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100">
+                        <option value="">{tenantId ? (debitInvoiceItemOptions.length ? "Select charge item" : "No charge items available") : "Select tenant first"}</option>
+                        {filteredDebitInvoiceItemOptions.map((item) => (
                           <option key={item.key} value={item.key}>
-                            {item.label} | {humanizeCategory(item.category)} | {item.anchorInvoice?.invoiceNumber || "-"}
+                            {item.label} | {humanizeCategory(item.category)} | {item.anchorInvoice?.invoiceNumber || "Standalone"}
                           </option>
                         ))}
                       </select>
@@ -737,7 +888,7 @@ const InvoiceNotes = () => {
                     </label>
                   ) : (
                     <label className="space-y-1.5 text-sm font-medium text-slate-700">
-                      <span>Invoice Item Category</span>
+                      <span>Charge Category</span>
                       <input
                         type="text"
                         value={selectedInvoiceItem ? humanizeCategory(selectedInvoiceItem.category) : ""}
@@ -770,7 +921,7 @@ const InvoiceNotes = () => {
 
                 {selectedSourceInvoice ? (
                   <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    <p><span className="font-semibold">{noteType === "CREDIT_NOTE" ? "Source Invoice" : "Anchor Invoice"}:</span> {selectedSourceInvoice.invoiceNumber}</p>
+                    <p><span className="font-semibold">{noteType === "CREDIT_NOTE" ? "Source Invoice" : "Linked Invoice"}:</span> {selectedSourceInvoice.invoiceNumber}</p>
                     <p><span className="font-semibold">Property:</span> {resolvePropertyName(selectedSourceInvoice, propertyMap)}</p>
                     <p><span className="font-semibold">Original Amount:</span> {formatCurrency(selectedSourceInvoice.amount)}</p>
                     <p><span className="font-semibold">Net Amount:</span> {formatCurrency(selectedSourceInvoice.netAmount ?? selectedSourceInvoice.amount)}</p>

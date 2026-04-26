@@ -1581,6 +1581,9 @@ export const generateLandlordStatement = async ({
     if (typeof metadata.includeInLandlordStatement === "boolean") {
       return metadata.includeInLandlordStatement;
     }
+    if (String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE" && metadata.standaloneDebitNote === true) {
+      return true;
+    }
     if (String(note?.category || "").toUpperCase() === "LATE_PENALTY_CHARGE") {
       return false;
     }
@@ -1948,6 +1951,18 @@ export const generateLandlordStatement = async ({
       );
     } else if (note.category === "DEPOSIT_CHARGE") {
       applyDepositChargeToMemo(note, amount, "current");
+    } else if (["OTHER_CHARGE", "LATE_PENALTY_CHARGE"].includes(String(note.category || "").toUpperCase())) {
+      const additionAmount = round2(Math.max(0, amount));
+      if (additionAmount > 0) {
+        totalAdditions = round2(totalAdditions + additionAmount);
+        additionRows.push({
+          date: getNoteStatementDate(note) || note.noteDate,
+          description: note.description || note.noteNumber || "Standalone tenant debit note",
+          amount: additionAmount,
+          category: String(note.category || "").toLowerCase(),
+          sourceId: String(note._id),
+        });
+      }
     }
 
     if (note.noteNumber) row.referenceNumbers.push(note.noteNumber);

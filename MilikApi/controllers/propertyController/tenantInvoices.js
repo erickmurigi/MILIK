@@ -57,6 +57,27 @@ const resolveTenantOperationalStatus = ({ tenant = null, invoiceSnapshots = [] }
 const escapeRegExp = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
+const resolvePrimaryLandlordId = ({ sourceInvoice = null, property = null, tenant = null } = {}) => {
+  const directCandidates = [
+    sourceInvoice?.landlord,
+    property?.landlord,
+    property?.landlordId,
+    tenant?.landlord,
+    tenant?.landlordId,
+  ];
+
+  for (const candidate of directCandidates) {
+    if (isValidObjectId(candidate)) return candidate;
+  }
+
+  const propertyLandlords = Array.isArray(property?.landlords) ? property.landlords : [];
+  const primaryLandlord =
+    propertyLandlords.find((entry) => entry?.isPrimary && isValidObjectId(entry?.landlordId)) ||
+    propertyLandlords.find((entry) => isValidObjectId(entry?.landlordId));
+
+  return primaryLandlord?.landlordId || null;
+};
+
 const isDuplicateKeyError = (error) =>
   Boolean(error) &&
   (error?.code === 11000 || error?.name === "MongoServerError" || /E11000 duplicate key/i.test(String(error?.message || "")));
@@ -1674,7 +1695,7 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount }) => {
   };
 };
 
-const postInvoiceNoteJournal = async ({ note, createdBy, sourceInvoice, postingAccount }) => {
+const postInvoiceNoteJournal = async ({ note, createdBy, sourceInvoice = null, postingAccount }) => {
   const receivableAccount = await resolveTenantReceivableAccount(note.business);
   const amount = Math.abs(Number(note.amount || 0));
   const { start, end } = buildStatementPeriod(note.noteDate);
@@ -1707,8 +1728,8 @@ const postInvoiceNoteJournal = async ({ note, createdBy, sourceInvoice, postingA
     metadata: {
       noteType: note.noteType,
       noteNumber: note.noteNumber,
-      sourceInvoiceId: String(sourceInvoice._id),
-      sourceInvoiceNumber: sourceInvoice.invoiceNumber,
+      sourceInvoiceId: sourceInvoice?._id ? String(sourceInvoice._id) : null,
+      sourceInvoiceNumber: sourceInvoice?.invoiceNumber || null,
       postingRole: "tenant_receivable",
       ...(note.metadata || {}),
     },
@@ -1742,8 +1763,8 @@ const postInvoiceNoteJournal = async ({ note, createdBy, sourceInvoice, postingA
     metadata: {
       noteType: note.noteType,
       noteNumber: note.noteNumber,
-      sourceInvoiceId: String(sourceInvoice._id),
-      sourceInvoiceNumber: sourceInvoice.invoiceNumber,
+      sourceInvoiceId: sourceInvoice?._id ? String(sourceInvoice._id) : null,
+      sourceInvoiceNumber: sourceInvoice?.invoiceNumber || null,
       postingRole: "income_or_charge",
       offsetOfEntryId: String(receivableLeg._id),
       ...(note.metadata || {}),
@@ -2397,37 +2418,90 @@ export const createTenantInvoiceNote = async (req, res) => {
       }
     }
 
-    if (!isValidObjectId(sourceInvoiceId)) {
-      return res.status(400).json({
-        error:
-          noteType === "CREDIT_NOTE"
-            ? "A valid source invoice is required for a credit note."
-            : "A valid anchor invoice could not be resolved for this debit note. Select an invoice item first.",
-      });
+    const isInvoiceLinked = isValidObjectId(sourceInvoiceId);
+    if (!isInvoiceLinked && noteType === "CREDIT_NOTE") {
+      return res.status(400).json({ error: "A valid source invoice is required for a credit note." });
     }
 
-    const sourceInvoice = await TenantInvoice.findOne({
-      _id: sourceInvoiceId,
+    let sourceInvoice = null;
+    if (isInvoiceLinked) {
+      sourceInvoice = await TenantInvoice.findOne({
+        _id: sourceInvoiceId,
+        ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
+      }).lean();
+
+      if (!sourceInvoice) {
+        return res.status(404).json({ error: "Source invoice not found." });
+      }
+
+      if (String(sourceInvoice.postingStatus || "") !== "posted") {
+        return res.status(400).json({ error: "Notes can only be created against posted invoices." });
+      }
+
+      if (["cancelled", "reversed"].includes(String(sourceInvoice.status || "").toLowerCase())) {
+        return res.status(400).json({ error: "Source invoice is not active." });
+      }
+    }
+
+    const requestedTenantId = req.body.tenantId || req.body.tenant || sourceInvoice?.tenant || null;
+    const requestedPropertyId = req.body.propertyId || req.body.property || sourceInvoice?.property || null;
+
+    if (!isValidObjectId(requestedTenantId)) {
+      return res.status(400).json({ error: "A valid tenant is required." });
+    }
+
+    if (!isValidObjectId(requestedPropertyId)) {
+      return res.status(400).json({ error: "A valid property is required." });
+    }
+
+    const tenant = await Tenant.findOne({
+      _id: requestedTenantId,
       ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
     }).lean();
-    if (!sourceInvoice) {
-      return res.status(404).json({ error: "Source invoice not found." });
+
+    if (!tenant) {
+      return res.status(404).json({ error: "Tenant not found." });
     }
 
-    if (String(sourceInvoice.postingStatus || "") !== "posted") {
-      return res.status(400).json({ error: "Notes can only be created against posted invoices." });
+    const property = await Property.findOne({
+      _id: requestedPropertyId,
+      ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
+    }).lean();
+
+    if (!property) {
+      return res.status(404).json({ error: "Property not found." });
     }
 
-    if (["cancelled", "reversed"].includes(String(sourceInvoice.status || "").toLowerCase())) {
-      return res.status(400).json({ error: "Source invoice is not active." });
+    const resolvedBusinessId = sourceInvoice?.business || tenant.business || property.business || scopedBusinessId;
+    const resolvedUnitId = sourceInvoice?.unit || tenant.unit || req.body.unitId || req.body.unit || null;
+
+    if (!isValidObjectId(resolvedUnitId)) {
+      return res.status(400).json({ error: "A valid unit could not be resolved for this tenant." });
+    }
+
+    const unit = await Unit.findOne({
+      _id: resolvedUnitId,
+      ...(resolvedBusinessId ? { business: resolvedBusinessId } : {}),
+    }).lean();
+
+    if (!unit) {
+      return res.status(404).json({ error: "Tenant unit not found." });
+    }
+
+    const resolvedLandlordId = resolvePrimaryLandlordId({ sourceInvoice, property, tenant });
+    if (!isValidObjectId(resolvedLandlordId)) {
+      return res.status(400).json({
+        error:
+          "This property has no valid landlord linked. Open the property, add/select a landlord, mark one as primary, then save the debit note again.",
+      });
     }
 
     let actorUserId;
     try {
       actorUserId = await resolveActorUserId({
         req,
-        business: sourceInvoice.business,
-        bodyCreatedBy: req.body.createdBy || sourceInvoice.createdBy,
+        business: resolvedBusinessId,
+        bodyCreatedBy: req.body.createdBy || sourceInvoice?.createdBy || tenant.createdBy,
       });
     } catch (actorError) {
       return res.status(400).json({ error: actorError.message });
@@ -2439,33 +2513,36 @@ export const createTenantInvoiceNote = async (req, res) => {
       return res.status(400).json({ error: "Amount must be positive." });
     }
 
-    const requestedCategory = String(req.body.category || sourceInvoice.category || "").toUpperCase();
+    const requestedCategory = String(req.body.category || sourceInvoice?.category || "").toUpperCase();
     if (!TENANT_INVOICE_CATEGORIES.includes(requestedCategory)) {
       return res.status(400).json({ error: "Invalid charge type/category." });
     }
 
-    const { invoiceSnapshots } = await computeTenantInvoiceSnapshots({
-      businessId: sourceInvoice.business,
-      tenantId: sourceInvoice.tenant,
-    });
-    const sourceSnapshot = invoiceSnapshots.find(
-      (snapshot) => String(snapshot._id) === String(sourceInvoice._id)
-    );
+    let sourceSnapshot = null;
+    if (sourceInvoice) {
+      const { invoiceSnapshots } = await computeTenantInvoiceSnapshots({
+        businessId: sourceInvoice.business,
+        tenantId: sourceInvoice.tenant,
+      });
+      sourceSnapshot = invoiceSnapshots.find(
+        (snapshot) => String(snapshot._id) === String(sourceInvoice._id)
+      );
 
-    if (!sourceSnapshot) {
-      return res.status(400).json({ error: "Source invoice snapshot could not be resolved." });
+      if (!sourceSnapshot) {
+        return res.status(400).json({ error: "Source invoice snapshot could not be resolved." });
+      }
     }
 
     if (noteType === "CREDIT_NOTE") {
       const isOpen = ["pending", "partially_paid"].includes(
-        String(sourceSnapshot.computedStatus || sourceInvoice.status || "").toLowerCase()
+        String(sourceSnapshot?.computedStatus || sourceInvoice?.status || "").toLowerCase()
       );
       if (!isOpen) {
         return res.status(400).json({ error: "Credit notes can only be created against open invoices." });
       }
 
       const remainingCreditableAmount = round2(
-        Number(sourceSnapshot.remainingCreditableAmount || 0)
+        Number(sourceSnapshot?.remainingCreditableAmount || 0)
       );
       if (remainingCreditableAmount <= 0) {
         return res.status(400).json({ error: "This invoice has no remaining creditable amount." });
@@ -2481,7 +2558,7 @@ export const createTenantInvoiceNote = async (req, res) => {
     let postingAccount;
     try {
       postingAccount = await resolveInvoiceIncomeAccount({
-        businessId: sourceInvoice.business,
+        businessId: resolvedBusinessId,
         category: requestedCategory,
         chartAccountValue:
           req.body.chartAccountId ||
@@ -2489,16 +2566,16 @@ export const createTenantInvoiceNote = async (req, res) => {
           req.body.chartAccountCode ||
           req.body.accountCode ||
           req.body.account ||
-          sourceInvoice.chartAccount,
+          sourceInvoice?.chartAccount,
       });
     } catch (accountError) {
       accountError.statusCode = accountError.statusCode || 400;
       throw accountError;
     }
 
-    const noteNumber = await resolveNoteNumber(sourceInvoice.business, noteType, req.body.noteNumber);
+    const noteNumber = await resolveNoteNumber(resolvedBusinessId, noteType, req.body.noteNumber);
     const duplicate = await TenantInvoiceNote.findOne({
-      business: sourceInvoice.business,
+      business: resolvedBusinessId,
       noteNumber: { $regex: `^${escapeRegExp(noteNumber)}$`, $options: "i" },
     }).lean();
 
@@ -2506,25 +2583,38 @@ export const createTenantInvoiceNote = async (req, res) => {
       return res.status(409).json({ error: "Note number already exists for this business." });
     }
 
-    const noteMetadata = buildInheritedInvoiceNoteMetadata({
-      sourceInvoice,
-      incomingMetadata: req.body.metadata,
-    });
+    const noteMetadata = sourceInvoice
+      ? buildInheritedInvoiceNoteMetadata({
+          sourceInvoice,
+          incomingMetadata: {
+            ...requestedMetadata,
+            noteSourceMode: "invoice",
+          },
+        })
+      : {
+          ...requestedMetadata,
+          noteSourceMode: "standalone",
+          standaloneDebitNote: noteType === "DEBIT_NOTE",
+          includeInLandlordStatement: true,
+          includeInCategoryTotals: true,
+        };
 
     const note = await TenantInvoiceNote.create({
-      business: sourceInvoice.business,
-      property: sourceInvoice.property,
-      landlord: sourceInvoice.landlord,
-      tenant: sourceInvoice.tenant,
-      unit: sourceInvoice.unit,
-      sourceInvoice: sourceInvoice._id,
+      business: resolvedBusinessId,
+      property: requestedPropertyId,
+      landlord: resolvedLandlordId,
+      tenant: requestedTenantId,
+      unit: resolvedUnitId,
+      sourceInvoice: sourceInvoice?._id || null,
       noteNumber,
       noteType,
       category: requestedCategory,
       amount,
       description:
         req.body.description ||
-        `${noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} note against ${sourceInvoice.invoiceNumber}`,
+        (sourceInvoice
+          ? `${noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} note against ${sourceInvoice.invoiceNumber}`
+          : `${noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} note - standalone charge`),
       noteDate,
       status: "posted",
       createdBy: actorUserId,
@@ -2601,17 +2691,17 @@ export const reverseTenantInvoiceNote = async (req, res) => {
     }
 
     const sourceInvoiceId = String(note.sourceInvoice || "");
-    if (!isValidObjectId(sourceInvoiceId)) {
-      return res.status(400).json({ error: "Source invoice could not be resolved for this debit note." });
-    }
+    let sourceInvoice = null;
 
-    const sourceInvoice = await TenantInvoice.findOne({
-      _id: sourceInvoiceId,
-      business: note.business,
-    }).lean();
+    if (isValidObjectId(sourceInvoiceId)) {
+      sourceInvoice = await TenantInvoice.findOne({
+        _id: sourceInvoiceId,
+        business: note.business,
+      }).lean();
 
-    if (!sourceInvoice) {
-      return res.status(404).json({ error: "Source invoice not found for this debit note." });
+      if (!sourceInvoice) {
+        return res.status(404).json({ error: "Source invoice not found for this debit note." });
+      }
     }
 
     let actorUserId;
@@ -2625,22 +2715,24 @@ export const reverseTenantInvoiceNote = async (req, res) => {
       return res.status(400).json({ error: actorError.message });
     }
 
-    const { invoiceSnapshots } = await computeTenantInvoiceSnapshots({
-      businessId: note.business,
-      tenantId: note.tenant,
-    });
-
-    const sourceSnapshot = invoiceSnapshots.find(
-      (snapshot) => String(snapshot?._id || "") === String(sourceInvoiceId)
-    );
-
-    const outstanding = Math.max(0, Number(sourceSnapshot?.outstanding || 0));
-    const noteAmount = Math.abs(Number(note.amount || 0));
-
-    if (normalizedNoteType === "DEBIT_NOTE" && outstanding + 0.009 < noteAmount) {
-      return res.status(400).json({
-        error: "This debit note cannot be reversed because it has already been settled fully or partially.",
+    if (sourceInvoice) {
+      const { invoiceSnapshots } = await computeTenantInvoiceSnapshots({
+        businessId: note.business,
+        tenantId: note.tenant,
       });
+
+      const sourceSnapshot = invoiceSnapshots.find(
+        (snapshot) => String(snapshot?._id || "") === String(sourceInvoiceId)
+      );
+
+      const outstanding = Math.max(0, Number(sourceSnapshot?.outstanding || 0));
+      const noteAmount = Math.abs(Number(note.amount || 0));
+
+      if (normalizedNoteType === "DEBIT_NOTE" && outstanding + 0.009 < noteAmount) {
+        return res.status(400).json({
+          error: "This debit note cannot be reversed because it has already been settled fully or partially.",
+        });
+      }
     }
 
     const ledgerEntryIds = Array.isArray(note.ledgerEntries) ? note.ledgerEntries.map((entry) => String(entry)) : [];

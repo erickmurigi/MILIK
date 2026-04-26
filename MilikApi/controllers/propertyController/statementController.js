@@ -185,7 +185,8 @@ export const createDraft = async (req, res, next) => {
         userId,
         notes || "",
         statementType,
-        hasExplicitCutoffAt ? requestedCutoffAt : null
+        hasExplicitCutoffAt ? requestedCutoffAt : null,
+        periodEnd
       );
 
       const lines = await LandlordStatementLine.find({ statement: existingDraft._id })
