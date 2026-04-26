@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Landlord from "../../models/Landlord.js";
 import Property from "../../models/Property.js";
+import { getLandlordBalance } from "../../services/propertyAccountingService.js";
 import Unit from "../../models/Unit.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
@@ -309,10 +310,18 @@ export const getLandlords = async (req, res, next) => {
           status: "archived",
         });
 
+        let balance = 0;
+        try {
+          balance = await getLandlordBalance(landlord._id, landlord.company);
+        } catch (balanceErr) {
+          console.warn("Unable to calculate landlord balance", landlord._id, balanceErr?.message);
+        }
+
         return {
           ...landlord.toObject(),
           activeProperties,
           archivedProperties,
+          balance,
         };
       })
     );

@@ -71,7 +71,13 @@ const LeaseSchema = new mongoose.Schema(
       default: "fixed",
     },
     startDate: { type: Date, required: true },
-    endDate: { type: Date, required: true },
+    endDate: {
+      type: Date,
+      required: function requireEndDateForFixedLease() {
+        return String(this.leaseType || "fixed").trim().toLowerCase() === "fixed";
+      },
+      default: null,
+    },
     rentAmount: { type: Number, required: true, min: 0 },
     depositAmount: { type: Number, required: true, min: 0, default: 0 },
     paymentDueDay: { type: Number, required: true, min: 1, max: 28, default: 5 },

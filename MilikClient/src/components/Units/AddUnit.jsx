@@ -91,7 +91,7 @@ function MilikSelect({
     <div className={`${className} relative`} ref={wrapRef}>
       {label ? (
         <label className="block text-sm font-bold text-slate-800 mb-1 tracking-tight">
-          {label} {required ? "*" : ""}
+          {label} {required ? <span className="text-red-500">*</span> : ""}
         </label>
       ) : null}
 
@@ -500,7 +500,7 @@ const AddUnit = () => {
       areaSqFt: parseFloat(formData.areaSqFt) || 0,
       rent: parseFloat(formData.rent),
       deposit: parseFloat(formData.deposit),
-      status: formData.status || "vacant",
+      ...(isEditMode ? { status: formData.status || "vacant" } : {}),
       description: formData.description?.trim() || "",
       amenities: formData.amenities
         ? formData.amenities.split(",").map((a) => a.trim()).filter(Boolean)
@@ -515,8 +515,12 @@ const AddUnit = () => {
       billingFrequency: canonicalBillingPeriodKey(formData.billingFrequency || "monthly"),
       billingPeriodKey: canonicalBillingPeriodKey(formData.billingFrequency || "monthly"),
       business: currentCompany._id,
-      isVacant: formData.status === "vacant",
-      vacantSince: formData.status === "vacant" ? new Date() : null,
+      ...(isEditMode
+        ? {
+            isVacant: formData.status === "vacant",
+            vacantSince: formData.status === "vacant" ? new Date() : null,
+          }
+        : {}),
     };
 
     try {
@@ -585,20 +589,20 @@ const AddUnit = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="h-[calc(100vh-8rem)] min-h-0 w-full max-w-none overflow-y-auto overscroll-contain bg-slate-50 p-3 pb-28 sm:p-4 lg:p-5">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Unit Details</h1>
-          <p className="text-sm text-slate-600 mt-1">
+        <div className="mb-4 flex flex-col gap-1 lg:flex-row lg:items-end lg:justify-between">
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Unit Details</h1>
+          <p className="text-sm text-slate-600">
             {isEditMode ? "Edit unit information" : "Create a new unit for a property"}
           </p>
         </div>
 
         {/* Form Card */}
         <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-5 grid grid-cols-1 xl:grid-cols-12 gap-4">
             {/* Property Selection */}
-            <div>
+            <div className="xl:col-span-5">
               <MilikSelect
                 label="Property"
                 required
@@ -614,7 +618,7 @@ const AddUnit = () => {
             </div>
 
             {selectedProperty && (
-              <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
+              <div className="xl:col-span-7 rounded-lg border border-orange-200 bg-orange-50 p-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-wide text-orange-700">Measurement Basis</div>
@@ -646,7 +650,7 @@ const AddUnit = () => {
             )}
 
             {/* Unit Number and Type */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <div>
                 <label className={labelClass}>
                   Unit Number <span className="text-red-500">*</span>
@@ -684,7 +688,7 @@ const AddUnit = () => {
             </div>
 
             {/* Area, Rent and Deposit */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
               <div>
                 <label className={labelClass}>Area ({measurementLabel})</label>
                 <input
@@ -747,27 +751,28 @@ const AddUnit = () => {
                 )}
               </div>
             </div>
-
-            {/* Status */}
-            <div>
-              <MilikSelect
-                label="Status"
-                placeholder="Select status"
-                items={statusOptions}
-                value={formData.status}
-                onChange={(val) => handleInputChange({ target: { name: "status", value: val } })}
-                getLabel={(s) => s.label}
-                getValue={(s) => s.value}
-                disabled={loading}
-              />
-            </div>
+            {/* Status - edit mode only. New units are created as vacant by backend. */}
+            {isEditMode && (
+              <div className="xl:col-span-4">
+                <MilikSelect
+                  label="Status"
+                  placeholder="Select status"
+                  items={statusOptions}
+                  value={formData.status}
+                  onChange={(val) => handleInputChange({ target: { name: "status", value: val } })}
+                  getLabel={(s) => s.label}
+                  getValue={(s) => s.value}
+                  disabled={loading}
+                />
+              </div>
+            )}
 
             {/* ============================================= */}
             {/* UTILITIES & BILLING SECTION */}
             {/* ============================================= */}
 
             {/* Unit-Specific Utilities */}
-            <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-5 space-y-4">
+            <div className="xl:col-span-7 bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-4 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-base font-bold text-slate-900 tracking-tight">Unit-Specific Utilities</h3>
                 <button
@@ -853,7 +858,7 @@ const AddUnit = () => {
             </div>
 
             {/* Billing Calculation Summary */}
-            <div className="bg-gradient-to-br from-orange-50 via-white to-slate-50 border-2 border-orange-200 rounded-lg p-6 space-y-5">
+            <div className="xl:col-span-5 bg-gradient-to-br from-orange-50 via-white to-slate-50 border-2 border-orange-200 rounded-lg p-4 space-y-4">
               <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                 <FaCalculator className="text-orange-600" />
                 Billing Calculation Summary
@@ -866,7 +871,7 @@ const AddUnit = () => {
                   <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
                     Monthly Rent
                   </div>
-                  <div className="text-2xl font-bold text-slate-900">
+                  <div className="text-xl font-bold text-slate-900">
                     KES {monthlyRent.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                   <div className="text-xs text-slate-500 mt-2">Base rental amount</div>
@@ -877,7 +882,7 @@ const AddUnit = () => {
                   <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
                     Utilities (Not in Rent)
                   </div>
-                  <div className="text-2xl font-bold text-orange-600">
+                  <div className="text-xl font-bold text-orange-600">
                     KES {monthlyUtilityBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                   <div className="text-xs text-slate-500 mt-2">Additional monthly charges</div>
@@ -888,7 +893,7 @@ const AddUnit = () => {
                   <div className="text-xs font-semibold text-orange-50 uppercase tracking-wide mb-1">
                     Total Monthly Bill
                   </div>
-                  <div className="text-2xl font-bold text-white">
+                  <div className="text-xl font-bold text-white">
                     KES {totalMonthlyBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                   <div className="text-xs text-orange-100 mt-2">Rent + utilities</div>
@@ -924,7 +929,7 @@ const AddUnit = () => {
                         return `${selectedPeriod?.name || "Configured"} Invoice Amount`;
                       })()}
                     </div>
-                    <div className="text-3xl font-bold text-white">
+                    <div className="text-2xl font-bold text-white">
                       KES {billingAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   </div>
@@ -954,7 +959,7 @@ const AddUnit = () => {
             </div>
 
             {/* Amenities */}
-            <div>
+            <div className="xl:col-span-6">
               <label className={labelClass}>Amenities</label>
               <input
                 type="text"
@@ -969,7 +974,7 @@ const AddUnit = () => {
             </div>
 
             {/* Description */}
-            <div>
+            <div className="xl:col-span-6">
               <label className={labelClass}>Description</label>
               <textarea
                 name="description"
@@ -983,7 +988,7 @@ const AddUnit = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+            <div className="xl:col-span-12 flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
               <button
                 type="button"
                 onClick={handleCancel}

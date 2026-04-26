@@ -61,6 +61,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
     paymentDate: new Date().toISOString().split("T")[0],
     paymentMethod: "bank_transfer",
     referenceNumber: "",
+    cashbook: "",
     description: "",
     propertyIds: [],
   });
@@ -135,9 +136,9 @@ const LandlordPayments = ({ mode = "payments" }) => {
 
       // Real payments to landlord from backend
       const paymentsMade = landlordPayments
-        .filter((p) => p.landlordId === landlord._id)
-        .reduce((sum, p) => sum + (p.amount || 0), 0);
-      const balance = totalRentCollected - paymentsMade;
+        .filter((p) => String(p?.landlord?._id || p?.landlord || p?.landlordId || "") === String(landlord._id) && p.status !== "reversed")
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      const balance = Number(landlord.balance ?? landlord.payableBalance ?? Math.max(totalRentCollected - paymentsMade, 0));
 
       return {
         ...landlord,
@@ -220,6 +221,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
       paymentDate: new Date().toISOString().split("T")[0],
       paymentMethod: "bank_transfer",
       referenceNumber: "",
+      cashbook: "",
       description: `Payment to ${landlord.landlordName}`,
       propertyIds: landlord.propertyBreakdown.map((p) => p.propertyId),
     });
@@ -232,6 +234,11 @@ const LandlordPayments = ({ mode = "payments" }) => {
       return;
     }
 
+    if (!paymentForm.cashbook) {
+      toast.error("Select or enter a cashbook account");
+      return;
+    }
+
     try {
       // Save payment to backend
       const payload = {
@@ -240,6 +247,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
         paymentDate: paymentForm.paymentDate,
         paymentMethod: paymentForm.paymentMethod,
         referenceNumber: paymentForm.referenceNumber,
+        cashbook: paymentForm.cashbook,
         description: paymentForm.description,
         propertyIds: paymentForm.propertyIds,
         business: currentCompany?._id,
@@ -258,6 +266,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
         paymentDate: new Date().toISOString().split("T")[0],
         paymentMethod: "bank_transfer",
         referenceNumber: "",
+        cashbook: "",
         description: "",
         propertyIds: [],
       });
@@ -789,6 +798,13 @@ const LandlordPayments = ({ mode = "payments" }) => {
                               <FaEye size={11} />
                             </button>
                             <button
+                              onClick={() => navigate(`/landlord-payment-history?landlordId=${landlord._id}`)}
+                              className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-800 text-white"
+                              title="View Payments"
+                            >
+                              <FaFileInvoiceDollar size={11} />
+                            </button>
+                            <button
                               onClick={() => handleOpenPayment(landlord)}
                               className={`px-2 py-1 rounded ${MILIK_ORANGE} hover:bg-[#e67e00] text-white`}
                               title="Make Payment"
@@ -903,6 +919,17 @@ const LandlordPayments = ({ mode = "payments" }) => {
                     <option value="cash">Cash</option>
                     <option value="mobile_money">Mobile Money</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Cashbook Account *</label>
+                  <input
+                    type="text"
+                    value={paymentForm.cashbook}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, cashbook: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    placeholder="Cashbook account code/name or ID"
+                  />
                 </div>
 
                 <div>

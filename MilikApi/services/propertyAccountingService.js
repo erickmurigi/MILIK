@@ -227,3 +227,67 @@ export default {
   resolveLandlordRemittancePayableAccount,
   findPropertyControlAccount,
 };
+export const getLandlordBalance = async (landlordId, businessId = null) => {
+  if (!landlordId || !isValidObjectId(landlordId)) {
+    throw new Error("Valid landlordId is required to calculate landlord balance.");
+  }
+
+  const landlord = await Landlord.findOne({
+    _id: landlordId,
+    ...(businessId && isValidObjectId(businessId) ? { company: businessId } : {}),
+  }).select("_id company").lean();
+
+  if (!landlord) {
+    throw new Error("Landlord not found while calculating balance.");
+  }
+
+  const resolvedBusinessId = businessId || landlord.company;
+  const payableAccount = await resolveLandlordRemittancePayableAccount(resolvedBusinessId);
+  const FinancialLedgerEntry = (await import("../models/FinancialLedgerEntry.js")).default;
+
+  const ledgerTotals = await FinancialLedgerEntry.aggregate([
+    {
+      $match: {
+        business: new mongoose.Types.ObjectId(String(resolvedBusinessId)),
+        landlord: new mongoose.Types.ObjectId(String(landlordId)),
+        accountId: payableAccount._id,
+        status: { $ne: "reversed" },
+        $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
+      },
+    },
+    { $group: { _id: null, debit: { $sum: "$debit" }, credit: { $sum: "$credit" }, count: { $sum: 1 } } },
+  ]);
+
+  const ledgerRow = ledgerTotals[0] || { debit: 0, credit: 0, count: 0 };
+  if (ledgerRow.count > 0) {
+    return Math.max(Number(ledgerRow.credit || 0) - Number(ledgerRow.debit || 0), 0);
+  }
+
+  const ProcessedStatement = (await import("../models/ProcessedStatement.js")).default;
+  const LandlordPayment = (await import("../models/LandlordPayment.js")).default;
+
+  const statementTotals = await ProcessedStatement.aggregate([
+    {
+      $match: {
+        business: new mongoose.Types.ObjectId(String(resolvedBusinessId)),
+        landlord: new mongoose.Types.ObjectId(String(landlordId)),
+        status: { $ne: "reversed" },
+        isNegativeStatement: { $ne: true },
+      },
+    },
+    { $group: { _id: null, payable: { $sum: "$netAmountDue" } } },
+  ]);
+
+  const paymentTotals = await LandlordPayment.aggregate([
+    {
+      $match: {
+        business: new mongoose.Types.ObjectId(String(resolvedBusinessId)),
+        landlord: new mongoose.Types.ObjectId(String(landlordId)),
+        status: { $ne: "reversed" },
+      },
+    },
+    { $group: { _id: null, paid: { $sum: "$amount" } } },
+  ]);
+
+  return Math.max(Number(statementTotals[0]?.payable || 0) - Number(paymentTotals[0]?.paid || 0), 0);
+};

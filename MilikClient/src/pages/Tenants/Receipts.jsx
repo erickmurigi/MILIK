@@ -1185,7 +1185,7 @@ const visibleReceiptIds = useMemo(
               <div class="card" style="margin-top:18px;">
                 <h2>Allocation lines</h2>
                 <table>
-                  <thead>
+                  <thead className="sticky top-0 z-10">
                     <tr>
                       <th style="width:64px;">#</th>
                       <th>Reference</th>
@@ -1596,11 +1596,27 @@ const visibleReceiptIds = useMemo(
     printWindow.print();
   };
 
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyHeight = document.body.style.height;
+    const previousDocumentOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.body.style.height = "100vh";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.height = previousBodyHeight;
+      document.documentElement.style.overflow = previousDocumentOverflow;
+    };
+  }, []);
+
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
-        <div className="mx-auto" style={{ maxWidth: "96%" }}>
-          <div className="sticky top-0 z-30 mb-2 rounded-lg border border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
+      <div className="h-[calc(100dvh-152px)] max-h-[calc(100dvh-152px)] overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
+        <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
+          <div className="sticky top-0 z-30 mb-2 shrink-0 rounded-lg border border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
             <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-[180px]">
                 <button
@@ -1810,10 +1826,10 @@ const visibleReceiptIds = useMemo(
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
               <table className="w-full min-w-[1200px] text-xs">
-                <thead>
+                <thead className="sticky top-0 z-10">
                   <tr className={`${MILIK_GREEN} text-white`}>
                     <th className="px-3 py-2 text-center">
                       <input
@@ -1976,7 +1992,7 @@ const visibleReceiptIds = useMemo(
                 </tbody>
               </table>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
+            <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
               <p>
                 <span className="font-semibold">Showing:</span> {filteredReceipts.length === 0 ? 0 : startIndex + 1}
                 {" - "}

@@ -132,7 +132,7 @@ const PropertySchema = new mongoose.Schema(
 
     lrNumber: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
     },
 

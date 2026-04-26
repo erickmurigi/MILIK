@@ -471,6 +471,10 @@ const normalizePropertyServiceMode = (value = "Managing") => {
   return "Managing";
 };
 
+const PROPERTY_CONTROL_LEDGER_TYPE = "Property Control Ledger In GL";
+
+const normalizePropertyLedgerType = () => PROPERTY_CONTROL_LEDGER_TYPE;
+
 // Create property
 export const createProperty = async (req, res) => {
   try {
@@ -538,14 +542,10 @@ export const createProperty = async (req, res) => {
     const normalizedLrNumber = typeof lrNumber === "string" ? lrNumber.trim() : "";
     const normalizedPropertyType = typeof propertyType === "string" ? propertyType.trim() : "";
 
-    if (
-      !normalizedPropertyName ||
-      !normalizedLrNumber ||
-      !normalizedPropertyType
-    ) {
+    if (!normalizedPropertyName || !normalizedPropertyType) {
       return res.status(400).json({
         success: false,
-        message: "Property Name, LR Number, and Type are required fields",
+        message: "Property Name and Type are required fields",
       });
     }
 
@@ -567,6 +567,20 @@ export const createProperty = async (req, res) => {
         success: false,
         message: "Property with this code already exists",
       });
+    }
+
+    if (normalizedLrNumber) {
+      const existingLrProperty = await Property.findOne({
+        business: businessId,
+        lrNumber: normalizedLrNumber,
+      });
+
+      if (existingLrProperty) {
+        return res.status(400).json({
+          success: false,
+          message: "Property with this LR number already exists",
+        });
+      }
     }
 
     const company = await getPropertyCompanyContext(businessId);
@@ -658,7 +672,7 @@ export const createProperty = async (req, res) => {
       unitMeasurement: unitMeasurement || "Sq Ft",
       rentPerMeasure: Math.max(0, parseFloat(rentPerMeasure) || 0),
       rentCurrency: rentCurrency || "Kenyan Shilling [KES]",
-      accountLedgerType,
+      accountLedgerType: normalizePropertyLedgerType(accountLedgerType),
       primaryBank,
       alternativeTaxPin,
       invoicePrefix,
@@ -930,6 +944,24 @@ export const updateProperty = async (req, res, next) => {
       }
     }
 
+    if (req.body.lrNumber !== undefined && typeof req.body.lrNumber === "string") {
+      const trimmedLrNumber = req.body.lrNumber.trim();
+      if (trimmedLrNumber && trimmedLrNumber !== String(property.lrNumber || "")) {
+        const existingLrProperty = await Property.findOne({
+          business: property.business,
+          lrNumber: trimmedLrNumber,
+          _id: { $ne: property._id },
+        });
+
+        if (existingLrProperty) {
+          return res.status(400).json({
+            success: false,
+            message: "Property with this LR number already exists",
+          });
+        }
+      }
+    }
+
     if (
       req.body.drawerBank !== undefined ||
       req.body.bankBranch !== undefined ||
@@ -944,7 +976,7 @@ export const updateProperty = async (req, res, next) => {
       };
     }
 
-    const optionalEnumFields = ["specification", "multiStoreyType", "category"];
+    const optionalEnumFields = ["category"];
     optionalEnumFields.forEach((field) => {
       if (req.body[field] === "" || req.body[field] === null) {
         req.body[field] = undefined;
@@ -998,6 +1030,9 @@ export const updateProperty = async (req, res, next) => {
 
       req.body.landlords = modeAwareAssignment.landlords;
     }
+
+    delete req.body.specification;
+    delete req.body.multiStoreyType;
 
     if (req.body.propertyCode !== undefined && typeof req.body.propertyCode === "string") {
       req.body.propertyCode = req.body.propertyCode.trim();
@@ -1395,10 +1430,6 @@ export const bulkImportProperties = async (req, res, next) => {
         errors.push("Property name is required");
       }
 
-      if (!property.lrNumber) {
-        errors.push("LR Number is required");
-      }
-
       if (property.lrNumber) {
         if (existingLRNumbers.has(property.lrNumber) || seenLRInBatch.has(property.lrNumber)) {
           errors.push(`LR Number already exists: ${property.lrNumber}`);
@@ -1444,7 +1475,7 @@ export const bulkImportProperties = async (req, res, next) => {
         const newProperty = new Property({
           propertyCode: generatedPropertyCode,
           propertyName: property.propertyName,
-          lrNumber: property.lrNumber,
+          lrNumber: property.lrNumber || "",
           propertyType: property.propertyType || "Residential",
           category: property.category,
           townCityState: property.townCityState,
@@ -1454,6 +1485,7 @@ export const bulkImportProperties = async (req, res, next) => {
           totalUnits: property.totalUnits || 0,
           country: property.country || "Kenya",
           status: property.status || "active",
+          accountLedgerType: normalizePropertyLedgerType(property.accountLedgerType),
           business: businessId,
           createdBy: createdById,
           updatedBy: createdById,

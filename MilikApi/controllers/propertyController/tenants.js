@@ -284,19 +284,24 @@ const syncTenantLeaseRecord = async ({
     return activeLease.save();
   }
 
-  if (normalizedLeaseType !== "fixed") {
-    return activeLease || null;
-  }
-
   const resolvedUnit =
     unitDoc ||
     (tenantDoc.unit ? await Unit.findById(tenantDoc.unit).populate("property", "landlords") : null);
   if (!resolvedUnit?._id) return activeLease || null;
 
   const startDate = tenantDoc.moveInDate ? new Date(tenantDoc.moveInDate) : new Date(tenantDoc.createdAt || Date.now());
-  const endDate = tenantDoc.moveOutDate ? new Date(tenantDoc.moveOutDate) : addDays(startDate, 365);
-  if (!endDate || Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+  if (Number.isNaN(startDate.getTime())) {
     return activeLease || null;
+  }
+
+  const endDate = normalizedLeaseType === "fixed"
+    ? (tenantDoc.moveOutDate ? new Date(tenantDoc.moveOutDate) : addDays(startDate, 365))
+    : null;
+
+  if (normalizedLeaseType === "fixed") {
+    if (!endDate || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+      return activeLease || null;
+    }
   }
 
   const payload = {
@@ -304,7 +309,7 @@ const syncTenantLeaseRecord = async ({
     unit: resolvedUnit._id,
     landlord: resolvePrimaryLandlordIdFromProperty(resolvedUnit?.property) || null,
     business: businessId,
-    leaseType: "fixed",
+    leaseType: normalizedLeaseType === "fixed" ? "fixed" : "at_will",
     startDate,
     endDate,
     rentAmount: Number(tenantDoc.rent || resolvedUnit.rent || 0),
@@ -1709,6 +1714,19 @@ export const bulkImportTenants = async (req, res, next) => {
       const rowIndex = Number(record?.rowNumber || i + 2);
 
       try {
+        const normalizedTenantName = normalizeString(record.tenantName);
+        const normalizedPhoneNumber = normalizeString(record.phoneNumber);
+        const normalizedIdNumber = normalizeString(record.idNumber);
+
+        if (!normalizedTenantName || !normalizedPhoneNumber || !normalizedIdNumber) {
+          failed.push({
+            tenantName: record.tenantName,
+            error: "Tenant name, phone number, and ID number are required",
+            row: rowIndex,
+          });
+          continue;
+        }
+
         if (!record.propertyCode) {
           failed.push({
             tenantName: record.tenantName,
@@ -1761,13 +1779,18 @@ export const bulkImportTenants = async (req, res, next) => {
           additionalUnits: requestedUnitDocs.slice(1).map((unit) => unit._id),
         });
 
-        await ensureUnitsAvailableForTenant({
-          businessId,
-          unitDocs: requestedUnitDocs,
-        });
+        const importedTenantStatus = normalizeTenantStatus(record.status || "active");
+        const importedTenantOccupiesUnits = shouldTenantOccupyUnits(importedTenantStatus);
 
-        const normalizedIdNumber = String(record.idNumber || "").trim().toLowerCase();
-        if (existingIds.has(normalizedIdNumber)) {
+        if (importedTenantOccupiesUnits) {
+          await ensureUnitsAvailableForTenant({
+            businessId,
+            unitDocs: requestedUnitDocs,
+          });
+        }
+
+        const normalizedIdNumberKey = String(normalizedIdNumber || "").trim().toLowerCase();
+        if (existingIds.has(normalizedIdNumberKey)) {
           failed.push({
             tenantName: record.tenantName,
             error: `Duplicate ID number: ${record.idNumber}`,
@@ -1841,14 +1864,14 @@ export const bulkImportTenants = async (req, res, next) => {
           : [];
 
         const newTenant = new Tenant({
-          name: normalizeString(record.tenantName),
-          phone: normalizeString(record.phoneNumber),
-          idNumber: normalizeString(record.idNumber),
+          name: normalizedTenantName,
+          phone: normalizedPhoneNumber,
+          idNumber: normalizedIdNumber,
           unit: primaryUnitDoc._id,
           additionalUnits: requestedUnits.additional,
           rent: requestedRent > 0 ? requestedRent : computedRent,
           balance: 0,
-          status: normalizeTenantStatus(record.status || "active"),
+          status: importedTenantStatus,
           depositAmount,
           depositHeldBy: normalizeDepositHolder(record.depositHeldBy, propertyDepositHeldBy),
           depositRefundStatus: depositAmount > 0 ? "pending" : "not_applicable",
@@ -1870,12 +1893,20 @@ export const bulkImportTenants = async (req, res, next) => {
         await newTenant.save();
         await syncTenantAssignedUnitOccupancy({
           previousUnitIds: [],
-          nextUnitIds: getTenantAssignedUnitIds(newTenant),
+          nextUnitIds: shouldTenantOccupyUnits(newTenant) ? getTenantAssignedUnitIds(newTenant) : [],
           tenantId: newTenant._id,
           effectiveDate: moveInDate,
         });
 
-        existingIds.add(normalizedIdNumber);
+        if (importedTenantOccupiesUnits && moveInDate && !Number.isNaN(moveInDate.getTime())) {
+          await syncTenantLeaseRecord({
+            tenantDoc: newTenant,
+            unitDoc: primaryUnitDoc,
+            action: "upsert",
+          });
+        }
+
+        existingIds.add(normalizedIdNumberKey);
         existingCodes.add(String(tenantCode).toLowerCase());
 
         successful.push({

@@ -800,7 +800,7 @@ const Landlords = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+      <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         {/* Filters Row */}
         <div className="sticky top-0 z-30 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm">
           <div className="space-y-2">
@@ -1054,7 +1054,7 @@ const Landlords = () => {
         </div>
 
         {/* Table */}
-        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col overflow-hidden px-0 pb-0">
+        <div className="flex w-full max-w-none min-h-0 flex-1 flex-col px-0 pb-0">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             {/* Make THIS the scroll area so the footer stays visible */}
             <div className="min-h-0 flex-1 overflow-auto">

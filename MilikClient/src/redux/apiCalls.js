@@ -1384,7 +1384,7 @@ export const getLandlordPayments = async (companyId) => {
   if (companyId) params.append("business", companyId);
   if (companyId) params.append("company", companyId);
   const query = params.toString();
-  const res = await adminRequests.get(`/payment-vouchers${query ? `?${query}` : ""}`);
+  const res = await adminRequests.get(`/landlord-payments${query ? `?${query}` : ""}`);
   return extractList(res.data);
 };
 
@@ -1405,7 +1405,7 @@ export const getPaymentVouchers = async (filters = {}) => {
 
 // Create a landlord payment voucher
 export const createLandlordPayment = async (paymentData) => {
-  const res = await adminRequests.post("/payment-vouchers", paymentData);
+  const res = await adminRequests.post("/landlord-payments", paymentData);
   return res.data;
 };
 
@@ -2641,5 +2641,9 @@ export const deleteMpesaCollection = async (id, params = {}) => {
 
 export const importMpesaBatch = async (payload = {}) => {
   const res = await adminRequests.post("/mpesa-collections/import-batch", payload);
+  return res.data;
+};
+export const reverseLandlordPayment = async (paymentId, payload = {}) => {
+  const res = await adminRequests.post(`/landlord-payments/${paymentId}/reverse`, payload);
   return res.data;
 };

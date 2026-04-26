@@ -68,7 +68,7 @@ function MilikSelect({
     <div className={`${className} relative`} ref={wrapRef}>
       {label ? (
         <label className="block text-sm font-bold text-slate-800 mb-1 tracking-tight">
-          {label} {required ? "*" : ""}
+          {label} {required ? <span className="text-red-500">*</span> : ""}
         </label>
       ) : null}
 
@@ -345,9 +345,9 @@ const AddLandlord = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-full bg-slate-50">
+      <div className="flex h-[calc(100vh-8rem)] min-h-0 flex-col bg-slate-50">
         {/* Header */}
-        <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
+        <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-3">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Landlord Details</h1>
@@ -369,16 +369,16 @@ const AddLandlord = () => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto px-6 py-6">
-          <form onSubmit={handleSubmit} className="max-w-5xl mx-auto">
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 space-y-6">
+        <div className="flex-1 min-h-0 overflow-auto px-3 py-3 pb-28 sm:px-4 lg:px-6">
+          <form onSubmit={handleSubmit} className="w-full max-w-none">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
               {/* General Information */}
-              <div>
+              <div className="xl:col-span-7 bg-white rounded-lg shadow-sm border border-slate-200 p-5">
                 <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-200">
                   General Information
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   <div>
                     <label className={labelClass}>Landlord Code</label>
                     <input
@@ -477,7 +477,7 @@ const AddLandlord = () => {
               </div>
 
               {/* Address Information */}
-              <div>
+              <div className="xl:col-span-5 bg-white rounded-lg shadow-sm border border-slate-200 p-5">
                 <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-200">
                   Address Information
                 </h3>
@@ -537,7 +537,7 @@ const AddLandlord = () => {
               </div>
 
               {/* Attachments */}
-              <div>
+              <div className="xl:col-span-12 bg-white rounded-lg shadow-sm border border-slate-200 p-5">
                 <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-200">
                   Attachments
                 </h3>
@@ -621,7 +621,7 @@ const AddLandlord = () => {
             </div>
 
             {/* Bottom Action Bar */}
-            <div className="mt-6 bg-white rounded-lg shadow-sm border border-slate-200 p-4 flex items-center justify-between">
+            <div className="mt-4 bg-white rounded-lg shadow-sm border border-slate-200 p-4 flex items-center justify-between">
               <div className="text-sm text-slate-600">
                 Fields marked with <span className="text-red-500">*</span> are required
               </div>

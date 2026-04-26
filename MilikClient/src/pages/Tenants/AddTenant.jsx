@@ -244,7 +244,7 @@ function MilikSelect({
     <div className={`${className} relative`} ref={wrapRef}>
       {label ? (
         <label className="block text-sm font-bold text-slate-800 mb-1 tracking-tight">
-          {label} {required ? "*" : ""}
+          {label} {required ? <span className="text-red-500">*</span> : null}
         </label>
       ) : null}
 
@@ -1342,13 +1342,13 @@ for (const request of invoiceRequests) {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 py-6 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-5xl mx-auto">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+      <div className="h-[calc(100vh-8rem)] min-h-0 w-full overflow-y-auto overscroll-contain bg-gradient-to-br from-slate-50 via-white to-slate-100 px-2 py-2 pb-28 sm:px-3 lg:px-4">
+        <div className="w-full max-w-none mx-0">
+          <div className="mb-2">
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
               {isEditMode ? "Edit Tenant" : "New Tenant"}
             </h1>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-0.5 text-sm text-slate-600">
               {isEditMode
                 ? "Update tenant record and billing information"
                 : "Create a new tenant record with billing information"}
@@ -1369,8 +1369,8 @@ for (const request of invoiceRequests) {
           ) : (
           <form onSubmit={handleSubmit}>
             <div className="bg-white shadow-sm rounded-lg border border-slate-200 overflow-hidden">
-              <div className="p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="p-3 space-y-3 sm:p-4 sm:space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   <div>
                     <label className={labelClass}>Tenant Code (Optional)</label>
                     <input
@@ -1388,10 +1388,10 @@ for (const request of invoiceRequests) {
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-4 border-b-2 border-orange-500 pb-2">
+                  <h3 className="text-base font-bold text-slate-900 mb-3 border-b-2 border-orange-500 pb-2">
                     👤 Tenant Information
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     <div>
                       <label className={labelClass}>
                         Full Name <span className="text-red-500">*</span>
@@ -1444,7 +1444,7 @@ for (const request of invoiceRequests) {
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-4 border-b-2 border-green-500 pb-2">
+                  <h3 className="text-base font-bold text-slate-900 mb-3 border-b-2 border-green-500 pb-2">
                     🏢 Property & Unit
                   </h3>
 
@@ -1506,7 +1506,7 @@ for (const request of invoiceRequests) {
                       </div>
                     </div>
                   )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     <MilikSelect
                       label="Property"
                       required
@@ -1602,15 +1602,15 @@ for (const request of invoiceRequests) {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-4 border-b-2 border-blue-500 pb-2">
+                  <h3 className="text-base font-bold text-slate-900 mb-3 border-b-2 border-blue-500 pb-2">
                     💰 Billing Information
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <div>
                       <label className={labelClass}>
                         Move-In Date (Billing Anchor) <span className="text-red-500">*</span>
@@ -1894,10 +1894,10 @@ for (const request of invoiceRequests) {
                   )}
                 </div>
 
-                <div ref={additionalUtilitiesSectionRef} className="bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-50 border-2 border-dashed border-indigo-300 rounded-xl p-6 space-y-4 shadow-sm">
+                <div ref={additionalUtilitiesSectionRef} className="bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-50 border-2 border-dashed border-indigo-300 rounded-xl p-4 space-y-3 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
+                      <h3 className="text-base font-bold text-indigo-900 flex items-center gap-2">
                         ➕ Additional Utilities (Optional)
                       </h3>
                       <p className="text-xs text-indigo-700 mt-1">
@@ -1988,10 +1988,10 @@ for (const request of invoiceRequests) {
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-4 border-b-2 border-purple-500 pb-2">
+                  <h3 className="text-base font-bold text-slate-900 mb-3 border-b-2 border-purple-500 pb-2">
                     🚨 Emergency Contact
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className={labelClass}>Contact Name</label>
                       <input
@@ -2035,7 +2035,7 @@ for (const request of invoiceRequests) {
                 </div>
               </div>
 
-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="sticky bottom-0 z-20 px-4 py-3 bg-slate-50/95 backdrop-blur-sm border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={handleCancel}

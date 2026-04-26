@@ -245,10 +245,7 @@ const EditProperty = () => {
       landlords: [{ name: "", contact: "", isPrimary: true }],
       propertyCode: "",
       propertyName: "",
-      lrNumber: "",
       propertyType: "",
-      specification: "",
-      multiStoreyType: "",
       numberOfFloors: "",
       country: "Kenya",
       townCityState: "",
@@ -319,8 +316,6 @@ const EditProperty = () => {
     { id: "general", label: "General Info", icon: <FaHome /> },
     { id: "space", label: "Space/Units", icon: <FaWarehouse /> },
     { id: "accounting", label: "Accounting", icon: <FaCalculator /> },
-    { id: "charges", label: "Standing Charges", icon: <FaChartBar /> },
-    { id: "communications", label: "Communications", icon: <FaBell /> },
   ];
 
   const propertyTypes = [
@@ -574,9 +569,6 @@ const EditProperty = () => {
     if (!formData.propertyName?.trim()) {
       errors.propertyName = "Property name is required.";
     }
-    if (!formData.lrNumber?.trim()) {
-      errors.lrNumber = "LR number is required.";
-    }
     if (!formData.propertyType?.trim()) {
       errors.propertyType = "Property type is required.";
     }
@@ -636,7 +628,10 @@ const EditProperty = () => {
     }
 
     const cleanedFormData = { ...formData };
-    const optionalEnumFields = ['specification', 'multiStoreyType', 'category'];
+    delete cleanedFormData.lrNumber;
+    delete cleanedFormData.specification;
+    delete cleanedFormData.multiStoreyType;
+    const optionalEnumFields = ['category'];
     optionalEnumFields.forEach(field => {
       if (cleanedFormData[field] === '') {
         delete cleanedFormData[field];
@@ -843,19 +838,6 @@ const EditProperty = () => {
             {fieldErrors.propertyName && <p className="mt-1 text-xs text-red-600">{fieldErrors.propertyName}</p>}
           </div>
 
-          <div>
-            <label className={labelClass}>LR Number *</label>
-            <input
-              type="text"
-              name="lrNumber"
-              value={formData.lrNumber}
-              onChange={handleChange}
-              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS} ${fieldErrors.lrNumber ? "border-red-500 focus:border-red-500 focus:ring-red-200" : ""}`}
-              placeholder="e.g., 209/1201"
-              required
-            />
-            {fieldErrors.lrNumber && <p className="mt-1 text-xs text-red-600">{fieldErrors.lrNumber}</p>}
-          </div>
 
           <div>
             <MilikSelect
@@ -872,105 +854,7 @@ const EditProperty = () => {
             {fieldErrors.propertyType && <p className="mt-1 text-xs text-red-600">{fieldErrors.propertyType}</p>}
           </div>
 
-          <div>
-            <MilikSelect
-              label="Specification"
-              placeholder="Select Specification"
-              items={buildingTypes}
-              value={formData.specification}
-              onChange={(val) => handleChange({ target: { name: "specification", value: val } })}
-              getLabel={(x) => x}
-              getValue={(x) => x}
-            />
-          </div>
 
-          <div>
-            <MilikSelect
-              label="Multi Storey Type"
-              placeholder="Select Type"
-              items={[
-                { value: "Low Rise", label: "Low Rise (1-4 floors)" },
-                { value: "Mid Rise", label: "Mid Rise (5-9 floors)" },
-                { value: "High Rise", label: "High Rise (10+ floors)" },
-              ]}
-              value={formData.multiStoreyType}
-              onChange={(val) => handleChange({ target: { name: "multiStoreyType", value: val } })}
-              getLabel={(x) => x.label}
-              getValue={(x) => x.value}
-            />
-          </div>
-
-          <div>
-            <label className={labelClass}>No. Of Floors</label>
-            <input
-              type="number"
-              name="numberOfFloors"
-              value={formData.numberOfFloors}
-              onChange={handleChange}
-              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-              min="0"
-            />
-          </div>
-
-          <div>
-            <label className={labelClass}>Country</label>
-            <input
-              type="text"
-              name="country"
-              value={formData.country}
-              onChange={handleChange}
-              className={`${inputClass} bg-slate-50 ${MILIK_ORANGE_BORDER_FOCUS}`}
-              readOnly
-            />
-          </div>
-
-          <div>
-            <label className={labelClass}>Town/City/State</label>
-            <input
-              type="text"
-              name="townCityState"
-              value={formData.townCityState}
-              onChange={handleChange}
-              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-              placeholder="e.g., Nairobi"
-            />
-          </div>
-
-          <div>
-            <label className={labelClass}>Estate/Area</label>
-            <input
-              type="text"
-              name="estateArea"
-              value={formData.estateArea}
-              onChange={handleChange}
-              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-              placeholder="e.g., Westlands"
-            />
-          </div>
-
-          <div>
-            <label className={labelClass}>Road/Street</label>
-            <input
-              type="text"
-              name="roadStreet"
-              value={formData.roadStreet}
-              onChange={handleChange}
-              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-              placeholder="e.g., Moi Avenue"
-            />
-          </div>
-
-          <div>
-            <MilikSelect
-              label="Zone/Region"
-              placeholder="Select Zone"
-              items={zones}
-              value={formData.zoneRegion}
-              onChange={(val) => handleChange({ target: { name: "zoneRegion", value: val } })}
-              getLabel={(x) => x}
-              getValue={(x) => x}
-            />
-          </div>
         </div>
 
         {isSelfManagingLandlordMode ? (
@@ -1192,6 +1076,8 @@ const EditProperty = () => {
           </div>
         </div>
       </div>
+
+      {renderCommunications()}
     </div>
   );
 
@@ -1309,6 +1195,8 @@ const EditProperty = () => {
             </div>
           </div>
         </div>
+
+        {renderStandingCharges()}
       </div>
     );
   };
@@ -1586,7 +1474,7 @@ const EditProperty = () => {
   const renderCommunications = () => (
     <div className="space-y-5">
       <div className={`${sectionCard} p-4`}>
-        <h3 className={sectionHeader}>SMS EXEMPTION</h3>
+        <h3 className={sectionHeader}>DISABLE SMSING</h3>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-3">
           {Object.entries(formData.smsExemptions).map(([key, value]) => (
@@ -1597,14 +1485,14 @@ const EditProperty = () => {
                 checked={value}
                 onChange={(e) => handleChange(e, "smsExemptions")}
               />
-              {key === "all" ? "Exempt All SMS" : `Exempt ${key} SMS`}
+              {key === "all" ? "Disable All SMS" : `Disable ${key} SMS`}
             </label>
           ))}
         </div>
       </div>
 
       <div className={`${sectionCard} p-4`}>
-        <h3 className={sectionHeader}>EMAIL EXEMPTION</h3>
+        <h3 className={sectionHeader}>DISABLE EMAILING</h3>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-3">
           {Object.entries(formData.emailExemptions).map(([key, value]) => (
@@ -1615,7 +1503,7 @@ const EditProperty = () => {
                 checked={value}
                 onChange={(e) => handleChange(e, "emailExemptions")}
               />
-              {key === "all" ? "Exempt All Email" : `Exempt ${key} Email`}
+              {key === "all" ? "Disable All Email" : `Disable ${key} Email`}
             </label>
           ))}
         </div>
@@ -1750,10 +1638,6 @@ const EditProperty = () => {
         return renderSpaceUnits();
       case "accounting":
         return renderAccountingBilling();
-      case "charges":
-        return renderStandingCharges();
-      case "communications":
-        return renderCommunications();
       case "banking":
         return renderBanking();
       case "notes":

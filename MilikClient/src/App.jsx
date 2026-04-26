@@ -20,6 +20,7 @@ import Dashboard from "./pages/Dashboard/Dashboard";
 import Landlords from "./pages/Landlord/Landlord";
 import AddLandlord from "./components/Landlord/AddLandlord";
 import LandlordPayments from "./pages/Landlord/LandlordPayments";
+import LandlordPaymentHistory from "./pages/Landlord/LandlordPaymentHistory";
 import LandlordReceipts from "./pages/Landlord/LandlordReceipts";
 import LandlordCommissionsStatement from "./pages/Landlord/LandlordCommissionsStatement";
 import LandlordStandingOrders from "./pages/Landlord/LandlordStandingOrders";
@@ -450,6 +451,7 @@ function App() {
         <Route path="/landlords" element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlords" moduleKey="propertyManagement"><Landlords /></PermissionRoute></CompanyModeRoute>} />
         <Route path="/landlords/new" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><AddLandlord /></ProtectedRoute></CompanyModeRoute>} />
         <Route path="/landlord-payments" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordPayments /></ProtectedRoute></CompanyModeRoute>} />
+        <Route path="/landlord-payment-history" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordPaymentHistory /></ProtectedRoute></CompanyModeRoute>} />
         <Route path="/financial/landlord-statement" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordCommissionsStatement /></ProtectedRoute></CompanyModeRoute>} />
         <Route path="/invoices/landlord" element={<ProtectedRoute><Navigate to="/landlord/statements" replace /></ProtectedRoute>} />
         <Route path="/landlord/processed-statements" element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="processedStatements" moduleKey="accounts"><ProcessedStatements /></PermissionRoute></CompanyModeRoute>} />

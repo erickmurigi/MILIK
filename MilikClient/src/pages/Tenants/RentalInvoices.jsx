@@ -1708,6 +1708,22 @@ const visibleInvoiceKeys = useMemo(
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [invoiceDetailOpen]);
 
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyHeight = document.body.style.height;
+    const previousDocumentOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.body.style.height = "100vh";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.height = previousBodyHeight;
+      document.documentElement.style.overflow = previousDocumentOverflow;
+    };
+  }, []);
+
   const applySearch = () => {
     setAppliedFilters({ ...draftFilters });
     setSelectedInvoices([]);
@@ -3048,10 +3064,10 @@ const createInvoiceForTenant = async (
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-3">
-        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-2">
+      <div className="h-[calc(100dvh-152px)] max-h-[calc(100dvh-152px)] overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
+        <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2">
+            <div className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-gray-50/95 p-2 shadow-sm backdrop-blur">
               {tenantId && (
                 <div className="mb-2 flex items-center justify-between">
                   <button
@@ -3251,7 +3267,7 @@ const createInvoiceForTenant = async (
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto">
+            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
               <table className="w-full min-w-[1320px] text-xs">
                 <thead>
                   <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>

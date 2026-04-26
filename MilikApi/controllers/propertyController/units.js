@@ -421,14 +421,10 @@ export const createUnit = async (req, res, next) => {
       });
     }
 
-    const requestedStatus = normalizeUnitStatus(req.body.status || "vacant", "vacant");
-    if (requestedStatus === "occupied") {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Create the unit as vacant, reserved, maintenance, or archived first. A unit becomes occupied only after tenant assignment.",
-      });
-    }
+    // New units must always start as vacant. Occupancy is controlled by tenant assignment,
+    // not by the create-unit form payload. This keeps the Add Unit UI simple and prevents
+    // orphan occupied/reserved/maintenance states during creation.
+    const requestedStatus = "vacant";
 
     const resolvedRent = calculateRentFromPropertyDefaults(
       property,
@@ -452,8 +448,8 @@ export const createUnit = async (req, res, next) => {
       amenities: sanitizeAmenities(req.body.amenities),
       utilities: sanitizeUtilities(req.body.utilities),
       status: requestedStatus,
-      isVacant: requestedStatus === "vacant",
-      vacantSince: requestedStatus === "vacant" ? new Date() : null,
+      isVacant: true,
+      vacantSince: new Date(),
       daysVacant: 0,
     });
 

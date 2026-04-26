@@ -129,7 +129,7 @@ function MilikSelect({
     <div className={`${className} relative`} ref={wrapRef}>
       {label ? (
         <label className="block text-sm font-bold text-slate-800 mb-1 tracking-tight">
-          {label} {required ? "*" : ""}
+          {label} {required ? <span className="text-red-600">*</span> : null}
         </label>
       ) : null}
 
@@ -233,10 +233,7 @@ const AddProperty = () => {
       landlords: [{ landlordId: "", name: "", contact: "", isPrimary: true }],
       propertyCode: "",
       propertyName: "",
-      lrNumber: "",
       propertyType: "",
-      specification: "",
-      multiStoreyType: "",
       numberOfFloors: "",
       country: "Kenya",
       townCityState: "",
@@ -309,8 +306,6 @@ const AddProperty = () => {
     { id: "general", label: "General Info", icon: <FaHome /> },
     { id: "space", label: "Space/Units", icon: <FaWarehouse /> },
     { id: "accounting", label: "Accounting", icon: <FaCalculator /> },
-    { id: "charges", label: "Standing Charges", icon: <FaChartBar /> },
-    { id: "communications", label: "Communications", icon: <FaBell /> },
   ];
 
   const propertyTypes = [
@@ -322,14 +317,6 @@ const AddProperty = () => {
     "Special Purpose",
   ];
 
-  const buildingTypes = [
-    "Multi-Unit/Multi-Spa",
-    "Single Storey",
-    "Multi Storey",
-    "High Rise",
-    "Complex",
-    "Estate",
-  ];
 
   const zones = [
     "Nairobi CBD",
@@ -361,7 +348,7 @@ const AddProperty = () => {
   const sectionCard = "bg-white border border-slate-200 rounded-lg shadow-sm";
   const sectionHeader = "text-sm font-bold text-slate-900 tracking-tight";
 
-  const uppercasePropertyFields = new Set(["propertyCode", "propertyName", "zoneRegion", "roadStreet", "estateArea", "townCityState", "lrNumber", "specification", "invoicePrefix", "specificContactInfo"]);
+  const uppercasePropertyFields = new Set(["propertyCode", "propertyName", "zoneRegion", "roadStreet", "estateArea", "townCityState", "invoicePrefix", "specificContactInfo"]);
 
   const handleChange = (e, section = null, index = null) => {
     const { name, value, type, checked } = e.target;
@@ -494,7 +481,6 @@ const AddProperty = () => {
 
     if (!formData.dateAcquired?.trim()) errors.dateAcquired = "Date acquired is required.";
     if (!formData.propertyName?.trim()) errors.propertyName = "Property name is required.";
-    if (!formData.lrNumber?.trim()) errors.lrNumber = "LR number is required.";
     if (!formData.propertyType?.trim()) errors.propertyType = "Property type is required.";
     if (
       !isSelfManagingLandlordMode &&
@@ -584,7 +570,10 @@ const AddProperty = () => {
     }
 
     const cleanedFormData = { ...formData };
-    const optionalEnumFields = ["specification", "multiStoreyType", "category"];
+    delete cleanedFormData.lrNumber;
+    delete cleanedFormData.specification;
+    delete cleanedFormData.multiStoreyType;
+    const optionalEnumFields = ["category"];
     optionalEnumFields.forEach((field) => {
       if (cleanedFormData[field] === "") {
         delete cleanedFormData[field];
@@ -758,7 +747,7 @@ const AddProperty = () => {
           </div>
 
           <div>
-            <label className={labelClass}>Property Code *</label>
+            <label className={labelClass}>Property Code <span className="text-red-600">*</span></label>
             <input
               type="text"
               name="propertyCode"
@@ -770,7 +759,7 @@ const AddProperty = () => {
           </div>
 
           <div className="md:col-span-2">
-            <label className={labelClass}>Property Name *</label>
+            <label className={labelClass}>Property Name <span className="text-red-600">*</span></label>
             <input
               type="text"
               name="propertyName"
@@ -783,19 +772,6 @@ const AddProperty = () => {
             {fieldErrors.propertyName && <p className="mt-1 text-xs text-red-600">{fieldErrors.propertyName}</p>}
           </div>
 
-          <div>
-            <label className={labelClass}>LR Number *</label>
-            <input
-              type="text"
-              name="lrNumber"
-              value={formData.lrNumber}
-              onChange={handleChange}
-              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS} ${fieldErrors.lrNumber ? "border-red-500 focus:border-red-500 focus:ring-red-200" : ""}`}
-              placeholder="e.g., 209/1201"
-              required
-            />
-            {fieldErrors.lrNumber && <p className="mt-1 text-xs text-red-600">{fieldErrors.lrNumber}</p>}
-          </div>
 
           <div>
             <MilikSelect
@@ -812,33 +788,7 @@ const AddProperty = () => {
             {fieldErrors.propertyType && <p className="mt-1 text-xs text-red-600">{fieldErrors.propertyType}</p>}
           </div>
 
-          <div>
-            <MilikSelect
-              label="Specification"
-              placeholder="Select Specification"
-              items={buildingTypes}
-              value={formData.specification}
-              onChange={(val) => handleChange({ target: { name: "specification", value: val } })}
-              getLabel={(x) => x}
-              getValue={(x) => x}
-            />
-          </div>
 
-          <div>
-            <MilikSelect
-              label="Multi Storey Type"
-              placeholder="Select Type"
-              items={[
-                { value: "Low Rise", label: "Low Rise (1-4 floors)" },
-                { value: "Mid Rise", label: "Mid Rise (5-9 floors)" },
-                { value: "High Rise", label: "High Rise (10+ floors)" },
-              ]}
-              value={formData.multiStoreyType}
-              onChange={(val) => handleChange({ target: { name: "multiStoreyType", value: val } })}
-              getLabel={(x) => x.label}
-              getValue={(x) => x.value}
-            />
-          </div>
 
           <div>
             <label className={labelClass}>No. Of Floors</label>
@@ -1033,7 +983,7 @@ const AddProperty = () => {
             </div>
 
             <div>
-              <label className={labelClass}>Email *</label>
+              <label className={labelClass}>Email <span className="text-red-600">*</span></label>
               <input
                 value={newLandlord.email}
                 onChange={(e) => setNewLandlord((p) => ({ ...p, email: e.target.value }))}
@@ -1094,6 +1044,31 @@ const AddProperty = () => {
       </div>
 
       <div>
+      <div className={`${sectionCard} p-4`}>
+        <h3 className={sectionHeader}>COMMUNICATION CONTROLS</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              name="all"
+              checked={Boolean(formData.smsExemptions?.all)}
+              onChange={(e) => handleChange(e, "smsExemptions")}
+            />
+            Disable All SMS
+          </label>
+
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              name="all"
+              checked={Boolean(formData.emailExemptions?.all)}
+              onChange={(e) => handleChange(e, "emailExemptions")}
+            />
+            Disable All Emails
+          </label>
+        </div>
+      </div>
+
         <label className={labelClass}>Invoice Payment Terms</label>
         <textarea
           name="invoicePaymentTerms"
@@ -1136,6 +1111,8 @@ const AddProperty = () => {
           </div>
         </div>
       </div>
+
+      {renderCommunications()}
     </div>
   );
 
@@ -1253,6 +1230,8 @@ const AddProperty = () => {
             </div>
           </div>
         </div>
+
+        {renderStandingCharges()}
       </div>
     );
   };
@@ -1531,7 +1510,7 @@ const AddProperty = () => {
   const renderCommunications = () => (
     <div className="space-y-5">
       <div className={`${sectionCard} p-4`}>
-        <h3 className={sectionHeader}>SMSING EXEMPTION</h3>
+        <h3 className={sectionHeader}>DISABLE SMSING</h3>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-3">
           {Object.entries(formData.smsExemptions).map(([key, value]) => (
@@ -1542,14 +1521,14 @@ const AddProperty = () => {
                 checked={value}
                 onChange={(e) => handleChange(e, "smsExemptions")}
               />
-              {key === "all" ? "Exempt All SMS" : `Exempt ${key} SMS`}
+              {key === "all" ? "Disable All SMS" : `Disable ${key} SMS`}
             </label>
           ))}
         </div>
       </div>
 
       <div className={`${sectionCard} p-4`}>
-        <h3 className={sectionHeader}>EMAILING EXEMPTION</h3>
+        <h3 className={sectionHeader}>DISABLE EMAILING</h3>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-3">
           {Object.entries(formData.emailExemptions).map(([key, value]) => (
@@ -1560,7 +1539,7 @@ const AddProperty = () => {
                 checked={value}
                 onChange={(e) => handleChange(e, "emailExemptions")}
               />
-              {key === "all" ? "Exempt All Email" : `Exempt ${key} Email`}
+              {key === "all" ? "Disable All Email" : `Disable ${key} Email`}
             </label>
           ))}
         </div>
@@ -1695,10 +1674,6 @@ const AddProperty = () => {
         return renderSpaceUnits();
       case "accounting":
         return renderAccountingBilling();
-      case "charges":
-        return renderStandingCharges();
-      case "communications":
-        return renderCommunications();
       case "banking":
         return renderBanking();
       case "notes":

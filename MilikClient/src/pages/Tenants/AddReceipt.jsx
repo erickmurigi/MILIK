@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { FaArrowLeft, FaSave } from "react-icons/fa";
+import { FaSave } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -42,6 +42,17 @@ const getTenantPropertyId = (tenant) => {
   const propertyFromUnit = tenant?.unit?.property?._id || tenant?.unit?.property;
   const propertyDirect = tenant?.property?._id || tenant?.property;
   return propertyFromUnit || propertyDirect || "";
+};
+
+const normalizeLifecycleStatus = (value = "") =>
+  String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+
+const isArchivedRecord = (record) =>
+  normalizeLifecycleStatus(record?.status || record?.lifecycleStatus) === "archived";
+
+const isTerminatedTenant = (tenant) => {
+  const status = normalizeLifecycleStatus(tenant?.status || tenant?.tenantStatus || tenant?.lifecycleStatus);
+  return ["terminated", "inactive", "moved_out", "movedout", "closed"].includes(status) || Boolean(tenant?.terminatedAt);
 };
 
 const getChargeTypeFromInvoice = (invoice) => {
@@ -121,6 +132,10 @@ const AddReceipt = () => {
   const rawTenants = useSelector((state) => state.tenant?.tenants);
 
   const properties = ensureArray(rawProperties);
+  const activeProperties = useMemo(
+    () => properties.filter((property) => !isArchivedRecord(property)),
+    [properties]
+  );
   const tenants = ensureArray(rawTenants);
 
   const [formData, setFormData] = useState({
@@ -143,6 +158,7 @@ const AddReceipt = () => {
   const [tenantInvoices, setTenantInvoices] = useState([]);
   const [cashbookOptions, setCashbookOptions] = useState([]);
   const [manualSelectionMode, setManualSelectionMode] = useState(false);
+  const [includeTerminatedTenants, setIncludeTerminatedTenants] = useState(Boolean(preselectedTenantId || prefilledTenantCode));
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -199,15 +215,24 @@ const AddReceipt = () => {
 
   const tenantOptions = useMemo(() => {
     if (!formData.propertyId) return [];
-    return tenants.filter(
-      (tenant) => String(getTenantPropertyId(tenant) || "") === String(formData.propertyId)
-    );
-  }, [tenants, formData.propertyId]);
+    return tenants.filter((tenant) => {
+      const belongsToSelectedProperty = String(getTenantPropertyId(tenant) || "") === String(formData.propertyId);
+      if (!belongsToSelectedProperty) return false;
+      if (includeTerminatedTenants) return true;
+      return !isTerminatedTenant(tenant);
+    });
+  }, [tenants, formData.propertyId, includeTerminatedTenants]);
 
   const selectedTenant = useMemo(
     () => tenants.find((tenant) => String(tenant._id) === String(formData.tenantId)),
     [formData.tenantId, tenants]
   );
+
+  useEffect(() => {
+    if (selectedTenant && isTerminatedTenant(selectedTenant) && !includeTerminatedTenants) {
+      setIncludeTerminatedTenants(true);
+    }
+  }, [includeTerminatedTenants, selectedTenant]);
 
   useEffect(() => {
     if (preselectedTenantId || formData.tenantId || !prefilledTenantCode || tenants.length === 0) return;
@@ -224,22 +249,6 @@ const AddReceipt = () => {
     : preselectedTenantId
     ? `/receipts/${preselectedTenantId}`
     : "/receipts";
-  const pageEyebrow = isLandlordMode
-    ? "Landlord Receipting"
-    : isInstantMode
-    ? "Instant Receipting"
-    : "Rental Receipting";
-  const pageTitle = isLandlordMode
-    ? "Add Landlord Receipt"
-    : isInstantMode
-    ? "Add Instant Receipt"
-    : "Add Receipt";
-  const pageDescription = isLandlordMode
-    ? "Capture landlord-directed receipt records cleanly while preserving the existing ledger safety rules."
-    : isInstantMode
-    ? "Capture an M-Pesa instant notification into the normal receipt workflow without bypassing controls."
-    : "Capture tenant collections cleanly, allocate safely, and preserve ledger integrity.";
-
   const getCreatedInvoicesForTenant = (targetTenantId) => {
     if (!targetTenantId) return [];
 
@@ -455,8 +464,8 @@ const AddReceipt = () => {
 
   const labelClass = "text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-700";
   const inputClass =
-    "w-full mt-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10";
-  const sectionCardClass = "rounded-2xl border border-slate-200 bg-white shadow-sm";
+    "w-full mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10";
+  const sectionCardClass = "rounded-xl border border-slate-200 bg-white shadow-sm";
   const preventWheelValueChange = (event) => {
     event.currentTarget.blur();
   };
@@ -558,50 +567,35 @@ const AddReceipt = () => {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-white p-4 md:p-6">
-        <div className="mx-auto max-w-6xl">
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
-            <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114b3d] to-slate-900 px-4 py-4 md:px-6">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <button
-                onClick={() => navigate(backToPath)}
-                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
-              >
-                <FaArrowLeft /> Back to Receipts
-              </button>
-                <div className="text-white md:text-right">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-100">{pageEyebrow}</p>
-                  <h1 className="mt-1 text-xl font-black tracking-tight md:text-2xl">{pageTitle}</h1>
-                  <p className="mt-1 text-sm text-slate-200">{pageDescription}</p>
-                </div>
-              </div>
-            </div>
-            <div className="p-4 md:p-6">
+      <div className="min-h-[calc(100vh-112px)] w-full overflow-x-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white px-2 py-2 sm:px-3 lg:px-4">
+        <div className="w-full max-w-none">
+          <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.08)]">
+            <div className="p-3 md:p-4">
 
             {formData.tenantId && (
               <div className="mb-3 space-y-2">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                   <div className="bg-red-50 border border-red-200 rounded-lg p-2">
                     <p className="text-[10px] font-bold uppercase text-red-700 mb-1">Total Invoiced</p>
-                    <p className="text-lg font-bold text-red-700">Ksh {balanceSummary.totalOwed.toLocaleString()}</p>
+                    <p className="text-base font-bold text-red-700">Ksh {balanceSummary.totalOwed.toLocaleString()}</p>
                   </div>
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
                     <p className="text-[10px] font-bold uppercase text-blue-700 mb-1">Current Balance</p>
-                    <p className={`text-lg font-bold ${balanceSummary.balance > 0 ? "text-blue-700" : "text-green-700"}`}>
+                    <p className={`text-base font-bold ${balanceSummary.balance > 0 ? "text-blue-700" : "text-green-700"}`}>
                       Ksh {balanceSummary.balance.toLocaleString()}
                     </p>
                   </div>
                   <div className="bg-green-50 border border-green-200 rounded-lg p-2">
                     <p className="text-[10px] font-bold uppercase text-green-700 mb-1">After This Receipt</p>
-                    <p className={`text-lg font-bold ${allocationPreview.projectedBalance > 0 ? "text-red-700" : "text-green-700"}`}>
+                    <p className={`text-base font-bold ${allocationPreview.projectedBalance > 0 ? "text-red-700" : "text-green-700"}`}>
                       Ksh {allocationPreview.projectedBalance.toLocaleString()}
                     </p>
                   </div>
                 </div>
 
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-2">
+                <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-sm">
                   <h3 className="text-[11px] font-bold text-slate-700 mb-1">Invoice Preview</h3>
-                  <div className="mb-1 flex items-center justify-between gap-3 text-[10px]">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-[10px]">
                     <p className="text-slate-500">
                       {manualSelectionMode
                         ? "Manual selection mode is on. Only the invoice(s) you pick below will be allocated. Any remaining amount stays as prepayment."
@@ -628,7 +622,7 @@ const AddReceipt = () => {
                     </div>
                   </div>
                   {outstandingInvoices.length > 0 ? (
-                    <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                    <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1 rounded-lg border border-slate-200 bg-white p-1">
                       <div className="bg-white border border-violet-200 rounded p-1.5">
                         <p className="text-[10px] font-bold uppercase text-violet-700 mb-1">Combined Invoices</p>
                         {combinedOutstandingInvoices.length > 0 ? (
@@ -639,7 +633,7 @@ const AddReceipt = () => {
                                 <div
                                   key={`combined-${invoice.invoiceKey}-${index}`}
                                   onClick={() => invoice.outstanding > 0 && togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`border rounded px-2 py-1 text-[11px] flex items-center justify-between gap-2 transition-colors ${
+                                  className={`border rounded-lg px-2 py-1.5 text-[11px] grid grid-cols-1 gap-1 transition-colors sm:grid-cols-[minmax(120px,1fr)_150px_220px_auto] sm:items-center ${
                                     invoice.outstanding <= 0
                                       ? "border-slate-200 bg-slate-50 opacity-80"
                                       : priorityIndex
@@ -677,7 +671,7 @@ const AddReceipt = () => {
                                 <div
                                   key={`rent-${invoice.period}-${index}`}
                                   onClick={() => invoice.outstanding > 0 && togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`border rounded px-2 py-1 text-[11px] flex items-center justify-between gap-2 transition-colors ${
+                                  className={`border rounded-lg px-2 py-1.5 text-[11px] grid grid-cols-1 gap-1 transition-colors sm:grid-cols-[minmax(120px,1fr)_150px_220px_auto] sm:items-center ${
                                     invoice.outstanding <= 0
                                       ? "border-slate-200 bg-slate-50 opacity-80"
                                       : priorityIndex
@@ -715,7 +709,7 @@ const AddReceipt = () => {
                                 <div
                                   key={`utility-${invoice.period}-${index}`}
                                   onClick={() => invoice.outstanding > 0 && togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`border rounded px-2 py-1 text-[11px] flex items-center justify-between gap-2 transition-colors ${
+                                  className={`border rounded-lg px-2 py-1.5 text-[11px] grid grid-cols-1 gap-1 transition-colors sm:grid-cols-[minmax(120px,1fr)_150px_220px_auto] sm:items-center ${
                                     invoice.outstanding <= 0
                                       ? "border-slate-200 bg-slate-50 opacity-80"
                                       : priorityIndex
@@ -753,7 +747,7 @@ const AddReceipt = () => {
                                 <div
                                   key={`deposit-${invoice.period}-${index}`}
                                   onClick={() => invoice.outstanding > 0 && togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`border rounded px-2 py-1 text-[11px] flex items-center justify-between gap-2 transition-colors ${
+                                  className={`border rounded-lg px-2 py-1.5 text-[11px] grid grid-cols-1 gap-1 transition-colors sm:grid-cols-[minmax(120px,1fr)_150px_220px_auto] sm:items-center ${
                                     invoice.outstanding <= 0
                                       ? "border-slate-200 bg-slate-50 opacity-80"
                                       : priorityIndex
@@ -791,7 +785,7 @@ const AddReceipt = () => {
                                 <div
                                   key={`late-${invoice.invoiceKey}-${index}`}
                                   onClick={() => invoice.outstanding > 0 && togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`border rounded px-2 py-1 text-[11px] flex items-center justify-between gap-2 transition-colors ${
+                                  className={`border rounded-lg px-2 py-1.5 text-[11px] grid grid-cols-1 gap-1 transition-colors sm:grid-cols-[minmax(120px,1fr)_150px_220px_auto] sm:items-center ${
                                     invoice.outstanding <= 0
                                       ? "border-slate-200 bg-slate-50 opacity-80"
                                       : priorityIndex
@@ -861,16 +855,16 @@ const AddReceipt = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-              <div className={`${sectionCardClass} p-4 md:p-5`}>
-                <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.8fr)_minmax(280px,0.7fr)]">
+              <div className={`${sectionCardClass} p-3 md:p-4`}>
+                <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
                   <div>
                     <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Receipt details</p>
-                    <h2 className="mt-1 text-lg font-black text-slate-900">Collection information</h2>
+                    <h2 className="mt-0.5 text-base font-black text-slate-900">Collection information</h2>
                   </div>
                   <div className="rounded-full bg-[#0B3B2E]/8 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[#0B3B2E]">Posting-safe entry</div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <div>
                 <label className={labelClass}>Property *</label>
                 <select
@@ -879,7 +873,7 @@ const AddReceipt = () => {
                   className={inputClass}
                 >
                   <option value="">Select property</option>
-                  {properties.map((property) => (
+                  {activeProperties.map((property) => (
                     <option key={property._id} value={property._id}>
                       {property.propertyName || property.name || "Unnamed Property"}
                     </option>
@@ -888,7 +882,25 @@ const AddReceipt = () => {
               </div>
 
               <div>
-                <label className={labelClass}>Tenant *</label>
+                <div className="flex items-center justify-between gap-3">
+                  <label className={labelClass}>Tenant *</label>
+                  <label className="mt-1 inline-flex items-center gap-2 text-[11px] font-bold text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={includeTerminatedTenants}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setIncludeTerminatedTenants(checked);
+                        if (!checked && selectedTenant && isTerminatedTenant(selectedTenant)) {
+                          setFormData((prev) => ({ ...prev, tenantId: "" }));
+                        }
+                      }}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                      disabled={!formData.propertyId}
+                    />
+                    Include terminated
+                  </label>
+                </div>
                 <select
                   value={formData.tenantId}
                   onChange={(e) => setFormData((prev) => ({ ...prev, tenantId: e.target.value }))}
@@ -896,12 +908,20 @@ const AddReceipt = () => {
                   disabled={!formData.propertyId}
                 >
                   <option value="">{formData.propertyId ? "Select tenant" : "Select property first"}</option>
-                  {tenantOptions.map((tenant) => (
-                    <option key={tenant._id} value={tenant._id}>
-                      {getTenantName(tenant)}
-                    </option>
-                  ))}
+                  {tenantOptions.map((tenant) => {
+                    const terminated = isTerminatedTenant(tenant);
+                    return (
+                      <option key={tenant._id} value={tenant._id}>
+                        {getTenantName(tenant)}{terminated ? " — Terminated" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
+                {selectedTenant && isTerminatedTenant(selectedTenant) ? (
+                  <p className="mt-1 text-xs font-semibold text-amber-700">
+                    Receipting a terminated tenant is allowed for arrears, recoveries, or late settlements only. New occupancy is not restored by this receipt.
+                  </p>
+                ) : null}
               </div>
 
               <div>
@@ -1027,7 +1047,7 @@ const AddReceipt = () => {
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div className="md:col-span-2 xl:col-span-3">
                 <label className={labelClass}>Description</label>
                 <textarea
                   rows={3}
@@ -1038,7 +1058,7 @@ const AddReceipt = () => {
                 />
               </div>
 
-              <div className="md:col-span-2 flex items-center gap-2">
+              <div className="md:col-span-2 xl:col-span-3 flex items-center gap-2">
                 <input
                   type="checkbox"
                   id="paidDirectToLandlord"
@@ -1056,7 +1076,7 @@ const AddReceipt = () => {
                 </label>
               </div>
 
-              <div className="md:col-span-2 flex items-center gap-2">
+              <div className="md:col-span-2 xl:col-span-3 flex items-center gap-2">
                 <input
                   type="checkbox"
                   id="isConfirmed"
@@ -1069,17 +1089,17 @@ const AddReceipt = () => {
               </div>
                 </div>
               </div>
-              <div className="space-y-4">
-                <div className={`${sectionCardClass} p-4 md:p-5`}>
+              <div className="space-y-3">
+                <div className={`${sectionCardClass} p-3 md:p-4`}>
                   <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Posting controls</p>
-                  <h2 className="mt-1 text-lg font-black text-slate-900">Receipt status and notes</h2>
-                  <p className="mt-1 text-sm text-slate-600">Use these controls only when you are ready for the receipt to participate in operational reporting and downstream posting actions.</p>
-                  <div className="mt-4 space-y-4">
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <h2 className="mt-0.5 text-base font-black text-slate-900">Receipt status and notes</h2>
+                  <p className="mt-1 text-xs text-slate-600">Use these controls only when you are ready for the receipt to participate in operational reporting and downstream posting actions.</p>
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                       <p className="font-bold">Reference discipline</p>
                       <p className="mt-1 text-amber-800">Use the bank reference, M-Pesa code, or teller reference exactly as received so duplicates remain easy to detect during reconciliation.</p>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
                       <p className="font-bold text-slate-900">Receipt amount wheel lock</p>
                       <p className="mt-1">Mouse-wheel changes on the Amount field are disabled to prevent accidental edits while scrolling.</p>
                     </div>
@@ -1088,7 +1108,7 @@ const AddReceipt = () => {
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
               <button
                 onClick={() => navigate(backToPath)}
                 className="rounded-xl border border-slate-300 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-50"
