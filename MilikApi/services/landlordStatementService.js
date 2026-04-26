@@ -740,6 +740,92 @@ const getReceiptAllocationRows = (receipt = {}) => {
     : [];
 };
 
+const formatStatementMonthYear = (value) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+};
+
+const uniqClean = (items = []) =>
+  Array.from(new Set(items.map((item) => String(item || "").trim()).filter(Boolean)));
+
+const normalizeChargeLabel = (value = "") => {
+  const normalized = safeName(value).replace(/[_-]+/g, " ");
+  if (!normalized) return "Charge";
+  if (normalized.includes("rent")) return "Rent Charge";
+  if (normalized.includes("utility")) return "Utility Charge";
+  if (normalized.includes("water")) return "Water";
+  if (normalized.includes("electric")) return "Electricity";
+  if (normalized.includes("garbage") || normalized.includes("refuse") || normalized.includes("waste")) return "Garbage";
+  if (normalized.includes("penalty") || normalized.includes("late")) return "Late Penalty";
+  if (normalized.includes("deposit")) return "Deposit Charge";
+  if (normalized.includes("debit note")) return "Debit Note";
+  if (normalized.includes("credit note")) return "Credit Note";
+  return titleCase(normalized);
+};
+
+const getInvoiceChargeLabelForStatement = ({ invoice = {}, row = null, combinedSplit = null } = {}) => {
+  const category = String(invoice?.category || "").toUpperCase();
+  if (category === "UTILITY_CHARGE") {
+    const utilityIdentity = resolveUtilityIdentity(invoice.description || invoice.invoiceNumber || "", invoice.metadata || {}, row);
+    const utilityLabel = utilityIdentity?.label && utilityIdentity.label !== defaultUtilityLabel ? utilityIdentity.label : "";
+    return utilityLabel ? `Utility Charge (${utilityLabel})` : "Utility Charge";
+  }
+  if (category === "RENT_CHARGE") {
+    const utilities = uniqClean((Array.isArray(combinedSplit?.utilities) ? combinedSplit.utilities : []).map((item) => item?.label));
+    return utilities.length > 0 ? `Rent Charge (${["Rent", ...utilities].join(" + ")})` : "Rent Charge";
+  }
+  if (category === "DEPOSIT_CHARGE") return "Deposit Charge";
+  return normalizeChargeLabel(invoice?.description || invoice?.category || "Charge");
+};
+
+const buildTenantStatementInvoiceDescription = ({ invoice = {}, row = null, combinedSplit = null } = {}) => {
+  const label = getInvoiceChargeLabelForStatement({ invoice, row, combinedSplit });
+  const period = formatStatementMonthYear(getInvoiceStatementDate(invoice) || invoice.invoiceDate || invoice.bookingDate);
+  return [label, period].filter(Boolean).join(" – ") || invoice.description || invoice.invoiceNumber || "Tenant invoice";
+};
+
+const getAllocationChargeLabelForStatement = ({ allocationRow = {}, sourceInvoice = null, row = null } = {}) => {
+  if (sourceInvoice) {
+    const category = String(sourceInvoice?.category || "").toUpperCase();
+    if (category === "UTILITY_CHARGE") {
+      const utilityIdentity = resolveUtilityIdentity(
+        allocationRow?.description || sourceInvoice.description || sourceInvoice.invoiceNumber || "",
+        {
+          ...(sourceInvoice.metadata || {}),
+          utilityType: allocationRow?.utilityType || allocationRow?.statementUtilityType || allocationRow?.utility || allocationRow?.name || sourceInvoice.metadata?.utilityType || sourceInvoice.metadata?.statementUtilityType || sourceInvoice.metadata?.utility || "",
+        },
+        row
+      );
+      return utilityIdentity?.label && utilityIdentity.label !== defaultUtilityLabel ? utilityIdentity.label : "Utility";
+    }
+    if (category === "RENT_CHARGE") return "Rent";
+    if (category === "DEPOSIT_CHARGE") return "Deposit";
+  }
+  return normalizeChargeLabel(allocationRow?.priorityGroup || allocationRow?.category || allocationRow?.description || allocationRow?.type || "Charge").replace(/ Charge$/i, "");
+};
+
+const buildGroupedReceiptDescription = ({ receipt = {}, allocationRows = [], invoiceStatementMap = new Map(), row = null } = {}) => {
+  const reference = receipt.receiptNumber || receipt.referenceNumber || "";
+  const fallbackPeriod = formatStatementMonthYear(getReceiptStatementDate(receipt) || receipt.paymentDate || receipt.recordDate || receipt.createdAt);
+  const grouped = new Map();
+  (Array.isArray(allocationRows) ? allocationRows : []).forEach((allocationRow) => {
+    const sourceInvoice = invoiceStatementMap.get(String(allocationRow?.invoice || allocationRow?.invoiceId || ""));
+    const label = getAllocationChargeLabelForStatement({ allocationRow, sourceInvoice, row });
+    const period = formatStatementMonthYear(sourceInvoice ? getInvoiceStatementDate(sourceInvoice) || sourceInvoice.invoiceDate || sourceInvoice.bookingDate : null) || fallbackPeriod;
+    const key = period || "__no_period__";
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(label);
+  });
+  const groups = Array.from(grouped.entries()).map(([period, labels]) => {
+    const cleanLabels = uniqClean(labels);
+    if (period === "__no_period__") return cleanLabels.join(" + ");
+    return `${cleanLabels.join(" + ")} – ${period}`;
+  }).filter(Boolean);
+  const allocationSummary = groups.length > 0 ? groups.join(" + ") : fallbackPeriod;
+  return ["Payment Received", allocationSummary, reference ? `Ref: ${reference}` : ""].filter(Boolean).join(" – ");
+};
+
 const getReceiptSummaryAmount = (receipt = {}, key = "") => {
   const summary = receipt?.allocationSummary || {};
   const sign = getReceiptSign(receipt);
@@ -1818,7 +1904,11 @@ export const generateLandlordStatement = async ({
       category: invoice.category,
       amount,
       direction: "credit",
-      description: invoice.description || invoice.invoiceNumber || "Tenant invoice",
+      description: buildTenantStatementInvoiceDescription({
+        invoice,
+        row,
+        combinedSplit,
+      }) || invoice.description || invoice.invoiceNumber || "Tenant invoice",
       sourceTransactionType: "invoice",
       sourceTransactionId: String(invoice._id),
       metadata: {
@@ -1916,13 +2006,13 @@ export const generateLandlordStatement = async ({
   for (const receipt of receiptsInPeriod) {
     const row = ensureRow(receipt.tenant, receipt.unit);
     const amount = Number(receipt.amount || 0);
-    const description =
-      receipt.description ||
-      receipt.referenceNumber ||
-      receipt.receiptNumber ||
-      "Tenant receipt";
-
     const allocationRows = getReceiptAllocationRows(receipt);
+    const description = buildGroupedReceiptDescription({
+      receipt,
+      allocationRows,
+      invoiceStatementMap,
+      row,
+    }) || receipt.description || receipt.referenceNumber || receipt.receiptNumber || "Tenant receipt";
     const depositAllocated = getReceiptSummaryAmount(receipt, "deposit");
     const unappliedAllocated = getReceiptSummaryAmount(receipt, "unapplied");
     let rentAllocated = 0;

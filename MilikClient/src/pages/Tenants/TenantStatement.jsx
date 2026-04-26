@@ -247,6 +247,113 @@ const getReceiptAllocationLabel = (row = {}) => {
   return row?.category || "Other";
 };
 
+const formatStatementLongPeriod = (dateValue) => {
+  const dt = new Date(dateValue);
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+};
+
+const cleanStatementPart = (value = "") =>
+  String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const uniqueStatementParts = (values = []) =>
+  Array.from(new Set(values.map((item) => cleanStatementPart(item)).filter(Boolean)));
+
+const extractUtilityNamesFromInvoice = (invoice = {}) => {
+  const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
+  const values = [];
+
+  if (Array.isArray(metadata.utilityBreakdown)) {
+    metadata.utilityBreakdown.forEach((item) => {
+      if (item?.label) values.push(item.label);
+      if (item?.utilityType) values.push(item.utilityType);
+      if (item?.name) values.push(item.name);
+    });
+  }
+
+  [
+    metadata.utilityType,
+    metadata.meterUtilityType,
+    metadata.statementUtilityType,
+    metadata.billItemLabel,
+    invoice.utilityType,
+    invoice.utilityLabel,
+  ].forEach((item) => {
+    if (item) values.push(item);
+  });
+
+  return uniqueStatementParts(values)
+    .map((item) => item.replace(/^utility\s*[-:·]?\s*/i, ""))
+    .filter((item) => item && !/^combined rent/i.test(item));
+};
+
+const buildTenantStatementInvoiceDescription = (invoice = {}) => {
+  const categoryLabel = getInvoiceCategoryLabel(invoice);
+  const period = formatStatementLongPeriod(invoice?.invoiceDate || invoice?.createdAt);
+  const category = String(invoice?.category || "").toUpperCase();
+  const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
+
+  let baseLabel = categoryLabel;
+
+  if (category === "RENT_CHARGE") {
+    const utilityBreakdown = Array.isArray(metadata.utilityBreakdown) ? metadata.utilityBreakdown : [];
+    if (utilityBreakdown.length > 0) {
+      const utilityNames = uniqueStatementParts(
+        utilityBreakdown.map((item) => item?.label || item?.utilityType || item?.name)
+      );
+      baseLabel = utilityNames.length > 0 ? `Rent + ${utilityNames.join(" + ")}` : "Rent Charge";
+    } else {
+      baseLabel = "Rent Charge";
+    }
+  } else if (category === "UTILITY_CHARGE") {
+    const utilityNames = extractUtilityNamesFromInvoice(invoice);
+    baseLabel = utilityNames.length > 0 ? `Utility Charge (${utilityNames.join(" + ")})` : "Utility Charge";
+  } else if (category === "DEPOSIT_CHARGE") {
+    baseLabel = "Deposit Charge";
+  } else if (category === "LATE_PENALTY_CHARGE") {
+    baseLabel = "Late Penalty";
+  } else if (category === "OTHER_CHARGE") {
+    baseLabel = categoryLabel || cleanStatementPart(invoice?.description) || "Other Charge";
+  }
+
+  return cleanStatementPart(period ? `${baseLabel} – ${period}` : baseLabel || invoice?.description || "Charge");
+};
+
+const buildTenantStatementReceiptDescription = (payment = {}, invoiceMap = new Map()) => {
+  const reference = cleanStatementPart(payment?.receiptNumber || payment?.referenceNumber || "");
+  const allocationRows = getReceiptAllocationRows(payment);
+  const parts = [];
+
+  allocationRows.forEach((row) => {
+    const invoiceId = String(row?.invoice || row?.invoiceId || "");
+    const invoice = invoiceMap.get(invoiceId) || null;
+    const period = formatStatementLongPeriod(
+      invoice?.invoiceDate || invoice?.createdAt || row?.invoiceDate || payment?.paymentDate || payment?.createdAt
+    );
+    const rawLabel = cleanStatementPart(getReceiptAllocationLabel(row));
+    const label = rawLabel.replace(/\s*·\s*/g, " ");
+
+    if (label && period) {
+      parts.push(`${label} ${period}`);
+    } else if (label) {
+      parts.push(label);
+    }
+  });
+
+  const uniqueParts = uniqueStatementParts(parts);
+  const hasUnapplied = Number(payment?.allocationSummary?.unapplied || 0) > 0;
+  if (hasUnapplied) {
+    uniqueParts.push("Unapplied Credit");
+  }
+
+  const allocationText = uniqueParts.length > 0 ? ` – ${uniqueParts.join(" + ")}` : "";
+  const referenceText = reference ? ` – Ref: ${reference}` : "";
+
+  return cleanStatementPart(`Payment Received${allocationText}${referenceText}`) || "Payment Received";
+};
+
 const TenantStatement = () => {
   const { id: tenantId } = useParams();
   const location = useLocation();
@@ -837,11 +944,13 @@ const TenantStatement = () => {
     const transactions = [];
     let transactionId = 1;
 
+    const invoiceMap = new Map(validTenantInvoices.map((invoice) => [safeId(invoice), invoice]));
+
     validTenantInvoices.forEach((invoice) => {
       transactions.push({
         id: transactionId++,
         date: invoice.invoiceDate || invoice.createdAt,
-        description: `Invoice ${invoice.invoiceNumber || ""} - ${getInvoiceCategoryLabel(invoice)}`,
+        description: buildTenantStatementInvoiceDescription(invoice),
         type: "CHARGE",
         amount: Number(invoice.amount || 0),
         transactionCode: invoice.invoiceNumber || `INV-${transactionId}`,
@@ -877,7 +986,7 @@ const TenantStatement = () => {
       transactions.push({
         id: transactionId++,
         date: payment.paymentDate || payment.createdAt,
-        description: `Receipt ${payment.receiptNumber || payment.referenceNumber || ""}`,
+        description: buildTenantStatementReceiptDescription(payment, invoiceMap),
         type: "PAYMENT",
         amount: -(Number(payment.amount || 0)),
         transactionCode: payment.receiptNumber || payment.referenceNumber || `RCP-${transactionId}`,
