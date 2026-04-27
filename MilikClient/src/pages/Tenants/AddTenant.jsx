@@ -392,7 +392,7 @@ const AddTenant = () => {
   const [tenantLoading, setTenantLoading] = useState(false);
   const [openingInvoiceMode, setOpeningInvoiceMode] = useState("separate");
   const [utilityOptions, setUtilityOptions] = useState([]);
-  const draftStorageKey = currentCompany?._id ? `milik:new-tenant-draft:${currentCompany._id}` : null;
+  const draftStorageKey = currentCompany?._id ? `milik:new-tenant-draft:${currentCompany._id}:${currentUser?._id || currentUser?.id || currentUser?.email || "user"}` : null;
   const draftRestoredRef = useRef(false);
   const lastPropertyRef = useRef("");
   const skipNextUnitAutofillRef = useRef(false);

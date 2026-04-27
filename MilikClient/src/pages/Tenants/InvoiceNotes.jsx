@@ -22,6 +22,7 @@ import {
   getTenantInvoiceNotes,
 } from "../../redux/invoiceApi";
 import { adminRequests } from "../../utils/requestMethods";
+import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 
 const todayInput = () => new Date().toISOString().split("T")[0];
 
@@ -199,32 +200,67 @@ const InvoiceNotes = () => {
   const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentCompany } = useSelector((state) => state.company || {});
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
   const tenants = useSelector((state) => state.tenant?.tenants || []);
 
   const requestedType = String(searchParams.get("type") || "").trim().toLowerCase();
   const initialNoteType = requestedType === "debit" ? "DEBIT_NOTE" : "CREDIT_NOTE";
 
-  const [properties, setProperties] = useState([]);
-  const [noteType, setNoteType] = useState(initialNoteType);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [filters, setFilters] = useState({
+  const invoiceNotesDraftKey = buildScopedDraftKey({
+    page: "invoice-notes",
+    companyId: currentCompany?._id,
+    userId: currentUser?._id || currentUser?.id || currentUser?.email,
+    extra: initialNoteType,
+  });
+  const [invoiceNotesDraft, setInvoiceNotesDraft, clearInvoiceNotesDraft] = useScopedSessionDraft(invoiceNotesDraftKey, {
+    noteType: initialNoteType,
+    filters: {
+      propertyId: "",
+      tenantId: "",
+      noteType: initialNoteType,
+      search: "",
+      status: "active",
+    },
+    showAddModal: false,
     propertyId: "",
     tenantId: "",
-    noteType: initialNoteType,
-    search: "",
-    status: "active",
+    sourceInvoiceId: "",
+    invoiceItemSelection: "",
+    chargeItemSearch: "",
+    amount: "",
+    category: "",
+    description: "",
+    noteDate: todayInput(),
+    chartAccountId: "",
   });
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [propertyId, setPropertyId] = useState("");
-  const [tenantId, setTenantId] = useState("");
-  const [sourceInvoiceId, setSourceInvoiceId] = useState("");
-  const [invoiceItemSelection, setInvoiceItemSelection] = useState("");
-  const [chargeItemSearch, setChargeItemSearch] = useState("");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("");
-  const [description, setDescription] = useState("");
-  const [noteDate, setNoteDate] = useState(todayInput());
-  const [chartAccountId, setChartAccountId] = useState("");
+  const [properties, setProperties] = useState([]);
+  const noteType = invoiceNotesDraft.noteType || initialNoteType;
+  const setNoteType = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, noteType: typeof value === "function" ? value(prev.noteType || initialNoteType) : value }));
+  const [currentPage, setCurrentPage] = useState(1);
+  const filters = invoiceNotesDraft.filters || { propertyId: "", tenantId: "", noteType: initialNoteType, search: "", status: "active" };
+  const setFilters = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
+  const showAddModal = Boolean(invoiceNotesDraft.showAddModal);
+  const setShowAddModal = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, showAddModal: typeof value === "function" ? value(Boolean(prev.showAddModal)) : Boolean(value) }));
+  const propertyId = invoiceNotesDraft.propertyId || "";
+  const setPropertyId = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, propertyId: typeof value === "function" ? value(prev.propertyId || "") : value }));
+  const tenantId = invoiceNotesDraft.tenantId || "";
+  const setTenantId = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, tenantId: typeof value === "function" ? value(prev.tenantId || "") : value }));
+  const sourceInvoiceId = invoiceNotesDraft.sourceInvoiceId || "";
+  const setSourceInvoiceId = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, sourceInvoiceId: typeof value === "function" ? value(prev.sourceInvoiceId || "") : value }));
+  const invoiceItemSelection = invoiceNotesDraft.invoiceItemSelection || "";
+  const setInvoiceItemSelection = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, invoiceItemSelection: typeof value === "function" ? value(prev.invoiceItemSelection || "") : value }));
+  const chargeItemSearch = invoiceNotesDraft.chargeItemSearch || "";
+  const setChargeItemSearch = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, chargeItemSearch: typeof value === "function" ? value(prev.chargeItemSearch || "") : value }));
+  const amount = invoiceNotesDraft.amount || "";
+  const setAmount = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, amount: typeof value === "function" ? value(prev.amount || "") : value }));
+  const category = invoiceNotesDraft.category || "";
+  const setCategory = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, category: typeof value === "function" ? value(prev.category || "") : value }));
+  const description = invoiceNotesDraft.description || "";
+  const setDescription = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, description: typeof value === "function" ? value(prev.description || "") : value }));
+  const noteDate = invoiceNotesDraft.noteDate || todayInput();
+  const setNoteDate = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, noteDate: typeof value === "function" ? value(prev.noteDate || todayInput()) : value }));
+  const chartAccountId = invoiceNotesDraft.chartAccountId || "";
+  const setChartAccountId = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, chartAccountId: typeof value === "function" ? value(prev.chartAccountId || "") : value }));
   const [openInvoices, setOpenInvoices] = useState([]);
   const [anchorInvoices, setAnchorInvoices] = useState([]);
   const [notes, setNotes] = useState([]);
@@ -578,6 +614,7 @@ const InvoiceNotes = () => {
       toast.success(`${noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} note created successfully.`);
       setShowAddModal(false);
       resetModalForm();
+      clearInvoiceNotesDraft();
       await loadData();
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {

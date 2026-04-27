@@ -13,6 +13,7 @@ import {
 import { getProperties } from "../../redux/propertyRedux";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
+import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 
 const currency = (value) =>
   new Intl.NumberFormat("en-KE", {
@@ -414,17 +415,42 @@ const Statements = () => {
   const today = new Date();
   const todayIso = toIsoDate(today);
   const initialPeriod = buildPeriod(today.getMonth() + 1, today.getFullYear());
-  const [statementType, setStatementType] = useState("provisional");
-  const [selectedPropertyId, setSelectedPropertyId] = useState("");
-  const [month, setMonth] = useState(String(today.getMonth() + 1));
-  const [year, setYear] = useState(String(today.getFullYear()));
-  const [periodStart, setPeriodStart] = useState(initialPeriod.periodStart);
-  const [periodEnd, setPeriodEnd] = useState(initialPeriod.periodEnd);
-  const [draftStatement, setDraftStatement] = useState(null);
+  const statementDraftKey = buildScopedDraftKey({
+    page: "landlord-statement",
+    companyId: currentCompany?._id,
+    userId: currentUser?._id || currentUser?.id || currentUser?.email,
+  });
+  const [statementDraft, setStatementDraft, clearStatementDraft] = useScopedSessionDraft(statementDraftKey, {
+    statementType: "provisional",
+    selectedPropertyId: "",
+    month: String(today.getMonth() + 1),
+    year: String(today.getFullYear()),
+    periodStart: initialPeriod.periodStart,
+    periodEnd: initialPeriod.periodEnd,
+    draftStatement: null,
+    activeTab: "workspace",
+    collapseAdditionalUnitRows: false,
+  });
+  const statementType = statementDraft.statementType || "provisional";
+  const setStatementType = (value) => setStatementDraft((prev) => ({ ...prev, statementType: typeof value === "function" ? value(prev.statementType || "provisional") : value }));
+  const selectedPropertyId = statementDraft.selectedPropertyId || "";
+  const setSelectedPropertyId = (value) => setStatementDraft((prev) => ({ ...prev, selectedPropertyId: typeof value === "function" ? value(prev.selectedPropertyId || "") : value }));
+  const month = statementDraft.month || String(today.getMonth() + 1);
+  const setMonth = (value) => setStatementDraft((prev) => ({ ...prev, month: typeof value === "function" ? value(prev.month || String(today.getMonth() + 1)) : value }));
+  const year = statementDraft.year || String(today.getFullYear());
+  const setYear = (value) => setStatementDraft((prev) => ({ ...prev, year: typeof value === "function" ? value(prev.year || String(today.getFullYear())) : value }));
+  const periodStart = statementDraft.periodStart || initialPeriod.periodStart;
+  const setPeriodStart = (value) => setStatementDraft((prev) => ({ ...prev, periodStart: typeof value === "function" ? value(prev.periodStart || initialPeriod.periodStart) : value }));
+  const periodEnd = statementDraft.periodEnd || initialPeriod.periodEnd;
+  const setPeriodEnd = (value) => setStatementDraft((prev) => ({ ...prev, periodEnd: typeof value === "function" ? value(prev.periodEnd || initialPeriod.periodEnd) : value }));
+  const draftStatement = statementDraft.draftStatement || null;
+  const setDraftStatement = (value) => setStatementDraft((prev) => ({ ...prev, draftStatement: typeof value === "function" ? value(prev.draftStatement || null) : value }));
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [activeTab, setActiveTab] = useState("workspace");
-  const [collapseAdditionalUnitRows, setCollapseAdditionalUnitRows] = useState(false);
+  const activeTab = statementDraft.activeTab || "workspace";
+  const setActiveTab = (value) => setStatementDraft((prev) => ({ ...prev, activeTab: typeof value === "function" ? value(prev.activeTab || "workspace") : value }));
+  const collapseAdditionalUnitRows = Boolean(statementDraft.collapseAdditionalUnitRows);
+  const setCollapseAdditionalUnitRows = (value) => setStatementDraft((prev) => ({ ...prev, collapseAdditionalUnitRows: typeof value === "function" ? value(Boolean(prev.collapseAdditionalUnitRows)) : Boolean(value) }));
   const [processedStatements, setProcessedStatements] = useState([]);
   const [loadingProcessedContext, setLoadingProcessedContext] = useState(false);
   const [processedContextLoaded, setProcessedContextLoaded] = useState(false);
@@ -1154,6 +1180,7 @@ const Statements = () => {
         periodEnd,
       });
       toast.success("Statement processed successfully");
+      clearStatementDraft();
       navigate("/landlord/processed-statements");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to process statement");

@@ -131,13 +131,14 @@ const AddLandlord = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentCompany } = useSelector((state) => state.company);
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
   const { isFetching } = useSelector((state) => state.landlord);
   const fileInputRef = useRef(null);
   const editLandlordId = location.state?.landlordId || null;
   const editLandlordData = location.state?.landlordData || null;
   const isEditMode = Boolean(editLandlordId);
   const draftStorageKey = currentCompany?._id
-    ? `milik:landlord-form-draft:${currentCompany._id}:${isEditMode ? editLandlordId || "edit" : "new"}`
+    ? `milik:landlord-form-draft:${currentCompany._id}:${currentUser?._id || currentUser?.id || currentUser?.email || "user"}:${isEditMode ? editLandlordId || "edit" : "new"}`
     : null;
 
   const [formData, setFormData] = useState({
@@ -155,12 +156,13 @@ const AddLandlord = () => {
   });
 
   const [attachments, setAttachments] = useState([]);
+  const draftReadyRef = useRef(false);
+  const [draftReadyNonce, setDraftReadyNonce] = useState(0);
 
   const clearDraftState = () => {
-    if (!draftStorageKey) return;
-    localStorage.removeItem(draftStorageKey);
+    if (!draftStorageKey || typeof window === "undefined" || !window.sessionStorage) return;
+    window.sessionStorage.removeItem(draftStorageKey);
   };
-
   useEffect(() => {
     if (!isEditMode || !editLandlordData) return;
 
@@ -188,31 +190,41 @@ const AddLandlord = () => {
       }))
     );
   }, [isEditMode, editLandlordData]);
-
   useEffect(() => {
-    if (isEditMode || !draftStorageKey) return;
+    draftReadyRef.current = false;
+
+    if (isEditMode || !draftStorageKey || typeof window === "undefined" || !window.sessionStorage) {
+      draftReadyRef.current = true;
+      setDraftReadyNonce((value) => value + 1);
+      return;
+    }
 
     try {
-      const savedDraft = localStorage.getItem(draftStorageKey);
-      if (!savedDraft) return;
-
-      const parsedDraft = JSON.parse(savedDraft);
-      if (parsedDraft?.formData && typeof parsedDraft.formData === "object") {
-        setFormData((prev) => ({ ...prev, ...parsedDraft.formData }));
-      }
-      if (Array.isArray(parsedDraft?.attachments)) {
-        setAttachments(parsedDraft.attachments);
+      const savedDraft = window.sessionStorage.getItem(draftStorageKey);
+      if (savedDraft) {
+        const parsedDraft = JSON.parse(savedDraft);
+        if (parsedDraft?.formData && typeof parsedDraft.formData === "object") {
+          setFormData((prev) => ({ ...prev, ...parsedDraft.formData }));
+        }
+        if (Array.isArray(parsedDraft?.attachments)) {
+          setAttachments(parsedDraft.attachments);
+        }
       }
     } catch (draftError) {
       console.warn("Failed to restore landlord draft", draftError);
+    } finally {
+      window.setTimeout(() => {
+        draftReadyRef.current = true;
+        setDraftReadyNonce((value) => value + 1);
+      }, 0);
     }
   }, [draftStorageKey, isEditMode]);
 
   useEffect(() => {
-    if (isEditMode || !draftStorageKey) return;
+    if (isEditMode || !draftStorageKey || !draftReadyRef.current || typeof window === "undefined" || !window.sessionStorage) return;
 
     try {
-      localStorage.setItem(
+      window.sessionStorage.setItem(
         draftStorageKey,
         JSON.stringify({
           formData,
@@ -228,8 +240,7 @@ const AddLandlord = () => {
     } catch (draftError) {
       console.warn("Failed to persist landlord draft", draftError);
     }
-  }, [attachments, draftStorageKey, formData, isEditMode]);
-
+  }, [attachments, draftReadyNonce, draftStorageKey, formData, isEditMode]);
   // Input classes for consistency
   const inputClass =
     "w-full px-3 py-2 text-sm border border-slate-300 rounded-md shadow-sm transition-all duration-200 ease-out hover:border-slate-400 focus:outline-none focus:ring-2";

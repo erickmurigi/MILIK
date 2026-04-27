@@ -215,8 +215,9 @@ const AddProperty = () => {
     [];
 
   const [activeTab, setActiveTab] = useState("general");
-  const draftStorageKey = currentCompany?._id ? `milik:add-property-draft:${currentCompany._id}` : null;
-  const draftRestoredRef = useRef(false);
+  const draftStorageKey = currentCompany?._id ? `milik:add-property-draft:${currentCompany._id}:${currentUser?._id || currentUser?.id || currentUser?.email || "user"}` : null;
+  const draftReadyRef = useRef(false);
+  const [draftReadyNonce, setDraftReadyNonce] = useState(0);
 
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -297,10 +298,9 @@ const AddProperty = () => {
   });
 
   const clearDraftState = () => {
-    if (!draftStorageKey) return;
-    localStorage.removeItem(draftStorageKey);
+    if (!draftStorageKey || typeof window === "undefined" || !window.sessionStorage) return;
+    window.sessionStorage.removeItem(draftStorageKey);
   };
-
 
   const tabs = [
     { id: "general", label: "General Info", icon: <FaHome /> },
@@ -670,12 +670,16 @@ const AddProperty = () => {
   }, [currentCompany, dispatch, isSelfManagingLandlordMode]);
 
   useEffect(() => {
-    if (!draftStorageKey) {
-      draftRestoredRef.current = true;
+    draftReadyRef.current = false;
+
+    if (!draftStorageKey || typeof window === "undefined" || !window.sessionStorage) {
+      draftReadyRef.current = true;
+      setDraftReadyNonce((value) => value + 1);
       return;
     }
+
     try {
-      const savedDraft = localStorage.getItem(draftStorageKey);
+      const savedDraft = window.sessionStorage.getItem(draftStorageKey);
       if (savedDraft) {
         const parsedDraft = JSON.parse(savedDraft);
         if (parsedDraft?.formData && typeof parsedDraft.formData === "object") {
@@ -688,14 +692,17 @@ const AddProperty = () => {
     } catch (draftError) {
       console.warn("Failed to restore add property draft", draftError);
     } finally {
-      draftRestoredRef.current = true;
+      window.setTimeout(() => {
+        draftReadyRef.current = true;
+        setDraftReadyNonce((value) => value + 1);
+      }, 0);
     }
   }, [draftStorageKey]);
 
   useEffect(() => {
-    if (!draftStorageKey || !draftRestoredRef.current) return;
+    if (!draftStorageKey || !draftReadyRef.current || typeof window === "undefined" || !window.sessionStorage) return;
     try {
-      localStorage.setItem(
+      window.sessionStorage.setItem(
         draftStorageKey,
         JSON.stringify({
           formData,
@@ -705,8 +712,7 @@ const AddProperty = () => {
     } catch (draftError) {
       console.warn("Failed to persist add property draft", draftError);
     }
-  }, [activeTab, draftStorageKey, formData]);
-
+  }, [activeTab, draftReadyNonce, draftStorageKey, formData]);
   const renderGeneralInfo = () => {
     const landlordItems = (Array.isArray(landlordsFromStore) ? landlordsFromStore : []).filter(
       (landlord) => String(landlord?.status || "active").toLowerCase() !== "archived"

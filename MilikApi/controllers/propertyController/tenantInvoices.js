@@ -483,21 +483,56 @@ const resolveTenantReceivableAccount = async (businessId) => {
   return account;
 };
 
+const ensurePostingChartAccount = (account, { expectedTypes = [], purpose = "posting" } = {}) => {
+  if (!account?._id) return null;
+
+  if (account.isHeader === true || account.isPosting === false) {
+    throw new Error(
+      `${account.code || account.name || "Selected account"} is a header/non-posting account and cannot be used for ${purpose}.`
+    );
+  }
+
+  const normalizedType = String(account.type || "").toLowerCase();
+  const allowedTypes = Array.isArray(expectedTypes)
+    ? expectedTypes.map((type) => String(type || "").toLowerCase()).filter(Boolean)
+    : [];
+
+  if (allowedTypes.length > 0 && !allowedTypes.includes(normalizedType)) {
+    throw new Error(
+      `${account.code || account.name || "Selected account"} is a ${account.type || "unknown"} account. Select a valid ${allowedTypes.join("/")} account for ${purpose}.`
+    );
+  }
+
+  return account;
+};
+
 const findAnyChartAccount = async (businessId, rawValue, fallbackCandidates = []) => {
   const direct = String(rawValue || "").trim();
 
   if (direct) {
     if (isValidObjectId(direct)) {
-      const byId = await ChartOfAccount.findOne({ _id: direct, business: businessId }).lean();
+      const byId = await ChartOfAccount.findOne({
+        _id: direct,
+        business: businessId,
+        isPosting: { $ne: false },
+        isHeader: { $ne: true },
+      }).lean();
       if (byId) return byId;
     }
 
-    const byCode = await ChartOfAccount.findOne({ business: businessId, code: direct }).lean();
+    const byCode = await ChartOfAccount.findOne({
+      business: businessId,
+      code: direct,
+      isPosting: { $ne: false },
+      isHeader: { $ne: true },
+    }).lean();
     if (byCode) return byCode;
 
     const byName = await ChartOfAccount.findOne({
       business: businessId,
       name: { $regex: `^${escapeRegExp(direct)}$`, $options: "i" },
+      isPosting: { $ne: false },
+      isHeader: { $ne: true },
     }).lean();
     if (byName) return byName;
   }
@@ -590,16 +625,17 @@ const resolveNoteNumber = async (businessId, noteType, providedNoteNumber) => {
   if (normalized) return normalized;
 
   const prefix = String(noteType || "").toUpperCase() === "CREDIT_NOTE" ? "CN" : "DN";
+  const sequenceKey = String(noteType || "").toUpperCase() === "CREDIT_NOTE"
+    ? "tenant_credit_note_number"
+    : "tenant_debit_note_number";
 
-  const latest = await TenantInvoiceNote.findOne({ business: businessId, noteType })
-    .sort({ createdAt: -1, _id: -1 })
-    .select("noteNumber")
-    .lean();
-
-  const current = String(latest?.noteNumber || "");
-  const match = current.match(/(\d+)(?!.*\d)/);
-  const nextNumber = match ? Number(match[1]) + 1 : 1;
-  return `${prefix}${String(nextNumber).padStart(5, "0")}`;
+  return reserveScopedSequenceNumber({
+    businessId,
+    key: sequenceKey,
+    prefix,
+    model: TenantInvoiceNote,
+    field: "noteNumber",
+  });
 };
 
 const mapInvoiceCategoryToLedgerCategory = (invoiceCategory) => {
@@ -624,7 +660,11 @@ const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountV
   const normalizedCategory = String(category || "").toUpperCase();
 
   if (normalizedCategory === "DEPOSIT_CHARGE") {
-    return resolveTenantDepositPayableAccount(businessId);
+    const depositAccount = await resolveTenantDepositPayableAccount(businessId);
+    return ensurePostingChartAccount(depositAccount, {
+      expectedTypes: ["liability"],
+      purpose: "tenant deposit posting",
+    });
   }
 
   if (normalizedCategory === "LATE_PENALTY_CHARGE") {
@@ -633,7 +673,12 @@ const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountV
         businessId,
         field: "penaltyIncomeAccount",
       });
-      if (configuredPenaltyIncome?._id) return configuredPenaltyIncome;
+      if (configuredPenaltyIncome?._id) {
+        return ensurePostingChartAccount(configuredPenaltyIncome, {
+          expectedTypes: ["income"],
+          purpose: "late penalty posting",
+        });
+      }
     }
 
     const account = await findAnyChartAccount(businessId, chartAccountValue, [
@@ -649,7 +694,10 @@ const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountV
       );
     }
 
-    return account;
+    return ensurePostingChartAccount(account, {
+      expectedTypes: ["income"],
+      purpose: "late penalty posting",
+    });
   }
 
   if (normalizedCategory === "OTHER_CHARGE") {
@@ -658,7 +706,12 @@ const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountV
         businessId,
         field: "leaseAgreementFeeIncomeAccount",
       });
-      if (configuredLeaseAgreementIncome?._id) return configuredLeaseAgreementIncome;
+      if (configuredLeaseAgreementIncome?._id) {
+        return ensurePostingChartAccount(configuredLeaseAgreementIncome, {
+          expectedTypes: ["income"],
+          purpose: "lease/agreement fee posting",
+        });
+      }
     }
 
     const account = await findAnyChartAccount(businessId, chartAccountValue, [
@@ -681,7 +734,10 @@ const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountV
       );
     }
 
-    return account;
+    return ensurePostingChartAccount(account, {
+      expectedTypes: ["income"],
+      purpose: "lease/agreement fee posting",
+    });
   }
 
   const candidates =
@@ -704,7 +760,12 @@ const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountV
       businessId,
       field: normalizedCategory === "UTILITY_CHARGE" ? "utilityRechargeIncomeAccount" : "rentIncomeAccount",
     });
-    if (configuredIncomeAccount?._id) return configuredIncomeAccount;
+    if (configuredIncomeAccount?._id) {
+      return ensurePostingChartAccount(configuredIncomeAccount, {
+        expectedTypes: ["income"],
+        purpose: normalizedCategory === "UTILITY_CHARGE" ? "utility invoice posting" : "rent invoice posting",
+      });
+    }
   }
 
   const account = await findAnyChartAccount(businessId, chartAccountValue, candidates);
@@ -717,7 +778,10 @@ const resolveInvoiceIncomeAccount = async ({ businessId, category, chartAccountV
     );
   }
 
-  return account;
+  return ensurePostingChartAccount(account, {
+    expectedTypes: ["income"],
+    purpose: normalizedCategory === "UTILITY_CHARGE" ? "utility invoice posting" : "rent invoice posting",
+  });
 };
 
 
@@ -2365,7 +2429,15 @@ export const createTenantInvoiceNote = async (req, res) => {
     let sourceInvoiceId =
       req.body.sourceInvoiceId || req.body.sourceInvoice || req.body.anchorSourceInvoiceId || null;
 
-    if (!isValidObjectId(sourceInvoiceId) && noteType === "DEBIT_NOTE") {
+    const requestedNoteSourceMode = String(
+      req.body.noteSourceMode || requestedMetadata?.noteSourceMode || ""
+    ).trim().toLowerCase();
+    const shouldAutoAnchorDebitNote =
+      noteType === "DEBIT_NOTE" &&
+      !isValidObjectId(sourceInvoiceId) &&
+      (req.body.allowAutoAnchor === true || requestedNoteSourceMode === "invoice");
+
+    if (shouldAutoAnchorDebitNote) {
       const requestedTenantId = req.body.tenantId || req.body.tenant || null;
       const requestedPropertyId = req.body.propertyId || req.body.property || null;
       const requestedCategory = String(req.body.category || "").toUpperCase();
@@ -2657,6 +2729,11 @@ export const createTenantInvoiceNote = async (req, res) => {
     return res.status(201).json(buildNoteStatementRow(populated));
   } catch (error) {
     console.error("Tenant invoice note creation error:", error);
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        error: "Note number already exists for this business. Please retry so a new number can be reserved safely.",
+      });
+    }
     return res.status(error.statusCode || 500).json({
       error: error.message || `Failed to create invoice note. ${error.message}`,
     });

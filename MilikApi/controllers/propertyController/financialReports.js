@@ -47,6 +47,8 @@ const normalizeDate = (value, fallbackToEnd = false) => {
 
 const round2 = (value) => Number((Number(value || 0)).toFixed(2));
 
+const REPORT_LEDGER_STATUSES = ["approved", "reversed"];
+
 const resolveInvoiceDueDateForReports = (invoice = {}) => {
   const dueDate = invoice?.dueDate ? normalizeDate(invoice.dueDate, true) : null;
   if (dueDate) return dueDate;
@@ -111,7 +113,7 @@ const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, e
   const match = {
     business: businessId,
     accountId: { $ne: null },
-    status: { $nin: ["draft", "void"] },
+    status: { $in: REPORT_LEDGER_STATUSES },
   };
 
   if (startDate || endDate || asOfDate) {

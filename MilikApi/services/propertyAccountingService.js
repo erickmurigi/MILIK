@@ -8,7 +8,26 @@ import {
 } from "./chartOfAccountsService.js";
 import { resolveConfiguredAccountingDefaultAccount } from "./companyAccountingDefaultsService.js";
 
-const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
+const normalizeObjectId = (value) => {
+  if (!value) return null;
+
+  if (value instanceof mongoose.Types.ObjectId) {
+    return value;
+  }
+
+  if (value?._id) {
+    return normalizeObjectId(value._id);
+  }
+
+  const stringValue = String(value || "").trim();
+  if (!/^[a-fA-F0-9]{24}$/.test(stringValue)) {
+    return null;
+  }
+
+  return new mongoose.Types.ObjectId(stringValue);
+};
+
+const isValidObjectId = (value) => Boolean(normalizeObjectId(value));
 
 const escapeRegExp = (value = "") => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -228,28 +247,36 @@ export default {
   findPropertyControlAccount,
 };
 export const getLandlordBalance = async (landlordId, businessId = null) => {
-  if (!landlordId || !isValidObjectId(landlordId)) {
+  const normalizedLandlordId = normalizeObjectId(landlordId);
+  const normalizedBusinessId = normalizeObjectId(businessId);
+
+  if (!normalizedLandlordId) {
     throw new Error("Valid landlordId is required to calculate landlord balance.");
   }
 
   const landlord = await Landlord.findOne({
-    _id: landlordId,
-    ...(businessId && isValidObjectId(businessId) ? { company: businessId } : {}),
+    _id: normalizedLandlordId,
+    ...(normalizedBusinessId ? { company: normalizedBusinessId } : {}),
   }).select("_id company").lean();
 
   if (!landlord) {
     throw new Error("Landlord not found while calculating balance.");
   }
 
-  const resolvedBusinessId = businessId || landlord.company;
+  const resolvedBusinessId = normalizedBusinessId || normalizeObjectId(landlord.company);
+
+  if (!resolvedBusinessId) {
+    throw new Error("Valid businessId is required to calculate landlord balance.");
+  }
+
   const payableAccount = await resolveLandlordRemittancePayableAccount(resolvedBusinessId);
   const FinancialLedgerEntry = (await import("../models/FinancialLedgerEntry.js")).default;
 
   const ledgerTotals = await FinancialLedgerEntry.aggregate([
     {
       $match: {
-        business: new mongoose.Types.ObjectId(String(resolvedBusinessId)),
-        landlord: new mongoose.Types.ObjectId(String(landlordId)),
+        business: resolvedBusinessId,
+        landlord: normalizedLandlordId,
         accountId: payableAccount._id,
         status: { $ne: "reversed" },
         $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
@@ -269,8 +296,8 @@ export const getLandlordBalance = async (landlordId, businessId = null) => {
   const statementTotals = await ProcessedStatement.aggregate([
     {
       $match: {
-        business: new mongoose.Types.ObjectId(String(resolvedBusinessId)),
-        landlord: new mongoose.Types.ObjectId(String(landlordId)),
+        business: resolvedBusinessId,
+        landlord: normalizedLandlordId,
         status: { $ne: "reversed" },
         isNegativeStatement: { $ne: true },
       },
@@ -281,8 +308,8 @@ export const getLandlordBalance = async (landlordId, businessId = null) => {
   const paymentTotals = await LandlordPayment.aggregate([
     {
       $match: {
-        business: new mongoose.Types.ObjectId(String(resolvedBusinessId)),
-        landlord: new mongoose.Types.ObjectId(String(landlordId)),
+        business: resolvedBusinessId,
+        landlord: normalizedLandlordId,
         status: { $ne: "reversed" },
       },
     },

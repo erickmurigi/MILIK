@@ -398,7 +398,7 @@ const reverseProcessedStatementLedgerEntries = async ({ statement, userId, reaso
     business: statement.business,
     sourceTransactionType: "processed_statement",
     sourceTransactionId: String(statement._id),
-    reversalOf: null,
+    $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     status: "approved",
   }).select("_id accountId");
 

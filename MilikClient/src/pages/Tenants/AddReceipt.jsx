@@ -8,6 +8,7 @@ import { createRentPayment, getTenantInvoices, getChartOfAccounts } from "../../
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
+import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -138,27 +139,63 @@ const AddReceipt = () => {
   );
   const tenants = ensureArray(rawTenants);
 
-  const [formData, setFormData] = useState({
-    propertyId: "",
-    tenantId: preselectedTenantId,
-    amount: prefilledAmount,
-    paymentType: ["rent", "deposit", "utility", "late_fee", "other"].includes(prefilledPaymentType) ? prefilledPaymentType : "rent",
-    paymentMethod: ["bank_transfer", "mobile_money", "cash", "check", "credit_card"].includes(prefilledMethod) ? prefilledMethod : "mobile_money",
-    cashbook: "Main Cashbook",
-    paidDirectToLandlord: isLandlordMode,
-    paymentDate: todayInput(),
-    dueDate: todayInput(),
-    referenceNumber: prefilledReference,
-    bankingDate: todayInput(),
-    recordDate: todayInput(),
-    description: prefilledDescription,
-    isConfirmed: false,
+  const receiptDraftKey = buildScopedDraftKey({
+    page: "add-receipt",
+    companyId: currentCompany?._id,
+    userId: currentUser?._id || currentUser?.id || currentUser?.email,
+    extra: preselectedTenantId || prefilledCollectionId || "new",
   });
-  const [priorityInvoiceKeys, setPriorityInvoiceKeys] = useState([]);
+  const [receiptDraft, setReceiptDraft, clearReceiptDraft] = useScopedSessionDraft(receiptDraftKey, {
+    formData: {
+      propertyId: "",
+      tenantId: preselectedTenantId,
+      amount: prefilledAmount,
+      paymentType: ["rent", "deposit", "utility", "late_fee", "other"].includes(prefilledPaymentType) ? prefilledPaymentType : "rent",
+      paymentMethod: ["bank_transfer", "mobile_money", "cash", "check", "credit_card"].includes(prefilledMethod) ? prefilledMethod : "mobile_money",
+      cashbook: "Main Cashbook",
+      paidDirectToLandlord: isLandlordMode,
+      paymentDate: todayInput(),
+      dueDate: todayInput(),
+      referenceNumber: prefilledReference,
+      bankingDate: todayInput(),
+      recordDate: todayInput(),
+      description: prefilledDescription,
+      isConfirmed: false,
+    },
+    priorityInvoiceKeys: [],
+    manualSelectionMode: false,
+    includeTerminatedTenants: Boolean(preselectedTenantId || prefilledTenantCode),
+  });
+  const formData = receiptDraft.formData || {};
+  const setFormData = (updater) => {
+    setReceiptDraft((prev) => ({
+      ...prev,
+      formData: typeof updater === "function" ? updater(prev.formData || {}) : updater,
+    }));
+  };
+  const priorityInvoiceKeys = receiptDraft.priorityInvoiceKeys || [];
+  const setPriorityInvoiceKeys = (updater) => {
+    setReceiptDraft((prev) => ({
+      ...prev,
+      priorityInvoiceKeys: typeof updater === "function" ? updater(prev.priorityInvoiceKeys || []) : updater,
+    }));
+  };
   const [tenantInvoices, setTenantInvoices] = useState([]);
   const [cashbookOptions, setCashbookOptions] = useState([]);
-  const [manualSelectionMode, setManualSelectionMode] = useState(false);
-  const [includeTerminatedTenants, setIncludeTerminatedTenants] = useState(Boolean(preselectedTenantId || prefilledTenantCode));
+  const manualSelectionMode = Boolean(receiptDraft.manualSelectionMode);
+  const setManualSelectionMode = (updater) => {
+    setReceiptDraft((prev) => ({
+      ...prev,
+      manualSelectionMode: typeof updater === "function" ? updater(Boolean(prev.manualSelectionMode)) : Boolean(updater),
+    }));
+  };
+  const includeTerminatedTenants = Boolean(receiptDraft.includeTerminatedTenants);
+  const setIncludeTerminatedTenants = (updater) => {
+    setReceiptDraft((prev) => ({
+      ...prev,
+      includeTerminatedTenants: typeof updater === "function" ? updater(Boolean(prev.includeTerminatedTenants)) : Boolean(updater),
+    }));
+  };
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -559,6 +596,7 @@ const AddReceipt = () => {
     try {
       await createRentPayment(dispatch, payload);
       toast.success("Receipt created successfully");
+      clearReceiptDraft();
       navigate(backToPath);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to create receipt");

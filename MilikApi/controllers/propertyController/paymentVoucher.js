@@ -637,7 +637,7 @@ const reverseVoucherLedgerEntries = async ({ voucher, userId, reason }) => {
     business: voucher.business,
     sourceTransactionType: "payment_voucher",
     sourceTransactionId: String(voucher._id),
-    reversalOf: null,
+    $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     status: "approved",
   }).select("_id accountId journalGroupId metadata");
 
@@ -675,7 +675,7 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
     business: voucher.business,
     sourceTransactionType: "payment_voucher",
     sourceTransactionId: String(voucher._id),
-    reversalOf: null,
+    $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     status: "approved",
   }).select("_id accountId journalGroupId");
 
@@ -820,7 +820,7 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     business: voucher.business,
     sourceTransactionType: "payment_voucher",
     sourceTransactionId: String(voucher._id),
-    reversalOf: null,
+    $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     status: "approved",
     "metadata.postingRole": { $in: ["liability_settlement", "cashbook_outflow"] },
   }).select("_id accountId journalGroupId metadata");
@@ -1336,11 +1336,27 @@ export const deletePaymentVoucher = async (req, res, next) => {
         await reverseVoucherLedgerEntries({
           voucher: row,
           userId: actorUserId,
-          reason: `Voucher ${row.voucherNo} deleted`,
+          reason: `Voucher ${row.voucherNo} removed from active voucher list`,
         });
+
+        row.status = "reversed";
+        row.reversedAt = new Date();
+        row.reversedBy = actorUserId;
+        row.reversalReason = `Voucher removed from active list instead of hard deletion for audit safety.`;
       }
 
       await deleteExpenseRecordForVoucher(row);
+      await releaseSourceRequisitionFromVoucher({ voucher: row, businessId: business });
+      await row.save();
+      await syncLinkedProcessedStatementForVoucher({ voucher: row, businessId: business });
+
+      emitToCompany(row.business, "voucher:reversed", { voucherId: row._id });
+
+      return res.status(200).json({
+        success: true,
+        message: "Posted voucher reversed and retained in the audit trail. Draft vouchers only are physically deleted.",
+        voucher: row,
+      });
     }
 
     await releaseSourceRequisitionFromVoucher({ voucher: row, businessId: business });
@@ -1349,7 +1365,7 @@ export const deletePaymentVoucher = async (req, res, next) => {
     await syncLinkedProcessedStatementForVoucher({ voucher: row, businessId: business });
     emitToCompany(row.business, "voucher:deleted", { voucherId: row._id });
 
-    res.status(200).json({ success: true, message: "Payment voucher deleted" });
+    return res.status(200).json({ success: true, message: "Draft payment voucher deleted" });
   } catch (err) {
     next(err);
   }

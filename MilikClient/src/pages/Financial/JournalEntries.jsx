@@ -27,6 +27,7 @@ import {
   updateJournalEntry,
 } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
+import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 
 const JOURNAL_TYPES = [
   {
@@ -102,22 +103,38 @@ const JournalEntries = () => {
     [currentCompany, currentUser?.company]
   );
 
+  const journalDraftKey = buildScopedDraftKey({
+    page: "journal-entries",
+    companyId: currentCompany?._id,
+    userId: currentUser?._id || currentUser?.id || currentUser?.email,
+  });
+  const [journalDraft, setJournalDraft, clearJournalDraft] = useScopedSessionDraft(journalDraftKey, {
+    showCreateModal: false,
+    editingJournalId: "",
+    filters: {
+      search: "",
+      status: "all",
+      journalType: "all",
+      propertyId: "all",
+    },
+    form: buildInitialForm(),
+  });
+
   const [journals, setJournals] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [rowActionKey, setRowActionKey] = useState("");
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingJournalId, setEditingJournalId] = useState("");
+  const showCreateModal = Boolean(journalDraft.showCreateModal);
+  const setShowCreateModal = (value) => setJournalDraft((prev) => ({ ...prev, showCreateModal: typeof value === "function" ? value(Boolean(prev.showCreateModal)) : Boolean(value) }));
+  const editingJournalId = journalDraft.editingJournalId || "";
+  const setEditingJournalId = (value) => setJournalDraft((prev) => ({ ...prev, editingJournalId: typeof value === "function" ? value(prev.editingJournalId || "") : value }));
   const [saving, setSaving] = useState(false);
 
-  const [filters, setFilters] = useState({
-    search: "",
-    status: "all",
-    journalType: "all",
-    propertyId: "all",
-  });
+  const filters = journalDraft.filters || { search: "", status: "all", journalType: "all", propertyId: "all" };
+  const setFilters = (value) => setJournalDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
 
-  const [form, setForm] = useState(buildInitialForm());
+  const form = journalDraft.form || buildInitialForm();
+  const setForm = (value) => setJournalDraft((prev) => ({ ...prev, form: typeof value === "function" ? value(prev.form || buildInitialForm()) : value }));
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -339,6 +356,7 @@ const JournalEntries = () => {
   const resetForm = () => {
     setEditingJournalId("");
     setForm(buildInitialForm());
+    clearJournalDraft();
   };
 
   const openCreateModal = () => {

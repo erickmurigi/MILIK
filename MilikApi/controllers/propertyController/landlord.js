@@ -312,7 +312,7 @@ export const getLandlords = async (req, res, next) => {
 
         let balance = 0;
         try {
-          balance = await getLandlordBalance(landlord._id, landlord.company);
+          balance = await getLandlordBalance(landlord._id, landlord.company?._id || landlord.company);
         } catch (balanceErr) {
           console.warn("Unable to calculate landlord balance", landlord._id, balanceErr?.message);
         }

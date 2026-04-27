@@ -17,6 +17,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
+import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 import {
   createPaymentVoucher,
   deletePaymentVoucher,
@@ -90,7 +91,19 @@ const PaymentVouchers = () => {
   const canReverseVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "reverse", "accounts");
   const canDeleteVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "delete", "accounts");
 
-  const [filters, setFilters] = useState({ search: "", category: "all", status: "all", propertyId: "all" });
+  const voucherDraftKey = buildScopedDraftKey({
+    page: "payment-vouchers",
+    companyId: currentCompany?._id,
+    userId: currentUser?._id || currentUser?.id || currentUser?.email,
+  });
+  const [voucherDraft, setVoucherDraft, clearVoucherDraft] = useScopedSessionDraft(voucherDraftKey, {
+    filters: { search: "", category: "all", status: "all", propertyId: "all" },
+    showModal: false,
+    editingVoucherId: "",
+    form: blankForm,
+  });
+  const filters = voucherDraft.filters || { search: "", category: "all", status: "all", propertyId: "all" };
+  const setFilters = (value) => setVoucherDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
   const [vouchers, setVouchers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -100,9 +113,12 @@ const PaymentVouchers = () => {
   const [settlementAccounts, setSettlementAccounts] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [showModal, setShowModal] = useState(false);
-  const [editingVoucherId, setEditingVoucherId] = useState("");
-  const [form, setForm] = useState(blankForm);
+  const showModal = Boolean(voucherDraft.showModal);
+  const setShowModal = (value) => setVoucherDraft((prev) => ({ ...prev, showModal: typeof value === "function" ? value(Boolean(prev.showModal)) : Boolean(value) }));
+  const editingVoucherId = voucherDraft.editingVoucherId || "";
+  const setEditingVoucherId = (value) => setVoucherDraft((prev) => ({ ...prev, editingVoucherId: typeof value === "function" ? value(prev.editingVoucherId || "") : value }));
+  const form = voucherDraft.form || blankForm;
+  const setForm = (value) => setVoucherDraft((prev) => ({ ...prev, form: typeof value === "function" ? value(prev.form || blankForm) : value }));
   const selectedCategoryMeta = useMemo(
     () => categories.find((category) => category.value === form.category) || categories[0] || BASE_CATEGORIES[0],
     [categories, form.category]
@@ -281,6 +297,7 @@ const PaymentVouchers = () => {
       setShowModal(false);
       setEditingVoucherId("");
       setForm(blankForm);
+      clearVoucherDraft();
       toast.success(`Voucher ${editingVoucherId ? "updated" : "saved"} successfully`);
     } catch (error) {
       toast.error(error?.response?.data?.message || `Failed to ${editingVoucherId ? "update" : "save"} payment voucher`);

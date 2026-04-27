@@ -319,7 +319,7 @@ const reverseJournalLedgerEntries = async ({ journal, userId, reason }) => {
     business: journal.business,
     sourceTransactionType: "manual_adjustment",
     sourceTransactionId: String(journal._id),
-    reversalOf: null,
+    $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     status: "approved",
   }).select("_id accountId");
 
@@ -357,7 +357,7 @@ const postJournalToLedger = async ({ journal, actorUserId }) => {
     business: journal.business,
     sourceTransactionType: "manual_adjustment",
     sourceTransactionId: String(journal._id),
-    reversalOf: null,
+    $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     status: "approved",
   }).select("_id");
 

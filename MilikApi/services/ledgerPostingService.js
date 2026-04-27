@@ -1,7 +1,15 @@
+import mongoose from "mongoose";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
+import ChartOfAccount from "../models/ChartOfAccount.js";
 import { resolvePropertyAccountingContext } from "./propertyAccountingService.js";
 
 const flipDirection = (direction) => (direction === "credit" ? "debit" : "credit");
+
+const toObjectIdString = (value) => {
+  const raw = typeof value === "object" && value?._id ? value._id : value;
+  if (!raw || !mongoose.Types.ObjectId.isValid(String(raw))) return "";
+  return String(raw);
+};
 
 const normalizeDate = (value, fallback = new Date()) => {
   const date = value ? new Date(value) : new Date(fallback);
@@ -29,6 +37,50 @@ const validatePayload = (payload) => {
   if (missing.length > 0) {
     throw new Error(`Missing ledger payload fields: ${missing.join(", ")}`);
   }
+
+  const amount = Number(payload.amount || 0);
+  if (!Number.isFinite(amount) || Math.abs(amount) <= 0) {
+    throw new Error("Ledger entry amount must be greater than zero.");
+  }
+
+  const direction = String(payload.direction || "").toLowerCase();
+  if (!["debit", "credit"].includes(direction)) {
+    throw new Error("Ledger entry direction must be debit or credit.");
+  }
+};
+
+const validatePostingAccount = async (payload = {}) => {
+  if (payload.allowNoAccount === true) return null;
+
+  const businessId = toObjectIdString(payload.business);
+  const accountId = toObjectIdString(payload.accountId);
+
+  if (!accountId) {
+    throw new Error("A valid posting account is required before saving a ledger entry.");
+  }
+
+  if (!businessId) {
+    throw new Error("A valid business id is required before saving a ledger entry.");
+  }
+
+  const account = await ChartOfAccount.findOne({
+    _id: accountId,
+    business: businessId,
+  }).select("_id code name type active isActive isPosting isHeader").lean();
+
+  if (!account) {
+    throw new Error("Selected posting account was not found in this company chart of accounts.");
+  }
+
+  if (account.isPosting === false || account.isHeader === true) {
+    throw new Error(`Account ${account.code || account.name || accountId} is a header/non-posting account and cannot receive ledger entries.`);
+  }
+
+  if (account.active === false || account.isActive === false) {
+    throw new Error(`Account ${account.code || account.name || accountId} is inactive and cannot receive new ledger entries.`);
+  }
+
+  return account;
 };
 
 const enrichPayloadFromProperty = async (payload = {}) => {
@@ -64,6 +116,7 @@ export const postEntry = async (payload = {}) => {
   const { session = null, ...entryPayload } = payload || {};
   const resolvedPayload = await enrichPayloadFromProperty(entryPayload);
   validatePayload(resolvedPayload);
+  await validatePostingAccount(resolvedPayload);
 
   const normalizedAmount = Math.abs(Number(resolvedPayload.amount || 0));
   const normalizedDirection = String(resolvedPayload.direction || "").toLowerCase();
