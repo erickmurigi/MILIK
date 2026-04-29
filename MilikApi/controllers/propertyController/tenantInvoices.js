@@ -852,7 +852,10 @@ const attachNoteTotalsToInvoices = (invoices = [], notes = []) => {
     };
 
     const baseAmount = round2(Math.abs(Number(invoice?.amount || 0)));
-    const adjustedAmount = round2(baseAmount + totals.debitNoteTotal - totals.creditNoteTotal);
+    // Credit notes reduce the source invoice balance. Debit notes are separate
+    // receivable documents and are exposed as independent allocation targets
+    // below, so they must not be merged into the older invoice balance.
+    const adjustedAmount = round2(baseAmount - totals.creditNoteTotal);
 
     return {
       ...(typeof invoice?.toObject === "function" ? invoice.toObject() : invoice),
@@ -862,6 +865,51 @@ const attachNoteTotalsToInvoices = (invoices = [], notes = []) => {
     };
   });
 };
+
+const buildDebitNoteAllocationSnapshots = (notes = []) =>
+  notes
+    .filter((note) => String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE")
+    .map((note) => {
+      const sourceInvoiceId = String(note?.sourceInvoice || "");
+      const metadata = note?.metadata && typeof note.metadata === "object" ? note.metadata : {};
+      const sourceInvoiceNumber =
+        metadata?.sourceInvoiceNumber ||
+        metadata?.sourceInvoiceRef ||
+        metadata?.invoiceNumber ||
+        "";
+      const noteNumber = note?.noteNumber || `DN-${String(note?._id || "").slice(-6)}`;
+      const description =
+        note?.description ||
+        (sourceInvoiceNumber
+          ? `Debit note against ${sourceInvoiceNumber}`
+          : "Debit note receivable");
+
+      return {
+        _id: note?._id,
+        tenant: note?.tenant,
+        amount: round2(Math.abs(Number(note?.amount || 0))),
+        invoiceNumber: noteNumber,
+        category: note?.category || metadata?.sourceInvoiceCategory || "OTHER_CHARGE",
+        metadata: {
+          ...metadata,
+          sourceTransactionType: "invoice_note",
+          invoicePriorityCategory: "debit_note",
+          noteType: "DEBIT_NOTE",
+          noteNumber,
+          sourceInvoice: sourceInvoiceId || null,
+          sourceInvoiceNumber,
+        },
+        status: "pending",
+        postingStatus: note?.postingStatus || "posted",
+        invoiceDate: note?.noteDate || note?.createdAt || null,
+        dueDate: note?.noteDate || note?.createdAt || null,
+        createdAt: note?.createdAt || note?.noteDate || null,
+        ledgerMode: "invoice_note",
+        description,
+        depositHeldBy: "",
+      };
+    })
+    .filter((snapshot) => snapshot?._id && Number(snapshot?.amount || 0) > 0);
 
 const buildNoteStatementRow = (noteDoc) => {
   const note = typeof noteDoc?.toObject === "function" ? noteDoc.toObject() : noteDoc || {};
@@ -1325,10 +1373,15 @@ const TENANT_SNAPSHOT_NOTE_FIELDS = [
   "_id",
   "tenant",
   "sourceInvoice",
+  "noteNumber",
   "noteType",
+  "category",
   "amount",
+  "description",
   "noteDate",
   "createdAt",
+  "postingStatus",
+  "metadata",
 ].join(" ");
 
 const getActiveReceiptsForTenant = async ({ businessId, tenantId, asOfDate = null }) =>
@@ -1438,12 +1491,16 @@ const groupDocsByTenantId = (docs = []) => {
 
 const buildTenantSnapshotBundle = ({ invoices = [], receipts = [], notes = [] }) => {
   const adjustedInvoices = attachNoteTotalsToInvoices(invoices, notes);
+  const debitNoteSnapshots = buildDebitNoteAllocationSnapshots(notes);
 
   const invoiceSnapshots = buildSortedInvoiceSnapshots(
-    adjustedInvoices.map((invoice) => ({
-      ...invoice,
-      amount: Math.abs(Number(invoice.adjustedAmount || invoice.amount || 0)),
-    }))
+    [
+      ...adjustedInvoices.map((invoice) => ({
+        ...invoice,
+        amount: Math.abs(Number(invoice.adjustedAmount ?? invoice.amount ?? 0)),
+      })),
+      ...debitNoteSnapshots,
+    ]
   );
 
   const invoiceMap = new Map(invoiceSnapshots.map((snapshot) => [String(snapshot._id), snapshot]));

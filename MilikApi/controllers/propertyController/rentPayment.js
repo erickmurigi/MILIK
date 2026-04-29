@@ -1032,30 +1032,37 @@ const buildReceiptAllocationWorkspace = async (payment) => {
     currentAllocatedByInvoice.set(key, round2(Number(currentAllocatedByInvoice.get(key) || 0) + Number(row?.appliedAmount || 0)));
   });
 
-  const invoiceOptions = invoiceSnapshots.map((snapshot) => {
-    const invoiceId = String(snapshot?._id || "");
-    const currentAllocation = round2(Number(currentAllocatedByInvoice.get(invoiceId) || 0));
-    const currentOutstanding = round2(Math.max(0, Number(snapshot?.outstanding || 0)));
-    const maxAllocatable = round2(currentOutstanding + currentAllocation);
-    return {
-      invoiceId,
-      invoiceNumber: snapshot?.invoiceNumber || "",
-      category: snapshot?.category || "",
-      priorityGroup: snapshot?.priorityGroup || "other",
-      utilityType: snapshot?.utilityType || "",
-      depositHeldBy: snapshot?.depositHeldBy || snapshot?.metadata?.depositHeldBy || "",
-      invoiceLedgerMode: snapshot?.ledgerMode || snapshot?.metadata?.ledgerMode || "",
-      description: snapshot?.description || "",
-      invoiceDate: snapshot?.invoiceDate || null,
-      dueDate: snapshot?.dueDate || null,
-      amount: round2(Math.abs(Number(snapshot?.amount || 0))),
-      outstanding: currentOutstanding,
-      currentAllocation,
-      maxAllocatable,
-      status: snapshot?.computedStatus || snapshot?.status || "pending",
-    };
-  });
-
+  const invoiceOptions = invoiceSnapshots
+    .map((snapshot) => {
+      const invoiceId = String(snapshot?._id || "");
+      const currentAllocation = round2(Number(currentAllocatedByInvoice.get(invoiceId) || 0));
+      const currentOutstanding = round2(Math.max(0, Number(snapshot?.outstanding || 0)));
+      const maxAllocatable = round2(currentOutstanding + currentAllocation);
+      return {
+        invoiceId,
+        invoiceNumber: snapshot?.invoiceNumber || "",
+        category: snapshot?.category || "",
+        priorityGroup: snapshot?.priorityGroup || "other",
+        utilityType: snapshot?.utilityType || "",
+        depositHeldBy: snapshot?.depositHeldBy || snapshot?.metadata?.depositHeldBy || "",
+        invoiceLedgerMode: snapshot?.ledgerMode || snapshot?.metadata?.ledgerMode || "",
+        description: snapshot?.description || "",
+        invoiceDate: snapshot?.invoiceDate || null,
+        dueDate: snapshot?.dueDate || null,
+        amount: round2(Math.abs(Number(snapshot?.amount || 0))),
+        outstanding: currentOutstanding,
+        currentAllocation,
+        maxAllocatable,
+        status: snapshot?.computedStatus || snapshot?.status || "pending",
+      };
+    })
+    .filter((option) => {
+      // Keep the support allocation workspace focused on real allocation targets only.
+      // Fully-paid invoices are not selectable for new allocations because they have no
+      // remaining tenant receivable to clear. Existing allocations are kept visible so
+      // an already-linked receipt can still be audited without losing its locked line.
+      return String(option.invoiceId || "").trim() && round2(Number(option.maxAllocatable || 0)) > 0;
+    });
   const lockedAllocatedTotal = round2(currentRows.reduce((sum, row) => sum + Number(row?.appliedAmount || 0), 0));
   const currentUnapplied = round2(Math.max(0, receiptAmount - lockedAllocatedTotal));
 
@@ -1152,13 +1159,22 @@ const buildManualReceiptAllocationData = async ({ payment, requestedAllocations 
 
     const appliedAmount = round2(appliedAmountRaw);
     const maxAllocatable = round2(Number(option.maxAllocatable || 0));
+    const currentOutstanding = round2(Number(option.outstanding || 0));
+    const currentLockedAllocation = round2(Number(option.currentAllocation || 0));
+
+    if (currentOutstanding <= 0.009 && currentLockedAllocation <= 0.009) {
+      const label = option.invoiceNumber || option.description || invoiceId;
+      const error = new Error(`Cannot allocate receipt to ${label} because the invoice is already fully paid.`);
+      error.statusCode = 400;
+      throw error;
+    }
+
     if (appliedAmount > maxAllocatable + 0.009) {
       const label = option.invoiceNumber || option.description || invoiceId;
       const error = new Error(`Allocation for ${label} exceeds its available amount of KES ${maxAllocatable.toLocaleString()}.`);
       error.statusCode = 400;
       throw error;
     }
-
     const depositMeta = enrichDepositAllocationMetadata({
       depositHeldBy: option.depositHeldBy || "",
       invoiceLedgerMode: option.invoiceLedgerMode || "",

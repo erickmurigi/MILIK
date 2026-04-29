@@ -369,7 +369,7 @@ const AddReceipt = () => {
           status,
         };
       })
-      .filter((inv) => inv.billedAmount > 0);
+      .filter((inv) => inv.billedAmount > 0 && inv.outstanding > 0.009);
   };
 
   const balanceSummary = useMemo(
@@ -488,6 +488,24 @@ const AddReceipt = () => {
   const latePenaltyOutstandingInvoices = useMemo(
     () => outstandingInvoices.filter((invoice) => invoice.chargeType === "late_fee"),
     [outstandingInvoices]
+  );
+
+
+  const invoicePreviewSections = useMemo(
+    () => [
+      { key: "combined", title: "Combined Invoices", rows: combinedOutstandingInvoices },
+      { key: "rent", title: "Rent Invoices", rows: rentOutstandingInvoices },
+      { key: "utility", title: "Utility Invoices", rows: utilityOutstandingInvoices },
+      { key: "deposit", title: "Deposit Invoices", rows: depositOutstandingInvoices },
+      { key: "late_fee", title: "Late Penalty Invoices", rows: latePenaltyOutstandingInvoices },
+    ].filter((section) => section.rows.length > 0),
+    [
+      combinedOutstandingInvoices,
+      rentOutstandingInvoices,
+      utilityOutstandingInvoices,
+      depositOutstandingInvoices,
+      latePenaltyOutstandingInvoices,
+    ]
   );
 
   const onPropertyChange = (propertyId) => {
@@ -612,32 +630,13 @@ const AddReceipt = () => {
 
             {formData.tenantId && (
               <div className="mb-3 space-y-2">
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-2">
-                    <p className="text-[10px] font-bold uppercase text-red-700 mb-1">Total Invoiced</p>
-                    <p className="text-base font-bold text-red-700">Ksh {balanceSummary.totalOwed.toLocaleString()}</p>
-                  </div>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
-                    <p className="text-[10px] font-bold uppercase text-blue-700 mb-1">Current Balance</p>
-                    <p className={`text-base font-bold ${balanceSummary.balance > 0 ? "text-blue-700" : "text-green-700"}`}>
-                      Ksh {balanceSummary.balance.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-2">
-                    <p className="text-[10px] font-bold uppercase text-green-700 mb-1">After This Receipt</p>
-                    <p className={`text-base font-bold ${allocationPreview.projectedBalance > 0 ? "text-red-700" : "text-green-700"}`}>
-                      Ksh {allocationPreview.projectedBalance.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
                 <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-sm">
                   <h3 className="text-[11px] font-bold text-slate-700 mb-1">Invoice Preview</h3>
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-[10px]">
                     <p className="text-slate-500">
                       {manualSelectionMode
-                        ? "Manual selection mode is on. Only the invoice(s) you pick below will be allocated. Any remaining amount stays as prepayment."
-                        : "All active tenant invoices appear here. Click an invoice with outstanding balance to prioritize it for clearing first."}
+                        ? "Manual selection mode is on. Only selected open invoices will be allocated. Any remaining amount stays as prepayment."
+                        : "Only open invoices with an outstanding balance appear here. Fully paid invoices are hidden to prevent accidental duplicate allocations."}
                     </p>
                     <div className="flex items-center gap-3">
                       <label className="inline-flex items-center gap-2 font-semibold text-slate-600">
@@ -660,199 +659,78 @@ const AddReceipt = () => {
                     </div>
                   </div>
                   {outstandingInvoices.length > 0 ? (
-                    <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1 rounded-lg border border-slate-200 bg-white p-1">
-                      <div className="bg-white border border-violet-200 rounded p-1.5">
-                        <p className="text-[10px] font-bold uppercase text-violet-700 mb-1">Combined Invoices</p>
-                        {combinedOutstandingInvoices.length > 0 ? (
-                          <div className="space-y-1">
-                            {combinedOutstandingInvoices.map((invoice, index) => {
-                              const priorityIndex = invoice.outstanding > 0 ? getPriorityIndex(invoice.invoiceKey) : null;
-                              return (
-                                <div
-                                  key={`combined-${invoice.invoiceKey}-${index}`}
-                                  onClick={() => invoice.outstanding > 0 && togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`border rounded-lg px-2 py-1.5 text-[11px] grid grid-cols-1 gap-1 transition-colors sm:grid-cols-[minmax(120px,1fr)_150px_220px_auto] sm:items-center ${
-                                    invoice.outstanding <= 0
-                                      ? "border-slate-200 bg-slate-50 opacity-80"
-                                      : priorityIndex
-                                      ? "border-violet-400 bg-violet-50 cursor-pointer"
-                                      : "border-slate-200 hover:bg-slate-50 cursor-pointer"
-                                  }`}
-                                >
-                                  <span className="font-semibold text-slate-900 whitespace-nowrap">{invoice.invoiceNumber || invoice.period}</span>
-                                  <span className="text-slate-600 whitespace-nowrap">Invoice: Ksh {invoice.billedAmount.toLocaleString()}</span>
-                                  <span className="text-slate-600 whitespace-nowrap">Outstanding: Ksh {invoice.outstanding.toLocaleString()} · {invoice.status}</span>
-                                  {priorityIndex && (
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-700 text-white whitespace-nowrap">
-                                      #{priorityIndex}
-                                    </span>
-                                  )}
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-700 uppercase whitespace-nowrap">
-                                    {invoice.chargeTypeLabel || getChargeTypeLabel(invoice.chargeType)}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-500">No combined invoices.</p>
-                        )}
-                      </div>
-
-                      <div className="bg-white border border-blue-200 rounded p-1.5">
-                        <p className="text-[10px] font-bold uppercase text-blue-700 mb-1">Rent Invoices</p>
-                        {rentOutstandingInvoices.length > 0 ? (
-                          <div className="space-y-1">
-                            {rentOutstandingInvoices.map((invoice, index) => {
-                              const priorityIndex = invoice.outstanding > 0 ? getPriorityIndex(invoice.invoiceKey) : null;
-                              return (
-                                <div
-                                  key={`rent-${invoice.period}-${index}`}
-                                  onClick={() => invoice.outstanding > 0 && togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`border rounded-lg px-2 py-1.5 text-[11px] grid grid-cols-1 gap-1 transition-colors sm:grid-cols-[minmax(120px,1fr)_150px_220px_auto] sm:items-center ${
-                                    invoice.outstanding <= 0
-                                      ? "border-slate-200 bg-slate-50 opacity-80"
-                                      : priorityIndex
-                                      ? "border-blue-400 bg-blue-50 cursor-pointer"
-                                      : "border-slate-200 hover:bg-slate-50 cursor-pointer"
-                                  }`}
-                                >
-                                  <span className="font-semibold text-slate-900 whitespace-nowrap">{invoice.invoiceNumber || invoice.period}</span>
-                                  <span className="text-slate-600 whitespace-nowrap">Invoice: Ksh {invoice.billedAmount.toLocaleString()}</span>
-                                  <span className="text-slate-600 whitespace-nowrap">Outstanding: Ksh {invoice.outstanding.toLocaleString()} · {invoice.status}</span>
-                                  {priorityIndex && (
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-700 text-white whitespace-nowrap">
-                                      #{priorityIndex}
-                                    </span>
-                                  )}
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 uppercase whitespace-nowrap">
-                                    {invoice.chargeTypeLabel || getChargeTypeLabel(invoice.chargeType)}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-500">No rent invoices.</p>
-                        )}
-                      </div>
-
-                      <div className="bg-white border border-amber-200 rounded p-1.5">
-                        <p className="text-[10px] font-bold uppercase text-amber-700 mb-1">Utility Invoices</p>
-                        {utilityOutstandingInvoices.length > 0 ? (
-                          <div className="space-y-1">
-                            {utilityOutstandingInvoices.map((invoice, index) => {
-                              const priorityIndex = invoice.outstanding > 0 ? getPriorityIndex(invoice.invoiceKey) : null;
-                              return (
-                                <div
-                                  key={`utility-${invoice.period}-${index}`}
-                                  onClick={() => invoice.outstanding > 0 && togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`border rounded-lg px-2 py-1.5 text-[11px] grid grid-cols-1 gap-1 transition-colors sm:grid-cols-[minmax(120px,1fr)_150px_220px_auto] sm:items-center ${
-                                    invoice.outstanding <= 0
-                                      ? "border-slate-200 bg-slate-50 opacity-80"
-                                      : priorityIndex
-                                      ? "border-amber-400 bg-amber-50 cursor-pointer"
-                                      : "border-slate-200 hover:bg-slate-50 cursor-pointer"
-                                  }`}
-                                >
-                                  <span className="font-semibold text-slate-900 whitespace-nowrap">{invoice.invoiceNumber || invoice.period}</span>
-                                  <span className="text-slate-600 whitespace-nowrap">Invoice: Ksh {invoice.billedAmount.toLocaleString()}</span>
-                                  <span className="text-slate-600 whitespace-nowrap">Outstanding: Ksh {invoice.outstanding.toLocaleString()} · {invoice.status}</span>
-                                  {priorityIndex && (
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-700 text-white whitespace-nowrap">
-                                      #{priorityIndex}
-                                    </span>
-                                  )}
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 uppercase whitespace-nowrap">
-                                    {invoice.chargeTypeLabel || getChargeTypeLabel(invoice.chargeType)}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-500">No utility invoices.</p>
-                        )}
-                      </div>
-
-                      <div className="bg-white border border-emerald-200 rounded p-1.5">
-                        <p className="text-[10px] font-bold uppercase text-emerald-700 mb-1">Deposit Invoices</p>
-                        {depositOutstandingInvoices.length > 0 ? (
-                          <div className="space-y-1">
-                            {depositOutstandingInvoices.map((invoice, index) => {
-                              const priorityIndex = invoice.outstanding > 0 ? getPriorityIndex(invoice.invoiceKey) : null;
-                              return (
-                                <div
-                                  key={`deposit-${invoice.period}-${index}`}
-                                  onClick={() => invoice.outstanding > 0 && togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`border rounded-lg px-2 py-1.5 text-[11px] grid grid-cols-1 gap-1 transition-colors sm:grid-cols-[minmax(120px,1fr)_150px_220px_auto] sm:items-center ${
-                                    invoice.outstanding <= 0
-                                      ? "border-slate-200 bg-slate-50 opacity-80"
-                                      : priorityIndex
-                                      ? "border-emerald-400 bg-emerald-50 cursor-pointer"
-                                      : "border-slate-200 hover:bg-slate-50 cursor-pointer"
-                                  }`}
-                                >
-                                  <span className="font-semibold text-slate-900 whitespace-nowrap">{invoice.invoiceNumber || invoice.period}</span>
-                                  <span className="text-slate-600 whitespace-nowrap">Invoice: Ksh {invoice.billedAmount.toLocaleString()}</span>
-                                  <span className="text-slate-600 whitespace-nowrap">Outstanding: Ksh {invoice.outstanding.toLocaleString()} · {invoice.status}</span>
-                                  {priorityIndex && (
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-700 text-white whitespace-nowrap">
-                                      #{priorityIndex}
-                                    </span>
-                                  )}
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 uppercase whitespace-nowrap">
-                                    {invoice.chargeTypeLabel || getChargeTypeLabel(invoice.chargeType)}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-500">No deposit invoices.</p>
-                        )}
-                      </div>
-
-                      <div className="bg-white border border-rose-200 rounded p-1.5">
-                        <p className="text-[10px] font-bold uppercase text-rose-700 mb-1">Late Penalty Invoices</p>
-                        {latePenaltyOutstandingInvoices.length > 0 ? (
-                          <div className="space-y-1">
-                            {latePenaltyOutstandingInvoices.map((invoice, index) => {
-                              const priorityIndex = invoice.outstanding > 0 ? getPriorityIndex(invoice.invoiceKey) : null;
-                              return (
-                                <div
-                                  key={`late-${invoice.invoiceKey}-${index}`}
-                                  onClick={() => invoice.outstanding > 0 && togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`border rounded-lg px-2 py-1.5 text-[11px] grid grid-cols-1 gap-1 transition-colors sm:grid-cols-[minmax(120px,1fr)_150px_220px_auto] sm:items-center ${
-                                    invoice.outstanding <= 0
-                                      ? "border-slate-200 bg-slate-50 opacity-80"
-                                      : priorityIndex
-                                      ? "border-rose-400 bg-rose-50 cursor-pointer"
-                                      : "border-slate-200 hover:bg-slate-50 cursor-pointer"
-                                  }`}
-                                >
-                                  <span className="font-semibold text-slate-900 whitespace-nowrap">{invoice.invoiceNumber || invoice.period}</span>
-                                  <span className="text-slate-600 whitespace-nowrap">Invoice: Ksh {invoice.billedAmount.toLocaleString()}</span>
-                                  <span className="text-slate-600 whitespace-nowrap">Outstanding: Ksh {invoice.outstanding.toLocaleString()} · {invoice.status}</span>
-                                  {priorityIndex && (
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-700 text-white whitespace-nowrap">
-                                      #{priorityIndex}
-                                    </span>
-                                  )}
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 uppercase whitespace-nowrap">
-                                    {invoice.chargeTypeLabel || getChargeTypeLabel(invoice.chargeType)}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-500">No late penalty invoices.</p>
-                        )}
-                      </div>
+                    <div className="max-h-[240px] overflow-auto rounded-lg border border-slate-200 bg-white">
+                      <table className="min-w-[860px] w-full border-collapse text-[11px]">
+                        <thead className="sticky top-0 z-10 bg-slate-100 text-[10px] uppercase tracking-[0.12em] text-slate-600 shadow-sm">
+                          <tr>
+                            <th className="w-10 border-b border-slate-200 px-2 py-1 text-left">Pick</th>
+                            <th className="border-b border-slate-200 px-2 py-1 text-left">Invoice</th>
+                            <th className="border-b border-slate-200 px-2 py-1 text-left">Period</th>
+                            <th className="border-b border-slate-200 px-2 py-1 text-left">Type</th>
+                            <th className="border-b border-slate-200 px-2 py-1 text-right">Invoice</th>
+                            <th className="border-b border-slate-200 px-2 py-1 text-right">Paid</th>
+                            <th className="border-b border-slate-200 px-2 py-1 text-right">Outstanding</th>
+                            <th className="border-b border-slate-200 px-2 py-1 text-left">Status</th>
+                            <th className="w-16 border-b border-slate-200 px-2 py-1 text-center">Priority</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invoicePreviewSections.map((section) => (
+                            <React.Fragment key={section.key}>
+                              <tr className="bg-slate-50">
+                                <td colSpan={9} className="border-b border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                                  {section.title}
+                                </td>
+                              </tr>
+                              {section.rows.map((invoice, index) => {
+                                const priorityIndex = getPriorityIndex(invoice.invoiceKey);
+                                return (
+                                  <tr
+                                    key={`${section.key}-${invoice.invoiceKey}-${index}`}
+                                    onClick={() => togglePriorityInvoice(invoice.invoiceKey)}
+                                    className={`cursor-pointer border-b border-slate-100 transition hover:bg-slate-50 ${
+                                      priorityIndex ? "bg-[#0B3B2E]/5" : "bg-white"
+                                    }`}
+                                  >
+                                    <td className="px-2 py-1 align-middle">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(priorityIndex)}
+                                        onChange={() => togglePriorityInvoice(invoice.invoiceKey)}
+                                        onClick={(event) => event.stopPropagation()}
+                                        className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                                      />
+                                    </td>
+                                    <td className="max-w-[220px] truncate px-2 py-1 font-bold text-slate-900" title={invoice.invoiceLabel}>
+                                      {invoice.invoiceNumber || invoice.invoiceLabel || invoice.period}
+                                    </td>
+                                    <td className="whitespace-nowrap px-2 py-1 text-slate-600">{invoice.period}</td>
+                                    <td className="whitespace-nowrap px-2 py-1 text-slate-600">{invoice.chargeTypeLabel || getChargeTypeLabel(invoice.chargeType)}</td>
+                                    <td className="whitespace-nowrap px-2 py-1 text-right text-slate-700">Ksh {invoice.billedAmount.toLocaleString()}</td>
+                                    <td className="whitespace-nowrap px-2 py-1 text-right text-slate-700">Ksh {invoice.paid.toLocaleString()}</td>
+                                    <td className="whitespace-nowrap px-2 py-1 text-right font-black text-slate-900">Ksh {invoice.outstanding.toLocaleString()}</td>
+                                    <td className="whitespace-nowrap px-2 py-1">
+                                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                                        {invoice.status}
+                                      </span>
+                                    </td>
+                                    <td className="whitespace-nowrap px-2 py-1 text-center">
+                                      {priorityIndex ? (
+                                        <span className="rounded-full bg-[#0B3B2E] px-2 py-0.5 text-[10px] font-black text-white">#{priorityIndex}</span>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-400">Auto</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-500">No open invoices found for this tenant.</p>
+                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">No open invoices found for this tenant.</p>
                   )}
                 </div>
 

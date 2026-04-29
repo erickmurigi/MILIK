@@ -141,6 +141,20 @@ const getInvoiceOptionLabel = (invoice = {}) => {
   return `${ref} · ${categoryLabel}${utilitySuffix}`;
 };
 
+const getAllocationOptionAmount = (invoice = {}) => {
+  const maxAllocatable = Number(invoice?.maxAllocatable || 0);
+  const currentAllocation = Number(invoice?.currentAllocation || 0);
+  const amount = Number(invoice?.amount || invoice?.netAmount || invoice?.adjustedAmount || 0);
+  return maxAllocatable > 0 ? maxAllocatable : currentAllocation > 0 ? currentAllocation : amount;
+};
+
+const getAllocationOptionLabel = (invoice = {}) => {
+  const ref = invoice?.invoiceNumber || invoice?.description || invoice?.invoiceId || "Invoice";
+  const categoryLabel = getAllocationGroupLabel(invoice?.priorityGroup || invoice?.chargeType || getInvoiceChargeType(invoice));
+  const utilitySuffix = invoice?.utilityType ? ` · ${invoice.utilityType}` : "";
+  return `${ref} · ${categoryLabel}${utilitySuffix} · ${formatMoney(getAllocationOptionAmount(invoice))}`;
+};
+
 const buildAppliedAmountsByInvoice = (payments = [], tenantId = "") => {
   const appliedByInvoice = new Map();
   const tenantIdStr = String(tenantId || "");
@@ -347,6 +361,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const [allocationTarget, setAllocationTarget] = useState(null);
   const [allocationOptions, setAllocationOptions] = useState([]);
   const [allocationLines, setAllocationLines] = useState([]);
+  const [allocationSearchTerms, setAllocationSearchTerms] = useState({});
+  const [allocationDropdownOpen, setAllocationDropdownOpen] = useState({});
   const [allocationReason, setAllocationReason] = useState("");
   const [allocationLoading, setAllocationLoading] = useState(false);
   const [allocationSaving, setAllocationSaving] = useState(false);
@@ -1229,6 +1245,8 @@ const visibleReceiptIds = useMemo(
     setAllocationTarget(null);
     setAllocationOptions([]);
     setAllocationLines([]);
+    setAllocationSearchTerms({});
+    setAllocationDropdownOpen({});
     setAllocationReason("");
     setAllocationRules({
       appendOnlyUnappliedForConfirmed: false,
@@ -1264,6 +1282,8 @@ const visibleReceiptIds = useMemo(
             }))
           : [{ invoiceId: "", appliedAmount: 0 }]
       );
+      setAllocationSearchTerms({});
+      setAllocationDropdownOpen({});
       setAllocationReason("");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to open allocation workspace");
@@ -1290,6 +1310,51 @@ const visibleReceiptIds = useMemo(
   const allocationOptionMap = useMemo(
     () => new Map((allocationOptions || []).map((option) => [String(option.invoiceId || ""), option])),
     [allocationOptions]
+  );
+
+  const getFilteredAllocationOptions = useCallback(
+    (term = "", currentInvoiceId = "") => {
+      const normalizedTerm = String(term || "").trim().toLowerCase();
+      const currentId = String(currentInvoiceId || "");
+
+      return (allocationOptions || []).filter((invoice) => {
+        const invoiceId = String(invoice?.invoiceId || "");
+        if (!invoiceId) return false;
+
+        const takenElsewhere =
+          selectedAllocationOptionIds.includes(invoiceId) && invoiceId !== currentId;
+        if (takenElsewhere) return false;
+
+        const maxAllocatable = Number(invoice?.maxAllocatable || 0);
+        const currentAllocation = Number(invoice?.currentAllocation || 0);
+        if (maxAllocatable <= 0 && currentAllocation <= 0) return false;
+
+        if (!normalizedTerm) return true;
+
+        const haystack = [
+          invoice?.invoiceNumber,
+          invoice?.description,
+          invoice?.invoiceId,
+          invoice?.priorityGroup,
+          invoice?.chargeType,
+          invoice?.category,
+          invoice?.utilityType,
+          invoice?.period,
+          getAllocationGroupLabel(invoice?.priorityGroup || invoice?.chargeType || getInvoiceChargeType(invoice)),
+          getInvoiceOptionLabel(invoice),
+          getAllocationOptionLabel(invoice),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return normalizedTerm
+          .split(/\s+/)
+          .filter(Boolean)
+          .every((token) => haystack.includes(token));
+      });
+    },
+    [allocationOptions, selectedAllocationOptionIds]
   );
 
   const isAppendOnlyAllocationMode = allocationRules?.appendOnlyUnappliedForConfirmed === true;
@@ -1348,6 +1413,22 @@ const visibleReceiptIds = useMemo(
         return prev;
       }
       const next = prev.filter((_, currentIndex) => currentIndex !== index);
+      setAllocationSearchTerms((searchPrev) => {
+        const cleaned = {};
+        next.forEach((_, nextIndex) => {
+          const previousIndex = nextIndex >= index ? nextIndex + 1 : nextIndex;
+          if (searchPrev[previousIndex] !== undefined) cleaned[nextIndex] = searchPrev[previousIndex];
+        });
+        return cleaned;
+      });
+      setAllocationDropdownOpen((openPrev) => {
+        const cleaned = {};
+        next.forEach((_, nextIndex) => {
+          const previousIndex = nextIndex >= index ? nextIndex + 1 : nextIndex;
+          if (openPrev[previousIndex]) cleaned[nextIndex] = openPrev[previousIndex];
+        });
+        return cleaned;
+      });
       return next.length > 0 ? next : [{ invoiceId: "", appliedAmount: 0 }];
     });
   }, [allocationOptionMap, isAppendOnlyAllocationMode]);
@@ -1610,6 +1691,15 @@ const visibleReceiptIds = useMemo(
       document.body.style.height = previousBodyHeight;
       document.documentElement.style.overflow = previousDocumentOverflow;
     };
+  }, []);
+
+  useEffect(() => {
+    const handleAllocationDropdownOutsideClick = () => {
+      setAllocationDropdownOpen({});
+    };
+
+    window.addEventListener("click", handleAllocationDropdownOutsideClick);
+    return () => window.removeEventListener("click", handleAllocationDropdownOutsideClick);
   }, []);
 
   return (
@@ -2438,7 +2528,7 @@ const visibleReceiptIds = useMemo(
 
       {allocationDrawerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          <div className="flex max-h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-500">Receipt Allocation Workspace</p>
@@ -2453,7 +2543,7 @@ const visibleReceiptIds = useMemo(
             {allocationLoading ? (
               <div className="flex min-h-[280px] items-center justify-center text-sm font-semibold text-slate-500">Loading allocation workspace...</div>
             ) : (
-              <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-[1.2fr_0.9fr]">
+              <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden xl:grid-cols-[minmax(0,1.75fr)_minmax(340px,0.65fr)]">
                 <div className="overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-white">
                   <div className="grid grid-cols-1 gap-3 border-b border-slate-200 p-4 md:grid-cols-3">
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -2528,83 +2618,205 @@ const visibleReceiptIds = useMemo(
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      {allocationLines.map((line, index) => {
-                        const lineInvoiceId = String(line?.invoiceId || "");
-                        const option = allocationOptionMap.get(lineInvoiceId);
-                        const maxForLine = Number(option?.maxAllocatable || 0);
-                        const lockedFloor = Math.max(0, Number(option?.currentAllocation || 0));
-                        const isLockedBaseLine = isAppendOnlyAllocationMode && lockedFloor > 0;
-                        return (
-                          <div key={`${lineInvoiceId || "line"}-${index}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70">
-                            <div className="hidden border-b border-slate-200 bg-slate-100/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 md:grid md:grid-cols-[minmax(0,1.55fr)_120px_140px_96px] md:gap-3">
-                              <span>Invoice / Bill</span>
-                              <span>Amount</span>
-                              <span>Available</span>
-                              <span className="text-center">Action</span>
-                            </div>
-                            <div className="grid grid-cols-1 gap-2 px-3 py-3 md:grid-cols-[minmax(0,1.55fr)_120px_140px_96px] md:items-end md:gap-3">
-                              <div className="min-w-0">
-                                <label className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 md:hidden">Invoice / Bill</label>
-                                <select
-                                  value={lineInvoiceId}
-                                  onChange={(e) => updateAllocationLine(index, "invoiceId", e.target.value)}
-                                  disabled={isLockedBaseLine}
-                                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 md:mt-0"
-                                >
-                                  <option value="">Select bill to allocate</option>
-                                  {allocationOptions.map((invoice) => {
-                                    const invoiceId = String(invoice?.invoiceId || "");
-                                    const takenElsewhere = selectedAllocationOptionIds.includes(invoiceId) && invoiceId !== lineInvoiceId;
-                                    return (
-                                      <option key={invoiceId} value={invoiceId} disabled={takenElsewhere || Number(invoice?.maxAllocatable || 0) <= 0}>
-                                        {getInvoiceOptionLabel(invoice)} · Open {formatMoney(invoice?.maxAllocatable || 0)}
-                                      </option>
-                                    );
-                                  })}
-                                </select>
-                              </div>
-                              <div className="min-w-0">
-                                <label className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 md:hidden">Amount</label>
-                                <input
-                                  type="number"
-                                  min={isLockedBaseLine ? lockedFloor : 0}
-                                  step="0.01"
-                                  value={line?.appliedAmount || ""}
-                                  onChange={(e) => updateAllocationLine(index, "appliedAmount", e.target.value)}
-                                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none md:mt-0"
-                                  placeholder="0.00"
-                                />
-                              </div>
-                              <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 md:hidden">Available</p>
-                                <p className="text-sm font-bold text-slate-900">{formatMoney(maxForLine)}</p>
-                                <p className="text-[11px] text-slate-500">Current {formatMoney(option?.currentAllocation || 0)}{isLockedBaseLine ? " · locked base" : ""}</p>
-                              </div>
-                              <div className="flex items-end">
-                                <button
-                                  onClick={() => removeAllocationLine(index)}
-                                  disabled={isLockedBaseLine}
-                                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  <FaMinusCircle /> {isLockedBaseLine ? "Locked" : "Remove"}
-                                </button>
-                              </div>
-                            </div>
-                            {option && (
-                              <div className="border-t border-slate-200 bg-white px-3 py-2">
-                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                                  <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">{getAllocationGroupLabel(option?.priorityGroup)}</span>
-                                  {option?.utilityType ? <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">{option.utilityType}</span> : null}
-                                  {option?.invoiceDate ? <span>Invoice {formatDate(option.invoiceDate)}</span> : null}
-                                  {option?.dueDate ? <span>Due {formatDate(option.dueDate)}</span> : null}
-                                  <span>Status {String(option?.status || "pending").replaceAll("_", " ")}</span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                      <div className="max-h-[430px] overflow-auto">
+                        <table className="min-w-[980px] w-full border-collapse text-[11px]">
+                          <thead className="sticky top-0 z-10 bg-slate-100 text-[10px] uppercase tracking-[0.14em] text-slate-600 shadow-sm">
+                            <tr>
+                              <th className="border-b border-slate-200 px-2 py-1.5 text-left">Invoice / Bill</th>
+                              <th className="w-32 border-b border-slate-200 px-2 py-1.5 text-left">Amount</th>
+                              <th className="w-36 border-b border-slate-200 px-2 py-1.5 text-right">Available</th>
+                              <th className="w-32 border-b border-slate-200 px-2 py-1.5 text-right">Current</th>
+                              <th className="w-40 border-b border-slate-200 px-2 py-1.5 text-left">Class</th>
+                              <th className="w-44 border-b border-slate-200 px-2 py-1.5 text-left">Dates / Status</th>
+                              <th className="w-28 border-b border-slate-200 px-2 py-1.5 text-center">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {allocationLines.map((line, index) => {
+                              const lineInvoiceId = String(line?.invoiceId || "");
+                              const option = allocationOptionMap.get(lineInvoiceId);
+                              const maxForLine = Number(option?.maxAllocatable || 0);
+                              const lockedFloor = Math.max(0, Number(option?.currentAllocation || 0));
+                              const isLockedBaseLine = isAppendOnlyAllocationMode && lockedFloor > 0;
+                              return (
+                                <tr key={`${lineInvoiceId || "line"}-${index}`} className={`border-b border-slate-100 ${isLockedBaseLine ? "bg-slate-50" : "bg-white hover:bg-slate-50"}`}>
+                                  <td className="px-2 py-1.5 align-middle">
+                                    <div
+                                      className="relative"
+                                      onClick={(event) => event.stopPropagation()}
+                                    >
+                                      {(() => {
+                                        const selectedLabel = option ? getAllocationOptionLabel(option) : "";
+                                        const isDropdownOpen = allocationDropdownOpen[index] === true;
+                                        const searchValue = allocationSearchTerms[index];
+                                        const inputValue = isDropdownOpen && searchValue !== undefined ? searchValue : selectedLabel;
+                                        const filteredOptions = getFilteredAllocationOptions(searchValue || "", lineInvoiceId);
+
+                                        return (
+                                          <>
+                                            <input
+                                              type="text"
+                                              value={inputValue}
+                                              onFocus={(event) => {
+                                                event.stopPropagation();
+                                                if (isLockedBaseLine) return;
+                                                setAllocationSearchTerms((prev) => ({
+                                                  ...prev,
+                                                  [index]: prev[index] !== undefined ? prev[index] : "",
+                                                }));
+                                                setAllocationDropdownOpen((prev) => ({
+                                                  ...prev,
+                                                  [index]: true,
+                                                }));
+                                              }}
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                if (isLockedBaseLine) return;
+                                                setAllocationDropdownOpen((prev) => ({
+                                                  ...prev,
+                                                  [index]: true,
+                                                }));
+                                              }}
+                                              onChange={(event) => {
+                                                if (isLockedBaseLine) return;
+                                                const value = event.target.value;
+                                                setAllocationSearchTerms((prev) => ({
+                                                  ...prev,
+                                                  [index]: value,
+                                                }));
+                                                setAllocationDropdownOpen((prev) => ({
+                                                  ...prev,
+                                                  [index]: true,
+                                                }));
+                                                if (lineInvoiceId) {
+                                                  updateAllocationLine(index, "invoiceId", "");
+                                                }
+                                              }}
+                                              onBlur={() => {
+                                                window.setTimeout(() => {
+                                                  setAllocationDropdownOpen((prev) => ({
+                                                    ...prev,
+                                                    [index]: false,
+                                                  }));
+                                                  setAllocationSearchTerms((prev) => {
+                                                    if (!lineInvoiceId && String(prev[index] || "").trim()) return prev;
+                                                    const next = { ...prev };
+                                                    delete next[index];
+                                                    return next;
+                                                  });
+                                                }, 140);
+                                              }}
+                                              disabled={isLockedBaseLine}
+                                              placeholder="Search invoice number, bill type, rent, deposit..."
+                                              className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-800 focus:border-[#0B3B2E] focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
+                                            />
+
+                                            {isDropdownOpen && !isLockedBaseLine && (
+                                              <div
+                                                className="absolute left-0 right-0 top-full z-[10000] mt-1 max-h-[200px] overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-2xl"
+                                                onMouseDown={(event) => event.preventDefault()}
+                                                onClick={(event) => event.stopPropagation()}
+                                              >
+                                                {filteredOptions.length > 0 ? (
+                                                  filteredOptions.map((invoice) => {
+                                                    const invoiceId = String(invoice?.invoiceId || "");
+                                                    return (
+                                                      <button
+                                                        key={invoiceId}
+                                                        type="button"
+                                                        onClick={(event) => {
+                                                          event.stopPropagation();
+                                                          updateAllocationLine(index, "invoiceId", invoiceId);
+                                                          setAllocationSearchTerms((prev) => {
+                                                            const next = { ...prev };
+                                                            delete next[index];
+                                                            return next;
+                                                          });
+                                                          setAllocationDropdownOpen((prev) => ({
+                                                            ...prev,
+                                                            [index]: false,
+                                                          }));
+                                                        }}
+                                                        className="block w-full border-b border-slate-100 px-3 py-2 text-left text-[11px] hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+                                                      >
+                                                        <div className="flex items-center justify-between gap-3">
+                                                          <span className="truncate font-black text-slate-900">
+                                                            {getAllocationOptionLabel(invoice)}
+                                                          </span>
+                                                        </div>
+                                                        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
+                                                          <span>{invoice?.description || getAllocationGroupLabel(invoice?.priorityGroup || invoice?.chargeType || getInvoiceChargeType(invoice))}</span>
+                                                          {invoice?.invoiceId ? <span>· ID {String(invoice.invoiceId).slice(-6)}</span> : null}
+                                                          {invoice?.dueDate ? <span>· Due {formatDate(invoice.dueDate)}</span> : null}
+                                                        </div>
+                                                      </button>
+                                                    );
+                                                  })
+                                                ) : (
+                                                  <div className="px-3 py-2 text-[11px] font-semibold text-slate-500">
+                                                    No open invoice, debit note, deposit, rent, utility, or penalty bill matched your search.
+                                                  </div>
+                                                )}
+                                              </div>
+                                            )}
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
+                                  </td>
+                                  <td className="px-2 py-1.5 align-middle">
+                                    <input
+                                      type="number"
+                                      min={isLockedBaseLine ? lockedFloor : 0}
+                                      step="0.01"
+                                      value={line?.appliedAmount || ""}
+                                      onChange={(e) => updateAllocationLine(index, "appliedAmount", e.target.value)}
+                                      className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                                      placeholder="0.00"
+                                    />
+                                  </td>
+                                  <td className="whitespace-nowrap px-2 py-1.5 text-right align-middle font-black text-slate-900">{formatMoney(maxForLine)}</td>
+                                  <td className="whitespace-nowrap px-2 py-1.5 text-right align-middle text-slate-600">
+                                    {formatMoney(option?.currentAllocation || 0)}
+                                    {isLockedBaseLine ? <span className="ml-1 rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">Locked</span> : null}
+                                  </td>
+                                  <td className="px-2 py-1.5 align-middle">
+                                    {option ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">{getAllocationGroupLabel(option?.priorityGroup)}</span>
+                                        {option?.utilityType ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">{option.utilityType}</span> : null}
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-400">-</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-1.5 align-middle text-[10px] text-slate-500">
+                                    {option ? (
+                                      <div className="space-y-0.5">
+                                        {option?.invoiceDate ? <div>Invoice {formatDate(option.invoiceDate)}</div> : null}
+                                        {option?.dueDate ? <div>Due {formatDate(option.dueDate)}</div> : null}
+                                        <div>Status {String(option?.status || "pending").replaceAll("_", " ")}</div>
+                                      </div>
+                                    ) : (
+                                      <span>-</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-center align-middle">
+                                    <button
+                                      onClick={() => removeAllocationLine(index)}
+                                      disabled={isLockedBaseLine}
+                                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      <FaMinusCircle /> {isLockedBaseLine ? "Locked" : "Remove"}
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 </div>

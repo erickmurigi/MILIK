@@ -791,6 +791,9 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [deletingInvoiceIds, setDeletingInvoiceIds] = useState([]);
   const [submittingSingleBooking, setSubmittingSingleBooking] = useState(false);
   const [submittingBatchBooking, setSubmittingBatchBooking] = useState(false);
+  const [singleBookingPropertyFilter, setSingleBookingPropertyFilter] = useState("all");
+  const [singleBookingTenantSearch, setSingleBookingTenantSearch] = useState("");
+  const [singleBookingTenantDropdownOpen, setSingleBookingTenantDropdownOpen] = useState(false);
   const currentDate = new Date();
   const currentBookingMonth = currentDate.getMonth();
   const currentBookingYear = currentDate.getFullYear();
@@ -1332,7 +1335,7 @@ const getTenantPricing = (tenant) => {
 
 
 const getTenantPricingForBookingPeriod = (tenant, month, year) => {
-  const pricing = getTenantPricingForBookingPeriod(tenant, Number(batchBookingForm.month), Number(batchBookingForm.year));
+  const pricing = getTenantPricing(tenant);
   const scheduleAwareUnitContexts = pricing.unitContexts
     .map((context) => {
       const bookingPeriod = resolveTenantBookingPeriod({ tenant, unitContext: context, month, year });
@@ -1391,16 +1394,36 @@ const getTenantPropertyId = (tenant) => {
   }, [propertiesFromStore]);
 
   const singleBookingTenantOptions = useMemo(() => {
+    const normalizedSearch = String(singleBookingTenantSearch || "").trim().toLowerCase();
+
     return tenantsFromStore
-      .filter((tenant) => String(tenant?.status || "active").toLowerCase() === "active")
+      .filter((tenant) => {
+        const isActive = String(tenant?.status || "active").toLowerCase() === "active";
+        if (!isActive) return false;
+
+        const tenantPropertyId = getTenantPropertyId(tenant);
+        if (singleBookingPropertyFilter !== "all" && String(tenantPropertyId || "") !== String(singleBookingPropertyFilter)) {
+          return false;
+        }
+
+        if (!normalizedSearch) return true;
+
+        const tenantName = getTenantDisplayName(tenant);
+        const tenantCode = tenant?.tenantCode || tenant?.code || tenant?.tenantNo || "";
+        const propertyName = resolveTenantPropertyName(tenant, unitsFromStore, propertiesFromStore);
+        const unitName = getUnitDisplayName(tenant);
+        const haystack = `${tenantName} ${tenantCode} ${propertyName} ${unitName}`.toLowerCase();
+        return haystack.includes(normalizedSearch);
+      })
       .map((tenant) => ({
         id: tenant._id,
         name: getTenantDisplayName(tenant),
+        tenantCode: tenant?.tenantCode || tenant?.code || tenant?.tenantNo || "",
         propertyName: resolveTenantPropertyName(tenant, unitsFromStore, propertiesFromStore),
         unitName: getUnitDisplayName(tenant),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [tenantsFromStore, unitsFromStore, propertiesFromStore]);
+  }, [tenantsFromStore, unitsFromStore, propertiesFromStore, singleBookingPropertyFilter, singleBookingTenantSearch]);
 
   const selectedSingleBookingTenant = useMemo(() => {
     return tenantLookup[singleBookingForm.tenantId] || null;
@@ -1468,9 +1491,7 @@ const getTenantPropertyId = (tenant) => {
       if (!tenantPropertyId) return false;
 
       if (batchBookingForm.propertyId === "all") {
-        return activeProperties.some(
-          (property) => String(property?._id) === String(tenantPropertyId)
-        );
+        return activeProperties.some((property) => String(property?._id) === String(tenantPropertyId));
       }
 
       return String(tenantPropertyId) === String(batchBookingForm.propertyId);
@@ -1478,6 +1499,25 @@ const getTenantPropertyId = (tenant) => {
   }, [tenantsFromStore, batchBookingForm.propertyId, activeProperties]);
 
   const batchBookingScopeCount = batchBookingScopeTenants.length;
+
+  const selectedSingleBookingTenantOption = useMemo(() => {
+    if (!singleBookingForm.tenantId) return null;
+    const tenant = tenantLookup[singleBookingForm.tenantId];
+    if (!tenant) return null;
+    return {
+      id: tenant._id,
+      name: getTenantDisplayName(tenant),
+      tenantCode: tenant?.tenantCode || tenant?.code || tenant?.tenantNo || "",
+      propertyName: resolveTenantPropertyName(tenant, unitsFromStore, propertiesFromStore),
+      unitName: getUnitDisplayName(tenant),
+    };
+  }, [singleBookingForm.tenantId, tenantLookup, unitsFromStore, propertiesFromStore]);
+
+  const formatTenantOptionLabel = (tenantOption) => {
+    if (!tenantOption) return "";
+    const code = tenantOption.tenantCode ? ` · ${tenantOption.tenantCode}` : "";
+    return `${tenantOption.name}${code} - ${tenantOption.propertyName} (${tenantOption.unitName})`;
+  };
 
   const batchBookingTaxPreview = useMemo(() => {
     const components = batchBookingScopeTenants.flatMap((tenant) => {
@@ -3456,7 +3496,7 @@ const createInvoiceForTenant = async (
 
       {showSingleBooking && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4 sm:items-center sm:p-6">
-          <div className="flex w-full max-w-xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+          <div className="flex w-full max-w-3xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
             <div className="sticky top-0 z-20 flex items-center justify-between bg-[#0B3B2E] px-5 py-3 text-white">
               <h3 className="text-sm font-bold tracking-wide">Single Tenant Booking</h3>
               <button
@@ -3472,22 +3512,83 @@ const createInvoiceForTenant = async (
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="md:col-span-3">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tenant</label>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Property Filter</label>
                   <select
-                    value={singleBookingForm.tenantId}
-                    onChange={(e) =>
-                      setSingleBookingForm((prev) => ({ ...prev, tenantId: e.target.value }))
-                    }
+                    value={singleBookingPropertyFilter}
+                    onChange={(e) => {
+                      setSingleBookingPropertyFilter(e.target.value);
+                      setSingleBookingTenantSearch("");
+                      setSingleBookingTenantDropdownOpen(false);
+                      setSingleBookingForm((prev) => ({ ...prev, tenantId: "" }));
+                    }}
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   >
-                    <option value="">Select tenant</option>
-                    {singleBookingTenantOptions.map((tenantOption) => (
-                      <option key={tenantOption.id} value={tenantOption.id}>
-                        {tenantOption.name} - {tenantOption.propertyName} ({tenantOption.unitName})
+                    <option value="all">All active properties</option>
+                    {activeProperties.map((property) => (
+                      <option key={property._id} value={property._id}>
+                        {property.propertyName || property.name}
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div className="relative md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tenant</label>
+                  <input
+                    type="text"
+                    value={singleBookingTenantSearch || formatTenantOptionLabel(selectedSingleBookingTenantOption)}
+                    onFocus={() => setSingleBookingTenantDropdownOpen(true)}
+                    onChange={(e) => {
+                      setSingleBookingTenantSearch(e.target.value);
+                      setSingleBookingTenantDropdownOpen(true);
+                      setSingleBookingForm((prev) => ({ ...prev, tenantId: "" }));
+                    }}
+                    placeholder="Type tenant name, code, unit, or property..."
+                    className="w-full px-3 py-2 pr-9 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSingleBookingTenantDropdownOpen((open) => !open)}
+                    className="absolute right-2 top-[29px] rounded px-2 py-1 text-xs font-black text-slate-500 hover:bg-slate-100"
+                    aria-label="Toggle tenant search results"
+                  >
+                    ▾
+                  </button>
+                  {singleBookingTenantDropdownOpen && (
+                    <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-xl">
+                      {singleBookingTenantOptions.length > 0 ? (
+                        singleBookingTenantOptions.map((tenantOption) => (
+                          <button
+                            key={tenantOption.id}
+                            type="button"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              setSingleBookingForm((prev) => ({ ...prev, tenantId: tenantOption.id }));
+                              setSingleBookingTenantSearch(formatTenantOptionLabel(tenantOption));
+                              setSingleBookingTenantDropdownOpen(false);
+                            }}
+                            className={`block w-full border-b border-slate-100 px-3 py-2 text-left text-xs transition last:border-b-0 hover:bg-[#0B3B2E]/5 ${
+                              String(singleBookingForm.tenantId || "") === String(tenantOption.id) ? "bg-[#0B3B2E]/10" : "bg-white"
+                            }`}
+                          >
+                            <span className="block font-black text-slate-900">
+                              {tenantOption.name}{tenantOption.tenantCode ? ` · ${tenantOption.tenantCode}` : ""}
+                            </span>
+                            <span className="mt-0.5 block text-[11px] font-semibold text-slate-500">
+                              {tenantOption.propertyName} · {tenantOption.unitName}
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-xs font-semibold text-slate-500">No matching tenants found.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="md:col-span-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
+                  Showing {singleBookingTenantOptions.length.toLocaleString()} active tenant{singleBookingTenantOptions.length === 1 ? "" : "s"} for this single booking filter.
                 </div>
 
                 <div>
@@ -3737,7 +3838,7 @@ const createInvoiceForTenant = async (
 
       {showBatchBooking && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4 sm:items-center sm:p-6">
-          <div className="flex w-full max-w-xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+          <div className="flex w-full max-w-3xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
             <div className="sticky top-0 z-20 flex items-center justify-between bg-[#0B3B2E] px-5 py-3 text-white">
               <h3 className="text-sm font-bold tracking-wide">Batch Booking</h3>
               <button
@@ -3753,16 +3854,16 @@ const createInvoiceForTenant = async (
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="md:col-span-3">
+                <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Property Scope (Optional)
+                    Property Scope
                   </label>
                   <select
                     value={batchBookingForm.propertyId}
-                    onChange={(e) =>
-                      setBatchBookingForm((prev) => ({ ...prev, propertyId: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    onChange={(e) => {
+                      setBatchBookingForm((prev) => ({ ...prev, propertyId: e.target.value }));
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   >
                     <option value="all">All active properties</option>
                     {activeProperties.map((property) => (
@@ -3771,6 +3872,11 @@ const createInvoiceForTenant = async (
                       </option>
                     ))}
                   </select>
+                </div>
+
+
+                <div className="md:col-span-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
+                  Batch scope: {batchBookingScopeCount.toLocaleString()} active tenant{batchBookingScopeCount === 1 ? "" : "s"} match the current property filter.
                 </div>
 
                 <div>
