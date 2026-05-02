@@ -37,12 +37,15 @@ export const createPropertySchema = z.object({
   // the next code when the client intentionally submits it blank.
   propertyCode: z.union([z.string().min(1, "Property code is required"), z.literal("")]).optional(),
   propertyName: z.string().min(1, "Property name is required"),
-  lrNumber: z.string().min(1, "LR number is required"),
+  // lrNumber is optional — the frontend may omit it. Controller handles the empty/missing case.
+  lrNumber: z.union([z.string(), z.literal(""), z.undefined(), z.null()]).optional().transform((v) => (v == null ? "" : String(v))),
   category: z.string().optional(),
   propertyType: z.string().min(1, "Property type is required"),
   country: z.string().optional(),
   townCityState: z.string().optional(),
   address: z.string().optional(),
+  // zoneRegion is optional; coerce undefined/null to empty string so the model receives a clean value
+  zoneRegion: z.union([z.string(), z.undefined(), z.null()]).optional().transform((v) => (v == null ? "" : String(v))),
   status: z
     .enum(['active', 'inactive', 'archived', 'Active', 'Inactive', 'Archived'])
     .transform((value) => value.toLowerCase())

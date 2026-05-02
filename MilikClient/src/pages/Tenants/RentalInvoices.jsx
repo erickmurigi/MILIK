@@ -1,5 +1,5 @@
 import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -286,21 +286,23 @@ const clampBillingPeriod = (month, year) => {
   };
 };
 
-const normalizeBillingMode = (value = "combined") => {
-  const normalized = String(value || "combined").trim().toLowerCase();
-  if (normalized === "separate") return "combined";
-  if (["rent", "utility", "combined"].includes(normalized)) return normalized;
-  return "combined";
+const normalizeBillingMode = (value = "separate") => {
+  const normalized = String(value || "separate").trim().toLowerCase();
+  // "combined" is no longer a valid creation mode. Any call that passes
+  // "combined" (legacy callers, URL params, old form state) is silently
+  // coerced to "separate" so rent and utility are always separate invoices.
+  if (["rent", "utility"].includes(normalized)) return normalized;
+  return "separate";
 };
 
-const getBillingModeLabel = (value = "combined") => {
+const getBillingModeLabel = (value = "separate") => {
   const normalized = normalizeBillingMode(value);
   if (normalized === "rent") return "Rent only";
   if (normalized === "utility") return "Utility only";
-  return "Rent + Utility (creates separate invoices)";
+  return "Rent + Utility (separate invoices)";
 };
 
-const resolveBookingAmountsForMode = ({ rentAmount = 0, utilityAmount = 0, billingMode = "combined" } = {}) => {
+const resolveBookingAmountsForMode = ({ rentAmount = 0, utilityAmount = 0, billingMode = "separate" } = {}) => {
   const normalizedMode = normalizeBillingMode(billingMode);
   const safeRentAmount = Number(rentAmount || 0);
   const safeUtilityAmount = Number(utilityAmount || 0);
@@ -323,7 +325,7 @@ const createBookingGroupId = () => {
   return `booking_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 };
 
-const buildBookingMetadata = ({ metadata = undefined, bookingGroupId = "", billingMode = "combined" } = {}) => {
+const buildBookingMetadata = ({ metadata = undefined, bookingGroupId = "", billingMode = "separate" } = {}) => {
   const baseMetadata = metadata && typeof metadata === "object" ? metadata : {};
   const normalizedMode = normalizeBillingMode(billingMode);
 
@@ -337,12 +339,13 @@ const buildBookingMetadata = ({ metadata = undefined, bookingGroupId = "", billi
 
 const buildUtilityInvoiceMetadata = (utilityLabel = "") => {
   const normalizedUtilityLabel = String(utilityLabel || "").trim();
-  if (!normalizedUtilityLabel) return undefined;
-
+  // Always return metadata even when label is empty — use "Utility" as the
+  // canonical fallback so deriveInvoiceDescription can always find a type.
+  const resolvedLabel = normalizedUtilityLabel || "Utility";
   return {
-    utilityType: normalizedUtilityLabel,
-    meterUtilityType: normalizedUtilityLabel,
-    statementUtilityType: normalizedUtilityLabel,
+    utilityType: resolvedLabel,
+    meterUtilityType: resolvedLabel,
+    statementUtilityType: resolvedLabel,
   };
 };
 
@@ -370,9 +373,18 @@ const buildUtilityChargeDescription = ({ utilityLabel = "", month, year } = {}) 
 
 const deriveInvoiceDescription = (invoice = {}) => {
   const description = String(invoice?.description || "").trim();
-  if (description && !/^utility\s+charge\b/i.test(description)) return description;
-
+  const category = String(invoice?.category || "").toUpperCase();
   const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
+
+  // For non-utility invoices, return the stored description if it looks meaningful
+  // (i.e. is not a bare period label like "May 26" or just "Utility Charge")
+  if (category !== "UTILITY_CHARGE") {
+    if (description && !/^utility\s+charge\b/i.test(description)) return description;
+    return description;
+  }
+
+  // For UTILITY_CHARGE: always try to build a descriptive label that includes
+  // the utility type name so the user knows *which* utility was invoiced.
   const utilityLabel = String(
     metadata?.utilityType ||
       metadata?.meterUtilityType ||
@@ -388,12 +400,8 @@ const deriveInvoiceDescription = (invoice = {}) => {
 
   const invoiceDate = invoice?.invoiceDate || invoice?.createdAt || null;
   const parsedDate = invoiceDate ? new Date(invoiceDate) : null;
-  if (
-    utilityLabel &&
-    String(invoice?.category || "").toUpperCase() === "UTILITY_CHARGE" &&
-    parsedDate &&
-    !Number.isNaN(parsedDate.getTime())
-  ) {
+
+  if (utilityLabel && parsedDate && !Number.isNaN(parsedDate.getTime())) {
     return buildUtilityChargeDescription({
       utilityLabel,
       month: parsedDate.getMonth(),
@@ -401,7 +409,31 @@ const deriveInvoiceDescription = (invoice = {}) => {
     });
   }
 
-  return description;
+  // No utility type in metadata — check if the stored description is just a bare
+  // period label (e.g. "May 26") and enrich it with a "Utility" prefix
+  if (
+    description &&
+    !/^utility\s+charge\b/i.test(description) &&
+    !/^utility\b/i.test(description)
+  ) {
+    // If description looks like a bare period label (e.g. "May/26", "May 26"),
+    // prepend "Utility -" so it reads "Utility - May/26"
+    if (/^[A-Z][a-z]{2}[\s/]\d{2}$/.test(description)) {
+      return `Utility - ${description}`;
+    }
+    return description;
+  }
+
+  // Final fallback: if we have a date, use a generic "Utility Charge" with period
+  if (parsedDate && !Number.isNaN(parsedDate.getTime())) {
+    return buildRecurringInvoiceDescription({
+      month: parsedDate.getMonth(),
+      year: parsedDate.getFullYear(),
+      label: "Utility",
+    });
+  }
+
+  return description || "Utility Charge";
 };
 
 const isLeaseAgreementFeeInvoice = ({ category, metadata = {} } = {}) => {
@@ -758,6 +790,136 @@ const buildInvoiceServerFilters = ({ filters = emptyFilters, propertiesFromStore
   };
 };
 
+function InvoiceTableRowBase({
+  invoice,
+  isSelected,
+  idx,
+  showTenantColumns,
+  canExportInvoice,
+  canDeleteInvoice,
+  onView,
+  onPrint,
+  onDownload,
+  onDelete,
+  onSelect,
+  onViewStatement,
+}) {
+  return (
+    <tr
+      className={`cursor-pointer border-b border-slate-200 transition-colors ${
+        isSelected
+          ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
+          : idx % 2 === 0
+          ? "bg-white hover:bg-blue-50/40"
+          : "bg-slate-50 hover:bg-blue-50/40"
+      }`}
+      onClick={() => onView(invoice)}
+    >
+      <td className="px-3 py-2">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onSelect(invoice.key)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      </td>
+      <td className="px-3 py-2 font-bold text-blue-700">{invoice.id}</td>
+      {showTenantColumns && (
+        <td className="px-3 py-2 font-bold text-slate-900">{invoice.tenantName}</td>
+      )}
+      {showTenantColumns && (
+        <td className="px-3 py-2 font-semibold text-slate-900">{invoice.propertyName}</td>
+      )}
+      <td className="px-3 py-2 font-semibold text-slate-900">{invoice.unitName}</td>
+      <td className="px-3 py-2 font-semibold text-orange-700">{invoice.invoiceDescription || invoice.period}</td>
+      <td className="px-3 py-2">
+        <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
+          {invoice.chargeTypeLabel || getInvoiceChargeTypeLabel(invoice.chargeType)}
+        </span>
+      </td>
+      <td className="px-3 py-2 text-center text-gray-700">{invoice.invoiceDateLabel}</td>
+      <td className="px-3 py-2 text-center text-gray-700">{invoice.dueDateLabel}</td>
+      <td className="px-3 py-2 text-right font-bold text-slate-900">
+        KES {Number(invoice.amount || 0).toLocaleString()}
+      </td>
+      <td className="px-3 py-2 text-center">
+        <span
+          className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${
+            invoice.status === "Paid"
+              ? "bg-green-100 text-green-700"
+              : invoice.status === "Cancelled" || invoice.status === "Reversed"
+              ? "bg-slate-100 text-slate-700"
+              : "bg-orange-100 text-orange-700"
+          }`}
+        >
+          {invoice.status}
+        </span>
+      </td>
+      <td className="px-3 py-2 text-center text-gray-600">{invoice.createdDate}</td>
+      <td className="px-3 py-2 text-right">
+        <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => onView(invoice)}
+            className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+            title="View Invoice"
+          >
+            <FaEye size={12} />
+          </button>
+          <button
+            onClick={() => onPrint(invoice)}
+            disabled={!canExportInvoice}
+            className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800 disabled:cursor-not-allowed disabled:opacity-40"
+            title={canExportInvoice ? "Print Invoice" : "You do not have permission to print invoices"}
+          >
+            <FaPrint size={12} />
+          </button>
+          <button
+            onClick={() => onDownload(invoice)}
+            disabled={!canExportInvoice}
+            className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800 disabled:cursor-not-allowed disabled:opacity-40"
+            title={canExportInvoice ? "Download Invoice" : "You do not have permission to download invoices"}
+          >
+            <FaDownload size={12} />
+          </button>
+          <button
+            onClick={() => onDelete(invoice)}
+            disabled={!canDeleteInvoice}
+            className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-40"
+            title={canDeleteInvoice ? "Delete Invoice" : "You do not have permission to delete invoices"}
+          >
+            <FaTrash size={12} />
+          </button>
+          {showTenantColumns && (
+            <button
+              onClick={() => onViewStatement(invoice.tenantId)}
+              className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"
+              title="View Tenant Statement"
+            >
+              <FaArrowRight size={12} />
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function areEqual(prev, next) {
+  return (
+    prev.invoice._id === next.invoice._id &&
+    prev.invoice.status === next.invoice.status &&
+    prev.invoice.amount === next.invoice.amount &&
+    prev.invoice.updatedAt === next.invoice.updatedAt &&
+    prev.isSelected === next.isSelected &&
+    prev.idx === next.idx &&
+    prev.showTenantColumns === next.showTenantColumns &&
+    prev.canExportInvoice === next.canExportInvoice &&
+    prev.canDeleteInvoice === next.canDeleteInvoice
+  );
+}
+
+const InvoiceTableRow = React.memo(InvoiceTableRowBase, areEqual);
+
 const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const { id: tenantId } = useParams();
   const location = useLocation();
@@ -803,7 +965,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
     month: currentBookingMonth,
     year: currentBookingYear,
     dueDay: 5,
-    billingMode: "combined",
+    billingMode: "separate",
     invoiceDate: getStartOfPeriod(currentBookingMonth, currentBookingYear),
     bookWithInvoiceDate: false,
     taxHandling: "company_default",
@@ -816,7 +978,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
     month: currentBookingMonth,
     year: currentBookingYear,
     dueDay: 5,
-    billingMode: "combined",
+    billingMode: "separate",
     invoiceDate: getStartOfPeriod(currentBookingMonth, currentBookingYear),
     bookWithInvoiceDate: false,
     taxHandling: "company_default",
@@ -1813,13 +1975,13 @@ const visibleInvoiceKeys = useMemo(
     setSelectAll(true);
   };
 
-  const toggleRowSelection = (rowKey) => {
+  const toggleRowSelection = useCallback((rowKey) => {
     setSelectedInvoices((prev) => {
       const hasRow = prev.includes(rowKey);
       if (hasRow) return prev.filter((id) => id !== rowKey);
       return [...prev, rowKey];
     });
-  };
+  }, []);
 
   useEffect(() => {
     if (currentPageInvoices.length === 0) {
@@ -2125,11 +2287,11 @@ const visibleInvoiceKeys = useMemo(
 </html>`;
   };
 
-  const handleViewInvoice = (invoice) => {
+  const handleViewInvoice = useCallback((invoice) => {
     if (!invoice) return;
     setActiveInvoice(invoice);
     setInvoiceDetailOpen(true);
-  };
+  }, []);
 
   const handlePrintInvoice = (invoice) => {
     if (!canExportInvoice) {
@@ -2411,7 +2573,6 @@ const visibleInvoiceKeys = useMemo(
     billingMode,
   });
 
-  console.log("Creating invoice with payload:", invoicePayload);
 
   return await createTenantInvoice(invoicePayload);
 };
@@ -2525,7 +2686,7 @@ const createInvoiceForTenant = async (
         month,
         year,
         dueDay,
-        description: bookingPeriodContext.description || buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` }),
+        description: buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` }),
         taxSelection,
         bookingDateOverride,
         bookingGroupId: effectiveBookingGroupId,
@@ -2535,6 +2696,11 @@ const createInvoiceForTenant = async (
     }
 
     if (utilityAmount > 0 && !utilityBlocked) {
+      const resolvedUtilityDescription = buildUtilityChargeDescription({
+        utilityLabel: utilityLabel || "Utility",
+        month,
+        year,
+      });
       const createdInvoice = await createBackendInvoiceEntry({
         targetTenant: targetTenantForUnit,
         amount: utilityAmount,
@@ -2542,7 +2708,7 @@ const createInvoiceForTenant = async (
         month,
         year,
         dueDay,
-        description: bookingPeriodContext.description || buildUtilityChargeDescription({ utilityLabel: utilityLabel || `Utility - ${unitContext.unitName}`, month, year }),
+        description: resolvedUtilityDescription,
         metadata: utilityMetadata,
         taxSelection,
         bookingDateOverride,
@@ -2865,7 +3031,11 @@ const createInvoiceForTenant = async (
                 month,
                 year,
                 dueDay,
-                description: bookingPeriodContext.description || buildUtilityChargeDescription({ utilityLabel: utilityLabel || `Utility - ${unitContext.unitName}`, month, year }),
+                description: buildUtilityChargeDescription({
+                  utilityLabel: utilityLabel || "Utility",
+                  month,
+                  year,
+                }),
                 metadata: utilityMetadata,
                 taxSelection: selectedTaxSelection,
                 bookingDateOverride: batchBookingDateOverride,
@@ -3098,9 +3268,9 @@ const createInvoiceForTenant = async (
     }
   };
 
-  const handleViewTenantStatement = (targetTenantId) => {
+  const handleViewTenantStatement = useCallback((targetTenantId) => {
     navigate(`/tenant/${targetTenantId}/statement`);
-  };
+  }, [navigate]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -3318,7 +3488,7 @@ const createInvoiceForTenant = async (
                     {!tenantId && <th className="px-3 py-2 text-left font-semibold">Tenant</th>}
                     {!tenantId && <th className="px-3 py-2 text-left font-semibold">Property</th>}
                     <th className="px-3 py-2 text-left font-semibold">Unit</th>
-                    <th className="px-3 py-2 text-left font-semibold">Inv Desc</th>
+                    <th className="px-3 py-2 text-left font-semibold">Description</th>
                     <th className="px-3 py-2 text-left font-semibold">Type</th>
                     <th className="px-3 py-2 text-center font-semibold">Booking / Invoice Date</th>
                     <th className="px-3 py-2 text-center font-semibold">Due Date</th>
@@ -3342,154 +3512,70 @@ const createInvoiceForTenant = async (
                       </td>
                     </tr>
                   ) : (
-                    currentPageInvoices.map((invoice, idx) => { const isSelected = selectedInvoices.includes(invoice.key); return (
-                      <tr
+                    currentPageInvoices.map((invoice, idx) => (
+                      <InvoiceTableRow
                         key={invoice.key}
-                        className={`cursor-pointer border-b border-slate-200 transition-colors ${
-                          isSelected
-                            ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
-                            : idx % 2 === 0
-                            ? "bg-white hover:bg-blue-50/40"
-                            : "bg-slate-50 hover:bg-blue-50/40"
-                        }`}
-                        onClick={() => handleViewInvoice(invoice)}
-                      >
-                        <td className="px-3 py-2">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleRowSelection(invoice.key)}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </td>
-                        <td className="px-3 py-2 font-bold text-blue-700">{invoice.id}</td>
-                        {!tenantId && (
-                          <td className="px-3 py-2 font-bold text-slate-900">{invoice.tenantName}</td>
-                        )}
-                        {!tenantId && (
-                          <td className="px-3 py-2 font-semibold text-slate-900">{invoice.propertyName}</td>
-                        )}
-                        <td className="px-3 py-2 font-semibold text-slate-900">{invoice.unitName}</td>
-                        <td className="px-3 py-2 font-semibold text-orange-700">{invoice.invoiceDescription || invoice.period}</td>
-                        <td className="px-3 py-2">
-                          <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
-                            {invoice.chargeTypeLabel || getInvoiceChargeTypeLabel(invoice.chargeType)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-center text-gray-700">{invoice.invoiceDateLabel}</td>
-                        <td className="px-3 py-2 text-center text-gray-700">{invoice.dueDateLabel}</td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-900">
-                          KES {Number(invoice.amount || 0).toLocaleString()}
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <span
-                            className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${
-                              invoice.status === "Paid"
-                                ? "bg-green-100 text-green-700"
-                                : invoice.status === "Cancelled" || invoice.status === "Reversed"
-                                ? "bg-slate-100 text-slate-700"
-                                : "bg-orange-100 text-orange-700"
-                            }`}
-                          >
-                            {invoice.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-center text-gray-600">{invoice.createdDate}</td>
-                        <td className="px-3 py-2 text-right">
-                          <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              onClick={() => handleViewInvoice(invoice)}
-                              className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800"
-                              title="View Invoice"
-                            >
-                              <FaEye size={12} />
-                            </button>
-                            <button
-                              onClick={() => handlePrintInvoice(invoice)}
-                              disabled={!canExportInvoice}
-                              className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800 disabled:cursor-not-allowed disabled:opacity-40"
-                              title={canExportInvoice ? "Print Invoice" : "You do not have permission to print invoices"}
-                            >
-                              <FaPrint size={12} />
-                            </button>
-                            <button
-                              onClick={() => handleDownloadInvoice(invoice)}
-                              disabled={!canExportInvoice}
-                              className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800 disabled:cursor-not-allowed disabled:opacity-40"
-                              title={canExportInvoice ? "Download Invoice" : "You do not have permission to download invoices"}
-                            >
-                              <FaDownload size={12} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteSingle(invoice)}
-                              disabled={!canDeleteInvoice}
-                              className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-40"
-                              title={canDeleteInvoice ? "Delete Invoice" : "You do not have permission to delete invoices"}
-                            >
-                              <FaTrash size={12} />
-                            </button>
-                            {!tenantId && (
-                              <button
-                                onClick={() => handleViewTenantStatement(invoice.tenantId)}
-                                className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"
-                                title="View Tenant Statement"
-                              >
-                                <FaArrowRight size={12} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ); })
+                        invoice={invoice}
+                        isSelected={selectedInvoices.includes(invoice.key)}
+                        idx={idx}
+                        showTenantColumns={!tenantId}
+                        canExportInvoice={canExportInvoice}
+                        canDeleteInvoice={canDeleteInvoice}
+                        onView={handleViewInvoice}
+                        onPrint={handlePrintInvoice}
+                        onDownload={handleDownloadInvoice}
+                        onDelete={handleDeleteSingle}
+                        onSelect={toggleRowSelection}
+                        onViewStatement={handleViewTenantStatement}
+                      />
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
 
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
+            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
               <p>
                 <span className="font-semibold">Showing:</span> {totalFilteredCount === 0 ? 0 : startIndex + 1}
                 {" - "}
                 {endIndex} of {totalFilteredCount} invoice(s)
                 {appliedFilters.status !== "ACTIVE" && ` · Status: ${appliedFilters.status}`}
               </p>
-              <p>
-                <span className="font-semibold">Selected:</span> {selectedCount}
-                {totalFilteredCount > 0 && (
-                  <>
-                    {" · "}
-                    <span className="font-semibold">Total:</span> KES {totalAmount.toLocaleString()}
-                  </>
-                )}
-              </p>
+              <div className="flex items-center gap-3">
+                <p>
+                  <span className="font-semibold">Selected:</span> {selectedCount}
+                  {totalFilteredCount > 0 && (
+                    <>
+                      {" · "}
+                      <span className="font-semibold">Total:</span> KES {totalAmount.toLocaleString()}
+                    </>
+                  )}
+                </p>
+                <div className="h-4 w-px bg-slate-300" />
+                <span className="text-slate-500">Per page: {ITEMS_PER_PAGE}</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={safeCurrentPage === 1}
+                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <span className="rounded border border-slate-200 bg-white px-2.5 py-0.5 font-semibold text-slate-700">
+                    Page {safeCurrentPage} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={safeCurrentPage === totalPages}
+                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
-
-<div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
-  <p>
-    <span className="font-semibold">Per page:</span> {ITEMS_PER_PAGE}
-  </p>
-  <div className="flex items-center gap-2">
-    <button
-      type="button"
-      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-      disabled={safeCurrentPage === 1}
-      className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      Previous
-    </button>
-    <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 font-semibold text-slate-700">
-      Page {safeCurrentPage} of {totalPages}
-    </span>
-    <button
-      type="button"
-      onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-      disabled={safeCurrentPage === totalPages}
-      className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      Next
-    </button>
-  </div>
-</div>
           </div>
         </div>
       </div>
@@ -3695,7 +3781,7 @@ const createInvoiceForTenant = async (
                     }
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
                   >
-                    <option value="combined">Rent + Utility</option>
+                    <option value="separate">Rent + Utility (separate)</option>
                     <option value="rent">Rent only</option>
                     <option value="utility">Utility only</option>
                   </select>
@@ -3982,7 +4068,7 @@ const createInvoiceForTenant = async (
                     }
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
                   >
-                    <option value="combined">Rent + Utility</option>
+                    <option value="separate">Rent + Utility (separate)</option>
                     <option value="rent">Rent only</option>
                     <option value="utility">Utility only</option>
                   </select>

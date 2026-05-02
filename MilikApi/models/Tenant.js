@@ -58,7 +58,6 @@ const TenantSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Unit",
       required: true,
-      index: true,
     },
 
     additionalUnits: {
@@ -194,13 +193,18 @@ const TenantSchema = new mongoose.Schema(
       default: [],
     },
 
+    lettingFeeAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     profileImage: { type: String, default: "", trim: true },
 
     business: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
       required: true,
-      index: true,
     },
   },
   { timestamps: true }

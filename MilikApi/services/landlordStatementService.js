@@ -1225,7 +1225,11 @@ export const generateLandlordStatement = async ({
 
   if (!property) throw new Error("Property not found");
   if (String(property?.letManage || "").trim().toLowerCase() === "letting") {
-    throw new Error("Landlord statements are not available for letting-only properties. Convert the property to Managing before generating recurring landlord statements.");
+    const lettingErr = new Error(
+      "Landlord statements are not available for letting-only properties. Convert the property to Managing before generating recurring landlord statements."
+    );
+    lettingErr.statusCode = 422;
+    throw lettingErr;
   }
   if (!property.business) {
     throw new Error("Property is missing business scope. Cannot generate landlord statement safely.");

@@ -471,6 +471,10 @@ const normalizePropertyServiceMode = (value = "Managing") => {
   return "Managing";
 };
 
+/** Returns true when a normalised letManage value represents Letting mode. */
+const isLettingMode = (value) =>
+  String(value || "").trim().toLowerCase() === "letting";
+
 const PROPERTY_CONTROL_LEDGER_TYPE = "Property Control Ledger In GL";
 
 const normalizePropertyLedgerType = () => PROPERTY_CONTROL_LEDGER_TYPE;
@@ -525,6 +529,8 @@ export const createProperty = async (req, res) => {
       status,
       images,
       business,
+      lettingFeeMode,
+      lettingFeeValue,
     } = req.body;
 
     const businessId = req.user?.company || req.user?.business || business;
@@ -647,9 +653,21 @@ export const createProperty = async (req, res) => {
         ? parseInt(numberOfFloors, 10)
         : 0;
 
+    const resolvedLetManage = normalizePropertyServiceMode(letManage);
+    const lettingMode = isLettingMode(resolvedLetManage);
+
+    // In Letting mode the landlord handles payments and holds the deposit directly.
+    // Override the modeAwareAssignment defaults if the property is Letting.
+    const resolvedTenantsPaysTo = lettingMode
+      ? "landlord"
+      : (modeAwareAssignment.tenantsPaysTo || "propertyManager");
+    const resolvedDepositHeldBy = lettingMode
+      ? "landlord"
+      : (modeAwareAssignment.depositHeldBy || "propertyManager");
+
     const property = new Property({
       dateAcquired: dateAcquired ? new Date(dateAcquired) : null,
-      letManage: normalizePropertyServiceMode(letManage),
+      letManage: resolvedLetManage,
       landlords: modeAwareAssignment.landlords,
       propertyCode: resolvedPropertyCode,
       propertyName: normalizedPropertyName,
@@ -696,13 +714,15 @@ export const createProperty = async (req, res) => {
       createdBy: createdById,
       updatedBy: createdById,
       controlAccount: null,
-      tenantsPaysTo: modeAwareAssignment.tenantsPaysTo || "propertyManager",
-      depositHeldBy: modeAwareAssignment.depositHeldBy || "propertyManager",
+      tenantsPaysTo: resolvedTenantsPaysTo,
+      depositHeldBy: resolvedDepositHeldBy,
       commissionPercentage: modeAwareAssignment.commissionPercentage ?? 0,
       commissionFixedAmount: modeAwareAssignment.commissionFixedAmount ?? 0,
       commissionPaymentMode: modeAwareAssignment.commissionPaymentMode || "percentage",
       commissionRecognitionBasis: modeAwareAssignment.commissionRecognitionBasis || "received",
       commissionTaxSettings: modeAwareAssignment.commissionTaxSettings || undefined,
+      lettingFeeMode: lettingMode ? (lettingFeeMode === "fixed" ? "fixed" : "percentage") : "percentage",
+      lettingFeeValue: lettingMode ? Math.max(0, parseFloat(lettingFeeValue) || 100) : 100,
     });
 
     const savedProperty = await property.save();
@@ -831,14 +851,11 @@ export const getProperties = async (req, res, next) => {
     if (landlord) query["landlords.landlordId"] = landlord;
 
     const properties = await Property.find(query)
-      .populate("business", "companyName")
-      .populate("createdBy", "surname otherNames email")
-      .populate("updatedBy", "surname otherNames email")
-      .populate("landlords.landlordId", "_id landlordName firstName lastName email")
-      .populate("controlAccount", "code name type group subGroup")
+      .populate("landlords.landlordId", "_id landlordName firstName lastName")
       .limit(limitNumber)
       .skip((pageNumber - 1) * limitNumber)
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     const total = await Property.countDocuments(query);
 
@@ -852,10 +869,7 @@ export const getProperties = async (req, res, next) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
@@ -867,7 +881,8 @@ export const getProperty = async (req, res, next) => {
       .populate("createdBy", "surname otherNames email")
       .populate("updatedBy", "surname otherNames email")
       .populate("landlords.landlordId", "_id landlordName firstName lastName email")
-      .populate("controlAccount", "code name type group subGroup");
+      .populate("controlAccount", "code name type group subGroup")
+      .lean();
 
     if (!property) {
       return res.status(404).json({
@@ -878,7 +893,8 @@ export const getProperty = async (req, res, next) => {
 
     if (!req.user.isSystemAdmin) {
       const userBusinessId = req.user?.company;
-      if (property.business.toString() !== userBusinessId?.toString()) {
+      const propertyBusinessId = property.business?._id || property.business;
+      if (String(propertyBusinessId) !== String(userBusinessId)) {
         return res.status(403).json({
           success: false,
           message: "Not authorized to access this property",
@@ -891,10 +907,7 @@ export const getProperty = async (req, res, next) => {
       data: property,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
@@ -1065,6 +1078,29 @@ export const updateProperty = async (req, res, next) => {
 
     if (req.body.letManage !== undefined) {
       req.body.letManage = normalizePropertyServiceMode(req.body.letManage);
+    }
+
+    // When a property is in (or is being switched to) Letting mode, enforce that
+    // tenantsPaysTo and depositHeldBy default to "landlord" — unless the caller
+    // has explicitly provided a different value in this same update payload.
+    const effectiveLetManage = req.body.letManage !== undefined
+      ? req.body.letManage
+      : property.letManage;
+
+    if (isLettingMode(effectiveLetManage)) {
+      if (req.body.tenantsPaysTo === undefined) {
+        req.body.tenantsPaysTo = "landlord";
+      }
+      if (req.body.depositHeldBy === undefined) {
+        req.body.depositHeldBy = "landlord";
+      }
+    }
+
+    if (req.body.lettingFeeMode !== undefined) {
+      req.body.lettingFeeMode = req.body.lettingFeeMode === "fixed" ? "fixed" : "percentage";
+    }
+    if (req.body.lettingFeeValue !== undefined) {
+      req.body.lettingFeeValue = Math.max(0, parseFloat(req.body.lettingFeeValue) || 0);
     }
 
     if (Array.isArray(req.body.standingCharges)) {

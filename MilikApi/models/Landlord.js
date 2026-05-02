@@ -73,7 +73,8 @@ const LandlordSchema = new mongoose.Schema(
 
     email: {
       type: String,
-      required: true,
+      required: false,
+      default: "",
       lowercase: true,
       trim: true,
     },

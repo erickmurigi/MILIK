@@ -74,9 +74,7 @@ const PropertyCommissionSettings = () => {
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const propertyState = useSelector((state) => state.property || {});
-  const properties = Array.isArray(propertyState?.properties?.data)
-    ? propertyState.properties.data
-    : Array.isArray(propertyState?.properties)
+  const properties = Array.isArray(propertyState?.properties)
     ? propertyState.properties
     : [];
 
@@ -323,6 +321,22 @@ const PropertyCommissionSettings = () => {
                 <div className="text-xl font-bold">{selectedProperty.propertyName}</div>
                 <div className="mt-1 text-sm text-emerald-50">Property Code: {selectedProperty.propertyCode}</div>
               </div>
+
+              {String(selectedProperty.letManage || "").toLowerCase() === "letting" && (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <FaInfoCircle className="mt-0.5 flex-shrink-0 text-amber-600" />
+                    <div>
+                      <p className="text-sm font-bold text-amber-900">Letting Mode Property</p>
+                      <p className="mt-1 text-xs text-amber-800">
+                        This property is set to <strong>Letting</strong> mode. Tenant payments go directly to the landlord and the landlord holds the deposit.
+                        Commission processing and landlord disbursement statements are not available for Letting properties.
+                        Any commission settings saved here will be stored but will not be applied to processed statements.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <div className={`${CARD} p-5`}>

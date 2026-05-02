@@ -60,12 +60,13 @@ const buildRecurringInvoiceDescription = ({ year, month, label }) => {
 };
 
 const buildUtilityInvoiceMetadata = (utilityLabel = "") => {
-  const normalizedLabel = String(utilityLabel || "").trim();
-  if (!normalizedLabel) return undefined;
+  // Always return metadata — use "Utility" as the minimum fallback so every
+  // utility invoice has utilityType stored for description derivation.
+  const resolvedLabel = String(utilityLabel || "").trim() || "Utility";
   return {
-    utilityType: normalizedLabel,
-    meterUtilityType: normalizedLabel,
-    statementUtilityType: normalizedLabel,
+    utilityType: resolvedLabel,
+    meterUtilityType: resolvedLabel,
+    statementUtilityType: resolvedLabel,
   };
 };
 
@@ -824,27 +825,50 @@ const TenantStatement = () => {
             });
           }
         } else {
-          const combinedAmount = Number(period.rent || 0) + Number(period.utility || 0);
-          if (combinedAmount > 0) {
+          // "separate" mode (and any legacy "combined" call coerced here):
+          // always create rent and utility as separate invoices.
+          if (Number(period.rent || 0) > 0) {
             await createTenantInvoice({
               ...invoiceContext,
               tenant: tenantId,
               category: "RENT_CHARGE",
-              amount: combinedAmount,
-              description:
-                Number(period.utility || 0) > 0
-                  ? buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: `Rent + ${Array.isArray(period.utilityNames) && period.utilityNames.length > 0 ? period.utilityNames.join(", ") : "Utilities"}` })
-                  : buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: "Rent" }),
+              amount: Number(period.rent || 0),
+              description: buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: "Rent" }),
               invoiceDate: periodDate,
               dueDate,
               metadata: {
-                ...(buildCombinedInvoiceMetadata({
-                  utilityAmount: Number(period.utility || 0),
-                  utilityLabel: Array.isArray(period.utilityNames) && period.utilityNames.length > 0
-                    ? period.utilityNames.join(", ")
-                    : "Utility",
-                  periodLabel: period.description,
-                }) || {}),
+                periodKey: period.periodKey,
+                billingPeriodKey: period.billingPeriodKey,
+                billingPeriodLabel: period.billingPeriodLabel,
+                periodFromDate: period.fromRaw,
+                periodToDate: period.toRaw,
+                sourceTransactionType: "billing_schedule",
+              },
+              ...taxPayload,
+            });
+          }
+
+          if (Number(period.utility || 0) > 0) {
+            const utilityLabel =
+              Array.isArray(period.utilityNames) && period.utilityNames.length === 1
+                ? period.utilityNames[0]
+                : Array.isArray(period.utilityNames) && period.utilityNames.length > 1
+                ? period.utilityNames.join(", ")
+                : "Utility";
+            await createTenantInvoice({
+              ...invoiceContext,
+              tenant: tenantId,
+              category: "UTILITY_CHARGE",
+              amount: Number(period.utility || 0),
+              description: buildUtilityInvoiceDescription({
+                year: period.periodYear,
+                month: period.periodMonth,
+                label: utilityLabel,
+              }),
+              invoiceDate: periodDate,
+              dueDate,
+              metadata: {
+                ...buildUtilityInvoiceMetadata(utilityLabel),
                 periodKey: period.periodKey,
                 billingPeriodKey: period.billingPeriodKey,
                 billingPeriodLabel: period.billingPeriodLabel,

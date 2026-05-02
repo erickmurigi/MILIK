@@ -37,6 +37,28 @@ const normalizeString = (value) => (typeof value === "string" ? value.trim() : v
 const normalizeEmail = (value) =>
   typeof value === "string" ? value.trim().toLowerCase() : value;
 
+// Returns true if a value is a placeholder that should be treated as absent.
+// Covers "-", "--", "n/a", "none", empty string, null, undefined.
+const isPlaceholder = (value) => {
+  if (value === null || value === undefined) return true;
+  const s = String(value).trim().toLowerCase();
+  return s === "" || s === "-" || s === "--" || s === "n/a" || s === "na" || s === "none";
+};
+
+// Normalise an import field: if the trimmed value is a placeholder, return null.
+// For email, also lowercase.
+const normalizeImportField = (value) => {
+  const trimmed = typeof value === "string" ? value.trim() : value;
+  if (isPlaceholder(trimmed)) return null;
+  return trimmed;
+};
+
+const normalizeImportEmail = (value) => {
+  const trimmed = typeof value === "string" ? value.trim().toLowerCase() : value;
+  if (isPlaceholder(trimmed)) return null;
+  return trimmed;
+};
+
 const authorizeLandlordAccess = (req, landlord) => {
   if (!landlord) {
     return { allowed: false, status: 404, message: "Landlord not found" };
@@ -138,10 +160,10 @@ export const createLandlord = async (req, res, next) => {
     const statusValue = normalizeString(req.body.status) || "Active";
     const portalAccessValue = normalizeString(req.body.portalAccess) || "Disabled";
 
-    if (!landlordNameValue || !regIdValue || !taxPinValue || !emailValue || !phoneNumberValue) {
+    if (!landlordNameValue || !regIdValue || !taxPinValue || !phoneNumberValue) {
       return res.status(400).json({
         success: false,
-        message: "Landlord name, Reg/ID, Tax PIN, Email, and Phone Number are required",
+        message: "Landlord name, Reg/ID, Tax PIN, and Phone Number are required",
       });
     }
 
@@ -159,6 +181,7 @@ export const createLandlord = async (req, res, next) => {
       ],
     };
 
+    // Only include email in duplicate check when a real email is provided
     if (emailValue) {
       duplicateQuery.$or.push({ email: emailValue });
     }
@@ -699,31 +722,42 @@ export const bulkImportLandlords = async (req, res, next) => {
       fallbackErrorMessage: "No valid company user could be resolved for landlord import.",
     });
 
-    const normalizedLandlords = landlords.map((item) => ({
-      landlordName: normalizeString(item.landlordName),
-      landlordType: normalizeString(item.landlordType) || "Individual",
-      regId: normalizeString(item.regId),
-      idNumber: normalizeString(item.idNumber) || normalizeString(item.regId),
-      taxPin: normalizeString(item.taxPin),
-      email: normalizeEmail(item.email),
-      phoneNumber: normalizeString(item.phoneNumber),
-      postalAddress: normalizeString(item.postalAddress) || "",
-      location: normalizeString(item.location) || "",
-      status: normalizeString(item.status) || "Active",
-      portalAccess: normalizeString(item.portalAccess) || "Disabled",
-    }));
+    // Normalise each row. Placeholder values ("-", "n/a", etc.) are converted to
+    // null so that they bypass required-field and duplicate checks below.
+    const normalizedLandlords = landlords.map((item) => {
+      const regIdRaw = normalizeImportField(item.regId);
+      const idNumberRaw = normalizeImportField(item.idNumber) ?? regIdRaw;
+      return {
+        landlordName: normalizeImportField(item.landlordName),
+        landlordType: normalizeImportField(item.landlordType) || "Individual",
+        regId: regIdRaw,
+        idNumber: idNumberRaw,
+        taxPin: normalizeImportField(item.taxPin),
+        email: normalizeImportEmail(item.email),
+        phoneNumber: normalizeImportField(item.phoneNumber),
+        postalAddress: normalizeImportField(item.postalAddress) || "",
+        location: normalizeImportField(item.location) || "",
+        status: normalizeImportField(item.status) || "Active",
+        portalAccess: normalizeImportField(item.portalAccess) || "Disabled",
+      };
+    });
 
+    // Only query the DB for real (non-placeholder) values to detect duplicates.
     const emails = normalizedLandlords.map((l) => l.email).filter(Boolean);
     const regIds = normalizedLandlords.map((l) => l.regId).filter(Boolean);
     const idNumbers = normalizedLandlords.map((l) => l.idNumber).filter(Boolean);
 
     const existingLandlords = await Landlord.find({
       company: companyId,
-      $or: [
-        ...(emails.length ? [{ email: { $in: emails } }] : []),
-        ...(regIds.length ? [{ regId: { $in: regIds } }] : []),
-        ...(idNumbers.length ? [{ idNumber: { $in: idNumbers } }] : []),
-      ],
+      ...(emails.length || regIds.length || idNumbers.length
+        ? {
+            $or: [
+              ...(emails.length ? [{ email: { $in: emails } }] : []),
+              ...(regIds.length ? [{ regId: { $in: regIds } }] : []),
+              ...(idNumbers.length ? [{ idNumber: { $in: idNumbers } }] : []),
+            ],
+          }
+        : { _id: null }), // No real values to check — skip DB query result
     }).select("email regId idNumber landlordCode");
 
     const existingEmails = new Set(existingLandlords.map((l) => l.email).filter(Boolean));
@@ -740,21 +774,20 @@ export const bulkImportLandlords = async (req, res, next) => {
       results.totalProcessed++;
 
       try {
-        if (
-          !landlordData.landlordName ||
-          !landlordData.regId ||
-          !landlordData.taxPin ||
-          !landlordData.email ||
-          !landlordData.phoneNumber
-        ) {
+        // Only landlordName is absolutely required for the record to be meaningful.
+        // regId, taxPin, email, phoneNumber are required UNLESS they are placeholders,
+        // in which case they are treated as intentionally absent and will be saved as
+        // empty strings (the model allows this after the placeholder normalisation above).
+        if (!landlordData.landlordName) {
           results.failed.push({
-            landlord: landlordData.landlordName || "",
-            error: "Landlord name, Reg/ID, Tax PIN, Email, and Phone Number are required",
+            landlord: "",
+            error: "Landlord name is required",
           });
           continue;
         }
 
-        if (existingEmails.has(landlordData.email)) {
+        // Duplicate check: only run for real (non-null) values.
+        if (landlordData.email && existingEmails.has(landlordData.email)) {
           results.failed.push({
             landlord: landlordData.landlordName,
             error: `Email ${landlordData.email} already exists`,
@@ -763,12 +796,12 @@ export const bulkImportLandlords = async (req, res, next) => {
         }
 
         if (
-          existingRegIds.has(landlordData.regId) ||
-          existingIdNumbers.has(landlordData.idNumber)
+          (landlordData.regId && existingRegIds.has(landlordData.regId)) ||
+          (landlordData.idNumber && existingIdNumbers.has(landlordData.idNumber))
         ) {
           results.failed.push({
             landlord: landlordData.landlordName,
-            error: `Reg/ID Number ${landlordData.regId} already exists`,
+            error: `Reg/ID Number ${landlordData.regId || landlordData.idNumber} already exists`,
           });
           continue;
         }
@@ -779,11 +812,13 @@ export const bulkImportLandlords = async (req, res, next) => {
           landlordCode,
           landlordName: landlordData.landlordName,
           landlordType: landlordData.landlordType,
-          regId: landlordData.regId,
-          idNumber: landlordData.idNumber,
-          taxPin: landlordData.taxPin,
-          email: landlordData.email,
-          phoneNumber: landlordData.phoneNumber,
+          // Store empty string for placeholder fields so Mongoose required validators
+          // pass (the Landlord model should allow "" for these fields in import context).
+          regId: landlordData.regId || "",
+          idNumber: landlordData.idNumber || "",
+          taxPin: landlordData.taxPin || "",
+          email: landlordData.email || "",
+          phoneNumber: landlordData.phoneNumber || "",
           postalAddress: landlordData.postalAddress,
           location: landlordData.location,
           status: landlordData.status,
@@ -794,9 +829,11 @@ export const bulkImportLandlords = async (req, res, next) => {
 
         await newLandlord.save();
 
-        existingEmails.add(landlordData.email);
-        existingRegIds.add(landlordData.regId);
-        existingIdNumbers.add(landlordData.idNumber);
+        // Only register real values in the seen-sets so subsequent rows with
+        // the same placeholder do not incorrectly trigger a duplicate error.
+        if (landlordData.email) existingEmails.add(landlordData.email);
+        if (landlordData.regId) existingRegIds.add(landlordData.regId);
+        if (landlordData.idNumber) existingIdNumbers.add(landlordData.idNumber);
 
         results.successful.push({
           landlord: landlordData.landlordName,
@@ -810,8 +847,11 @@ export const bulkImportLandlords = async (req, res, next) => {
       }
     }
 
+    // Fix 2: Accurately reflect overall success/failure in the response.
+    // success=false when ALL rows failed; success=true otherwise (including partial).
+    const allFailed = results.successful.length === 0 && results.failed.length > 0;
     res.status(200).json({
-      success: true,
+      success: !allFailed,
       message: `Import completed: ${results.successful.length} successful, ${results.failed.length} failed`,
       data: results,
     });

@@ -1,15 +1,12 @@
 // redux/propertySlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import axios from "axios";
-
-const API_URL = String(import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
+import { adminRequests } from "../utils/requestMethods";
 
 // Async thunks using createAsyncThunk
 export const getProperties = createAsyncThunk(
   'property/getProperties',
   async (params = {}, { getState, rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('milik_token') || localStorage.getItem('token');
       const state = getState();
 
       // For non-paginated property lookups across pages, request a high limit
@@ -33,13 +30,8 @@ export const getProperties = createAsyncThunk(
         queryParams.set('business', resolvedBusinessId);
       }
 
-      const response = await axios.get(
-        `${API_URL}/properties${queryParams.toString() ? `?${queryParams.toString()}` : ''}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
+      const response = await adminRequests.get(
+        `/properties${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
       );
       return response.data;
     } catch (error) {
@@ -52,7 +44,6 @@ export const createProperty = createAsyncThunk(
   'property/createProperty',
   async (propertyData, { getState, rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('milik_token') || localStorage.getItem('token');
       const state = getState();
 
       const resolvedBusinessId = propertyData.business || state.company?.currentCompany?._id;
@@ -60,39 +51,21 @@ export const createProperty = createAsyncThunk(
         return rejectWithValue('Please select a company before creating a property.');
       }
 
-      // Add business and user info to property data
       const dataWithContext = {
         ...propertyData,
         business: resolvedBusinessId,
         createdBy: state.auth?.currentUser?._id,
         updatedBy: state.auth?.currentUser?._id
       };
-      
-      console.log('Creating property with data:', dataWithContext);
-      
-      const response = await axios.post(
-        `${API_URL}/properties`,
-        dataWithContext,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+
+      const response = await adminRequests.post('/properties', dataWithContext);
       return response.data;
     } catch (error) {
-      console.error('Property creation error:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message
-      });
-      
       let errorMessage = 'Failed to create property';
       const validationErrors = Array.isArray(error.response?.data?.errors)
         ? error.response.data.errors
         : [];
-      
+
       if (validationErrors.length > 0) {
         errorMessage = validationErrors
           .map((item) => item?.message)
@@ -103,11 +76,11 @@ export const createProperty = createAsyncThunk(
       } else if (error.response?.data?.error) {
         errorMessage = error.response.data.error;
       } else if (error.response?.status === 500) {
-        errorMessage = 'Server error. Please check the console for details.';
+        errorMessage = 'Server error. Please try again.';
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       return rejectWithValue(errorMessage);
     }
   }
@@ -117,9 +90,8 @@ export const updateProperty = createAsyncThunk(
   'property/updateProperty',
   async ({ id, propertyData }, { getState, rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('milik_token') || localStorage.getItem('token');
       const state = getState();
-      
+
       const currentUserId = state.auth?.currentUser?._id || state.auth?.currentUser?.id;
       const isValidObjectId = (value) => typeof value === 'string' && /^[a-f\d]{24}$/i.test(value);
 
@@ -130,17 +102,8 @@ export const updateProperty = createAsyncThunk(
         ...propertyData,
         ...(isValidObjectId(currentUserId) ? { updatedBy: currentUserId } : {})
       };
-      
-      const response = await axios.put(
-        `${API_URL}/properties/${id}`,
-        dataWithContext,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+
+      const response = await adminRequests.put(`/properties/${id}`, dataWithContext);
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to update property');
@@ -152,15 +115,7 @@ export const deleteProperty = createAsyncThunk(
   'property/deleteProperty',
   async (id, { rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('milik_token') || localStorage.getItem('token');
-      const response = await axios.delete(
-        `${API_URL}/properties/${id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
+      const response = await adminRequests.delete(`/properties/${id}`);
       return {
         id,
         message: response.data?.message || 'Property deletion request completed',
@@ -177,22 +132,12 @@ export const archiveProperty = createAsyncThunk(
   'property/archiveProperty',
   async (id, { getState, rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('milik_token') || localStorage.getItem('token');
       const state = getState();
-      
-      const response = await axios.put(
-        `${API_URL}/properties/${id}`,
-        {
-          status: 'archived',
-          updatedBy: state.auth?.currentUser?._id
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+
+      const response = await adminRequests.put(`/properties/${id}`, {
+        status: 'archived',
+        updatedBy: state.auth?.currentUser?._id
+      });
       return { id, message: response.data.message };
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to archive property');
@@ -204,22 +149,12 @@ export const restoreProperty = createAsyncThunk(
   'property/restoreProperty',
   async (id, { getState, rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('milik_token') || localStorage.getItem('token');
       const state = getState();
-      
-      const response = await axios.put(
-        `${API_URL}/properties/${id}`,
-        {
-          status: 'active',
-          updatedBy: state.auth?.currentUser?._id
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+
+      const response = await adminRequests.put(`/properties/${id}`, {
+        status: 'active',
+        updatedBy: state.auth?.currentUser?._id
+      });
       return { id, message: response.data.message };
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to restore property');
@@ -231,15 +166,7 @@ export const getPropertyById = createAsyncThunk(
   'property/getPropertyById',
   async (id, { rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('milik_token') || localStorage.getItem('token');
-      const response = await axios.get(
-        `${API_URL}/properties/${id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
+      const response = await adminRequests.get(`/properties/${id}`);
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch property');
@@ -300,7 +227,7 @@ const propertySlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // Create Property
       .addCase(createProperty.pending, (state) => {
         state.loading = true;
@@ -321,7 +248,7 @@ const propertySlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // Get Property by ID
       .addCase(getPropertyById.pending, (state) => {
         state.loading = true;
@@ -335,7 +262,7 @@ const propertySlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // Update Property
       .addCase(updateProperty.pending, (state) => {
         state.loading = true;
@@ -351,7 +278,7 @@ const propertySlice = createSlice({
         if (index !== -1) {
           state.properties[index] = action.payload.data;
         }
-        if (state.currentProperty && 
+        if (state.currentProperty &&
             state.currentProperty._id === action.payload.data._id) {
           state.currentProperty = action.payload.data;
         }
@@ -360,7 +287,7 @@ const propertySlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // Delete Property
       .addCase(deleteProperty.pending, (state) => {
         state.loading = true;
@@ -407,7 +334,7 @@ const propertySlice = createSlice({
       })
       .addCase(archiveProperty.fulfilled, (state, action) => {
         state.loading = false;
-        state.properties = state.properties.map(p => 
+        state.properties = state.properties.map(p =>
           p._id === action.payload.id ? { ...p, status: 'archived' } : p
         );
         state.success = true;
@@ -423,7 +350,7 @@ const propertySlice = createSlice({
       })
       .addCase(restoreProperty.fulfilled, (state, action) => {
         state.loading = false;
-        state.properties = state.properties.map(p => 
+        state.properties = state.properties.map(p =>
           p._id === action.payload.id ? { ...p, status: 'active' } : p
         );
         state.success = true;

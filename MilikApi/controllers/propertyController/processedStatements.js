@@ -703,6 +703,17 @@ export const closeStatement = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
+    // Block processed statement creation for Letting-mode properties.
+    // In Letting mode the landlord manages finances directly; no landlord
+    // statement/disbursement flow applies.
+    const propertyForModeCheck = await Property.findById(property).select("letManage propertyName").lean();
+    if (propertyForModeCheck && String(propertyForModeCheck.letManage || "").trim().toLowerCase() === "letting") {
+      return res.status(400).json({
+        success: false,
+        message: `Processed statements are not available for Letting-mode properties (${propertyForModeCheck.propertyName || property}). Switch the property to Managing mode to generate landlord disbursements.`,
+      });
+    }
+
     const start = startOfDay(periodStart);
     const end = endOfDay(periodEnd);
     if (!start || !end) {

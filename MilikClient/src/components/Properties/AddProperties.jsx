@@ -231,6 +231,8 @@ const AddProperty = () => {
     () => ({
       dateAcquired: "",
       letManage: normalizePropertyServiceMode("Managing"),
+      lettingFeeMode: "percentage",
+      lettingFeeValue: 100,
       landlords: [{ landlordId: "", name: "", contact: "", isPrimary: true }],
       propertyCode: "",
       propertyName: "",
@@ -384,10 +386,24 @@ const AddProperty = () => {
       return;
     }
 
-    setFormData((prev) => ({
-      ...prev,
-      [name]: normalizedValue,
-    }));
+    setFormData((prev) => {
+      const next = { ...prev, [name]: normalizedValue };
+      // When switching to Letting mode, default tenantsPaysTo and depositHeldBy
+      // to "landlord" so the form reflects the correct business logic immediately.
+      // When switching back to Managing, reset them to "propertyManager".
+      if (name === "letManage") {
+        if (String(normalizedValue).toLowerCase() === "letting") {
+          next.tenantsPaysTo = "landlord";
+          next.depositHeldBy = "landlord";
+        } else {
+          next.tenantsPaysTo = "propertyManager";
+          next.depositHeldBy = "propertyManager";
+          next.lettingFeeMode = "percentage";
+          next.lettingFeeValue = 100;
+        }
+      }
+      return next;
+    });
   };
 
   const addStandingCharge = () => {
@@ -750,7 +766,50 @@ const AddProperty = () => {
               getLabel={(x) => x}
               getValue={(x) => x}
             />
+            {formData.letManage === "Letting" && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <span className="font-bold">Letting mode:</span> Tenant payments go directly to the landlord. Deposit is held by the landlord. Landlord disbursement statements and commission processing are not available for letting properties.
+              </div>
+            )}
           </div>
+
+          {formData.letManage === "Letting" && (
+            <div className="md:col-span-1 lg:col-span-1">
+              <label className={labelClass}>Letting Fee Mode</label>
+              <select
+                name="lettingFeeMode"
+                value={formData.lettingFeeMode}
+                onChange={handleChange}
+                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+              >
+                <option value="percentage">Percentage of rent</option>
+                <option value="fixed">Fixed amount</option>
+              </select>
+            </div>
+          )}
+
+          {formData.letManage === "Letting" && (
+            <div className="md:col-span-1 lg:col-span-1">
+              <label className={labelClass}>
+                Letting Fee {formData.lettingFeeMode === "percentage" ? "(%)" : "(Fixed)"}
+              </label>
+              <input
+                type="number"
+                name="lettingFeeValue"
+                value={formData.lettingFeeValue}
+                onChange={handleChange}
+                min="0"
+                step={formData.lettingFeeMode === "percentage" ? "0.5" : "1"}
+                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                placeholder={formData.lettingFeeMode === "percentage" ? "e.g. 100 = 1 month" : "e.g. 5000"}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                {formData.lettingFeeMode === "percentage"
+                  ? `${formData.lettingFeeValue || 0}% of the tenant's monthly rent`
+                  : `Fixed fee of ${Number(formData.lettingFeeValue || 0).toLocaleString()} charged per tenant placed`}
+              </p>
+            </div>
+          )}
 
           <div>
             <label className={labelClass}>Property Code <span className="text-red-600">*</span></label>

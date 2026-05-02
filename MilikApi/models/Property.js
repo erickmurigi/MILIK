@@ -339,6 +339,18 @@ const PropertySchema = new mongoose.Schema(
       default: "propertyManager",
     },
 
+    lettingFeeMode: {
+      type: String,
+      enum: ["percentage", "fixed"],
+      default: "percentage",
+    },
+
+    lettingFeeValue: {
+      type: Number,
+      default: 100,
+      min: 0,
+    },
+
     controlAccount: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ChartOfAccount",

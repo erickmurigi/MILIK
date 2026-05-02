@@ -317,10 +317,6 @@ const AddLandlord = () => {
       toast.error("Phone number is required");
       return;
     }
-    if (!formData.email?.trim()) {
-      toast.error("Email is required");
-      return;
-    }
 
     try {
       const payload = {
@@ -514,7 +510,7 @@ const AddLandlord = () => {
                       value={formData.email}
                       onChange={handleInputChange}
                       className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                      placeholder="Email address"
+                      placeholder="Email address (optional)"
                     />
                   </div>
 

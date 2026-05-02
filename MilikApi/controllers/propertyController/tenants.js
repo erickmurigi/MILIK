@@ -99,7 +99,7 @@ const ensureUnitsBelongToBusiness = async ({ businessId, unitIds = [] } = {}) =>
   const unitDocs = await Unit.find({
     _id: { $in: normalizedIds },
     business: businessId,
-  }).populate("property", "depositHeldBy landlords letManage");
+  }).populate("property", "depositHeldBy landlords letManage lettingFeeMode lettingFeeValue");
 
   if (unitDocs.length !== normalizedIds.length) {
     const error = new Error("One or more selected units were not found for the selected company");
@@ -706,6 +706,13 @@ export const createTenant = async (req, res, next) => {
 
     const unit = unitDocs.find((item) => String(item._id) === requestedUnits.primary) || null;
     const propertyServiceMode = normalizePropertyServiceMode(unit?.property?.letManage);
+    const isPropertyLetting = propertyServiceMode === "Letting";
+
+    // In Letting mode the landlord holds deposits; use "landlord" as the fallback
+    // when the caller has not explicitly specified a depositHeldBy value.
+    const effectivePropertyDepositHolder = isPropertyLetting
+      ? "landlord"
+      : (unit?.property?.depositHeldBy || "propertyManager");
 
     const normalizedName = normalizeString(req.body.name);
     const normalizedPhone = normalizeString(req.body.phone);
@@ -782,6 +789,16 @@ export const createTenant = async (req, res, next) => {
       }
     }
 
+    const assignedRent = calculateTenantAssignedRent(unitDocs, req.body.rent || unit.rent || 0);
+
+    const computedLettingFeeAmount = (() => {
+      if (!isPropertyLetting) return 0;
+      const feeMode = unit?.property?.lettingFeeMode || "percentage";
+      const feeValue = Math.max(0, parseFloat(unit?.property?.lettingFeeValue ?? 100) || 0);
+      if (feeMode === "fixed") return feeValue;
+      return Math.round((feeValue / 100) * assignedRent * 100) / 100;
+    })();
+
     const newTenant = new Tenant({
       ...req.body,
       name: normalizedName,
@@ -794,12 +811,13 @@ export const createTenant = async (req, res, next) => {
       business: businessId,
       unit: unit._id,
       additionalUnits: requestedUnits.additional,
-      rent: calculateTenantAssignedRent(unitDocs, req.body.rent || unit.rent || 0),
+      rent: assignedRent,
       depositAmount: defaultDepositAmount,
-      depositHeldBy: normalizeDepositHolder(req.body.depositHeldBy, unit.property?.depositHeldBy),
+      depositHeldBy: normalizeDepositHolder(req.body.depositHeldBy, effectivePropertyDepositHolder),
       status: normalizeTenantStatus(req.body.status || "active"),
       depositRefundStatus: defaultDepositAmount > 0 ? "pending" : "not_applicable",
       depositRefundAmount: defaultDepositAmount,
+      lettingFeeAmount: computedLettingFeeAmount,
       documents: sanitizeDocuments(req.body.documents),
       utilities: sanitizeUtilities(
         Array.isArray(req.body.utilities) && req.body.utilities.length > 0
@@ -1702,7 +1720,7 @@ export const bulkImportTenants = async (req, res, next) => {
       });
     }
 
-    const units = await Unit.find({ business: businessId }).populate("property");
+    const units = await Unit.find({ business: businessId }).lean().select("_id unitNumber property status isVacant").populate("property");
     const unitMap = new Map();
 
     units.forEach((unit) => {
@@ -1713,7 +1731,7 @@ export const bulkImportTenants = async (req, res, next) => {
       }
     });
 
-    const existingTenants = await Tenant.find({ business: businessId });
+    const existingTenants = await Tenant.find({ business: businessId }).lean().select("_id idNumber tenantCode");
     const existingIds = new Set(
       existingTenants.map((t) => String(t.idNumber || "").toLowerCase()).filter(Boolean)
     );

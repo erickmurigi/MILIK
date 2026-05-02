@@ -25,6 +25,9 @@ import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
 
 const TENANT_INVOICE_NOTE_SOURCE_TYPE = "invoice_note";
 
+const SINGLE_INVOICE_ACCOUNT_CACHE_TTL_MS = 5 * 60 * 1000;
+const singleInvoiceAccountCache = new Map();
+
 const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 const safeLower = (value = "") => String(value || "").trim().toLowerCase();
 const normalizeUtilityMatch = (value = "") =>
@@ -602,6 +605,50 @@ const reserveScopedSequenceNumber = async ({
   }
 
   throw new Error(`Could not reserve a unique ${field}. Please retry.`);
+};
+
+const preallocateInvoiceNumbers = async (businessId, items) => {
+  const businessObjectId = new mongoose.Types.ObjectId(String(businessId));
+  const regularIndices = [];
+  const depositIndices = [];
+
+  items.forEach((item, index) => {
+    if (String(item.invoiceNumber || "").trim()) return;
+    const cat = String(item.category || "").toUpperCase();
+    (cat === "DEPOSIT_CHARGE" ? depositIndices : regularIndices).push(index);
+  });
+
+  const result = items.map((item) => ({ ...item }));
+
+  const bumpCounter = async (key, count) => {
+    const counter = await SequenceCounter.findOneAndUpdate(
+      { business: businessObjectId, key },
+      { $setOnInsert: { business: businessObjectId, key }, $inc: { sequence: count } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean();
+    return Number(counter?.sequence || count);
+  };
+
+  await Promise.all([
+    regularIndices.length > 0
+      ? bumpCounter("tenant_invoice_number", regularIndices.length).then((endSeq) => {
+          const startSeq = endSeq - regularIndices.length + 1;
+          regularIndices.forEach((itemIndex, i) => {
+            result[itemIndex] = { ...result[itemIndex], invoiceNumber: `INV${String(startSeq + i).padStart(5, "0")}` };
+          });
+        })
+      : Promise.resolve(),
+    depositIndices.length > 0
+      ? bumpCounter("tenant_deposit_invoice_number", depositIndices.length).then((endSeq) => {
+          const startSeq = endSeq - depositIndices.length + 1;
+          depositIndices.forEach((itemIndex, i) => {
+            result[itemIndex] = { ...result[itemIndex], invoiceNumber: `DINV${String(startSeq + i).padStart(5, "0")}` };
+          });
+        })
+      : Promise.resolve(),
+  ]);
+
+  return result;
 };
 
 const resolveInvoiceNumber = async (businessId, providedInvoiceNumber, category = null) => {
@@ -1643,8 +1690,8 @@ const recomputeTenantFinancialState = async ({ businessId, tenantId }) => {
   };
 };
 
-const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount }) => {
-  const receivableAccount = await resolveTenantReceivableAccount(invoice.business);
+const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivableAccount: preResolvedReceivableAccount = null }) => {
+  const receivableAccount = preResolvedReceivableAccount || await resolveTenantReceivableAccount(invoice.business);
   const amount = Math.abs(Number(invoice.amount || 0));
   const taxSnapshot = invoice?.taxSnapshot || {};
   const outputTaxAmount = Math.abs(Number(taxSnapshot.taxAmount || 0));
@@ -3219,16 +3266,31 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
       String(requestedChartAccountValue || "auto").trim().toLowerCase(),
     ].join(":");
 
-    postingAccount = await getOrLoadCachedValue(
-      batchContext?.postingAccountCache,
-      postingAccountCacheKey,
-      () =>
-        resolveInvoiceIncomeAccount({
-          businessId: businessId,
+    if (!batchContext && normalizedCategory !== "DEPOSIT_CHARGE") {
+      const cached = singleInvoiceAccountCache.get(postingAccountCacheKey);
+      if (cached?.account?._id && Date.now() - cached.cachedAt < SINGLE_INVOICE_ACCOUNT_CACHE_TTL_MS) {
+        postingAccount = cached.account;
+      } else {
+        singleInvoiceAccountCache.delete(postingAccountCacheKey);
+        postingAccount = await resolveInvoiceIncomeAccount({
+          businessId,
           category: normalizedCategory,
           chartAccountValue: requestedChartAccountValue,
-        })
-    );
+        });
+        singleInvoiceAccountCache.set(postingAccountCacheKey, { account: postingAccount, cachedAt: Date.now() });
+      }
+    } else {
+      postingAccount = await getOrLoadCachedValue(
+        batchContext?.postingAccountCache,
+        postingAccountCacheKey,
+        () =>
+          resolveInvoiceIncomeAccount({
+            businessId: businessId,
+            category: normalizedCategory,
+            chartAccountValue: requestedChartAccountValue,
+          })
+      );
+    }
   } catch (accountError) {
     accountError.statusCode = accountError.statusCode || 400;
     throw accountError;
@@ -3239,6 +3301,13 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     String(businessId),
     () => getCompanyTaxConfiguration(businessId)
   );
+
+  const cachedReceivableAccount = await getOrLoadCachedValue(
+    batchContext?.receivableAccountCache,
+    String(businessId),
+    () => resolveTenantReceivableAccount(businessId)
+  );
+
   const taxSnapshot = buildInvoiceTaxSnapshot({
     amount: Math.abs(Number(amount)),
     category: normalizedCategory,
@@ -3360,6 +3429,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
       invoice,
       createdBy: actorUserId,
       incomeAccount: postingAccount,
+      receivableAccount: cachedReceivableAccount || null,
     });
 
     invoice.journalGroupId = posting.journalGroupId;
@@ -3655,7 +3725,7 @@ export const updateTakeOnBalance = async (req, res) => {
 
 export const createTenantInvoice = async (req, res) => {
   try {
-    const invoice = await createTenantInvoiceRecord({
+    const result = await createTenantInvoiceRecord({
       req,
       payload: {
         business: resolveAuthorizedBusinessId(req, req.body.business),
@@ -3678,7 +3748,23 @@ export const createTenantInvoice = async (req, res) => {
         accountCode: req.body.accountCode,
         account: req.body.account,
       },
+      options: { deferPostProcessing: true },
     });
+
+    let invoice;
+    if (result?.tenantId) {
+      const { invoice: deferredInvoice, touchedAccountIds, tenantId, businessId } = result;
+      if (touchedAccountIds.length > 0) {
+        await aggregateChartOfAccountBalances(businessId, touchedAccountIds);
+      }
+      await recomputeTenantFinancialState({ businessId, tenantId });
+      invoice = await TenantInvoice.findById(deferredInvoice._id)
+        .populate("chartAccount", "code name type")
+        .populate("ledgerEntries")
+        .populate("createdBy", "surname otherNames email profile");
+    } else {
+      invoice = result;
+    }
 
     return res.status(201).json(invoice);
   } catch (error) {
@@ -3761,12 +3847,43 @@ export const createTenantInvoicesBatch = async (req, res) => {
       postingAccountCache: new Map(),
       monthlyInvoiceCache: new Map(),
       companyTaxConfigCache: new Map(),
+      receivableAccountCache: new Map(),
     };
+
+    // Pre-allocate all invoice numbers in one counter bump instead of N individual bumps
+    const numberedItems = await preallocateInvoiceNumbers(businessId, items);
+
+    // Pre-fetch all unique entity docs in 3 bulk queries and warm the caches
+    const uniquePropertyIds = [...new Set(numberedItems.map((item) => String(item.property || "")).filter(Boolean))];
+    const uniqueUnitIds = [...new Set(numberedItems.map((item) => String(item.unit || "")).filter(Boolean))];
+    const uniqueTenantIds = [...new Set(numberedItems.map((item) => String(item.tenant || "")).filter(Boolean))];
+
+    const [propertyDocs, unitDocs, tenantDocs] = await Promise.all([
+      Property.find({ _id: { $in: uniquePropertyIds }, business: businessId })
+        .select("_id business landlords depositHeldBy")
+        .lean(),
+      Unit.find({ _id: { $in: uniqueUnitIds }, business: businessId })
+        .select("_id business property")
+        .lean(),
+      Tenant.find({ _id: { $in: uniqueTenantIds }, business: businessId })
+        .select("_id business unit additionalUnits depositHeldBy")
+        .lean(),
+    ]);
+
+    propertyDocs.forEach((doc) => {
+      batchContext.propertyDocCache.set([String(businessId), String(doc._id)].join(":"), Promise.resolve(doc));
+    });
+    unitDocs.forEach((doc) => {
+      batchContext.unitDocCache.set([String(businessId), String(doc._id)].join(":"), Promise.resolve(doc));
+    });
+    tenantDocs.forEach((doc) => {
+      batchContext.tenantDocCache.set([String(businessId), String(doc._id)].join(":"), Promise.resolve(doc));
+    });
 
     const touchedTenantIds = new Set();
     const touchedAccountIds = new Set();
-    const results = new Array(items.length);
-    const indexedItems = items.map((item, index) => ({ item, index }));
+    const results = new Array(numberedItems.length);
+    const indexedItems = numberedItems.map((item, index) => ({ item, index }));
     const groupsByTenant = new Map();
 
     indexedItems.forEach(({ item, index }) => {
@@ -3838,7 +3955,7 @@ export const createTenantInvoicesBatch = async (req, res) => {
           }
         }
       },
-      8
+      20
     );
 
     await Promise.all([

@@ -13,6 +13,7 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
+  const [importFailures, setImportFailures] = useState([]);
 
   if (!isOpen) return null;
 
@@ -61,21 +62,33 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
       const result = await onImport(parseResult.valid);
       console.log('Import completed:', result);
       
-      // Show detailed success message
+      // Show detailed success/failure message based on actual backend result
       if (result?.data) {
         const { successful = [], failed = [] } = result.data;
         if (successful.length > 0 && failed.length === 0) {
-          toast.success(`Successfully imported ${successful.length} landlords!`);
+          // All succeeded
+          toast.success(`Successfully imported ${successful.length} landlord${successful.length !== 1 ? 's' : ''}!`);
+          handleClose();
         } else if (successful.length > 0 && failed.length > 0) {
-          toast.warning(`Imported ${successful.length} landlords. ${failed.length} failed.`);
+          // Partial success — keep modal open so user can see failures
+          toast.warning(`Imported ${successful.length} landlord${successful.length !== 1 ? 's' : ''} successfully. ${failed.length} row${failed.length !== 1 ? 's' : ''} failed — see details below.`);
+          setImportFailures(failed);
+          setIsImporting(false);
         } else {
-          toast.error(`Import failed for all ${failed.length} records.`);
+          // All failed — keep modal open, do NOT close
+          toast.error(`Import failed: all ${failed.length} row${failed.length !== 1 ? 's' : ''} could not be saved. See errors below.`);
+          setImportFailures(failed);
+          setIsImporting(false);
         }
+      } else if (result?.success === false) {
+        // Backend-level failure
+        toast.error(result?.message || 'Import failed. Please check your file and try again.');
+        setIsImporting(false);
       } else {
-        toast.success(`Successfully imported ${parseResult.validCount} landlords!`);
+        // Fallback: treat as success if backend returned no data breakdown
+        toast.success(`Successfully imported ${parseResult.validCount} landlord${parseResult.validCount !== 1 ? 's' : ''}!`);
+        handleClose();
       }
-      
-      handleClose();
     } catch (error) {
       console.error('Import error in modal:', error);
       toast.error(error.message || 'Failed to import landlords. Please check console for details.');
@@ -89,6 +102,7 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
     setShowErrors(false);
     setIsUploading(false);
     setIsImporting(false);
+    setImportFailures([]);
     onClose();
   };
 
@@ -247,6 +261,36 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
                   </p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Import backend failures (shown after a failed/partial import attempt) */}
+          {importFailures.length > 0 && (
+            <div className="mt-4 bg-red-50 rounded-lg p-4 border border-red-200">
+              <div className="flex items-center gap-2 mb-3">
+                <FaExclamationTriangle className="text-red-600" />
+                <h3 className="text-sm font-bold text-red-900">
+                  Import Failures ({importFailures.length} row{importFailures.length !== 1 ? 's' : ''})
+                </h3>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {importFailures.map((failure, idx) => (
+                  <div key={idx} className="bg-white rounded p-3 border border-red-200">
+                    <div className="flex items-start gap-2">
+                      <FaExclamationTriangle className="text-red-500 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <div className="text-xs font-bold text-red-900 mb-0.5">
+                          {failure.landlord || 'Unknown record'}
+                        </div>
+                        <div className="text-xs text-red-700">{failure.error}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-red-600 mt-3">
+                Correct the issues above in your Excel file and re-import those specific rows.
+              </p>
             </div>
           )}
         </div>

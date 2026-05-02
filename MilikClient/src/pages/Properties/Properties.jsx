@@ -173,6 +173,8 @@ const Properties = () => {
 
   // Fetch properties when applied filters or page changes
   useEffect(() => {
+    if (!currentCompany?._id) return;
+
     const params = {
       page: currentPage,
       limit: itemsPerPage,
@@ -188,7 +190,7 @@ const Properties = () => {
     };
 
     dispatch(getProperties(params));
-  }, [dispatch, currentPage, itemsPerPage, appliedFilters]);
+  }, [dispatch, currentPage, itemsPerPage, appliedFilters, currentCompany]);
 
   // Show error toast
   useEffect(() => {
@@ -349,12 +351,10 @@ const Properties = () => {
     }
 
     try {
-      console.log('Calling bulk import with properties:', properties.length);
       const response = await adminRequests.post('/properties/bulk-import', {
         properties,
         business: currentCompany._id
       });
-      console.log('Import completed:', response.data);
 
       // Refresh properties list
       const params = {
@@ -374,7 +374,6 @@ const Properties = () => {
 
       return response;
     } catch (error) {
-      console.error('Bulk import error:', error);
       throw error;
     }
   };

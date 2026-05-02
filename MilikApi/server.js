@@ -35,6 +35,7 @@ import tenantInvoicesRoutes from "./routes/propertyRoutes/tenantInvoices.js";
 import paymentVoucherRoutes from "./routes/propertyRoutes/paymentVouchers.js";
 import http from "http";
 import cors from "cors";
+import compression from "compression";
 import companyRoutes from "./routes/companies.js";
 import trialRoutes from "./routes/trial.js";
 import companySettingsRoutes from "./routes/companySettings.js";
@@ -65,6 +66,14 @@ const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || "1mb";
 mongoose.set("strictQuery", true);
 app.disable("x-powered-by");
 app.set("trust proxy", resolveTrustProxySetting());
+app.set("etag", "strong");
+
+const cacheShortLived = (req, res, next) => {
+  if (req.method === "GET") {
+    res.set("Cache-Control", "private, no-cache");
+  }
+  next();
+};
 
 if (!process.env.MONGO_URL) {
   console.error("Missing MONGO_URL in environment variables.");
@@ -292,6 +301,7 @@ io.on("connection", (socket) => {
 
 setIO(io);
 
+app.use(compression());
 app.use(helmet());
 app.use(morgan(isProduction ? "combined" : "common"));
 
@@ -390,12 +400,12 @@ app.use("/api", tryAttachUserFromToken, enforceRequestedCompanyScope, enforceRou
 app.use("/api/chart-of-accounts", chartOfAccountsRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/printers", printerRoute);
-app.use("/api/landlords", landlordRoutes);
-app.use("/api/properties", propertyRoutes);
+app.use("/api/landlords", cacheShortLived, landlordRoutes);
+app.use("/api/properties", cacheShortLived, propertyRoutes);
 app.use("/api/utilities", utilityRoutes);
 app.use("/api/meter-readings", meterReadingRoutes);
 app.use("/api/late-penalties", latePenaltyRoutes);
-app.use("/api/units", unitRoutes);
+app.use("/api/units", cacheShortLived, unitRoutes);
 app.use("/api/tenants", tenantRoutes);
 app.use("/api/rent-payments", rentPaymentRoutes);
 app.use("/api/mpesa-collections", mpesaCollectionsRoutes);
@@ -418,12 +428,12 @@ app.use("/api/tenant-invoices", tenantInvoicesRoutes);
 app.use("/api/communications", communicationRoutes);
 app.use("/api/dashboard", DashboardRoutes);
 app.use("/api/companies", companyRoutes);
-app.use("/api/company-settings", companySettingsRoutes);
+app.use("/api/company-settings", cacheShortLived, companySettingsRoutes);
 app.use("/api/journals", journalEntriesRoutes);
 app.use("/api/financial-reports", financialReportsRoutes);
 
 app.use((err, req, res, next) => {
-  const errorStatus = err.status || 500;
+  const errorStatus = err.status || err.statusCode || 500;
   const errorMessage = err.message || "Something went wrong!";
   const clientMessage = errorStatus >= 500 && isProduction ? "Internal server error" : errorMessage;
 
@@ -450,7 +460,11 @@ async function connect() {
   for (const candidate of connectionCandidates) {
     try {
       await mongoose.connect(candidate.value, {
+        maxPoolSize: 20,
+        minPoolSize: 5,
+        socketTimeoutMS: 45000,
         serverSelectionTimeoutMS: 10000,
+        heartbeatFrequencyMS: 30000,
       });
 
       console.log(`Connected to MongoDB using ${candidate.label}`);

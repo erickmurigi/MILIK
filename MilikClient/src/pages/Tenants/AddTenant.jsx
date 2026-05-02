@@ -1262,31 +1262,18 @@ if (Number(rentItem?.amount || 0) > 0) {
   invoiceRequests.push({
     ...baseRequest,
     category: "RENT_CHARGE",
-    amount:
-      openingInvoiceMode === "combined"
-        ? Number(rentItem.amount || 0) + Number(utilityTotal || 0)
-        : Number(rentItem.amount || 0),
-    description:
-      openingInvoiceMode === "combined" && utilityTotal > 0
-        ? `Opening combined charge (rent + utilities) for ${pendingInvoiceContext.tenant.name || formData.name}`
-        : `Opening rent balance for ${pendingInvoiceContext.tenant.name || formData.name}`,
+    amount: Number(rentItem.amount || 0),
+    description: `Opening rent balance for ${pendingInvoiceContext.tenant.name || formData.name}`,
     metadata: buildTakeOnMetadata({
       type: "debit",
-      billItemKey: openingInvoiceMode === "combined" ? "rent_utility:combined" : "rent",
-      billItemLabel: openingInvoiceMode === "combined" ? "Combined Rent + Utilities" : "Rent",
+      billItemKey: "rent",
+      billItemLabel: "Rent",
       invoicePriorityCategory: "rent",
-      utilityBreakdown:
-        openingInvoiceMode === "combined"
-          ? utilityRows.map((item) => ({
-              label: item.label,
-              amount: Number(item.amount || 0),
-            }))
-          : undefined,
     }),
   });
 }
 
-if (openingInvoiceMode !== "combined" && utilityRows.length > 0) {
+if (utilityRows.length > 0) {
   utilityRows.forEach((item) => {
     const utilityLabel = item.label || "Utility";
     invoiceRequests.push({
@@ -1299,6 +1286,8 @@ if (openingInvoiceMode !== "combined" && utilityRows.length > 0) {
         billItemKey: `utility:${slugifyTakeOnValue(utilityLabel)}`,
         billItemLabel: utilityLabel,
         utilityType: utilityLabel,
+        meterUtilityType: utilityLabel,
+        statementUtilityType: utilityLabel,
         invoicePriorityCategory: "utility",
       }),
     });
@@ -2138,18 +2127,6 @@ for (const request of invoiceRequests) {
                     />
                     <p className="font-semibold text-slate-900">Separate</p>
                     <p className="text-xs text-slate-500 mt-1">Create rent and utility invoices separately so each hits the correct ledger.</p>
-                  </label>
-                  <label className={`rounded-xl border px-4 py-3 cursor-pointer ${openingInvoiceMode === "combined" ? "border-orange-500 bg-orange-50" : "border-slate-200 bg-white"}`}>
-                    <input
-                      type="radio"
-                      name="openingInvoiceMode"
-                      value="combined"
-                      checked={openingInvoiceMode === "combined"}
-                      onChange={(e) => setOpeningInvoiceMode(e.target.value)}
-                      className="sr-only"
-                    />
-                    <p className="font-semibold text-slate-900">Combined</p>
-                    <p className="text-xs text-slate-500 mt-1">Combine rent and utilities into one opening rent invoice. Deposit stays separate.</p>
                   </label>
                 </div>
               </div>

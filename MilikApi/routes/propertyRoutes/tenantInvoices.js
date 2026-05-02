@@ -18,15 +18,7 @@ import TenantInvoice from "../../models/TenantInvoice.js";
 const router = express.Router();
 
 // Create tenant invoice
-router.post(
-  "/",
-  (req, res, next) => {
-    console.log("ROUTE HANDLER: /api/tenant-invoices POST hit", req.body);
-    next();
-  },
-  verifyUser,
-  createTenantInvoice
-);
+router.post("/", verifyUser, createTenantInvoice);
 
 router.post("/batch", verifyUser, createTenantInvoicesBatch);
 

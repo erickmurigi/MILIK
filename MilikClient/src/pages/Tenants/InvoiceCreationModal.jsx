@@ -16,7 +16,7 @@ const InvoiceCreationModal = ({
   taxConfig = null,
 }) => {
   const [isCreating, setIsCreating] = useState(false);
-  const [billingMode, setBillingMode] = useState("combined");
+  const [billingMode, setBillingMode] = useState("separate");
   const [includeDeposit, setIncludeDeposit] = useState(false);
   const [depositAmountInput, setDepositAmountInput] = useState("");
   const [taxSelection, setTaxSelection] = useState({
@@ -31,7 +31,7 @@ const InvoiceCreationModal = ({
 
   useEffect(() => {
     if (isOpen) {
-      setBillingMode("combined");
+      setBillingMode("separate");
       setIncludeDeposit(Boolean(depositOption?.recommended && depositOption?.enabled));
       setDepositAmountInput(
         depositOption?.amount !== undefined && depositOption?.amount !== null
@@ -62,15 +62,13 @@ const InvoiceCreationModal = ({
   const depositAmount = enteredDepositAmount > 0 ? enteredDepositAmount : 0;
 
   const taxComponents = useMemo(() => {
-    if (billingMode === "combined") {
-      return totalAmount > 0 ? [{ category: "RENT_CHARGE", amount: totalAmount }] : [];
-    }
-
+    // Always calculate tax per-category (separate mode only).
+    // Combined invoices are no longer created — billing is always separate.
     return [
       totalRentAmount > 0 ? { category: "RENT_CHARGE", amount: totalRentAmount } : null,
       totalUtilityAmount > 0 ? { category: "UTILITY_CHARGE", amount: totalUtilityAmount } : null,
     ].filter(Boolean);
-  }, [billingMode, totalAmount, totalRentAmount, totalUtilityAmount]);
+  }, [totalRentAmount, totalUtilityAmount]);
 
   const taxPreview = useMemo(
     () => buildTaxPreviewForComponents({ components: taxComponents, companyTaxConfig: normalizedTaxConfig, selection: taxSelection }),
@@ -162,34 +160,11 @@ const InvoiceCreationModal = ({
             </div>
           </div>
 
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="text-sm font-semibold text-amber-900 mb-2">Invoice Billing Mode</p>
-            <div className="space-y-2 text-xs">
-              <label className="flex items-start gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="billingMode"
-                  checked={billingMode === "combined"}
-                  onChange={() => setBillingMode("combined")}
-                  disabled={isCreating}
-                />
-                <span>
-                  <strong>Combined</strong>: one invoice per period with Rent + Utility together.
-                </span>
-              </label>
-              <label className="flex items-start gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="billingMode"
-                  checked={billingMode === "separate"}
-                  onChange={() => setBillingMode("separate")}
-                  disabled={isCreating}
-                />
-                <span>
-                  <strong>Separate</strong>: one Rent invoice and one Utility invoice (if utility exists).
-                </span>
-              </label>
-            </div>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+            <p className="text-sm font-semibold text-emerald-900">Billing mode: Separate invoices</p>
+            <p className="text-xs text-emerald-700 mt-1">
+              Rent and utility invoices are always created separately so each posts to the correct ledger account.
+            </p>
           </div>
 
           <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 space-y-3">
