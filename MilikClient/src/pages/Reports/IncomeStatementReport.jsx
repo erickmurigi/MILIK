@@ -2,57 +2,91 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
-import { FaFileDownload, FaFileInvoice, FaFilePdf, FaFilter, FaSyncAlt } from "react-icons/fa";
+import { FaChevronDown, FaChevronRight, FaFileDownload, FaFilePdf, FaSyncAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getIncomeStatementReport } from "../../redux/apiCalls";
 
-const MILIK_GREEN = "#0B3B2E";
-const MILIK_GREEN_BG = "bg-[#0B3B2E]";
-const MILIK_ORANGE = "#FF8C00";
-const MILIK_RED = "#DC2626";
+const GRN = "#0B3B2E";
+const GRN_BG = "bg-[#0B3B2E]";
+const RED = "#DC2626";
 
-const formatMoney = (value) =>
-  Number(value || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+const fmt = (value) =>
+  Number(value || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const firstDayOfMonth = () => {
-  const date = new Date();
-  return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split("T")[0];
-};
+const firstDayOfMonth = () =>
+  new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0];
 
 const todayString = () => new Date().toISOString().split("T")[0];
 
 const escapeHtml = (value) =>
   String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 
+// ─── Collapsible section ──────────────────────────────────────────────────────
+const Section = ({ label, rows = [], total, accentColor }) => {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="mb-2 overflow-hidden rounded-lg border border-slate-200">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50"
+      >
+        <div className="flex items-center gap-2">
+          {open ? <FaChevronDown size={9} className="text-slate-400" /> : <FaChevronRight size={9} className="text-slate-400" />}
+          <span className="text-xs font-bold text-slate-700">{label}</span>
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">
+            {rows.length}
+          </span>
+        </div>
+        <span className="text-xs font-bold" style={{ color: accentColor }}>
+          KES {fmt(total)}
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-slate-100 bg-white">
+          {rows.map((row) => (
+            <div
+              key={row._id || `${row.code}-${row.name}`}
+              className="flex items-center justify-between px-4 py-2 text-xs hover:bg-slate-50"
+            >
+              <div className="flex items-center gap-2 text-slate-700">
+                <span className="w-14 shrink-0 font-mono text-[10px] font-semibold text-slate-400">
+                  {row.code}
+                </span>
+                <span className="font-medium">{row.name}</span>
+              </div>
+              <span className="ml-4 shrink-0 font-mono font-semibold text-slate-800">
+                {fmt(row.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 const IncomeStatementReport = () => {
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
+  const currentUser = useSelector((s) => s.auth?.currentUser);
+  const currentCompany = useSelector((s) => s.company?.currentCompany);
+  const canExport = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
 
   const businessId = useMemo(() => {
-    const activeCompanyId = localStorage.getItem("milik_active_company_id");
+    const activeId = localStorage.getItem("milik_active_company_id");
     const storedUser = (() => {
-      try {
-        return JSON.parse(localStorage.getItem("milik_user") || "null");
-      } catch {
-        return null;
-      }
+      try { return JSON.parse(localStorage.getItem("milik_user") || "null"); } catch { return null; }
     })();
-
     return (
       currentCompany?._id ||
       currentUser?.company?._id ||
       currentUser?.company ||
       currentUser?.businessId ||
-      activeCompanyId ||
+      activeId ||
       storedUser?.company?._id ||
       storedUser?.company ||
       storedUser?.businessId ||
@@ -70,25 +104,11 @@ const IncomeStatementReport = () => {
     summary: { totalIncome: 0, totalExpenses: 0, netProfit: 0, resultLabel: "Net Profit" },
     exclusions: [],
     reportBasis: "",
-    startDate: new Date(),
-    endDate: new Date(),
   });
-  const [filters, setFilters] = useState({
-    startDate: firstDayOfMonth(),
-    endDate: todayString(),
-  });
+  const [filters, setFilters] = useState({ startDate: firstDayOfMonth(), endDate: todayString() });
 
   const loadReport = useCallback(async () => {
-    if (!businessId) {
-      setReport((prev) => ({
-        ...prev,
-        rows: [],
-        count: 0,
-        totals: { debit: 0, credit: 0, difference: 0, balanced: true },
-      }));
-      return;
-    }
-
+    if (!businessId) return;
     setLoading(true);
     try {
       const data = await getIncomeStatementReport({
@@ -97,608 +117,334 @@ const IncomeStatementReport = () => {
         endDate: filters.endDate,
       });
       setReport(data);
-    } catch (error) {
-      console.error("Failed to load income statement", error);
-      toast.error(error?.response?.data?.error || error?.message || "Failed to load income statement");
+    } catch (err) {
+      toast.error(err?.response?.data?.error || err?.message || "Failed to load income statement");
     } finally {
       setLoading(false);
     }
   }, [businessId, filters.startDate, filters.endDate]);
 
-  useEffect(() => {
-    loadReport();
-  }, [loadReport]);
+  useEffect(() => { loadReport(); }, [loadReport]);
 
+  // ── Export CSV
   const handleExportCSV = () => {
-    if (!canExportReports) {
-      toast.warning("You do not have permission to export reports");
-      return;
-    }
+    if (!canExport) return toast.warning("You do not have permission to export reports");
     const lines = [
-      ["INCOME STATEMENT"].join(","),
-      [`Period`, `${filters.startDate} to ${filters.endDate}`].join(","),
-      [""].join(","),
-      ["INCOME"].join(","),
+      "INCOME STATEMENT",
+      `Period,${filters.startDate} to ${filters.endDate}`,
+      "",
+      "INCOME",
     ];
-
-    report.income.sections.forEach((section) => {
-      lines.push([section.label].join(","));
-      section.rows.forEach((row) => {
-        lines.push([
-          row.code,
-          `"${String(row.name || "").replaceAll('"', '""')}"`,
-          Number(row.amount || 0).toFixed(2),
-        ].join(","));
-      });
-      lines.push(["", `Subtotal ${section.label}`, Number(section.total || 0).toFixed(2)].join(","));
+    report.income.sections.forEach((s) => {
+      lines.push(s.label);
+      s.rows.forEach((r) => lines.push(`${r.code},"${String(r.name).replaceAll('"', '""')}",${Number(r.amount).toFixed(2)}`));
+      lines.push(`,"Subtotal ${s.label}",${Number(s.total).toFixed(2)}`);
     });
-
-    lines.push(["", "Total Income", Number(report.summary?.totalIncome || 0).toFixed(2)].join(","));
-    lines.push([""].join(","));
-    lines.push(["EXPENSES"].join(","));
-
-    report.expenses.sections.forEach((section) => {
-      lines.push([section.label].join(","));
-      section.rows.forEach((row) => {
-        lines.push([
-          row.code,
-          `"${String(row.name || "").replaceAll('"', '""')}"`,
-          Number(row.amount || 0).toFixed(2),
-        ].join(","));
-      });
-      lines.push(["", `Subtotal ${section.label}`, Number(section.total || 0).toFixed(2)].join(","));
+    lines.push(`,"Total Income",${Number(report.summary?.totalIncome || 0).toFixed(2)}`);
+    lines.push("", "EXPENSES");
+    report.expenses.sections.forEach((s) => {
+      lines.push(s.label);
+      s.rows.forEach((r) => lines.push(`${r.code},"${String(r.name).replaceAll('"', '""')}",${Number(r.amount).toFixed(2)}`));
+      lines.push(`,"Subtotal ${s.label}",${Number(s.total).toFixed(2)}`);
     });
-
-    lines.push(["", "Total Expenses", Number(report.summary?.totalExpenses || 0).toFixed(2)].join(","));
-    lines.push(["", report.summary?.resultLabel || "Net Profit", Number(report.summary?.netProfit || 0).toFixed(2)].join(","));
-
+    lines.push(`,"Total Expenses",${Number(report.summary?.totalExpenses || 0).toFixed(2)}`);
+    lines.push(`,"${report.summary?.resultLabel || "Net Profit"}",${Number(report.summary?.netProfit || 0).toFixed(2)}`);
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `income_statement_${filters.startDate}_to_${filters.endDate}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const a = document.createElement("a");
+    a.href = url;
+    a.setAttribute("download", `income_statement_${filters.startDate}_to_${filters.endDate}.csv`);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success("Income statement exported successfully");
+    toast.success("Exported successfully");
   };
 
-  const buildPrintableSection = (title, sections = [], total = 0, totalColor = "#111827") => {
-    const content = sections.length
-      ? sections
-          .map(
-            (section) => `
-              <div class="print-section-block">
-                <div class="section-heading-row">
-                  <div class="section-heading">${escapeHtml(section.label)}</div>
-                  <div class="section-heading amount">KES ${escapeHtml(formatMoney(section.total))}</div>
-                </div>
-                ${(section.rows || [])
-                  .map(
-                    (row) => `
-                      <div class="item-row">
-                        <div class="item-name">
-                          <span class="item-code">${escapeHtml(row.code)}</span>
-                          ${escapeHtml(row.name)}
-                        </div>
-                        <div class="item-amount">KES ${escapeHtml(formatMoney(row.amount))}</div>
-                      </div>
-                    `
-                  )
-                  .join("")}
-              </div>
-            `
-          )
-          .join("")
-      : `<div class="empty-note">No accounts found for this period.</div>`;
-
-    return `
-      <div class="print-card">
-        <div class="card-header">${escapeHtml(title)}</div>
-        <div class="card-body">
-          ${content}
-          <div class="total-row" style="color:${totalColor}">
-            <div>Total ${escapeHtml(title)}</div>
-            <div>KES ${escapeHtml(formatMoney(total))}</div>
-          </div>
-        </div>
-      </div>
-    `;
-  };
-
+  // ── Print PDF
   const handlePrintPDF = () => {
-    if (!canExportReports) {
-      toast.warning("You do not have permission to print reports");
-      return;
-    }
-    if (loading) {
-      toast.info("Please wait for the report to finish loading.");
-      return;
-    }
+    if (!canExport) return toast.warning("You do not have permission to print reports");
+    if (loading) return toast.info("Please wait for the report to finish loading.");
+    const win = window.open("", "_blank", "width=1200,height=900");
+    if (!win) return toast.error("Popup blocked. Allow popups to print.");
 
-    const printWindow = window.open("", "_blank", "width=1200,height=900");
-    if (!printWindow) {
-      toast.error("Popup blocked. Please allow popups to print the report.");
-      return;
-    }
-
-    const printableHtml = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Income Statement - ${escapeHtml(filters.startDate)} to ${escapeHtml(filters.endDate)}</title>
-          <meta charset="utf-8" />
-          <style>
-            * { box-sizing: border-box; }
-            body {
-              font-family: Arial, Helvetica, sans-serif;
-              margin: 0;
-              padding: 24px;
-              color: #111827;
-              background: #ffffff;
-            }
-            .report-wrap {
-              width: 100%;
-              max-width: 1100px;
-              margin: 0 auto;
-            }
-            .report-header {
-              margin-bottom: 20px;
-              border-bottom: 2px solid ${MILIK_GREEN};
-              padding-bottom: 12px;
-            }
-            .report-title {
-              font-size: 30px;
-              font-weight: 800;
-              color: ${MILIK_GREEN};
-              margin: 0 0 6px 0;
-            }
-            .report-subtitle {
-              font-size: 14px;
-              font-weight: 600;
-              color: #4b5563;
-              margin: 0;
-            }
-            .meta-grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 12px;
-              margin: 18px 0 20px 0;
-            }
-            .meta-box {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              padding: 12px 14px;
-              background: #f9fafb;
-            }
-            .meta-label {
-              font-size: 12px;
-              font-weight: 700;
-              color: #4b5563;
-              margin-bottom: 4px;
-              text-transform: uppercase;
-            }
-            .meta-value {
-              font-size: 16px;
-              font-weight: 800;
-              color: #111827;
-            }
-            .summary-grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 12px;
-              margin-bottom: 20px;
-            }
-            .summary-card {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              padding: 12px 14px;
-              background: #ffffff;
-            }
-            .summary-label {
-              font-size: 12px;
-              font-weight: 700;
-              color: #4b5563;
-              margin-bottom: 4px;
-              text-transform: uppercase;
-            }
-            .summary-value {
-              font-size: 20px;
-              font-weight: 800;
-              color: #111827;
-            }
-            .two-col {
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 18px;
-              align-items: start;
-              margin-bottom: 20px;
-            }
-            .print-card {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              overflow: hidden;
-              background: #ffffff;
-            }
-            .card-header {
-              background: ${MILIK_GREEN};
-              color: #ffffff;
-              padding: 12px 14px;
-              font-size: 16px;
-              font-weight: 800;
-            }
-            .card-body {
-              padding: 14px;
-            }
-            .print-section-block + .print-section-block {
-              margin-top: 18px;
-            }
-            .section-heading-row,
-            .item-row,
-            .total-row,
-            .summary-row {
-              display: flex;
-              justify-content: space-between;
-              gap: 12px;
-            }
-            .section-heading-row {
-              border-bottom: 1px solid #d1d5db;
-              padding-bottom: 6px;
-              margin-bottom: 8px;
-            }
-            .section-heading {
-              font-size: 14px;
-              font-weight: 800;
-              color: #111827;
-            }
-            .item-row {
-              padding: 4px 0;
-              font-size: 13px;
-            }
-            .item-name {
-              font-weight: 600;
-              color: #374151;
-            }
-            .item-code {
-              font-weight: 800;
-              margin-right: 8px;
-            }
-            .item-amount,
-            .amount {
-              font-weight: 800;
-              white-space: nowrap;
-            }
-            .empty-note {
-              font-size: 13px;
-              color: #6b7280;
-              font-weight: 600;
-            }
-            .total-row {
-              border-top: 2px solid #d1d5db;
-              margin-top: 14px;
-              padding-top: 10px;
-              font-size: 15px;
-              font-weight: 800;
-            }
-            .summary-card-wide {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              overflow: hidden;
-              background: #ffffff;
-            }
-            .summary-card-wide .body {
-              padding: 14px;
-            }
-            .summary-row {
-              padding: 6px 0;
-              font-size: 14px;
-            }
-            .summary-row .label {
-              font-weight: 700;
-              color: #374151;
-            }
-            .summary-row .value {
-              font-weight: 800;
-            }
-            .profit-row {
-              border-top: 2px solid #d1d5db;
-              margin-top: 12px;
-              padding-top: 10px;
-              font-size: 16px;
-              font-weight: 800;
-            }
-
-            @media print {
-              body {
-                padding: 0;
-              }
-              .report-wrap {
-                max-width: none;
-              }
-              @page {
-                size: A4 portrait;
-                margin: 12mm;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="report-wrap">
-            <div class="report-header">
-              <h1 class="report-title">Income Statement</h1>
-              <p class="report-subtitle">Property manager income and operating expenses only.</p>
-            </div>
-
-            <div class="meta-grid">
-              <div class="meta-box">
-                <div class="meta-label">Business</div>
-                <div class="meta-value">${escapeHtml(businessName)}</div>
-              </div>
-              <div class="meta-box">
-                <div class="meta-label">Period</div>
-                <div class="meta-value">${escapeHtml(filters.startDate)} to ${escapeHtml(filters.endDate)}</div>
-              </div>
-              <div class="meta-box">
-                <div class="meta-label">Basis</div>
-                <div class="meta-value">${escapeHtml(
-                  report.reportBasis || "Property manager income and operating expenses only"
-                )}</div>
-              </div>
-            </div>
-
-            <div class="summary-grid">
-              <div class="summary-card">
-                <div class="summary-label">Total Income</div>
-                <div class="summary-value" style="color:#15803d;">KES ${escapeHtml(
-                  formatMoney(report.summary?.totalIncome)
-                )}</div>
-              </div>
-              <div class="summary-card">
-                <div class="summary-label">Total Expenses</div>
-                <div class="summary-value" style="color:${MILIK_RED};">KES ${escapeHtml(
-                  formatMoney(report.summary?.totalExpenses)
-                )}</div>
-              </div>
-              <div class="summary-card">
-                <div class="summary-label">${escapeHtml(report.summary?.resultLabel || "Net Profit")}</div>
-                <div class="summary-value" style="color:${Number(report.summary?.netProfit || 0) >= 0 ? MILIK_GREEN : MILIK_RED};">
-                  KES ${escapeHtml(formatMoney(report.summary?.netProfit))}
-                </div>
-              </div>
-            </div>
-
-            <div class="two-col">
-              ${buildPrintableSection(
-                "Income",
-                report.income?.sections || [],
-                report.summary?.totalIncome || 0,
-                "#15803d"
-              )}
-              ${buildPrintableSection(
-                "Expenses",
-                report.expenses?.sections || [],
-                report.summary?.totalExpenses || 0,
-                MILIK_RED
-              )}
-            </div>
-
-            <div class="summary-card-wide">
-              <div class="card-header">Summary</div>
-              <div class="body">
-                <div class="summary-row">
-                  <div class="label">Total Income</div>
-                  <div class="value" style="color:#15803d;">KES ${escapeHtml(
-                    formatMoney(report.summary?.totalIncome)
-                  )}</div>
-                </div>
-                <div class="summary-row">
-                  <div class="label">Total Expenses</div>
-                  <div class="value" style="color:${MILIK_RED};">KES ${escapeHtml(
-                    formatMoney(report.summary?.totalExpenses)
-                  )}</div>
-                </div>
-                <div class="summary-row profit-row">
-                  <div class="label">${escapeHtml(report.summary?.resultLabel || "Net Profit")}</div>
-                  <div class="value" style="color:${Number(report.summary?.netProfit || 0) >= 0 ? MILIK_GREEN : MILIK_RED};">
-                    KES ${escapeHtml(formatMoney(report.summary?.netProfit))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="summary-card-wide" style="margin-top:20px;">
-              <div class="card-header">Excluded From This Report</div>
-              <div class="body">
-                <ul style="margin:0; padding-left:18px; color:#374151; font-size:13px; font-weight:600; line-height:1.7;">
-                  ${(report.exclusions || [])
-                    .map((item) => `<li>${escapeHtml(item)}</li>`)
-                    .join("")}
-                </ul>
-              </div>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.open();
-    printWindow.document.write(printableHtml);
-    printWindow.document.close();
-    printWindow.focus();
-
-    const triggerPrint = () => {
-      printWindow.print();
+    const sectionHtml = (title, sections, total, color) => {
+      const content = sections.length
+        ? sections.map((s) => `
+            <div class="s-block">
+              <div class="s-head"><span>${escapeHtml(s.label)}</span><span>KES ${escapeHtml(fmt(s.total))}</span></div>
+              ${s.rows.map((r) => `<div class="s-row"><span class="code">${escapeHtml(r.code)}</span>${escapeHtml(r.name)}<span class="amt">KES ${escapeHtml(fmt(r.amount))}</span></div>`).join("")}
+            </div>`).join("")
+        : `<div class="empty">No accounts found for this period.</div>`;
+      return `<div class="card"><div class="card-hdr">${escapeHtml(title)}</div><div class="card-body">${content}<div class="total-row" style="color:${color}"><span>Total ${escapeHtml(title)}</span><span>KES ${escapeHtml(fmt(total))}</span></div></div></div>`;
     };
 
-    if (printWindow.document.readyState === "complete") {
-      setTimeout(triggerPrint, 300);
-    } else {
-      printWindow.onload = () => setTimeout(triggerPrint, 300);
-    }
+    const netProfit = Number(report.summary?.netProfit || 0);
+    const netColor = netProfit >= 0 ? "#166534" : RED;
+
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+      <title>Income Statement</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;color:#111;padding:24px}
+        h1{font-size:26px;font-weight:800;color:${GRN}}p.sub{font-size:12px;color:#4b5563;margin:4px 0 16px}
+        .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+        .meta-box{border:1px solid #d1d5db;border-radius:6px;padding:10px 12px;background:#f9fafb}
+        .meta-box .lbl{font-size:10px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px}
+        .meta-box .val{font-size:13px;font-weight:800;color:#111}
+        .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+        .kpi-box{border:1px solid #d1d5db;border-radius:6px;padding:12px 14px}
+        .kpi-box .lbl{font-size:10px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:5px}
+        .kpi-box .val{font-size:20px;font-weight:900}
+        .two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+        .card{border:1px solid #d1d5db;border-radius:6px;overflow:hidden}
+        .card-hdr{background:${GRN};color:#fff;padding:10px 12px;font-size:14px;font-weight:800}
+        .card-body{padding:12px}
+        .s-block{margin-bottom:14px}
+        .s-head{display:flex;justify-content:space-between;border-bottom:1px solid #e5e7eb;padding-bottom:5px;margin-bottom:6px;font-size:12px;font-weight:800}
+        .s-row{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;padding:3px 0;color:#374151}
+        .code{font-family:monospace;font-weight:700;color:#9ca3af;margin-right:8px;min-width:40px}
+        .amt{font-family:monospace;font-weight:700;white-space:nowrap}
+        .total-row{display:flex;justify-content:space-between;border-top:2px solid #d1d5db;margin-top:12px;padding-top:10px;font-size:14px;font-weight:800}
+        .empty{font-size:12px;color:#6b7280;font-style:italic}
+        .net-box{border:2px solid ${netColor};border-radius:6px;padding:14px 16px;background:${netProfit >= 0 ? "#f0fdf4" : "#fef2f2"};display:flex;justify-content:space-between;align-items:center}
+        .net-label{font-size:16px;font-weight:800;color:${netColor}}
+        .net-val{font-size:22px;font-weight:900;color:${netColor};font-family:monospace}
+        @media print{body{padding:10px}@page{size:A4 portrait;margin:12mm}}
+      </style></head><body>
+      <h1>Income Statement</h1>
+      <p class="sub">Property manager income and operating expenses · ${escapeHtml(filters.startDate)} to ${escapeHtml(filters.endDate)}</p>
+      <div class="meta">
+        <div class="meta-box"><div class="lbl">Business</div><div class="val">${escapeHtml(businessName)}</div></div>
+        <div class="meta-box"><div class="lbl">Period</div><div class="val">${escapeHtml(filters.startDate)} → ${escapeHtml(filters.endDate)}</div></div>
+        <div class="meta-box"><div class="lbl">Basis</div><div class="val">${escapeHtml(report.reportBasis || "Manager income & expenses only")}</div></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-box"><div class="lbl">Total Income</div><div class="val" style="color:#166534">KES ${escapeHtml(fmt(report.summary?.totalIncome))}</div></div>
+        <div class="kpi-box"><div class="lbl">Total Expenses</div><div class="val" style="color:${RED}">KES ${escapeHtml(fmt(report.summary?.totalExpenses))}</div></div>
+        <div class="kpi-box"><div class="lbl">${escapeHtml(report.summary?.resultLabel || "Net Profit")}</div><div class="val" style="color:${netColor}">KES ${escapeHtml(fmt(report.summary?.netProfit))}</div></div>
+      </div>
+      <div class="two">
+        ${sectionHtml("Income", report.income?.sections || [], report.summary?.totalIncome || 0, "#166534")}
+        ${sectionHtml("Expenses", report.expenses?.sections || [], report.summary?.totalExpenses || 0, RED)}
+      </div>
+      <div class="net-box">
+        <div class="net-label">${escapeHtml(report.summary?.resultLabel || "Net Profit")}</div>
+        <div class="net-val">KES ${escapeHtml(fmt(report.summary?.netProfit))}</div>
+      </div>
+    </body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
   };
 
-  const renderSection = (title, sections, total, accentClass = "text-gray-900") => (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
-      <div className={`${MILIK_GREEN_BG} text-white px-6 py-4`}>
-        <h3 className="text-sm font-extrabold tracking-wide">{title}</h3>
-      </div>
-      <div className="p-3 space-y-6">
-        {sections.length ? (
-          sections.map((section) => (
-            <div key={section.label}>
-              <div className="flex items-center justify-between border-b pb-2 mb-3">
-                <h4 className="text-base font-extrabold text-gray-900">{section.label}</h4>
-                <span className="text-sm font-bold text-gray-700">KES {formatMoney(section.total)}</span>
-              </div>
-              <div className="space-y-2">
-                {section.rows.map((row) => (
-                  <div key={row._id || `${row.code}-${row.name}`} className="flex items-center justify-between text-sm">
-                    <div className="text-gray-800 font-semibold">
-                      <span className="font-bold mr-2">{row.code}</span>
-                      {row.name}
-                    </div>
-                    <div className="font-bold text-gray-900">KES {formatMoney(row.amount)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="text-sm font-medium text-gray-600">No accounts found for this period.</div>
-        )}
-        <div className="border-t pt-4 flex items-center justify-between">
-          <span className={`text-lg font-extrabold ${accentClass}`}>Total {title}</span>
-          <span className={`text-lg font-extrabold ${accentClass}`}>KES {formatMoney(total)}</span>
-        </div>
-      </div>
-    </div>
-  );
+  const netProfit = Number(report.summary?.netProfit || 0);
+  const netColor = netProfit >= 0 ? "#166534" : RED;
+  const totalIncome = Number(report.summary?.totalIncome || 0);
+  const totalExpenses = Number(report.summary?.totalExpenses || 0);
 
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-100 p-2">
-        <div className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
-          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur print:hidden">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto_auto_auto]">
-              <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]" />
-              <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]" />
-              <button onClick={loadReport} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700"><FaSyncAlt /> Refresh</button>
-              <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"><FaFileDownload /> Export CSV</button>
-              <button onClick={handlePrintPDF} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:opacity-50 ${MILIK_GREEN_BG} hover:bg-[#0A3127]`}><FaFilePdf /> Print PDF</button>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Business: <span className="text-slate-900">{businessName}</span></span>
-              <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Basis: <span className="text-slate-900">{report.reportBasis || "Property manager income and operating expenses only"}</span></span>
-            </div>
-          </div>
+      <div className="h-[calc(100dvh-152px)] max-h-[calc(100dvh-152px)] overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
+        <div className="mx-auto flex h-full w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              <div>
-                <label className="block text-sm font-bold text-gray-800 mb-2">Start Date</label>
+          {/* ── Sticky toolbar ──────────────────────────────────────────────── */}
+          <div className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-gray-50/95 p-2 shadow-sm backdrop-blur">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-bold text-slate-800">Income Statement</span>
+
+              <div className="flex items-center gap-1">
                 <input
                   type="date"
                   value={filters.startDate}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent font-semibold text-gray-800"
+                  onChange={(e) => setFilters((p) => ({ ...p, startDate: e.target.value }))}
+                  className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-800 mb-2">End Date</label>
+                <span className="text-[10px] font-medium text-slate-400">to</span>
                 <input
                   type="date"
                   value={filters.endDate}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent font-semibold text-gray-800"
+                  onChange={(e) => setFilters((p) => ({ ...p, endDate: e.target.value }))}
+                  className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
               </div>
-              <div className="text-sm text-gray-700 font-medium">
-                <div>
-                  <span className="font-bold">Business:</span>{" "}
-                  {businessName}
-                </div>
-                <div>
-                  <span className="font-bold">Basis:</span>{" "}
-                  {report.reportBasis || "Property manager income and operating expenses only"}
-                </div>
-              </div>
+
+              <button
+                onClick={loadReport}
+                disabled={loading}
+                className="flex h-7 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                <FaSyncAlt size={9} className={loading ? "animate-spin" : ""} />
+                {loading ? "Loading…" : "Refresh"}
+              </button>
+
+              <div className="flex-1" />
+
+              <button
+                onClick={handleExportCSV}
+                disabled={!canExport}
+                title={!canExport ? "No export permission" : "Export CSV"}
+                className="flex h-7 items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"
+              >
+                <FaFileDownload size={9} /> Export CSV
+              </button>
+              <button
+                onClick={handlePrintPDF}
+                disabled={!canExport}
+                title={!canExport ? "No print permission" : "Print PDF"}
+                className="flex h-7 items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
+              >
+                <FaFilePdf size={9} /> Print PDF
+              </button>
             </div>
 
-          <div className="grid flex-shrink-0 grid-cols-1 gap-2 md:grid-cols-3">
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-1">Total Income</div>
-              <div className="text-sm font-black tracking-tight text-green-700">
-                KES {formatMoney(report.summary?.totalIncome)}
+            {/* Business + basis badges */}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                {businessName}
+              </span>
+              <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                {report.reportBasis || "Property manager income and operating expenses only"}
+              </span>
+            </div>
+          </div>
+
+          {/* ── KPI strip ───────────────────────────────────────────────────── */}
+          <div className="shrink-0 grid grid-cols-3 divide-x divide-slate-200 border-b border-slate-200 bg-white">
+            <div className="px-5 py-3">
+              <div className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                Total Income
+              </div>
+              <div className="text-lg font-black tabular-nums text-emerald-700">
+                KES {fmt(totalIncome)}
+              </div>
+              <div className="mt-0.5 text-[10px] text-slate-400">
+                {report.income.count} account{report.income.count !== 1 ? "s" : ""}
               </div>
             </div>
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-1">Total Expenses</div>
-              <div className="text-sm font-black tracking-tight text-red-600">
-                KES {formatMoney(report.summary?.totalExpenses)}
+            <div className="px-5 py-3">
+              <div className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                Total Expenses
+              </div>
+              <div className="text-lg font-black tabular-nums text-red-600">
+                KES {fmt(totalExpenses)}
+              </div>
+              <div className="mt-0.5 text-[10px] text-slate-400">
+                {report.expenses.count} account{report.expenses.count !== 1 ? "s" : ""}
               </div>
             </div>
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-1">
+            <div className="px-5 py-3">
+              <div className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">
                 {report.summary?.resultLabel || "Net Profit"}
               </div>
               <div
-                className="text-sm font-black tracking-tight"
-                style={{ color: Number(report.summary?.netProfit || 0) >= 0 ? MILIK_GREEN : MILIK_RED }}
+                className="text-lg font-black tabular-nums"
+                style={{ color: netColor }}
               >
-                KES {formatMoney(report.summary?.netProfit)}
+                KES {fmt(netProfit)}
+              </div>
+              <div className="mt-0.5 text-[10px]" style={{ color: netColor }}>
+                {netProfit >= 0 ? "Profitable period" : "Loss period"}
               </div>
             </div>
           </div>
 
-          {loading ? (
-            <div className="bg-white rounded-lg shadow p-10 text-center text-gray-600 font-medium">
-              Loading income statement...
-            </div>
-          ) : (
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-auto lg:grid-cols-2">
-              {renderSection("Income", report.income?.sections || [], report.summary?.totalIncome || 0, "text-green-700")}
-              {renderSection("Expenses", report.expenses?.sections || [], report.summary?.totalExpenses || 0, "text-red-600")}
-            </div>
-          )}
+          {/* ── Scrollable content ───────────────────────────────────────────── */}
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {loading ? (
+              <div className="flex h-40 items-center justify-center text-xs font-semibold text-slate-400">
+                Loading income statement…
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
-          <div className="flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className={`${MILIK_GREEN_BG} text-white px-6 py-4`}>
-              <h3 className="text-sm font-extrabold tracking-wide">Summary</h3>
-            </div>
-            <div className="p-3 space-y-4">
-              <div className="flex items-center justify-between text-base">
-                <span className="font-bold text-gray-800">Total Income</span>
-                <span className="font-extrabold text-green-700">KES {formatMoney(report.summary?.totalIncome)}</span>
-              </div>
-              <div className="flex items-center justify-between text-base">
-                <span className="font-bold text-gray-800">Total Expenses</span>
-                <span className="font-extrabold text-red-600">KES {formatMoney(report.summary?.totalExpenses)}</span>
-              </div>
-              <div className="border-t pt-4 flex items-center justify-between text-lg">
-                <span className="font-extrabold text-gray-900">
-                  {report.summary?.resultLabel || "Net Profit"}
-                </span>
-                <span
-                  className="font-extrabold"
-                  style={{ color: Number(report.summary?.netProfit || 0) >= 0 ? MILIK_GREEN : MILIK_RED }}
-                >
-                  KES {formatMoney(report.summary?.netProfit)}
-                </span>
-              </div>
-            </div>
-          </div>
+                {/* Income */}
+                <div>
+                  <div className="mb-2 flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2.5 text-white">
+                    <span className="text-xs font-bold tracking-wide">INCOME</span>
+                    <span className="ml-auto text-xs font-black">KES {fmt(totalIncome)}</span>
+                  </div>
+                  {report.income.sections.length ? (
+                    report.income.sections.map((s) => (
+                      <Section
+                        key={s.label}
+                        label={s.label}
+                        rows={s.rows}
+                        total={s.total}
+                        accentColor="#166534"
+                      />
+                    ))
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-xs text-slate-400">
+                      No income accounts found for this period
+                    </div>
+                  )}
+                </div>
 
-          <div className="flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className={`${MILIK_GREEN_BG} text-white px-6 py-4`}>
-              <h3 className="text-sm font-extrabold tracking-wide">Excluded From This Report</h3>
-            </div>
-            <div className="p-3">
-              <ul className="space-y-2 text-sm font-medium text-gray-800 list-disc pl-5">
-                {(report.exclusions || []).map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
+                {/* Expenses */}
+                <div>
+                  <div className="mb-2 flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2.5 text-white">
+                    <span className="text-xs font-bold tracking-wide">EXPENSES</span>
+                    <span className="ml-auto text-xs font-black">KES {fmt(totalExpenses)}</span>
+                  </div>
+                  {report.expenses.sections.length ? (
+                    report.expenses.sections.map((s) => (
+                      <Section
+                        key={s.label}
+                        label={s.label}
+                        rows={s.rows}
+                        total={s.total}
+                        accentColor={RED}
+                      />
+                    ))
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-xs text-slate-400">
+                      No expense accounts found for this period
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            )}
+
+            {/* Net result bar */}
+            {!loading && (
+              <div
+                className="mt-4 flex items-center justify-between rounded-xl border-2 px-6 py-4"
+                style={{
+                  borderColor: netColor,
+                  background: netProfit >= 0 ? "#f0fdf4" : "#fef2f2",
+                }}
+              >
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: netColor }}>
+                    {report.summary?.resultLabel || "Net Profit"}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-slate-500">
+                    {filters.startDate} — {filters.endDate}
+                  </div>
+                </div>
+                <div className="text-2xl font-black tabular-nums" style={{ color: netColor }}>
+                  KES {fmt(netProfit)}
+                </div>
+              </div>
+            )}
+
+            {/* Exclusions note */}
+            {!loading && (report.exclusions || []).length > 0 && (
+              <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
+                <div className="mb-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                  Excluded from this report
+                </div>
+                <ul className="space-y-0.5 text-[10px] font-medium text-slate-500">
+                  {report.exclusions.map((item) => (
+                    <li key={item} className="flex items-start gap-1.5">
+                      <span className="mt-0.5 text-slate-300">•</span> {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </div>

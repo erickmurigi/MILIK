@@ -66,6 +66,7 @@ const isManagerIncomeAccount = (account = {}) => {
   if (code === "4200" || code === "4210") return true;
   if (name.includes("management fee") || name.includes("commission income")) return true;
   if (name.includes("late fee") || name.includes("penalty")) return true;
+  if (name.includes("lease agreement fee") || name.includes("letting fee") || name.includes("agreement fee")) return true;
   if (subGroup === "other income" && !name.includes("property income")) return true;
 
   if (["4100", "4101", "4102", "4300"].includes(code)) return false;
@@ -95,9 +96,21 @@ const isManagerExpenseAccount = (account = {}) => {
     name.includes("software") ||
     name.includes("subscription") ||
     name.includes("marketing") ||
-    name.includes("transport")
+    name.includes("transport") ||
+    name.includes("fuel")
   ) return true;
 
+  // Internal petty cash / office running costs
+  if (name.includes("staff welfare") || name.includes("welfare")) return true;
+  if (name.includes("miscellaneous")) return true;
+  if (name.includes("stationery") || name.includes("stationary")) return true;
+  if (name.includes("cleaning supplies")) return true;
+  if (name.includes("petty cash")) return true;
+  if (name.includes("postage") || name.includes("courier")) return true;
+  if (name.includes("staff training") || name.includes("training")) return true;
+  if (name.includes("tea") || name.includes("refreshment") || name.includes("catering")) return true;
+
+  // Explicit property expense exclusions (must come after inclusions)
   if (["5100", "5101", "5102", "5103", "5104"].includes(code)) return false;
   if (subGroup === "property expenses") return false;
   if (name.includes("maintenance expense")) return false;

@@ -919,6 +919,24 @@ export const closeStatement = async (req, res) => {
         });
 
         if (existingProcessedStatement) {
+          const existingCommission = numberOrZero(existingProcessedStatement.commissionAmount);
+          if (existingCommission > 0) {
+            const existingCommissionEntry = await FinancialLedgerEntry.findOne({
+              business: existingProcessedStatement.business,
+              sourceTransactionType: "processed_statement",
+              sourceTransactionId: String(existingProcessedStatement._id),
+              category: "COMMISSION_CHARGE",
+            }).lean();
+
+            if (!existingCommissionEntry) {
+              await postCommissionAccrualForProcessedStatement({
+                processedStatement: existingProcessedStatement,
+                approvedStatement,
+                userId,
+              });
+            }
+          }
+
           const hydratedExistingStatement =
             (await hydrateProcessedStatementForResponse(existingProcessedStatement)) || existingProcessedStatement;
 

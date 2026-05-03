@@ -666,6 +666,34 @@ useEffect(() => {
     [properties, formData.property]
   );
 
+  const isLettingProperty = selectedPropertyRecord?.letManage === "Letting";
+
+  const computedLettingFee = useMemo(() => {
+    if (!isLettingProperty) return 0;
+    const rent = parseFloat(formData.rent) || 0;
+    const feeMode = selectedPropertyRecord?.lettingFeeMode || "percentage";
+    const feeValue = parseFloat(selectedPropertyRecord?.lettingFeeValue ?? 100) || 0;
+    if (feeMode === "fixed") return Math.round(feeValue * 100) / 100;
+    return Math.round((feeValue / 100) * rent * 100) / 100;
+  }, [isLettingProperty, formData.rent, selectedPropertyRecord?.lettingFeeMode, selectedPropertyRecord?.lettingFeeValue]);
+
+  useEffect(() => {
+    if (isEditMode) return;
+    if (!isLettingProperty) {
+      setFormData((prev) => {
+        if (!prev.createLeaseFeeInvoice && prev.leaseFeeAmount === "") return prev;
+        return { ...prev, createLeaseFeeInvoice: false, leaseFeeAmount: "", leaseFeeDescription: "" };
+      });
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      createLeaseFeeInvoice: true,
+      leaseFeeAmount: prev.leaseFeeAmount || (computedLettingFee > 0 ? String(computedLettingFee) : ""),
+      leaseFeeDescription: prev.leaseFeeDescription || "Letting fee",
+    }));
+  }, [isEditMode, isLettingProperty, computedLettingFee]);
+
   const selectedPrimaryUnitStatus = useMemo(() => {
     const unitRecord = selectedUnitRecord || (Array.isArray(units)
       ? units.find((unit) => normalizeId(unit?._id || unit?.id || unit) === normalizeId(formData.unit))
@@ -947,6 +975,7 @@ useEffect(() => {
     return items;
   }, [combinedUtilitiesPreview, formData.depositAmount, formData.depositHeldBy, formData.rent, selectedUnitRecord]);
 
+
   const buildTenantInvoiceContext = (savedTenantPayload) => {
     const savedTenant =
       savedTenantPayload?.data && typeof savedTenantPayload.data === "object"
@@ -993,6 +1022,8 @@ useEffect(() => {
       unit: unitId,
       invoiceDate,
       dueDate,
+      leaseFeeAmount: formData.createLeaseFeeInvoice ? parseFloat(formData.leaseFeeAmount || 0) : 0,
+      isLettingFee: isLettingProperty,
       items: invoicePreviewItems,
       utilityRows: combinedUtilitiesPreview
         .filter((item) => item && !item.isIncluded && Number(item.unitCharge || 0) > 0)
@@ -1776,15 +1807,28 @@ for (const request of invoiceRequests) {
 </div>
 
                   {!isEditMode && (
-                    <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50/70 p-4">
+                    <div className={`mt-4 rounded-xl border p-4 ${isLettingProperty ? "border-blue-200 bg-blue-50/70" : "border-orange-200 bg-orange-50/70"}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h4 className="text-sm font-bold text-orange-900">Lease / Agreement Fee</h4>
-                          <p className="mt-1 text-xs text-orange-800">
-                            Create a one-time tenant onboarding charge. This is posted as manager/company income and excluded from landlord statements.
+                          <h4 className={`text-sm font-bold ${isLettingProperty ? "text-blue-900" : "text-orange-900"}`}>
+                            {isLettingProperty ? "Letting Fee" : "Lease / Agreement Fee"}
+                          </h4>
+                          <p className={`mt-1 text-xs ${isLettingProperty ? "text-blue-800" : "text-orange-800"}`}>
+                            {isLettingProperty
+                              ? `This property is managed under Letting. A letting fee is automatically applied based on the property setting (${
+                                  selectedPropertyRecord?.lettingFeeMode === "fixed"
+                                    ? `fixed Ksh ${Number(selectedPropertyRecord?.lettingFeeValue || 0).toLocaleString()}`
+                                    : `${selectedPropertyRecord?.lettingFeeValue ?? 100}% of rent`
+                                }).`
+                              : "Create a one-time tenant onboarding charge. This is posted as manager/company income and excluded from landlord statements."}
                           </p>
+                          {isLettingProperty && computedLettingFee > 0 && (
+                            <p className="mt-1 text-xs font-semibold text-blue-900">
+                              Computed fee: Ksh {computedLettingFee.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                          )}
                         </div>
-                        <label className="inline-flex items-center gap-2 text-sm font-semibold text-orange-900">
+                        <label className={`inline-flex items-center gap-2 text-sm font-semibold ${isLettingProperty ? "text-blue-900" : "text-orange-900"}`}>
                           <input
                             type="checkbox"
                             name="createLeaseFeeInvoice"
@@ -1810,7 +1854,10 @@ for (const request of invoiceRequests) {
                       {formData.createLeaseFeeInvoice && (
                         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className={labelClass}>Lease / Agreement Fee Amount (Ksh) <span className="text-red-500">*</span></label>
+                            <label className={labelClass}>
+                              {isLettingProperty ? "Letting Fee Amount (Ksh)" : "Lease / Agreement Fee Amount (Ksh)"}{" "}
+                              <span className="text-red-500">*</span>
+                            </label>
                             <input
                               type="number"
                               name="leaseFeeAmount"
@@ -1821,6 +1868,11 @@ for (const request of invoiceRequests) {
                               min="0"
                               className={`${inputClass} ${fieldErrors.leaseFeeAmount ? "border-red-500" : ""}`}
                             />
+                            {isLettingProperty && computedLettingFee > 0 && (
+                              <p className="mt-1 text-xs text-blue-600">
+                                Auto-computed: Ksh {computedLettingFee.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — adjust if needed
+                              </p>
+                            )}
                             {fieldErrors.leaseFeeAmount && (
                               <p className="mt-1 text-xs text-red-600">{fieldErrors.leaseFeeAmount}</p>
                             )}
@@ -1833,7 +1885,7 @@ for (const request of invoiceRequests) {
                               name="leaseFeeDescription"
                               value={formData.leaseFeeDescription}
                               onChange={handleInputChange}
-                              placeholder="Lease preparation and agreement fee"
+                              placeholder={isLettingProperty ? "Letting fee" : "Lease preparation and agreement fee"}
                               className={inputClass}
                             />
                             <p className="mt-1 text-xs text-slate-500">
@@ -2130,6 +2182,17 @@ for (const request of invoiceRequests) {
                   </label>
                 </div>
               </div>
+
+              {pendingInvoiceContext?.leaseFeeAmount > 0 && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
+                  <p className="font-semibold text-blue-900">
+                    {pendingInvoiceContext?.isLettingFee ? "Letting fee" : "Lease / Agreement fee"} already created
+                  </p>
+                  <p className="text-xs text-blue-700 mt-0.5">
+                    KES {Number(pendingInvoiceContext.leaseFeeAmount).toLocaleString()} was invoiced automatically when the tenant was saved.
+                  </p>
+                </div>
+              )}
 
               <div className="rounded-2xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">

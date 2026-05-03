@@ -58,6 +58,7 @@ import AddCompanyWizard from "./pages/SystemSetup/AddCompanyWizard";
 import AddUserPage from "./pages/SystemSetup/AddUsers";
 import CompanySettings from "./pages/SystemSetup/CompanySettings";
 import PaymentVouchers from "./pages/Financial/PaymentVouchers";
+import PettyCash from "./pages/Financial/PettyCash";
 import ServiceProviders from "./pages/Financial/ServiceProviders";
 import ExpenseRequisition from "./pages/Financial/ExpenseRequisition";
 import ChartOfAccounts from "./pages/Financial/ChartOfAccounts";
@@ -486,6 +487,7 @@ function App() {
         <Route path="/receipts/landlord" element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="receipts" moduleKey="propertyManagement"><LandlordReceipts /></PermissionRoute></CompanyModeRoute>} />
         <Route path="/receipts/:id" element={<ProtectedRoute><Receipts /></ProtectedRoute>} />
         <Route path="/financial/payment-vouchers" element={<PermissionRoute resource="paymentVouchers" moduleKey="accounts"><PaymentVouchers /></PermissionRoute>} />
+        <Route path="/financial/petty-cash" element={<PermissionRoute resource="paymentVouchers" moduleKey="accounts"><PettyCash /></PermissionRoute>} />
         <Route path="/financial/service-providers" element={<PermissionRoute resource="expenses" moduleKey="accounts"><ServiceProviders /></PermissionRoute>} />
         <Route path="/expenses/requisition" element={<ProtectedRoute><ExpenseRequisition /></ProtectedRoute>} />
         <Route path="/landlords/standing-orders" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordStandingOrders /></ProtectedRoute></CompanyModeRoute>} />

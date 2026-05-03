@@ -1574,7 +1574,8 @@ export const generateLandlordStatement = async ({
     if (typeof metadata.includeInLandlordStatement === "boolean") {
       return metadata.includeInLandlordStatement;
     }
-    if (String(invoice?.category || "").toUpperCase() === "LATE_PENALTY_CHARGE") {
+    const cat = String(invoice?.category || "").toUpperCase();
+    if (cat === "LATE_PENALTY_CHARGE" || cat === "OTHER_CHARGE") {
       return false;
     }
     return true;
@@ -1956,13 +1957,22 @@ export const generateLandlordStatement = async ({
     } else if (note.category === "DEPOSIT_CHARGE") {
       applyDepositChargeToMemo(note, amount, "current");
     } else if (["OTHER_CHARGE", "LATE_PENALTY_CHARGE"].includes(String(note.category || "").toUpperCase())) {
-      const additionAmount = round2(Math.max(0, amount));
-      if (additionAmount > 0) {
-        totalAdditions = round2(totalAdditions + additionAmount);
+      if (amount > 0) {
+        totalAdditions = round2(totalAdditions + amount);
         additionRows.push({
           date: getNoteStatementDate(note) || note.noteDate,
           description: note.description || note.noteNumber || "Standalone tenant debit note",
-          amount: additionAmount,
+          amount,
+          category: String(note.category || "").toLowerCase(),
+          sourceId: String(note._id),
+        });
+      } else if (amount < 0) {
+        const reductionAmount = round2(Math.abs(amount));
+        totalExtraDeductions = round2(totalExtraDeductions + reductionAmount);
+        extraDeductionRows.push({
+          date: getNoteStatementDate(note) || note.noteDate,
+          description: note.description || note.noteNumber || "Credit note reversal",
+          amount: reductionAmount,
           category: String(note.category || "").toLowerCase(),
           sourceId: String(note._id),
         });

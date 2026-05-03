@@ -5,6 +5,7 @@ import {
   FaFileInvoiceDollar,
   FaFilter,
   FaPlus,
+  FaPrint,
   FaSave,
   FaSearch,
   FaSquare,
@@ -342,6 +343,128 @@ const PaymentVouchers = () => {
     }
   };
 
+  const handlePrintVoucher = (voucher) => {
+    const co = currentCompany || {};
+    const coName = co.companyName || co.name || "MILIK";
+    const coInfo = [co.phone || co.phoneNumber, co.email || co.companyEmail, co.address || co.location]
+      .filter(Boolean).join(" • ");
+    const logoHtml = co.logo
+      ? `<img src="${String(co.logo)}" alt="logo" style="width:80px;height:80px;object-fit:cover;border-radius:12px;border:1px solid #cbd5e1;padding:4px;" />`
+      : `<div style="width:80px;height:80px;background:#0B3B2E;color:#fff;font-size:28px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:12px">${String(coName).slice(0,1).toUpperCase()}</div>`;
+
+    const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const fmtAmt = (n) => `KES ${Number(n||0).toLocaleString("en-KE",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"}) : "—";
+
+    const catLabel = categories.find(c => c.value === voucher.category)?.label || voucher.category || "—";
+    const statusColor = { draft:"#92400e", approved:"#1e40af", paid:"#166534", reversed:"#92400e" }[voucher.status] || "#334155";
+    const statusBg = { draft:"#fef3c7", approved:"#dbeafe", paid:"#dcfce7", reversed:"#fef3c7" }[voucher.status] || "#f1f5f9";
+    const printedOn = new Date().toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"});
+
+    const field = (label, value, mono = false) => `
+      <div class="field">
+        <div class="field-label">${esc(label)}</div>
+        <div class="field-val${mono ? " mono" : ""}">${esc(value || "—")}</div>
+      </div>`;
+
+    const win = window.open("", "_blank", "width=900,height=720");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/>
+<title>Payment Voucher — ${esc(voucher.voucherNo)}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px}
+  .hdr{display:grid;grid-template-columns:96px 1fr 160px;align-items:center;border-bottom:3px solid #0B3B2E;padding-bottom:14px;margin-bottom:20px;gap:12px}
+  .co-name{font-size:20px;font-weight:900;color:#0B3B2E}
+  .co-sub{font-size:10px;color:#64748b;margin-top:3px;line-height:1.5}
+  .doc-type{font-size:14px;font-weight:800;color:#0B3B2E;text-transform:uppercase;letter-spacing:.05em;text-align:right}
+  .doc-no{font-family:monospace;font-size:15px;font-weight:700;text-align:right;margin-top:4px}
+  .doc-date{font-size:10px;color:#64748b;text-align:right;margin-top:3px}
+  .status-badge{display:inline-block;padding:3px 12px;border-radius:999px;font-size:10px;font-weight:700;float:right;margin-top:6px;background:${statusBg};color:${statusColor}}
+  .fields-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:16px}
+  .field{background:#fff;padding:10px 12px}
+  .field-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:3px}
+  .field-val{font-size:12px;font-weight:600;color:#1e293b;line-height:1.4}
+  .field-val.mono{font-family:monospace;font-size:13px}
+  .amt-box{border:2px solid #0B3B2E;border-radius:8px;padding:14px 16px;margin-bottom:16px;background:#f0faf5}
+  .amt-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:5px}
+  .amt-val{font-size:26px;font-weight:900;color:#0B3B2E;font-family:monospace}
+  .narration-box{border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-bottom:16px}
+  .narration-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px}
+  .narration-val{font-size:12px;color:#334155;line-height:1.5}
+  .sig-section{border-top:2px solid #0B3B2E;padding-top:18px;margin-top:24px}
+  .sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px}
+  .sig-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#0B3B2E;margin-bottom:14px}
+  .sig-line{border-bottom:1.5px solid #94a3b8;height:28px;margin-bottom:4px}
+  .sig-sub{font-size:9px;color:#94a3b8;margin-bottom:10px}
+  .notice{font-size:9px;color:#94a3b8;text-align:center;margin-top:18px;border-top:1px solid #f1f5f9;padding-top:10px;line-height:1.6}
+  @media print{body{padding:12px 14px}@page{size:A4 portrait;margin:12mm}}
+</style></head>
+<body>
+  <div class="hdr">
+    <div>${logoHtml}</div>
+    <div style="text-align:center">
+      <div class="co-name">${esc(coName)}</div>
+      ${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}
+    </div>
+    <div>
+      <div class="doc-type">Payment Voucher</div>
+      <div class="doc-no">${esc(voucher.voucherNo)}</div>
+      <div class="doc-date">${fmtDate(voucher.dueDate)}</div>
+      <div class="status-badge">${esc(String(voucher.status||"").toUpperCase())}</div>
+    </div>
+  </div>
+
+  <div class="amt-box">
+    <div class="amt-label">Amount</div>
+    <div class="amt-val">${fmtAmt(voucher.amount)}</div>
+  </div>
+
+  <div class="fields-grid">
+    ${field("Voucher No.", voucher.voucherNo, true)}
+    ${field("Category", catLabel)}
+    ${field("Due Date", fmtDate(voucher.dueDate))}
+    ${field("Property", voucher.propertyName)}
+    ${field("Landlord / Owner", voucher.landlordName)}
+    ${field("Reference", voucher.reference)}
+    ${field("Liability Account", voucher.liabilityAccountName)}
+    ${field("Debit Account", voucher.debitAccountName)}
+    ${field("Settlement Account", voucher.settlementAccountName)}
+  </div>
+
+  ${voucher.narration ? `
+  <div class="narration-box">
+    <div class="narration-label">Narration / Description</div>
+    <div class="narration-val">${esc(voucher.narration)}</div>
+  </div>` : ""}
+
+  <div class="sig-section">
+    <div class="sig-grid">
+      <div>
+        <div class="sig-title">Prepared By</div>
+        <div class="sig-line"></div><div class="sig-sub">Signature</div>
+        <div class="sig-line"></div><div class="sig-sub">Name &amp; Date</div>
+      </div>
+      <div>
+        <div class="sig-title">Approved By</div>
+        <div class="sig-line"></div><div class="sig-sub">Signature</div>
+        <div class="sig-line"></div><div class="sig-sub">Name &amp; Date</div>
+      </div>
+      <div>
+        <div class="sig-title">Received / Paid By</div>
+        <div class="sig-line"></div><div class="sig-sub">Signature</div>
+        <div class="sig-line"></div><div class="sig-sub">Name &amp; Date</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notice">Official payment voucher generated by ${esc(coName)} • Printed: ${esc(printedOn)}</div>
+</body></html>`);
+    win.document.close();
+    setTimeout(() => { win.focus(); win.print(); }, 450);
+  };
+
   const toggleSelect = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]);
   const toggleSelectAll = () => setSelectedIds((prev) => prev.length === filtered.length ? [] : filtered.map((voucher) => voucher._id));
 
@@ -465,6 +588,7 @@ const PaymentVouchers = () => {
                         <td className="px-3 py-2"><span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-black ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span></td>
                         <td className="px-3 py-2 text-right">
                           <div className="inline-flex flex-wrap justify-end gap-2">
+                            <button onClick={() => handlePrintVoucher(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"><FaPrint /> Print</button>
                             {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"><FaEdit /> Edit</button>}
                             {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher, "approved")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700 disabled:opacity-60"><FaCheck /> {isBusy("approved") ? "Working..." : "Approve"}</button>}
                             {(voucher.status === "draft" || voucher.status === "approved") && canUpdateVoucher && <button onClick={() => updateStatus(voucher, "paid")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 disabled:opacity-60"><FaCheck /> {isBusy("paid") ? "Working..." : "Mark Paid"}</button>}

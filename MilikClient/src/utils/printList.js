@@ -1,119 +1,143 @@
+const GRN = "#0B3B2E";
+
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
+    .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
 const formatDateTime = (value = new Date()) => {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString();
+  return date.toLocaleDateString("en-KE", {
+    day: "2-digit", month: "long", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
 };
 
-const getCompanyDetails = (company = {}) => {
-  const name = company?.companyName || company?.name || "MILIK";
-  const logo = company?.logo || "";
-  const phone = company?.phone || company?.phoneNumber || company?.mobile || "";
-  const email = company?.email || company?.companyEmail || "";
-  const address = company?.address || company?.location || company?.city || "";
-  return { name, logo, phone, email, address };
-};
+const getCompanyDetails = (company = {}) => ({
+  name: company?.companyName || company?.name || "MILIK",
+  logo: company?.logo || "",
+  phone: company?.phone || company?.phoneNumber || company?.mobile || "",
+  email: company?.email || company?.companyEmail || "",
+  address: company?.address || company?.location || company?.city || "",
+});
 
 const buildHeaderHtml = ({ company, title, subtitle, metaLine }) => {
-  const details = getCompanyDetails(company);
-  const infoLine = [details.phone, details.email, details.address].filter(Boolean).join(" • ");
+  const d = getCompanyDetails(company);
+  const infoLine = [d.phone, d.email, d.address].filter(Boolean).join(" • ");
 
   return `
-    <div class="header-wrap">
-      <div class="brand-side brand-side-left">
-        ${details.logo ? `<img src="${escapeHtml(details.logo)}" alt="${escapeHtml(details.name)} logo" class="brand-logo" />` : `<div class="brand-logo brand-fallback">${escapeHtml(details.name.slice(0, 1).toUpperCase())}</div>`}
+    <div class="hdr">
+      <div class="hdr-logo">
+        ${d.logo
+          ? `<img src="${escapeHtml(d.logo)}" alt="${escapeHtml(d.name)} logo" class="logo-img" />`
+          : `<div class="logo-fallback">${escapeHtml(d.name.slice(0, 1).toUpperCase())}</div>`}
       </div>
-      <div class="brand-center">
-        <div class="company-name">${escapeHtml(details.name)}</div>
-        <div class="report-title">${escapeHtml(title)}</div>
-        ${subtitle ? `<div class="report-subtitle">${escapeHtml(subtitle)}</div>` : ""}
-        ${infoLine ? `<div class="company-meta">${escapeHtml(infoLine)}</div>` : ""}
-        <div class="company-meta">${escapeHtml(metaLine || `Printed on ${formatDateTime()}`)}</div>
+      <div class="hdr-center">
+        <div class="co-name">${escapeHtml(d.name)}</div>
+        ${infoLine ? `<div class="co-sub">${escapeHtml(infoLine)}</div>` : ""}
+        <div class="rpt-title">${escapeHtml(title)}</div>
+        ${subtitle ? `<div class="rpt-sub">${escapeHtml(subtitle)}</div>` : ""}
       </div>
-      <div class="brand-side"></div>
+      <div class="hdr-right">
+        <div class="print-date">${escapeHtml(metaLine || `Printed: ${formatDateTime()}`)}</div>
+      </div>
     </div>
   `;
 };
 
 const buildTableHtml = ({ columns = [], rows = [] }) => {
   const headerCells = columns
-    .map((column) => `<th style="text-align:${column.align === "right" ? "right" : "left"};">${escapeHtml(column.label)}</th>`)
+    .map((col) => `<th style="text-align:${col.align === "right" ? "right" : "left"}">${escapeHtml(col.label)}</th>`)
     .join("");
 
   const bodyRows = rows
-    .map((row, rowIndex) => {
+    .map((row, idx) => {
       const cells = columns
-        .map((column) => {
-          const rawValue = typeof column.value === "function" ? column.value(row, rowIndex) : row?.[column.key];
-          return `<td style="text-align:${column.align === "right" ? "right" : "left"};">${escapeHtml(rawValue ?? "-")}</td>`;
+        .map((col) => {
+          const raw = typeof col.value === "function" ? col.value(row, idx) : row?.[col.key];
+          return `<td style="text-align:${col.align === "right" ? "right" : "left"}">${escapeHtml(raw ?? "-")}</td>`;
         })
         .join("");
-      return `<tr>${cells}</tr>`;
+      return `<tr class="${idx % 2 === 1 ? "alt" : ""}">${cells}</tr>`;
     })
     .join("");
 
   return `
     <table>
       <thead><tr>${headerCells}</tr></thead>
-      <tbody>${bodyRows || `<tr><td colspan="${Math.max(columns.length, 1)}" class="empty-cell">No rows available</td></tr>`}</tbody>
+      <tbody>${bodyRows || `<tr><td colspan="${Math.max(columns.length, 1)}" class="empty-cell">No records found</td></tr>`}</tbody>
     </table>
   `;
 };
 
+const BASE_CSS = `
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: #fff; padding: 26px 28px; font-size: 12px; }
+  /* Header */
+  .hdr { display: grid; grid-template-columns: 100px 1fr 140px; align-items: center; border-bottom: 3px solid ${GRN}; padding-bottom: 16px; margin-bottom: 18px; gap: 12px; }
+  .hdr-logo { display: flex; align-items: center; justify-content: flex-start; }
+  .logo-img { width: 84px; height: 84px; object-fit: cover; border-radius: 14px; border: 1px solid #cbd5e1; background: #fff; padding: 5px; }
+  .logo-fallback { width: 84px; height: 84px; background: ${GRN}; color: #fff; font-size: 32px; font-weight: 900; display: flex; align-items: center; justify-content: center; border-radius: 14px; }
+  .hdr-center { text-align: center; }
+  .co-name { font-size: 22px; font-weight: 900; letter-spacing: .02em; color: ${GRN}; }
+  .co-sub { font-size: 10px; color: #64748b; margin-top: 3px; line-height: 1.5; }
+  .rpt-title { font-size: 16px; font-weight: 800; margin-top: 6px; color: #1e293b; }
+  .rpt-sub { font-size: 11px; color: #475569; margin-top: 3px; }
+  .hdr-right { text-align: right; }
+  .print-date { font-size: 10px; color: #64748b; line-height: 1.6; }
+  /* Summary line */
+  .summary { font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 12px; padding: 7px 10px; background: #f8fafc; border-left: 3px solid ${GRN}; border-radius: 0 4px 4px 0; }
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead tr { background: ${GRN}; }
+  thead th { color: #fff; padding: 9px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; border: 1px solid rgba(255,255,255,.15); }
+  tbody td { padding: 8px 10px; border: 1px solid #e2e8f0; vertical-align: top; color: #1e293b; }
+  tbody tr.alt td { background: #f8fafc; }
+  tbody tr:hover td { background: #f0fdf4; }
+  .empty-cell { text-align: center; color: #94a3b8; padding: 20px; font-style: italic; }
+  /* Footer count */
+  tfoot td { padding: 8px 10px; font-weight: 700; font-size: 11px; border-top: 2px solid ${GRN}; background: #f0faf5; color: ${GRN}; }
+  /* Print */
+  @media print {
+    body { padding: 12px 14px; }
+    @page { size: A4 landscape; margin: 10mm; }
+    thead tr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    tbody tr.alt td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+`;
+
 export const printTabularList = ({ title, subtitle = "", company = {}, columns = [], rows = [], summary = "" }) => {
-  const printWindow = window.open("", "_blank", "width=1200,height=800");
-  if (!printWindow) return null;
+  const win = window.open("", "_blank", "width=1200,height=800");
+  if (!win) return null;
 
-  const html = `
-    <html>
-      <head>
-        <title>${escapeHtml(title || "List")}</title>
-        <style>
-          * { box-sizing: border-box; }
-          body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; margin: 0; padding: 26px 28px; }
-          .header-wrap { display: grid; grid-template-columns: 128px 1fr 128px; align-items: center; border-bottom: 3px solid #0B3B2E; padding-bottom: 18px; margin-bottom: 18px; gap: 12px; }
-          .brand-side { display:flex; align-items:center; justify-content:center; min-height: 96px; }
-          .brand-side-left { justify-content:flex-start; }
-          .brand-logo { width: 96px; height: 96px; object-fit: cover; border-radius: 18px; border: 1px solid #cbd5e1; background: #fff; padding: 6px; }
-          .brand-fallback { width: 96px; height: 96px; background: #0B3B2E; color: #fff; font-weight: 800; font-size: 34px; display:flex; align-items:center; justify-content:center; border-radius: 18px; }
-          .brand-center { text-align: center; }
-          .company-name { font-size: 26px; font-weight: 800; letter-spacing: .02em; color: #0B3B2E; }
-          .report-title { font-size: 18px; font-weight: 700; margin-top: 4px; }
-          .report-subtitle { font-size: 12px; color: #475569; margin-top: 4px; }
-          .company-meta { font-size: 11px; color: #64748b; margin-top: 4px; }
-          .summary-line { margin: 0 0 14px; font-size: 12px; color: #334155; font-weight: 600; }
-          .header-wrap + .summary-line { margin-top: 2px; }
-          table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          thead th { background: #0B3B2E; color: #fff; padding: 9px 10px; border: 1px solid #dbe3dd; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-          tbody td { padding: 8px 10px; border: 1px solid #e2e8f0; vertical-align: top; }
-          tbody tr:nth-child(even) td { background: #f8fafc; }
-          .empty-cell { text-align:center; color:#64748b; padding: 20px; }
-          @media print { body { padding: 14px 16px; } }
-        </style>
-      </head>
-      <body>
-        ${buildHeaderHtml({ company, title, subtitle, metaLine: summary || `Printed on ${formatDateTime()}` })}
-        ${summary ? `<p class="summary-line">${escapeHtml(summary)}</p>` : ""}
-        ${buildTableHtml({ columns, rows })}
-      </body>
-    </html>
-  `;
+  const countRow = rows.length > 0
+    ? `<tfoot><tr><td colspan="${columns.length}">${rows.length.toLocaleString()} record${rows.length !== 1 ? "s" : ""}</td></tr></tfoot>`
+    : "";
 
-  printWindow.document.write(html);
-  printWindow.document.close();
-  setTimeout(() => {
-    printWindow.focus();
-    printWindow.print();
-  }, 450);
+  const tableWithFoot = buildTableHtml({ columns, rows }).replace("</table>", `${countRow}</table>`);
 
-  return printWindow;
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>${escapeHtml(title || "List")}</title>
+  <style>${BASE_CSS}</style>
+</head>
+<body>
+  ${buildHeaderHtml({ company, title, subtitle, metaLine: summary || `Printed: ${formatDateTime()}` })}
+  ${summary ? `<div class="summary">${escapeHtml(summary)}</div>` : ""}
+  ${tableWithFoot}
+</body>
+</html>`;
+
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => { win.focus(); win.print(); }, 450);
+  return win;
 };
 
 export default printTabularList;

@@ -20,6 +20,8 @@ const LEDGER_CATEGORIES = [
   "ADJUSTMENT",
   "WRITE_OFF",
   "REVERSAL",
+  "PETTY_CASH_EXPENSE",
+  "PETTY_CASH_REPLENISHMENT",
 ];
 
 const SOURCE_TYPES = [
@@ -38,6 +40,8 @@ const SOURCE_TYPES = [
   "system_migration",
   "advance",
   "recurring_deduction",
+  "petty_cash_disbursement",
+  "petty_cash_replenishment",
   "other",
 ];
 
