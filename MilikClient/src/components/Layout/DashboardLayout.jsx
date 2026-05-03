@@ -135,7 +135,7 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
   return (
     <div
       className={`${
-        lockContentScroll ? "h-screen overflow-hidden" : "min-h-screen"
+        lockContentScroll ? "h-screen overflow-hidden flex flex-col" : "min-h-screen"
       } ${darkMode ? "dark bg-gray-900" : "bg-white"}`}
     >
       <Toaster
@@ -160,7 +160,7 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
       />
 
       <div
-        className={`sticky top-0 left-0 right-0 z-50 ${
+        className={`sticky top-0 left-0 right-0 z-50 flex-shrink-0 ${
           darkMode ? "bg-gray-800" : "bg-white"
         } border-b ${darkMode ? "border-gray-700" : "border-gray-200"}`}
       >
@@ -181,10 +181,10 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
       </div>
 
       <div
-        className={`flex flex-1 bg-white min-h-0 ${
+        className={`flex bg-white min-h-0 ${
           lockContentScroll
-            ? "h-[calc(100vh-64px)] overflow-hidden pb-8"
-            : "min-h-screen overflow-x-hidden pb-16"
+            ? "flex-1 overflow-hidden"
+            : "flex-1 min-h-screen overflow-x-hidden pb-16"
         }`}
       >
         <main

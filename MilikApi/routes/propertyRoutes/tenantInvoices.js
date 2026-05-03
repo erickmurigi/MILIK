@@ -17,28 +17,21 @@ import TenantInvoice from "../../models/TenantInvoice.js";
 
 const router = express.Router();
 
-// Create tenant invoice
-router.post("/", verifyUser, createTenantInvoice);
-
-router.post("/batch", verifyUser, createTenantInvoicesBatch);
-
-router.put("/:id/take-on-balance", verifyUser, updateTakeOnBalance);
-router.delete("/:id", verifyUser, deleteTenantInvoice);
-
-// Credit/debit note routes
+// Static / collection routes — must come before any /:id patterns
+router.get("/", verifyUser, getTenantInvoicesList);
 router.get("/note-charge-types", verifyUser, getTenantInvoiceNoteChargeTypes);
-router.post("/notes", verifyUser, createTenantInvoiceNote);
-router.post("/notes/:id/reverse", verifyUser, reverseTenantInvoiceNote);
-router.delete("/notes/:id", verifyUser, reverseTenantInvoiceNote);
 router.get("/notes", verifyUser, getTenantInvoiceNotes);
 router.get("/creditable", verifyUser, getCreditableTenantInvoices);
 router.get("/take-on-balances", verifyUser, getTakeOnBalances);
 
-// Get tenant invoices
-// Supports:
-//   /api/tenant-invoices?tenant=<tenantId>
-//   /api/tenant-invoices?business=<businessId>
-//   /api/tenant-invoices?tenant=<tenantId>&business=<businessId>
-router.get("/", verifyUser, getTenantInvoicesList);
+router.post("/", verifyUser, createTenantInvoice);
+router.post("/batch", verifyUser, createTenantInvoicesBatch);
+router.post("/notes", verifyUser, createTenantInvoiceNote);
+router.post("/notes/:id/reverse", verifyUser, reverseTenantInvoiceNote);
+
+// Parameterised routes
+router.put("/:id/take-on-balance", verifyUser, updateTakeOnBalance);
+router.delete("/:id", verifyUser, deleteTenantInvoice);
+router.delete("/notes/:id", verifyUser, reverseTenantInvoiceNote);
 
 export default router;

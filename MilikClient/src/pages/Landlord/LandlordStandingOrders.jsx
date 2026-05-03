@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   FaCalendarAlt,
   FaCheck,
@@ -30,6 +30,7 @@ import {
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { propertyBelongsToLandlord } from "./propertyUtils";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const ITEMS_PER_PAGE = 50;
 const todayIso = () => new Date().toISOString().split("T")[0];
@@ -148,6 +149,7 @@ const validateForm = (form) => {
 const LandlordStandingOrders = () => {
   const dispatch = useDispatch();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser);
   const landlords = useSelector((state) => state.landlord?.landlords || []);
   const properties = useSelector((state) => state.property?.properties || []);
   const activeLandlords = useMemo(
@@ -166,6 +168,27 @@ const LandlordStandingOrders = () => {
   const [editingId, setEditingId] = useState("");
   const [filters, setFilters] = useState({ search: "", status: "all", landlordId: "all", propertyId: "all" });
   const [form, setForm] = useState(blankForm);
+
+  const canWrite = hasCompanyPermission(currentUser, currentCompany, "standingOrders", "create", "accounts");
+
+  const _uid = currentUser?._id || currentUser?.id;
+  const _lsoDraftKey = (currentCompany?._id && _uid) ? `milik:draft:standing-order:${currentCompany._id}:${_uid}` : null;
+  const _lsoDraftRestored = useRef(false);
+
+  useEffect(() => {
+    if (!_lsoDraftKey || _lsoDraftRestored.current) return;
+    _lsoDraftRestored.current = true;
+    try {
+      const raw = window.sessionStorage.getItem(_lsoDraftKey);
+      if (raw) { const { form: s } = JSON.parse(raw); if (s) { setForm(s); setShowModal(true); } }
+    } catch {}
+  }, [_lsoDraftKey]);
+
+  useEffect(() => {
+    if (!_lsoDraftKey || !_lsoDraftRestored.current || !showModal || editingId) return;
+    try { window.sessionStorage.setItem(_lsoDraftKey, JSON.stringify({ form })); } catch {}
+  }, [_lsoDraftKey, form, showModal, editingId]);
+
   const [runModal, setRunModal] = useState({ open: false, row: null, periodKey: "", amount: "", note: "" });
   const [expandedId, setExpandedId] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
@@ -260,7 +283,15 @@ const LandlordStandingOrders = () => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
   }, [currentPage, safeCurrentPage]);
 
+  const closeModal = () => {
+    if (_lsoDraftKey) { try { window.sessionStorage.removeItem(_lsoDraftKey); } catch {} }
+    setShowModal(false);
+    setEditingId("");
+    setForm(blankForm);
+  };
+
   const openCreate = () => {
+    if (!canWrite) { toast.warning("You don't have permission to create standing orders"); return; }
     setEditingId("");
     setForm({
       ...blankForm,
@@ -271,6 +302,7 @@ const LandlordStandingOrders = () => {
   };
 
   const openEdit = (row) => {
+    if (!canWrite) { toast.warning("You don't have permission to edit standing orders"); return; }
     const destination = row?.destination || {};
     setEditingId(row._id);
     setForm({
@@ -340,9 +372,7 @@ const LandlordStandingOrders = () => {
         : await createLandlordStandingOrder(payload);
 
       setRows((prev) => (editingId ? prev.map((row) => (row._id === editingId ? saved : row)) : [saved, ...prev]));
-      setShowModal(false);
-      setEditingId("");
-      setForm(blankForm);
+      closeModal();
       toast.success(`Standing order ${editingId ? "updated" : "saved"}`);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to save standing order");
@@ -532,6 +562,7 @@ const LandlordStandingOrders = () => {
   };
 
   const handleDelete = async (row) => {
+    if (!canWrite) { toast.warning("You don't have permission to delete standing orders"); return; }
     if (!window.confirm(`Delete standing order ${row.standingOrderNo || row.referenceNo}?`)) return;
     try {
       await deleteLandlordStandingOrder(row._id, { business: currentCompany?._id, company: currentCompany?._id });
@@ -618,7 +649,8 @@ const LandlordStandingOrders = () => {
                 </button>
                 <button
                   onClick={openCreate}
-                  className="flex items-center gap-2 rounded-md bg-[#0B3B2E] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0A3127]"
+                  disabled={!canWrite}
+                  className="flex items-center gap-2 rounded-md bg-[#0B3B2E] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   <FaPlus /> Add Standing Order
                 </button>
@@ -722,7 +754,8 @@ const LandlordStandingOrders = () => {
                             <div className="inline-flex flex-wrap justify-end gap-2">
                               <button
                                 onClick={() => openEdit(row)}
-                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-blue-700"
+                                disabled={!canWrite}
+                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 <FaEdit /> Edit
                               </button>
@@ -762,7 +795,8 @@ const LandlordStandingOrders = () => {
                               </button>
                               <button
                                 onClick={() => handleDelete(row)}
-                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-2.5 text-[11px] font-bold text-rose-700"
+                                disabled={!canWrite}
+                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-2.5 text-[11px] font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 <FaTrash /> Delete
                               </button>
@@ -930,7 +964,7 @@ const LandlordStandingOrders = () => {
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Landlord Standing Order</p>
                 <h3 className="text-xl font-black">{editingId ? "Edit Standing Order" : "Add Standing Order"}</h3>
               </div>
-              <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10">
+              <button onClick={closeModal} className="rounded-full border border-white/30 p-2 hover:bg-white/10">
                 <FaTimes />
               </button>
             </div>
@@ -1158,7 +1192,7 @@ const LandlordStandingOrders = () => {
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700">
+              <button onClick={closeModal} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700">
                 Cancel
               </button>
               <button

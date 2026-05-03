@@ -17,6 +17,7 @@ import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getChartOfAccounts } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const ACCOUNT_GROUPS = [
   {
@@ -149,6 +150,10 @@ const formatMoney = (value) => {
 const ChartOfAccounts = () => {
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser);
+  const canCreateCOA = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "create", "accounts");
+  const canUpdateCOA = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "update", "accounts");
+  const canDeleteCOA = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "delete", "accounts");
 
   const [accounts, setAccounts] = useState([]);
   const [search, setSearch] = useState("");
@@ -161,6 +166,24 @@ const ChartOfAccounts = () => {
   const [editingAccountId, setEditingAccountId] = useState(null);
   const [formData, setFormData] = useState(blankForm);
   const requestSequenceRef = useRef(0);
+
+  const _uid = currentUser?._id || currentUser?.id;
+  const _coaDraftKey = (currentCompany?._id && _uid) ? `milik:draft:coa-account:${currentCompany._id}:${_uid}` : null;
+  const _coaDraftRestored = useRef(false);
+
+  useEffect(() => {
+    if (!_coaDraftKey || _coaDraftRestored.current) return;
+    _coaDraftRestored.current = true;
+    try {
+      const raw = window.sessionStorage.getItem(_coaDraftKey);
+      if (raw) { const { form: s } = JSON.parse(raw); if (s) { setFormData(s); setShowForm(true); } }
+    } catch {}
+  }, [_coaDraftKey]);
+
+  useEffect(() => {
+    if (!_coaDraftKey || !_coaDraftRestored.current || !showForm || editingAccountId) return;
+    try { window.sessionStorage.setItem(_coaDraftKey, JSON.stringify({ form: formData })); } catch {}
+  }, [_coaDraftKey, formData, showForm, editingAccountId]);
 
   const businessId = currentCompany?._id || "";
 
@@ -272,6 +295,7 @@ const ChartOfAccounts = () => {
   }, [accounts, selectedIds]);
 
   const openCreateModal = () => {
+    if (!canCreateCOA) { toast.warning("You do not have permission to create chart of accounts entries."); return; }
     setEditingAccountId(null);
     setFormData(blankForm);
     setShowForm(true);
@@ -282,6 +306,7 @@ const ChartOfAccounts = () => {
       toast.info("Select one account to edit.");
       return;
     }
+    if (!canUpdateCOA) { toast.warning("You do not have permission to edit chart of accounts entries."); return; }
 
     const account = selectedAccounts[0];
     setEditingAccountId(account._id);
@@ -299,6 +324,7 @@ const ChartOfAccounts = () => {
   };
 
   const closeModal = () => {
+    if (_coaDraftKey) { try { window.sessionStorage.removeItem(_coaDraftKey); } catch {} }
     setShowForm(false);
     setEditingAccountId(null);
     setFormData(blankForm);
@@ -408,7 +434,7 @@ const ChartOfAccounts = () => {
       toast.info("Select at least one account to delete.");
       return;
     }
-
+    if (!canDeleteCOA) { toast.warning("You do not have permission to delete chart of accounts entries."); return; }
     const names = selectedAccounts.map((a) => `${a.code} ${a.name}`).join(", ");
     const confirmed = window.confirm(`Delete selected account(s)?\n\n${names}`);
     if (!confirmed) return;
@@ -468,9 +494,9 @@ const ChartOfAccounts = () => {
                   {selectedAccounts.length} selected
                 </div>
                 <button onClick={loadAccounts} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100"><FaSyncAlt /> Refresh</button>
-                <button onClick={openCreateModal} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00]"><FaPlus /> Add Account</button>
-                <button onClick={openEditModal} disabled={selectedAccounts.length !== 1} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length === 1 ? "bg-amber-500 hover:bg-amber-600" : "bg-slate-300"}`}><FaEdit /> Edit</button>
-                <button onClick={handleDeleteSelected} disabled={selectedAccounts.length === 0} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length > 0 ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-300"}`}><FaTrash /> Delete</button>
+                <button onClick={openCreateModal} disabled={!canCreateCOA} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> Add Account</button>
+                <button onClick={openEditModal} disabled={selectedAccounts.length !== 1 || !canUpdateCOA} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length === 1 && canUpdateCOA ? "bg-amber-500 hover:bg-amber-600" : "bg-slate-300"}`}><FaEdit /> Edit</button>
+                <button onClick={handleDeleteSelected} disabled={selectedAccounts.length === 0 || !canDeleteCOA} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length > 0 && canDeleteCOA ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-300"}`}><FaTrash /> Delete</button>
               </div>
             </div>
           </div>

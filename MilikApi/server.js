@@ -339,6 +339,19 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Dedicated limiter for company creation — tighter than the general limiter
+// because each company creation triggers heavy seeding (CoA, workspace init).
+const companyCreationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: {
+    success: false,
+    message: "Too many company creation requests from this IP, please try again later",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use(generalLimiter);
 
 app.get("/health", (req, res) => {
@@ -428,6 +441,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/tenant-invoices", tenantInvoicesRoutes);
 app.use("/api/communications", communicationRoutes);
 app.use("/api/dashboard", DashboardRoutes);
+app.post("/api/companies", companyCreationLimiter);
 app.use("/api/companies", companyRoutes);
 app.use("/api/company-settings", cacheShortLived, companySettingsRoutes);
 app.use("/api/journals", journalEntriesRoutes);

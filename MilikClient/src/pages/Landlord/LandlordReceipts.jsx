@@ -18,6 +18,7 @@ import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getLandlords, getChartOfAccounts, getLandlordReceipts, createLandlordReceipt, updateLandlordReceipt, postLandlordReceipt, reverseLandlordReceipt, deleteLandlordReceipt } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -126,10 +127,14 @@ const getPropertyLinkedLandlord = (property, landlords = []) => {
 const LandlordReceipts = () => {
   const dispatch = useDispatch();
   const { currentCompany } = useSelector((state) => state.company || {});
+  const currentUser = useSelector((state) => state.auth?.currentUser);
   const landlords = ensureArray(useSelector((state) => state.landlord?.landlords));
   const properties = ensureArray(useSelector((state) => state.property?.properties));
   const activeLandlords = useMemo(() => landlords.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [landlords]);
   const activeProperties = useMemo(() => properties.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [properties]);
+
+  const canCreate  = hasCompanyPermission(currentUser, currentCompany, "landlordReceipts", "create", "accounts");
+  const canReverse = hasCompanyPermission(currentUser, currentCompany, "landlordReceipts", "reverse", "accounts");
 
   const [cashbooks, setCashbooks] = useState([]);
   const [receipts, setReceipts] = useState([]);
@@ -246,12 +251,14 @@ const LandlordReceipts = () => {
   }, [filteredReceipts]);
 
   const openCreateModal = () => {
+    if (!canCreate) { toast.warning("You don't have permission to record landlord receipts"); return; }
     setEditingReceiptId("");
     setFormData(buildDefaultForm());
     setShowFormModal(true);
   };
 
   const openEditModal = (receipt) => {
+    if (!canCreate) { toast.warning("You don't have permission to edit landlord receipts"); return; }
     setEditingReceiptId(String(receipt?._id || ""));
     setFormData({
       property: String(receipt?.property?._id || receipt?.property || ""),
@@ -319,6 +326,7 @@ const LandlordReceipts = () => {
   };
 
   const handlePost = async (receipt) => {
+    if (!canCreate) { toast.warning("You don't have permission to post landlord receipts"); return; }
     if (!receipt?._id) return;
     try {
       await postLandlordReceipt(receipt._id, { business: currentCompany?._id });
@@ -330,6 +338,7 @@ const LandlordReceipts = () => {
   };
 
   const handleReverse = async (receipt) => {
+    if (!canReverse) { toast.warning("You don't have permission to reverse landlord receipts"); return; }
     if (!receipt?._id) return;
     const reason = window.prompt("Enter reversal reason", "Landlord receipt reversed") || "Landlord receipt reversed";
     try {
@@ -342,6 +351,7 @@ const LandlordReceipts = () => {
   };
 
   const handleDelete = async (receipt) => {
+    if (!canCreate) { toast.warning("You don't have permission to delete landlord receipts"); return; }
     if (!receipt?._id) return;
     const ok = window.confirm(`Delete draft receipt ${receipt.receiptNumber || ""}?`);
     if (!ok) return;
@@ -487,7 +497,8 @@ const LandlordReceipts = () => {
               <button
                 type="button"
                 onClick={openCreateModal}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-4 py-1 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                disabled={!canCreate}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-4 py-1 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
               >
                 <FaPlus /> Add Landlord Receipt
               </button>
@@ -527,13 +538,13 @@ const LandlordReceipts = () => {
                           <button type="button" onClick={() => handlePrint(row)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print"><FaPrint size={12} /></button>
                           {row?.status === "draft" && (
                             <>
-                              <button type="button" onClick={() => openEditModal(row)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title="Edit"><FaEdit size={12} /></button>
-                              <button type="button" onClick={() => handlePost(row)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Post"><FaCheck size={12} /></button>
-                              <button type="button" onClick={() => handleDelete(row)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Delete"><FaTrash size={12} /></button>
+                              {canCreate && <button type="button" onClick={() => openEditModal(row)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title="Edit"><FaEdit size={12} /></button>}
+                              {canCreate && <button type="button" onClick={() => handlePost(row)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Post"><FaCheck size={12} /></button>}
+                              {canCreate && <button type="button" onClick={() => handleDelete(row)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Delete"><FaTrash size={12} /></button>}
                             </>
                           )}
                           {row?.status === "posted" && (
-                            <button type="button" onClick={() => handleReverse(row)} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800" title="Reverse"><FaUndo size={12} /></button>
+                            canReverse && <button type="button" onClick={() => handleReverse(row)} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800" title="Reverse"><FaUndo size={12} /></button>
                           )}
                         </div>
                       </td>
@@ -733,13 +744,13 @@ const LandlordReceipts = () => {
             </div>
             <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-5">
               <button type="button" onClick={() => handlePrint(activeReceipt)} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-100"><FaPrint /> Print</button>
-              {activeReceipt?.status === "draft" && (
+              {activeReceipt?.status === "draft" && canCreate && (
                 <>
                   <button type="button" onClick={() => { setShowDetailModal(false); openEditModal(activeReceipt); }} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-100"><FaEdit /> Edit Draft</button>
                   <button type="button" onClick={() => { setShowDetailModal(false); handlePost(activeReceipt); }} className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaCheck /> Post</button>
                 </>
               )}
-              {activeReceipt?.status === "posted" && (
+              {activeReceipt?.status === "posted" && canReverse && (
                 <button type="button" onClick={() => { setShowDetailModal(false); handleReverse(activeReceipt); }} className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaUndo /> Reverse</button>
               )}
             </div>

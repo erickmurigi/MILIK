@@ -9,15 +9,15 @@ const MODULE_REGISTRY = {
   accounts: {
     key: 'accounts',
     label: 'Accounting',
-    category: 'core',
-    defaultEnabled: true,
+    category: 'expansion',
+    defaultEnabled: false,
     userAccessKey: 'accounts',
   },
   billing: {
     key: 'billing',
     label: 'Billing',
-    category: 'core',
-    defaultEnabled: true,
+    category: 'expansion',
+    defaultEnabled: false,
     userAccessKey: null,
   },
   inventory: {

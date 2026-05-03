@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   FaCheck,
   FaEdit,
@@ -26,6 +26,7 @@ import {
   updateExpenseRequisitionStatus,
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const ITEMS_PER_PAGE = 50;
 
@@ -58,6 +59,7 @@ const ExpenseRequisition = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser);
   const properties = useSelector((state) => state.property?.properties || []);
 
   const [rows, setRows] = useState([]);
@@ -70,6 +72,28 @@ const ExpenseRequisition = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState({ search: "", status: "all", propertyId: "all" });
   const [form, setForm] = useState(blankForm);
+
+  const canCreate  = hasCompanyPermission(currentUser, currentCompany, "expenses", "create", "accounts");
+  const canUpdate  = hasCompanyPermission(currentUser, currentCompany, "expenses", "update", "accounts");
+  const canDelete  = hasCompanyPermission(currentUser, currentCompany, "expenses", "delete", "accounts");
+
+  const _uid = currentUser?._id || currentUser?.id;
+  const _erDraftKey = (currentCompany?._id && _uid) ? `milik:draft:expense-req:${currentCompany._id}:${_uid}` : null;
+  const _erDraftRestored = useRef(false);
+
+  useEffect(() => {
+    if (!_erDraftKey || _erDraftRestored.current) return;
+    _erDraftRestored.current = true;
+    try {
+      const raw = window.sessionStorage.getItem(_erDraftKey);
+      if (raw) { const { form: s } = JSON.parse(raw); if (s) { setForm(s); setShowModal(true); } }
+    } catch {}
+  }, [_erDraftKey]);
+
+  useEffect(() => {
+    if (!_erDraftKey || !_erDraftRestored.current || !showModal || editingId) return;
+    try { window.sessionStorage.setItem(_erDraftKey, JSON.stringify({ form })); } catch {}
+  }, [_erDraftKey, form, showModal, editingId]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -144,13 +168,21 @@ const ExpenseRequisition = () => {
     );
   };
 
+  const closeModal = () => {
+    if (_erDraftKey) { try { window.sessionStorage.removeItem(_erDraftKey); } catch {} }
+    setShowModal(false);
+    setEditingId("");
+  };
+
   const openCreate = () => {
+    if (!canCreate) { toast.warning("You don't have permission to create expense requisitions"); return; }
     setEditingId("");
     setForm(blankForm);
     setShowModal(true);
   };
 
   const openEdit = (row) => {
+    if (!canUpdate) { toast.warning("You don't have permission to edit expense requisitions"); return; }
     setEditingId(row._id);
     setForm({
       title: row.title || "",
@@ -209,8 +241,7 @@ const ExpenseRequisition = () => {
         ? await updateExpenseRequisition(editingId, payload)
         : await createExpenseRequisition(payload);
       setRows((prev) => (editingId ? prev.map((row) => (row._id === editingId ? saved : row)) : [saved, ...prev]));
-      setShowModal(false);
-      setEditingId("");
+      closeModal();
       setForm(blankForm);
       toast.success(
         editingId
@@ -229,6 +260,7 @@ const ExpenseRequisition = () => {
   };
 
   const handleDelete = async (row) => {
+    if (!canDelete) { toast.warning("You don't have permission to delete expense requisitions"); return; }
     if (!window.confirm(`Delete requisition ${row.requisitionNo}?`)) return;
     try {
       const response = await deleteExpenseRequisition(row._id, {
@@ -284,6 +316,7 @@ const ExpenseRequisition = () => {
   };
 
   const handleBulkDelete = async () => {
+    if (!canDelete) { toast.warning("You don't have permission to delete expense requisitions"); return; }
     if (selectedIds.length === 0) {
       toast.info("Select requisitions first");
       return;
@@ -453,8 +486,8 @@ const ExpenseRequisition = () => {
 
                 <button onClick={() => setFilters({ search: "", status: "all", propertyId: "all" })} className="inline-flex items-center gap-2 rounded border border-gray-300 bg-[#DDEFE1] px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"><FaUndo /> Reset</button>
                 <button onClick={loadRows} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100"><FaRedoAlt /> Refresh</button>
-                <button onClick={handleBulkDelete} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-rose-300 bg-rose-50 px-3 text-[11px] font-bold text-rose-700 hover:bg-rose-100"><FaTrash /> Delete Selected</button>
-                <button onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00]"><FaPlus /> New Requisition</button>
+                <button onClick={handleBulkDelete} disabled={!canDelete} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-rose-300 bg-rose-50 px-3 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash /> Delete Selected</button>
+                <button onClick={openCreate} disabled={!canCreate} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> New Requisition</button>
 
                 <div className="ml-auto flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm">
                   Selected
@@ -520,7 +553,7 @@ const ExpenseRequisition = () => {
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Expense Requisition</p>
                 <h3 className="text-xl font-black">{editingId ? "Edit Draft Requisition" : "New Requisition"}</h3>
               </div>
-              <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
+              <button onClick={closeModal} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
             </div>
             <div className="grid gap-2 p-6 md:grid-cols-2 xl:grid-cols-3">
               <label className="block xl:col-span-2"><span className="text-xs font-bold text-slate-700">Title</span><input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
@@ -535,7 +568,7 @@ const ExpenseRequisition = () => {
               <label className="block xl:col-span-3"><span className="text-xs font-bold text-slate-700">Internal Notes</span><textarea rows={2} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
             </div>
             <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
-              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-black text-slate-700">Cancel</button>
+              <button onClick={closeModal} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-black text-slate-700">Cancel</button>
               <button onClick={() => handleSave("draft")} disabled={saving} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-60"><FaSave /> {saving ? "Saving..." : editingId ? "Update Draft" : "Save Draft"}</button>
               <button onClick={() => handleSave("submitted")} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-3 py-2 text-xs font-black text-white disabled:opacity-60"><FaCheck /> {saving ? "Saving..." : editingId ? "Update & Submit" : "Save & Submit"}</button>
             </div>

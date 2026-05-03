@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   FaCheck,
   FaChevronDown,
@@ -34,6 +34,7 @@ import {
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { propertyBelongsToLandlord } from "./propertyUtils";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const todayIso = () => new Date().toISOString().split("T")[0];
 const money = (value) =>
@@ -188,6 +189,7 @@ const RecoveryHistoryRow = ({ item, onCancel }) => (
 const LandlordAdvancements = () => {
   const dispatch = useDispatch();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser);
   const landlords = useSelector((state) => state.landlord?.landlords || []);
   const properties = useSelector((state) => state.property?.properties || []);
 
@@ -215,6 +217,27 @@ const LandlordAdvancements = () => {
     advanceType: "all",
   });
   const [form, setForm] = useState(blankForm);
+
+  const canWrite = hasCompanyPermission(currentUser, currentCompany, "landlordAdvancements", "create", "accounts");
+
+  const _uid = currentUser?._id || currentUser?.id;
+  const _laDraftKey = (currentCompany?._id && _uid) ? `milik:draft:landlord-advance:${currentCompany._id}:${_uid}` : null;
+  const _laDraftRestored = useRef(false);
+
+  useEffect(() => {
+    if (!_laDraftKey || _laDraftRestored.current) return;
+    _laDraftRestored.current = true;
+    try {
+      const raw = window.sessionStorage.getItem(_laDraftKey);
+      if (raw) { const { form: s } = JSON.parse(raw); if (s) { setForm(s); setShowModal(true); } }
+    } catch {}
+  }, [_laDraftKey]);
+
+  useEffect(() => {
+    if (!_laDraftKey || !_laDraftRestored.current || !showModal || editingId) return;
+    try { window.sessionStorage.setItem(_laDraftKey, JSON.stringify({ form })); } catch {}
+  }, [_laDraftKey, form, showModal, editingId]);
+
   const [recoveryModal, setRecoveryModal] = useState({
     open: false,
     row: null,
@@ -335,18 +358,21 @@ const LandlordAdvancements = () => {
   }, [recoveryModal.row, recoveryModal.periodKey]);
 
   const resetModal = () => {
+    if (_laDraftKey) { try { window.sessionStorage.removeItem(_laDraftKey); } catch {} }
     setShowModal(false);
     setEditingId("");
     setForm(blankForm);
   };
 
   const openCreate = () => {
+    if (!canWrite) { toast.warning("You don't have permission to create landlord advancements"); return; }
     setEditingId("");
     setForm(blankForm);
     setShowModal(true);
   };
 
   const openEdit = (row) => {
+    if (!canWrite) { toast.warning("You don't have permission to edit landlord advancements"); return; }
     setEditingId(row._id);
     setForm(mapRowToForm(row));
     setShowModal(true);
@@ -422,6 +448,7 @@ const LandlordAdvancements = () => {
   };
 
   const handleDelete = async (row) => {
+    if (!canWrite) { toast.warning("You don't have permission to delete landlord advancements"); return; }
     if (!window.confirm(`Delete ${row.referenceNo || "this landlord advance"}?`)) return;
     await submitAction(async () => {
       try {
@@ -583,7 +610,7 @@ const LandlordAdvancements = () => {
       );
     }
 
-    if (!row.disbursedAt && !["cancelled", "reversed"].includes(row.status)) {
+    if (!row.disbursedAt && !["cancelled", "reversed"].includes(row.status) && canWrite) {
       actions.push(
         <button
           key="edit"
@@ -595,7 +622,7 @@ const LandlordAdvancements = () => {
       );
     }
 
-    if (!row.disbursedAt) {
+    if (!row.disbursedAt && canWrite) {
       actions.push(
         <button
           key="delete"
@@ -670,7 +697,7 @@ const LandlordAdvancements = () => {
               </select>
             </label>
           </div>
-          <div className="mt-2 flex flex-wrap justify-end gap-2"><button onClick={openCreate} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00]"><FaPlus /> New Landlord Advance</button></div>
+          <div className="mt-2 flex flex-wrap justify-end gap-2"><button onClick={openCreate} disabled={!canWrite} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> New Landlord Advance</button></div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">

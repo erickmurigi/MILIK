@@ -91,6 +91,7 @@ const Units = () => {
   const navigate = useNavigate();
   
   const { currentCompany } = useSelector((state) => state.company);
+  const currentUser = useSelector((state) => state.auth?.currentUser);
   const { units: unitsData, isFetching } = useSelector((state) => state.unit);
   const { properties } = useSelector((state) => state.property);
 
@@ -113,6 +114,31 @@ const Units = () => {
   // Modal
   const [showAddUnitModal, setShowAddUnitModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+
+  // Draft persistence — survives tab switches for the Add Unit modal
+  const _uDraftKey = (currentCompany?._id && (currentUser?._id || currentUser?.id))
+    ? `milik:draft:unit-modal:${currentCompany._id}:${currentUser?._id || currentUser?.id || "u"}`
+    : null;
+  const _uDraftRestored = useRef(false);
+
+  useEffect(() => {
+    if (!_uDraftKey || _uDraftRestored.current) return;
+    _uDraftRestored.current = true;
+    try {
+      const raw = window.sessionStorage.getItem(_uDraftKey);
+      if (raw) {
+        const { formData: fd, services: sv, extraMeters: em } = JSON.parse(raw);
+        if (fd) { setFormData(fd); setShowAddUnitModal(true); }
+        if (sv) setServices(sv);
+        if (em) setExtraMeters(em);
+      }
+    } catch {}
+  }, [_uDraftKey]);
+
+  useEffect(() => {
+    if (!_uDraftKey || !_uDraftRestored.current || !showAddUnitModal) return;
+    try { window.sessionStorage.setItem(_uDraftKey, JSON.stringify({ formData, services, extraMeters })); } catch {}
+  }, [_uDraftKey, formData, services, extraMeters, showAddUnitModal]);
 
   // Milik Confirm Dialog
   const [confirmDialog, setConfirmDialog] = useState({
@@ -782,11 +808,17 @@ const Units = () => {
     setExtraMeters((p) => p.filter((_, i) => i !== index));
   };
 
+  const closeAddUnitModal = () => {
+    if (_uDraftKey) { try { window.sessionStorage.removeItem(_uDraftKey); } catch {} }
+    setShowAddUnitModal(false);
+  };
+
   const handleAddUnitSubmit = (e) => {
     e.preventDefault();
     if (!formData.property || !formData.unitSpaceNo) return;
 
     // wire later
+    if (_uDraftKey) { try { window.sessionStorage.removeItem(_uDraftKey); } catch {} }
     setShowAddUnitModal(false);
 
     setFormData({
@@ -1385,7 +1417,7 @@ const Units = () => {
                   <p className="text-xs text-gray-600">Fill in the unit details below</p>
                 </div>
                 <button
-                  onClick={() => setShowAddUnitModal(false)}
+                  onClick={closeAddUnitModal}
                   className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100"
                 >
                   <FaTimes />
@@ -1748,7 +1780,7 @@ const Units = () => {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowAddUnitModal(false)}
+                    onClick={closeAddUnitModal}
                     className="px-6 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     Cancel

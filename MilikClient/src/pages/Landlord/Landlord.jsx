@@ -37,6 +37,7 @@ import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const STORAGE_KEY = "milik_landlords_v1";
 const ITEMS_PER_PAGE = 50;
@@ -58,6 +59,7 @@ const Landlords = () => {
   const landlords = landlordState?.landlords || [];
   const isFetching = landlordState?.isFetching || false;
   const { currentCompany } = useSelector((state) => state.company);
+  const currentUser = useSelector((state) => state.auth?.currentUser);
   
   // Table + UI state
   const [selectedLandlords, setSelectedLandlords] = useState([]);
@@ -384,6 +386,7 @@ const Landlords = () => {
 
   // Delete selected landlords
   const deleteSelected = async () => {
+    if (!canDelete) { toast.warning("You don't have permission to delete landlords"); return; }
     if (selectedLandlords.length === 0) return;
 
     if (selectedDeletableLandlords.length === 0) {
@@ -467,6 +470,7 @@ const Landlords = () => {
   };
 
   const archiveSelected = () => {
+    if (!canUpdate) { toast.warning("You don't have permission to archive landlords"); return; }
     if (selectedLandlords.length === 0) return;
     setActionMenuOpen(false);
 
@@ -530,6 +534,7 @@ const Landlords = () => {
   };
 
   const restoreSelected = () => {
+    if (!canUpdate) { toast.warning("You don't have permission to restore landlords"); return; }
     if (selectedLandlords.length === 0) return;
     setActionMenuOpen(false);
 
@@ -594,6 +599,7 @@ const Landlords = () => {
 
   // --- MODAL / FORM ---
   const openAddModal = () => {
+    if (!canCreate) { toast.warning("You don't have permission to create landlords"); return; }
     navigate('/landlords/new');
   };
 
@@ -732,7 +738,10 @@ const Landlords = () => {
   };
 
   const selectedCount = selectedLandlords.length;
-  const canEdit = selectedCount === 1;
+  const canCreate = hasCompanyPermission(currentUser, currentCompany, "landlords", "create", "propertyManagement");
+  const canUpdate = hasCompanyPermission(currentUser, currentCompany, "landlords", "update", "propertyManagement");
+  const canDelete = hasCompanyPermission(currentUser, currentCompany, "landlords", "delete", "propertyManagement");
+  const canEdit = selectedCount === 1 && canUpdate;
 
   // Excel Import Handler
   const handleBulkImport = async (landlords) => {
@@ -936,11 +945,11 @@ const Landlords = () => {
               {/* Delete */}
               <button
                 onClick={deleteSelected}
-                disabled={selectedCount === 0 || selectedDeletableLandlords.length === 0}
+                disabled={!canDelete || selectedCount === 0 || selectedDeletableLandlords.length === 0}
                 className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  selectedCount > 0 && selectedDeletableLandlords.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"
+                  canDelete && selectedCount > 0 && selectedDeletableLandlords.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"
                 }`}
-                title={selectedCount === 0 ? "Select landlord(s) to delete" : selectedDeletableLandlords.length > 0 ? "Delete selected landlord(s) with no linked properties" : "Selected landlords still have linked properties and cannot be deleted"}
+                title={!canDelete ? "You don't have permission to delete landlords" : selectedCount === 0 ? "Select landlord(s) to delete" : selectedDeletableLandlords.length > 0 ? "Delete selected landlord(s) with no linked properties" : "Selected landlords still have linked properties and cannot be deleted"}
               >
                 <FaTrash className="text-xs" />
                 Delete
@@ -949,7 +958,8 @@ const Landlords = () => {
               {/* Existing actions */}
               <button
                 onClick={openAddModal}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                disabled={!canCreate}
+                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${canCreate ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}
               >
                 <FaPlus className="text-xs" />
                 <span>Add Landlord</span>

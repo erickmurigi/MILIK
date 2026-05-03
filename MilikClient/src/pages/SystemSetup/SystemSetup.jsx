@@ -2,12 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  FaArrowRight,
   FaBoxOpen,
   FaBuilding,
   FaChartBar,
   FaCheckCircle,
-  FaChevronRight,
   FaCog,
   FaEdit,
   FaEnvelope,
@@ -19,6 +17,7 @@ import {
   FaLockOpen,
   FaMapMarkerAlt,
   FaPlus,
+  FaRedoAlt,
   FaSearch,
   FaShieldAlt,
   FaStore,
@@ -43,12 +42,8 @@ import {
   getEnabledCompanyModuleKeys,
 } from "../../utils/companyModules";
 
-const MILIK_GREEN = "#0B3B2E";
-const SECTION_ALIASES = {
-  rights: "users",
-  database: "overview",
-  sessions: "trials",
-};
+const ITEMS_PER_PAGE = 25;
+const SECTION_ALIASES = { rights: "users", database: "overview", sessions: "trials" };
 const VALID_SECTIONS = ["overview", "companies", "users", "trials", "audit"];
 
 const normalizeId = (value) => {
@@ -59,29 +54,21 @@ const normalizeId = (value) => {
 };
 
 const initialsFromName = (value = "") =>
-  String(value || "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("") || "M";
+  String(value || "").split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p.charAt(0).toUpperCase()).join("") || "M";
 
-const formatDate = (value, options = { year: "numeric", month: "short", day: "numeric" }) => {
+const formatDate = (value, opts = { year: "numeric", month: "short", day: "numeric" }) => {
   if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-KE", options);
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleDateString("en-KE", opts);
 };
 
 const normalizeText = (value) => String(value ?? "").trim().toLowerCase();
 
 const isCompanyActive = (company = {}) => {
-  const accountStatus = normalizeText(company?.accountStatus);
-  if (["inactive", "disabled", "suspended", "archived"].includes(accountStatus)) {
-    return false;
-  }
+  const s = normalizeText(company?.accountStatus);
+  if (["inactive", "disabled", "suspended", "archived"].includes(s)) return false;
   if (typeof company?.isActive === "boolean") return company.isActive;
-  return accountStatus !== "inactive";
+  return s !== "inactive";
 };
 
 const getCompanyStatusLabel = (company = {}) => {
@@ -91,58 +78,41 @@ const getCompanyStatusLabel = (company = {}) => {
 };
 
 const getStatusTone = (status = "") => {
-  const normalized = normalizeText(status);
-  if (["active", "live"].includes(normalized)) {
-    return "bg-emerald-50 text-emerald-700 border border-emerald-200";
-  }
-  if (["demo", "trial"].includes(normalized)) {
-    return "bg-violet-50 text-violet-700 border border-violet-200";
-  }
-  if (["inactive", "suspended", "disabled", "archived"].includes(normalized)) {
-    return "bg-slate-100 text-slate-700 border border-slate-200";
-  }
-  return "bg-amber-50 text-amber-700 border border-amber-200";
+  const s = normalizeText(status);
+  if (["active", "live"].includes(s)) return "bg-emerald-100 text-emerald-700";
+  if (["demo", "trial"].includes(s)) return "bg-violet-100 text-violet-700";
+  if (["inactive", "suspended", "disabled", "archived"].includes(s)) return "bg-slate-100 text-slate-600";
+  return "bg-amber-100 text-amber-700";
 };
 
 const getReadinessTone = (score) => {
-  if (score >= 80) return "bg-emerald-50 text-emerald-700 border border-emerald-200";
-  if (score >= 50) return "bg-amber-50 text-amber-700 border border-amber-200";
-  return "bg-rose-50 text-rose-700 border border-rose-200";
+  if (score >= 80) return "bg-emerald-100 text-emerald-700";
+  if (score >= 50) return "bg-amber-100 text-amber-700";
+  return "bg-rose-100 text-rose-700";
 };
 
 const getUserAssignedCompanyIds = (user = {}) => {
-  const directAssignments = Array.isArray(user?.companyAssignments) ? user.companyAssignments : [];
-  const accessibleCompanies = Array.isArray(user?.accessibleCompanies) ? user.accessibleCompanies : [];
-  const primaryCandidates = [user?.primaryCompany, user?.company];
-
   const ids = new Set();
-  directAssignments.forEach((assignment) => {
-    const companyId = normalizeId(assignment?.company || assignment);
-    if (companyId) ids.add(companyId);
+  (Array.isArray(user?.companyAssignments) ? user.companyAssignments : []).forEach((a) => {
+    const id = normalizeId(a?.company || a);
+    if (id) ids.add(id);
   });
-  accessibleCompanies.forEach((company) => {
-    const companyId = normalizeId(company);
-    if (companyId) ids.add(companyId);
+  (Array.isArray(user?.accessibleCompanies) ? user.accessibleCompanies : []).forEach((c) => {
+    const id = normalizeId(c);
+    if (id) ids.add(id);
   });
-  primaryCandidates.forEach((company) => {
-    const companyId = normalizeId(company);
-    if (companyId) ids.add(companyId);
+  [user?.primaryCompany, user?.company].forEach((c) => {
+    const id = normalizeId(c);
+    if (id) ids.add(id);
   });
-
   return Array.from(ids);
 };
 
 const getPrimaryCompanyName = (user = {}, companyMap = new Map()) => {
   const primaryId = normalizeId(user?.primaryCompany || user?.company);
-  if (primaryId && companyMap.has(primaryId)) {
-    return companyMap.get(primaryId)?.companyName || "-";
-  }
-  if (typeof user?.company === "object" && user?.company?.companyName) {
-    return user.company.companyName;
-  }
-  if (typeof user?.primaryCompany === "object" && user?.primaryCompany?.companyName) {
-    return user.primaryCompany.companyName;
-  }
+  if (primaryId && companyMap.has(primaryId)) return companyMap.get(primaryId)?.companyName || "-";
+  if (typeof user?.company === "object" && user?.company?.companyName) return user.company.companyName;
+  if (typeof user?.primaryCompany === "object" && user?.primaryCompany?.companyName) return user.primaryCompany.companyName;
   return "-";
 };
 
@@ -162,506 +132,299 @@ const evaluateCompanySetup = (company = {}, userCount = 0) => {
     company?.paymentIntegration?.mpesaPaybill ||
       (Array.isArray(company?.paymentIntegration?.mpesaPaybills) && company.paymentIntegration.mpesaPaybills.length > 0)
   );
-
   const checks = [
-    {
-      key: "profile",
-      label: "Company profile",
-      ok: Boolean(company?.companyName && (company?.email || company?.phoneNo) && company?.postalAddress),
-    },
-    {
-      key: "mode",
-      label: "Operating model",
-      ok: Boolean(company?.companyMode),
-    },
-    {
-      key: "modules",
-      label: "Module assignment",
-      ok: enabledModules.length > 0,
-    },
-    {
-      key: "payments",
-      label: "Payments",
-      ok: hasPaymentSetup,
-    },
-    {
-      key: "communications",
-      label: "Email/SMS",
-      ok: emailProfiles.length > 0 || smsProfiles.length > 0,
-    },
-    {
-      key: "users",
-      label: "Users assigned",
-      ok: userCount > 0,
-    },
+    { key: "profile", label: "Company profile", ok: Boolean(company?.companyName && (company?.email || company?.phoneNo) && company?.postalAddress) },
+    { key: "mode", label: "Operating model", ok: Boolean(company?.companyMode) },
+    { key: "modules", label: "Module assignment", ok: enabledModules.length > 0 },
+    { key: "payments", label: "Payments", ok: hasPaymentSetup },
+    { key: "communications", label: "Email/SMS", ok: emailProfiles.length > 0 || smsProfiles.length > 0 },
+    { key: "users", label: "Users assigned", ok: userCount > 0 },
   ];
-
-  const passed = checks.filter((item) => item.ok).length;
+  const passed = checks.filter((c) => c.ok).length;
   const score = Math.round((passed / checks.length) * 100);
-  const missing = checks.filter((item) => !item.ok).map((item) => item.label);
+  const missing = checks.filter((c) => !c.ok).map((c) => c.label);
   const label = score >= 80 ? "Ready" : score >= 50 ? "In Progress" : "Needs Attention";
-
-  return {
-    score,
-    label,
-    missing,
-    enabledModules,
-    hasPaymentSetup,
-    hasCommunicationSetup: emailProfiles.length > 0 || smsProfiles.length > 0,
-  };
+  return { score, label, missing, enabledModules, hasPaymentSetup, hasCommunicationSetup: emailProfiles.length > 0 || smsProfiles.length > 0 };
 };
-
-const StatCard = ({ label, value, icon: Icon, hint }) => (
-  <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-    <div className="flex items-start justify-between gap-3">
-      <div>
-        <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</div>
-        <div className="mt-1 text-2xl font-black text-slate-900">{value}</div>
-        
-      </div>
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-        <Icon className="text-lg" />
-      </div>
-    </div>
-  </div>
-);
-
-const SectionButton = ({ active, label, icon: Icon, onClick }) => (
-  <button
-    onClick={onClick}
-    className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-black transition ${
-      active
-        ? "bg-emerald-700 text-white shadow-sm"
-        : "border border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:text-emerald-700"
-    }`}
-  >
-    <Icon className="text-sm" />
-    {label}
-  </button>
-);
-
-const ActionLink = ({ icon: Icon, label, onClick, tone = "default" }) => {
-  const tones = {
-    default: "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
-    primary: "border-emerald-700 bg-emerald-700 text-white hover:bg-emerald-800",
-    subtle: "border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
-    danger: "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100",
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-bold transition ${tones[tone]}`}
-    >
-      <Icon className="text-xs" />
-      {label}
-    </button>
-  );
-};
-
-const SearchInput = ({ value, onChange, placeholder = "Search..." }) => (
-  <label className="relative block min-w-[220px] flex-1">
-    <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
-    <input
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-    />
-  </label>
-);
-
-const FilterSelect = ({ value, onChange, children }) => (
-  <select
-    value={value}
-    onChange={(event) => onChange(event.target.value)}
-    className="min-w-[170px] rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-  >
-    {children}
-  </select>
-);
 
 const CompanyAvatar = ({ company }) => {
   const logo = company?.logo;
   const name = company?.companyName || "Company";
-  if (logo) {
-    return <img src={logo} alt={name} className="h-12 w-12 rounded-2xl border border-slate-200 bg-white object-cover" />;
-  }
+  if (logo) return <img src={logo} alt={name} className="h-7 w-7 rounded-lg border border-slate-200 bg-white object-cover" />;
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-sm font-black text-emerald-700">
+    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-[10px] font-black text-emerald-700 shrink-0">
       {initialsFromName(name)}
     </div>
   );
 };
 
-const OverviewPanel = ({
-  companies,
-  users,
-  companyReadiness,
-  companyUserCounts,
-  onAddCompany,
-  onAddUser,
-  onOpenCompanySetup,
-  onOpenOperationalSettings,
-  onOpenWorkspace,
-  onManageUsers,
-}) => {
-  const activeCompanies = companies.filter((company) => isCompanyActive(company) && !company?.isDemoWorkspace);
-  const demoCompanies = companies.filter((company) => company?.isDemoWorkspace);
-  const attentionCompanies = companies
-    .filter((company) => (companyReadiness.get(normalizeId(company))?.score || 0) < 80)
-    .slice(0, 5);
-  const recentCompanies = [...companies]
-    .sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime())
-    .slice(0, 5);
-  const recentUsers = [...users]
-    .sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime())
-    .slice(0, 5);
+const StatCard = ({ label, value, icon: Icon }) => (
+  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm flex items-center gap-3">
+    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 shrink-0"><Icon className="text-sm" /></div>
+    <div>
+      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className="text-xl font-black text-slate-900 leading-none mt-0.5">{value}</div>
+    </div>
+  </div>
+);
+
+const Pagination = ({ page, totalPages, total, pageSize, onPage }) => {
+  if (totalPages <= 1) return null;
+  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+      <span className="font-semibold">
+        Showing <span className="font-black text-slate-900">{start}</span>–<span className="font-black text-slate-900">{end}</span> of <span className="font-black text-slate-900">{total}</span>
+      </span>
+      <div className="flex items-center gap-2">
+        <button onClick={() => onPage(page - 1)} disabled={page === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+        <span className="font-semibold text-slate-700">Page {page} of {totalPages}</span>
+        <button onClick={() => onPage(page + 1)} disabled={page >= totalPages} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Overview Panel ────────────────────────────────────────────────────────────
+const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, onAddCompany, onAddUser, onOpenCompanySetup, onOpenWorkspace }) => {
+  const activeCompanies = companies.filter((c) => isCompanyActive(c) && !c?.isDemoWorkspace);
+  const demoCompanies = companies.filter((c) => c?.isDemoWorkspace);
+  const attentionCompanies = companies.filter((c) => (companyReadiness.get(normalizeId(c))?.score || 0) < 80).slice(0, 5);
+  const recentCompanies = [...companies].sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0)).slice(0, 6);
+  const recentUsers = [...users].sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0)).slice(0, 6);
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Companies" value={companies.length} icon={FaBuilding} hint="Platform tenants on MILIK" />
-        <StatCard label="Active companies" value={activeCompanies.length} icon={FaCheckCircle} hint="Live operational companies" />
-        <StatCard label="Demo workspaces" value={demoCompanies.length} icon={FaStore} hint="Demo or showcase environments" />
-        <StatCard label="Users" value={users.length} icon={FaUsers} hint="All users across companies" />
-        <StatCard label="Needs attention" value={attentionCompanies.length} icon={FaExclamationTriangle} hint="Companies below setup readiness" />
+    <div className="p-3 space-y-3">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+        <StatCard label="Companies" value={companies.length} icon={FaBuilding} />
+        <StatCard label="Active" value={activeCompanies.length} icon={FaCheckCircle} />
+        <StatCard label="Demo" value={demoCompanies.length} icon={FaStore} />
+        <StatCard label="Users" value={users.length} icon={FaUsers} />
+        <StatCard label="Needs Attention" value={attentionCompanies.length} icon={FaExclamationTriangle} />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Actions</div>
-              <h2 className="mt-1 text-xl font-black text-slate-900">Admin actions</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                
-              </p>
-            </div>
+      <div className="grid gap-3 xl:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 bg-slate-50/60 px-3 py-2">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-600">Attention Queue</div>
+            <div className="text-sm font-black text-slate-900 mt-0.5">Companies needing setup</div>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <button onClick={onAddCompany} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left transition hover:bg-emerald-100">
-              <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-700 text-white"><FaPlus /></div>
-              <div className="mt-3 text-base font-black text-slate-900">Register Company</div>
-              <div className="mt-1 text-sm text-slate-600"></div>
-            </button>
-            <button onClick={onAddUser} className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-emerald-200 hover:bg-slate-50">
-              <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-orange-100 text-orange-700"><FaUserPlus /></div>
-              <div className="mt-3 text-base font-black text-slate-900">Add user</div>
-              <div className="mt-1 text-sm text-slate-600"></div>
-            </button>
-            {companies[0] ? (
-              <button
-                onClick={() => onOpenCompanySetup(companies[0])}
-                className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-emerald-200 hover:bg-slate-50"
-              >
-                <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-100 text-sky-700"><FaCog /></div>
-                <div className="mt-3 text-base font-black text-slate-900">Company setup</div>
-                <div className="mt-1 text-sm text-slate-600"></div>
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-emerald-50 via-white to-orange-50 p-5 shadow-sm">
-          <div className="text-xs font-black uppercase tracking-[0.18em] text-orange-600">Scope</div>
-          <h2 className="mt-1 text-xl font-black text-slate-900">Access Control</h2>
-          <div className="mt-4 space-y-3 text-sm text-slate-600">
-            <div className="rounded-2xl border border-white/70 bg-white/80 p-3">
-              <div className="font-black text-slate-900">System Administration</div>
-              <div className="mt-1">Companies, users, access and module assignment.</div>
-            </div>
-            <div className="rounded-2xl border border-white/70 bg-white/80 p-3">
-              <div className="font-black text-slate-900">Company Setup</div>
-              <div className="mt-1">Company profile, payments, email, SMS and operational settings.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-rose-600">Attention queue</div>
-              <h3 className="mt-1 text-lg font-black text-slate-900">Companies needing setup follow-through</h3>
-            </div>
-            <div className="rounded-2xl bg-rose-50 px-3 py-1 text-xs font-black text-rose-700">{attentionCompanies.length} open</div>
-          </div>
-          <div className="mt-4 space-y-3">
-            {attentionCompanies.length ? (
-              attentionCompanies.map((company) => {
-                const readiness = companyReadiness.get(normalizeId(company));
-                const userCount = companyUserCounts.get(normalizeId(company)) || 0;
-                return (
-                  <div key={company._id} className="rounded-2xl border border-slate-200 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <CompanyAvatar company={company} />
-                        <div>
-                          <div className="text-base font-black text-slate-900">{company.companyName}</div>
-                          <div className="text-sm text-slate-500">{getCompanyOperatingModeLabel(company?.companyMode)} · {userCount} user{userCount === 1 ? "" : "s"}</div>
-                        </div>
-                      </div>
-                      <span className={`rounded-full px-3 py-1 text-xs font-black ${getReadinessTone(readiness?.score || 0)}`}>
-                        {readiness?.label || "Needs Attention"}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(readiness?.missing || []).slice(0, 3).map((item) => (
-                        <span key={item} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                          Missing {item}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <ActionLink icon={FaCog} label="Company Setup" onClick={() => onOpenCompanySetup(company)} tone="subtle" />
-                      <ActionLink icon={FaGlobeAfrica} label="Operational Settings" onClick={() => onOpenOperationalSettings(company)} />
-                      <ActionLink icon={FaUsers} label="Manage Users" onClick={() => onManageUsers(company)} />
-                    </div>
+          <div className="divide-y divide-slate-100">
+            {attentionCompanies.length ? attentionCompanies.map((company) => {
+              const readiness = companyReadiness.get(normalizeId(company));
+              const userCount = companyUserCounts.get(normalizeId(company)) || 0;
+              return (
+                <div key={company._id} className="flex items-center gap-3 px-3 py-2">
+                  <CompanyAvatar company={company} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-black text-slate-900 truncate">{company.companyName}</div>
+                    <div className="text-[11px] text-slate-500">{userCount} users · {readiness?.score || 0}% ready</div>
                   </div>
-                );
-              })
-            ) : (
-              <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 p-6 text-sm text-emerald-700">
-                All current companies are in a strong readiness position.
-              </div>
+                  <button onClick={() => onOpenCompanySetup(company)} className="shrink-0 text-[11px] font-bold text-emerald-700 hover:underline">Setup</button>
+                </div>
+              );
+            }) : (
+              <div className="px-3 py-4 text-xs text-emerald-700 text-center">All companies are ready</div>
             )}
           </div>
         </div>
 
-        <div className="space-y-5">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Recent onboarding</div>
-            <div className="mt-3 space-y-3">
-              {recentCompanies.map((company) => (
-                <button
-                  key={company._id}
-                  onClick={() => onOpenWorkspace(company)}
-                  className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left transition hover:border-emerald-200 hover:bg-slate-50"
-                >
-                  <div>
-                    <div className="font-black text-slate-900">{company.companyName}</div>
-                    <div className="text-sm text-slate-500">Created {formatDate(company.createdAt)} · {getCompanyOperatingModeLabel(company.companyMode)}</div>
-                  </div>
-                  <FaChevronRight className="text-slate-400" />
-                </button>
-              ))}
-            </div>
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 bg-slate-50/60 px-3 py-2">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Recent Onboarding</div>
+            <div className="text-sm font-black text-slate-900 mt-0.5">Latest companies</div>
           </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-orange-600">Recent user access</div>
-            <div className="mt-3 space-y-3">
-              {recentUsers.map((user) => (
-                <div key={user._id} className="rounded-2xl border border-slate-200 px-4 py-3">
-                  <div className="font-black text-slate-900">{`${user?.surname || ""} ${user?.otherNames || ""}`.trim() || user?.email || "User"}</div>
-                  <div className="text-sm text-slate-500">{getUserRoleLabel(user)} · Added {formatDate(user?.createdAt)}</div>
+          <div className="divide-y divide-slate-100">
+            {recentCompanies.map((company) => (
+              <div key={company._id} className="flex items-center gap-3 px-3 py-2">
+                <CompanyAvatar company={company} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-black text-slate-900 truncate">{company.companyName}</div>
+                  <div className="text-[11px] text-slate-500">{formatDate(company.createdAt)}</div>
                 </div>
-              ))}
-            </div>
+                <button onClick={() => onOpenWorkspace(company)} className="shrink-0 text-[11px] font-bold text-emerald-700 hover:underline">Open</button>
+              </div>
+            ))}
           </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 bg-slate-50/60 px-3 py-2">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-600">Recent User Access</div>
+            <div className="text-sm font-black text-slate-900 mt-0.5">Latest users</div>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {recentUsers.map((user) => {
+              const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim() || user?.email || "User";
+              return (
+                <div key={user._id} className="flex items-center gap-3 px-3 py-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[10px] font-black text-orange-700 shrink-0">{initialsFromName(name)}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-black text-slate-900 truncate">{name}</div>
+                    <div className="text-[11px] text-slate-500">{getUserRoleLabel(user)} · {formatDate(user?.createdAt)}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-100 bg-slate-50/60 px-3 py-2">
+          <div className="text-sm font-black text-slate-900">Quick actions</div>
+        </div>
+        <div className="flex flex-wrap gap-3 p-3">
+          <button onClick={onAddCompany} className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"><FaPlus /> Register Company</button>
+          <button onClick={onAddUser} className="inline-flex items-center gap-2 rounded-lg bg-[#FF8C00] px-4 py-2 text-xs font-bold text-white hover:bg-[#e67e00]"><FaUserPlus /> Add User</button>
         </div>
       </div>
     </div>
   );
 };
 
-const CompaniesPanel = ({
-  companies,
-  companyReadiness,
-  companyUserCounts,
-  onAddCompany,
-  onEditCompany,
-  onDeleteCompany,
-  onOpenCompanySetup,
-  onOpenOperationalSettings,
-  onOpenWorkspace,
-  onManageUsers,
-}) => {
+// ─── Companies Panel ───────────────────────────────────────────────────────────
+const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddCompany, onEditCompany, onDeleteCompany, onOpenCompanySetup, onOpenOperationalSettings, onOpenWorkspace, onManageUsers }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
+  const [page, setPage] = useState(1);
 
-  const filteredCompanies = useMemo(() => {
+  const filtered = useMemo(() => {
     return companies.filter((company) => {
       const readiness = companyReadiness.get(normalizeId(company));
       const status = getCompanyStatusLabel(company);
       const modeLabel = getCompanyOperatingModeLabel(company?.companyMode);
-      const searchHaystack = [
-        company?.companyName,
-        company?.companyCode,
-        company?.registrationNo,
-        company?.email,
-        company?.town,
-        company?.country,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      const matchesSearch = !search || searchHaystack.includes(search.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "attention" && (readiness?.score || 0) < 80) ||
-        normalizeText(status) === normalizeText(statusFilter);
+      const haystack = [company?.companyName, company?.companyCode, company?.registrationNo, company?.email, company?.town, company?.country].filter(Boolean).join(" ").toLowerCase();
+      const matchesSearch = !search || haystack.includes(search.toLowerCase());
+      const matchesStatus = statusFilter === "all" || (statusFilter === "attention" && (readiness?.score || 0) < 80) || normalizeText(status) === normalizeText(statusFilter);
       const matchesMode = modeFilter === "all" || normalizeText(modeLabel) === normalizeText(modeFilter);
-
       return matchesSearch && matchesStatus && matchesMode;
     });
   }, [companies, companyReadiness, modeFilter, search, statusFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+
+  useEffect(() => { setPage(1); }, [search, statusFilter, modeFilter]);
+
   return (
-    <div className="space-y-5">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Companies</div>
-            <h2 className="mt-1 text-xl font-black text-slate-900">Companies</h2>
-            <p className="mt-1 text-sm text-slate-500"></p>
+    <>
+      <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[240px] flex-1">
+            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search company, code, email, town..." className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] pl-9 pr-3 text-xs text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
           </div>
-          <ActionLink icon={FaPlus} label="Register Company" onClick={onAddCompany} tone="primary" />
-        </div>
-        <div className="mt-4 flex flex-col gap-3 xl:flex-row">
-          <SearchInput value={search} onChange={setSearch} placeholder="Search company, code, email, town..." />
-          <FilterSelect value={statusFilter} onChange={setStatusFilter}>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
             <option value="all">All statuses</option>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
             <option value="Demo">Demo</option>
             <option value="attention">Needs attention</option>
-          </FilterSelect>
-          <FilterSelect value={modeFilter} onChange={setModeFilter}>
+          </select>
+          <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value)} className="h-8 rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
             <option value="all">All operating models</option>
             <option value="property manager">Property Manager</option>
             <option value="self-managing landlord">Self-Managing Landlord</option>
-          </FilterSelect>
+          </select>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-slate-500">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+            <button onClick={onAddCompany} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"><FaPlus /> Register Company</button>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-4">
-        {filteredCompanies.map((company) => {
-          const companyId = normalizeId(company);
-          const readiness = companyReadiness.get(companyId) || evaluateCompanySetup(company, 0);
-          const userCount = companyUserCounts.get(companyId) || 0;
-          const enabledModules = readiness.enabledModules || [];
-          const statusLabel = getCompanyStatusLabel(company);
-
-          return (
-            <div key={companyId} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div className="flex items-start gap-4">
-                  <CompanyAvatar company={company} />
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-black text-slate-900">{company.companyName}</h3>
-                      <span className={`rounded-full px-3 py-1 text-xs font-black ${getStatusTone(statusLabel)}`}>{statusLabel}</span>
-                      <span className={`rounded-full px-3 py-1 text-xs font-black ${getReadinessTone(readiness.score)}`}>{readiness.label}</span>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="min-w-full text-xs">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-[#0B3B2E] text-white">
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Company</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Mode</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Status</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Readiness</th>
+              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Users</th>
+              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Modules</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Contact</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Updated</th>
+              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.length === 0 ? (
+              <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-500">No companies match the current filters.</td></tr>
+            ) : pageRows.map((company, idx) => {
+              const companyId = normalizeId(company);
+              const readiness = companyReadiness.get(companyId) || evaluateCompanySetup(company, 0);
+              const userCount = companyUserCounts.get(companyId) || 0;
+              const statusLabel = getCompanyStatusLabel(company);
+              return (
+                <tr key={companyId} className={`border-t border-slate-100 hover:bg-slate-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <CompanyAvatar company={company} />
+                      <div>
+                        <div className="font-black text-slate-900">{company.companyName}</div>
+                        <div className="text-[11px] text-slate-500">{company.companyCode || company.registrationNo || "-"}</div>
+                      </div>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-500">
-                      <span className="inline-flex items-center gap-2"><FaShieldAlt className="text-emerald-700" /> {getCompanyOperatingModeLabel(company.companyMode)}</span>
-                      <span className="inline-flex items-center gap-2"><FaEnvelope className="text-emerald-700" /> {company.email || "No email"}</span>
-                      <span className="inline-flex items-center gap-2"><FaMapMarkerAlt className="text-emerald-700" /> {[company.town, company.country].filter(Boolean).join(", ") || "Location not set"}</span>
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">{getCompanyOperatingModeLabel(company?.companyMode)}</td>
+                  <td className="px-3 py-2">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${getStatusTone(statusLabel)}`}>{statusLabel}</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-200">
+                        <div className={`h-full rounded-full ${readiness.score >= 80 ? "bg-emerald-600" : readiness.score >= 50 ? "bg-amber-500" : "bg-rose-500"}`} style={{ width: `${readiness.score}%` }} />
+                      </div>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${getReadinessTone(readiness.score)}`}>{readiness.score}%</span>
                     </div>
-                  </div>
-                </div>
-                <div className="grid min-w-[240px] gap-3 rounded-3xl border border-slate-100 bg-slate-50 p-4 sm:grid-cols-3 xl:grid-cols-1">
-                  <div>
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Users</div>
-                    <div className="mt-1 text-xl font-black text-slate-900">{userCount}</div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Assigned modules</div>
-                    <div className="mt-1 text-xl font-black text-slate-900">{enabledModules.length}</div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Updated</div>
-                    <div className="mt-1 text-sm font-bold text-slate-900">{formatDate(company.updatedAt || company.createdAt)}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-                <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-black text-slate-900">Readiness</div>
-                    <div className="text-sm font-black text-slate-900">{readiness.score}%</div>
-                  </div>
-                  <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200">
-                    <div className="h-full rounded-full bg-emerald-700" style={{ width: `${readiness.score}%` }} />
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {readiness.missing.length ? (
-                      readiness.missing.map((item) => (
-                        <span key={item} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 border border-slate-200">
-                          Missing {item}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Ready</span>
+                    {readiness.missing.length > 0 && (
+                      <div className="mt-1 text-[10px] text-rose-600 leading-tight">Missing: {readiness.missing.slice(0, 2).join(", ")}{readiness.missing.length > 2 ? ` +${readiness.missing.length - 2}` : ""}</div>
                     )}
-                  </div>
-                </div>
-
-                <div className="rounded-3xl border border-slate-100 bg-white p-4">
-                  <div className="text-sm font-black text-slate-900">Assigned modules</div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {enabledModules.length ? (
-                      enabledModules.map((moduleKey) => (
-                        <span key={moduleKey} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                          {moduleKey}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">No modules assigned</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                <ActionLink icon={FaCog} label="Company Setup" onClick={() => onOpenCompanySetup(company)} tone="primary" />
-                <ActionLink icon={FaGlobeAfrica} label="Operational Settings" onClick={() => onOpenOperationalSettings(company)} tone="subtle" />
-                <ActionLink icon={FaUsers} label="Manage Users" onClick={() => onManageUsers(company)} />
-                <ActionLink icon={FaEye} label="Open Workspace" onClick={() => onOpenWorkspace(company)} />
-                <ActionLink icon={FaEdit} label="Edit Record" onClick={() => onEditCompany(company)} />
-                <ActionLink icon={FaTrash} label="Delete" onClick={() => onDeleteCompany(company)} tone="danger" />
-              </div>
-            </div>
-          );
-        })}
-
-        {!filteredCompanies.length ? (
-          <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-            No companies match the current filters.
-          </div>
-        ) : null}
+                  </td>
+                  <td className="px-3 py-2 text-right font-bold text-slate-900">{userCount}</td>
+                  <td className="px-3 py-2 text-right font-bold text-slate-900">{readiness.enabledModules.length}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1 text-slate-500"><FaEnvelope className="shrink-0 text-emerald-700" /><span className="truncate max-w-[140px]">{company.email || "—"}</span></div>
+                    <div className="flex items-center gap-1 text-slate-500 mt-0.5"><FaMapMarkerAlt className="shrink-0 text-emerald-700" /><span>{[company.town, company.country].filter(Boolean).join(", ") || "—"}</span></div>
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">{formatDate(company.updatedAt || company.createdAt)}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <button onClick={() => onOpenCompanySetup(company)} className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100"><FaCog size={9} /> Setup</button>
+                      <button onClick={() => onOpenOperationalSettings(company)} className="inline-flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 hover:bg-blue-100"><FaGlobeAfrica size={9} /> Settings</button>
+                      <button onClick={() => onOpenWorkspace(company)} className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-100"><FaEye size={9} /> Workspace</button>
+                      <button onClick={() => onManageUsers(company)} className="inline-flex items-center gap-1 rounded border border-orange-300 bg-orange-50 px-2 py-1 text-[10px] font-black text-orange-700 hover:bg-orange-100"><FaUsers size={9} /> Users</button>
+                      <button onClick={() => onEditCompany(company)} className="inline-flex items-center gap-1 rounded border border-indigo-300 bg-indigo-50 px-2 py-1 text-[10px] font-black text-indigo-700 hover:bg-indigo-100"><FaEdit size={9} /> Edit</button>
+                      <button onClick={() => onDeleteCompany(company)} className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-100"><FaTrash size={9} /> Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-    </div>
+
+      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={ITEMS_PER_PAGE} onPage={setPage} />
+    </>
   );
 };
 
-const UsersPanel = ({
-  users,
-  companies,
-  companyMap,
-  selectedCompanyId,
-  onSelectedCompanyIdChange,
-  onAddUser,
-  onEditUser,
-  onToggleUserLock,
-  onDeleteUser,
-}) => {
+// ─── Users Panel ───────────────────────────────────────────────────────────────
+const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelectedCompanyIdChange, onAddUser, onEditUser, onToggleUserLock, onDeleteUser }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
 
-  const filteredUsers = useMemo(() => {
+  const filtered = useMemo(() => {
     return users.filter((user) => {
       const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim();
-      const haystack = [name, user?.email, user?.phoneNumber, getUserRoleLabel(user)]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      const haystack = [name, user?.email, user?.phoneNumber, getUserRoleLabel(user)].filter(Boolean).join(" ").toLowerCase();
       const assignedCompanyIds = getUserAssignedCompanyIds(user);
       const matchesSearch = !search || haystack.includes(search.toLowerCase());
       const matchesCompany = !selectedCompanyId || assignedCompanyIds.includes(selectedCompanyId);
@@ -671,263 +434,278 @@ const UsersPanel = ({
     });
   }, [search, selectedCompanyId, statusFilter, users]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+
+  useEffect(() => { setPage(1); }, [search, statusFilter, selectedCompanyId]);
+
   return (
-    <div className="space-y-5">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Users & access</div>
-            <h2 className="mt-1 text-xl font-black text-slate-900">Company-aware user access</h2>
-            <p className="mt-1 text-sm text-slate-500"></p>
+    <>
+      <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[240px] flex-1">
+            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search user, email, phone, role..." className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] pl-9 pr-3 text-xs text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
           </div>
-          <ActionLink icon={FaUserPlus} label="Add user" onClick={onAddUser} tone="primary" />
-        </div>
-        <div className="mt-4 flex flex-col gap-3 xl:flex-row">
-          <SearchInput value={search} onChange={setSearch} placeholder="Search user, email, phone, role..." />
-          <FilterSelect value={selectedCompanyId} onChange={onSelectedCompanyIdChange}>
+          <select value={selectedCompanyId} onChange={(e) => onSelectedCompanyIdChange(e.target.value)} className="h-8 rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
             <option value="">All companies</option>
-            {companies.map((company) => (
-              <option key={company._id} value={company._id}>{company.companyName}</option>
-            ))}
-          </FilterSelect>
-          <FilterSelect value={statusFilter} onChange={setStatusFilter}>
+            {companies.map((c) => <option key={c._id} value={c._id}>{c.companyName}</option>)}
+          </select>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
             <option value="all">All statuses</option>
             <option value="active">Active</option>
             <option value="locked">Locked</option>
             <option value="inactive">Inactive</option>
-          </FilterSelect>
+          </select>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-slate-500">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+            <button onClick={onAddUser} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00]"><FaUserPlus /> Add User</button>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-4">
-        {filteredUsers.map((user) => {
-          const userId = normalizeId(user);
-          const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim() || user?.email || "User";
-          const assignedCompanyIds = getUserAssignedCompanyIds(user);
-          const lockState = user?.locked ? "Locked" : user?.isActive === false ? "Inactive" : "Active";
-          return (
-            <div key={userId} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 text-sm font-black text-orange-700">
-                    {initialsFromName(name)}
-                  </div>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-black text-slate-900">{name}</h3>
-                      <span className={`rounded-full px-3 py-1 text-xs font-black ${getStatusTone(lockState)}`}>{lockState}</span>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="min-w-full text-xs">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-[#0B3B2E] text-white">
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">User</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Email</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Role</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Primary Company</th>
+              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Companies</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Status</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Created</th>
+              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.length === 0 ? (
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">No users match the current filters.</td></tr>
+            ) : pageRows.map((user, idx) => {
+              const userId = normalizeId(user);
+              const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim() || user?.email || "User";
+              const assignedCompanyIds = getUserAssignedCompanyIds(user);
+              const lockState = user?.locked ? "Locked" : user?.isActive === false ? "Inactive" : "Active";
+              return (
+                <tr key={userId} className={`border-t border-slate-100 hover:bg-slate-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[10px] font-black text-orange-700 shrink-0">{initialsFromName(name)}</div>
+                      <span className="font-black text-slate-900">{name}</span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-500">
-                      <span className="inline-flex items-center gap-2"><FaEnvelope className="text-emerald-700" /> {user?.email || "No email"}</span>
-                      <span className="inline-flex items-center gap-2"><FaUserCog className="text-emerald-700" /> {getUserRoleLabel(user)}</span>
-                      <span className="inline-flex items-center gap-2"><FaBuilding className="text-emerald-700" /> {assignedCompanyIds.length} compan{assignedCompanyIds.length === 1 ? "y" : "ies"}</span>
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">{user?.email || "—"}</td>
+                  <td className="px-3 py-2">
+                    <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">{getUserRoleLabel(user)}</span>
+                  </td>
+                  <td className="px-3 py-2 text-slate-700">{getPrimaryCompanyName(user, companyMap)}</td>
+                  <td className="px-3 py-2 text-right font-bold text-slate-900">{assignedCompanyIds.length}</td>
+                  <td className="px-3 py-2">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${getStatusTone(lockState)}`}>{lockState}</span>
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">{formatDate(user?.createdAt)}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <button onClick={() => onEditUser(user)} className="inline-flex items-center gap-1 rounded border border-indigo-300 bg-indigo-50 px-2 py-1 text-[10px] font-black text-indigo-700 hover:bg-indigo-100"><FaEdit size={9} /> Edit</button>
+                      <button onClick={() => onToggleUserLock(user)} className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-black hover:opacity-90 ${user?.locked ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-amber-300 bg-amber-50 text-amber-700"}`}>
+                        {user?.locked ? <><FaLockOpen size={9} /> Unlock</> : <><FaLock size={9} /> Lock</>}
+                      </button>
+                      <button onClick={() => onDeleteUser(user)} className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-100"><FaTrash size={9} /> Delete</button>
                     </div>
-                  </div>
-                </div>
-                <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Primary company</div>
-                  <div className="mt-1 text-sm font-bold text-slate-900">{getPrimaryCompanyName(user, companyMap)}</div>
-                  <div className="mt-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Created</div>
-                  <div className="mt-1 text-sm font-bold text-slate-900">{formatDate(user?.createdAt)}</div>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {assignedCompanyIds.length ? (
-                  assignedCompanyIds.map((companyId) => (
-                    <span key={companyId} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-                      {companyMap.get(companyId)?.companyName || companyId}
-                    </span>
-                  ))
-                ) : (
-                  <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">No company assigned</span>
-                )}
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                <ActionLink icon={FaEdit} label="Edit user" onClick={() => onEditUser(user)} tone="primary" />
-                <ActionLink
-                  icon={user?.locked ? FaLockOpen : FaLock}
-                  label={user?.locked ? "Unlock" : "Lock"}
-                  onClick={() => onToggleUserLock(user)}
-                />
-                <ActionLink icon={FaTrash} label="Delete" onClick={() => onDeleteUser(user)} tone="danger" />
-              </div>
-            </div>
-          );
-        })}
-
-        {!filteredUsers.length ? (
-          <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-            No users match the current filters.
-          </div>
-        ) : null}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-    </div>
+
+      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={ITEMS_PER_PAGE} onPage={setPage} />
+    </>
   );
 };
 
+// ─── Trials Panel ──────────────────────────────────────────────────────────────
 const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWorkspace, onOpenCompanySetup }) => {
-  const demoCompanies = companies.filter((company) => company?.isDemoWorkspace);
-  const inactiveCompanies = companies.filter((company) => !company?.isDemoWorkspace && !isCompanyActive(company));
-  const attentionCompanies = companies.filter((company) => (companyReadiness.get(normalizeId(company))?.score || 0) < 80);
+  const [page, setPage] = useState(1);
 
-  const spotlightCompanies = [...new Set([...demoCompanies, ...inactiveCompanies, ...attentionCompanies])];
+  const spotlightCompanies = useMemo(() => {
+    const demoCompanies = companies.filter((c) => c?.isDemoWorkspace);
+    const inactiveCompanies = companies.filter((c) => !c?.isDemoWorkspace && !isCompanyActive(c));
+    const attentionCompanies = companies.filter((c) => (companyReadiness.get(normalizeId(c))?.score || 0) < 80);
+    return [...new Map([...demoCompanies, ...inactiveCompanies, ...attentionCompanies].map((c) => [normalizeId(c), c])).values()];
+  }, [companies, companyReadiness]);
+
+  const totalPages = Math.max(1, Math.ceil(spotlightCompanies.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = spotlightCompanies.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+
+  const demoCount = companies.filter((c) => c?.isDemoWorkspace).length;
+  const inactiveCount = companies.filter((c) => !c?.isDemoWorkspace && !isCompanyActive(c)).length;
+  const attentionCount = companies.filter((c) => (companyReadiness.get(normalizeId(c))?.score || 0) < 80).length;
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatCard label="Demo workspaces" value={demoCompanies.length} icon={FaStore} hint="Demo or seeded showcase companies" />
-        <StatCard label="Inactive companies" value={inactiveCompanies.length} icon={FaLock} hint="Companies not currently marked active" />
-        <StatCard label="Needs activation work" value={attentionCompanies.length} icon={FaExclamationTriangle} hint="Companies with setup gaps to close" />
+    <>
+      <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700"><FaStore size={10} /> {demoCount} Demo workspaces</div>
+          <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700"><FaLock size={10} /> {inactiveCount} Inactive companies</div>
+          <div className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700"><FaExclamationTriangle size={10} /> {attentionCount} Needs activation work</div>
+          <div className="ml-auto text-[11px] font-semibold text-slate-500">{spotlightCompanies.length} total</div>
+        </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Trials & demo</div>
-        <h2 className="mt-1 text-xl font-black text-slate-900">Demo oversight and activation readiness</h2>
-        <p className="mt-1 text-sm text-slate-500"></p>
-      </div>
-
-      <div className="space-y-4">
-        {spotlightCompanies.map((company) => {
-          const companyId = normalizeId(company);
-          const readiness = companyReadiness.get(companyId) || evaluateCompanySetup(company, 0);
-          const userCount = companyUserCounts.get(companyId) || 0;
-          const spotlightLabel = company?.isDemoWorkspace ? "Demo workspace" : !isCompanyActive(company) ? "Inactive company" : "Needs activation work";
-          return (
-            <div key={companyId} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div className="flex items-start gap-4">
-                  <CompanyAvatar company={company} />
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-lg font-black text-slate-900">{company.companyName}</div>
-                      <span className={`rounded-full px-3 py-1 text-xs font-black ${getStatusTone(spotlightLabel)}`}>{spotlightLabel}</span>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="min-w-full text-xs">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-[#0B3B2E] text-white">
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Company</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Type</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Mode</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Readiness</th>
+              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Users</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Missing setup</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Updated</th>
+              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.length === 0 ? (
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">No demo or activation-watch companies found.</td></tr>
+            ) : pageRows.map((company, idx) => {
+              const companyId = normalizeId(company);
+              const readiness = companyReadiness.get(companyId) || evaluateCompanySetup(company, 0);
+              const userCount = companyUserCounts.get(companyId) || 0;
+              const spotlightLabel = company?.isDemoWorkspace ? "Demo" : !isCompanyActive(company) ? "Inactive" : "Needs Attention";
+              return (
+                <tr key={companyId} className={`border-t border-slate-100 hover:bg-slate-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <CompanyAvatar company={company} />
+                      <div className="font-black text-slate-900">{company.companyName}</div>
                     </div>
-                    <div className="mt-2 text-sm text-slate-500">{getCompanyOperatingModeLabel(company.companyMode)} · {userCount} user{userCount === 1 ? "" : "s"} · Updated {formatDate(company.updatedAt || company.createdAt)}</div>
-                  </div>
-                </div>
-                <div className="rounded-3xl border border-slate-100 bg-slate-50 px-4 py-3 text-right">
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Readiness</div>
-                  <div className="mt-1 text-2xl font-black text-slate-900">{readiness.score}%</div>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {readiness.missing.length ? readiness.missing.map((item) => (
-                  <span key={item} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">Missing {item}</span>
-                )) : <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">No major setup gaps</span>}
-              </div>
-              <div className="mt-5 flex flex-wrap gap-2">
-                <ActionLink icon={FaEye} label="Open workspace" onClick={() => onOpenWorkspace(company)} tone="primary" />
-                <ActionLink icon={FaCog} label="Company Setup" onClick={() => onOpenCompanySetup(company)} tone="subtle" />
-              </div>
-            </div>
-          );
-        })}
-
-        {!spotlightCompanies.length ? (
-          <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-            No demo or activation-watch companies were found in the current data.
-          </div>
-        ) : null}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${getStatusTone(spotlightLabel)}`}>{spotlightLabel}</span>
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">{getCompanyOperatingModeLabel(company.companyMode)}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-14 overflow-hidden rounded-full bg-slate-200">
+                        <div className={`h-full rounded-full ${readiness.score >= 80 ? "bg-emerald-600" : readiness.score >= 50 ? "bg-amber-500" : "bg-rose-500"}`} style={{ width: `${readiness.score}%` }} />
+                      </div>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${getReadinessTone(readiness.score)}`}>{readiness.score}%</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right font-bold text-slate-900">{userCount}</td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {readiness.missing.length ? readiness.missing.slice(0, 3).join(", ") + (readiness.missing.length > 3 ? ` +${readiness.missing.length - 3}` : "") : <span className="text-emerald-600">No gaps</span>}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">{formatDate(company.updatedAt || company.createdAt)}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <button onClick={() => onOpenWorkspace(company)} className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100"><FaEye size={9} /> Workspace</button>
+                      <button onClick={() => onOpenCompanySetup(company)} className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-100"><FaCog size={9} /> Setup</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-    </div>
+
+      <Pagination page={safePage} totalPages={totalPages} total={spotlightCompanies.length} pageSize={ITEMS_PER_PAGE} onPage={setPage} />
+    </>
   );
 };
 
+// ─── Audit Panel ───────────────────────────────────────────────────────────────
 const AuditPanel = ({ companies, users, companyMap }) => {
-  const events = useMemo(() => {
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [page, setPage] = useState(1);
+
+  const allEvents = useMemo(() => {
     const rows = [];
-
     companies.forEach((company) => {
-      if (company?.createdAt) {
-        rows.push({
-          id: `company-created-${company._id}`,
-          timestamp: company.createdAt,
-          title: `${company.companyName} created`,
-          detail: `${getCompanyOperatingModeLabel(company.companyMode)} · ${getCompanyStatusLabel(company)}`,
-          type: "Company",
-        });
-      }
-      if (company?.updatedAt && company?.updatedAt !== company?.createdAt) {
-        rows.push({
-          id: `company-updated-${company._id}`,
-          timestamp: company.updatedAt,
-          title: `${company.companyName} updated`,
-          detail: `${company.email || "No email"} · ${[company.town, company.country].filter(Boolean).join(", ") || "No location"}`,
-          type: "Company",
-        });
-      }
+      if (company?.createdAt) rows.push({ id: `company-created-${company._id}`, timestamp: company.createdAt, title: `${company.companyName} created`, detail: `${getCompanyOperatingModeLabel(company.companyMode)} · ${getCompanyStatusLabel(company)}`, type: "Company" });
+      if (company?.updatedAt && company?.updatedAt !== company?.createdAt) rows.push({ id: `company-updated-${company._id}`, timestamp: company.updatedAt, title: `${company.companyName} updated`, detail: `${company.email || "No email"} · ${[company.town, company.country].filter(Boolean).join(", ") || "No location"}`, type: "Company" });
     });
-
     users.forEach((user) => {
       const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim() || user?.email || "User";
       const primaryCompany = getPrimaryCompanyName(user, companyMap);
-      if (user?.createdAt) {
-        rows.push({
-          id: `user-created-${user._id}`,
-          timestamp: user.createdAt,
-          title: `${name} added`,
-          detail: `${getUserRoleLabel(user)} · ${primaryCompany}`,
-          type: "User",
-        });
-      }
-      if (user?.updatedAt && user?.updatedAt !== user?.createdAt) {
-        rows.push({
-          id: `user-updated-${user._id}`,
-          timestamp: user.updatedAt,
-          title: `${name} updated`,
-          detail: `${user?.locked ? "Locked" : user?.isActive === false ? "Inactive" : "Active"} · ${primaryCompany}`,
-          type: "User",
-        });
-      }
+      if (user?.createdAt) rows.push({ id: `user-created-${user._id}`, timestamp: user.createdAt, title: `${name} added`, detail: `${getUserRoleLabel(user)} · ${primaryCompany}`, type: "User" });
+      if (user?.updatedAt && user?.updatedAt !== user?.createdAt) rows.push({ id: `user-updated-${user._id}`, timestamp: user.updatedAt, title: `${name} updated`, detail: `${user?.locked ? "Locked" : user?.isActive === false ? "Inactive" : "Active"} · ${primaryCompany}`, type: "User" });
     });
-
-    return rows
-      .filter((item) => item.timestamp)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 40);
+    return rows.filter((e) => e.timestamp).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   }, [companies, users, companyMap]);
 
+  const filtered = useMemo(() => {
+    return allEvents.filter((e) => {
+      const matchesType = typeFilter === "all" || e.type === typeFilter;
+      const matchesSearch = !search || `${e.title} ${e.detail}`.toLowerCase().includes(search.toLowerCase());
+      return matchesType && matchesSearch;
+    });
+  }, [allEvents, typeFilter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+
+  useEffect(() => { setPage(1); }, [search, typeFilter]);
+
   return (
-    <div className="space-y-5">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Audit view</div>
-        <h2 className="mt-1 text-xl font-black text-slate-900">Recent platform activity snapshot</h2>
-        <p className="mt-1 text-sm text-slate-500"></p>
-      </div>
-
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="space-y-3">
-          {events.map((event) => (
-            <div key={event.id} className="flex gap-4 rounded-2xl border border-slate-200 p-4">
-              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                {event.type === "Company" ? <FaBuilding /> : <FaUsers />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="font-black text-slate-900">{event.title}</div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-slate-600">{event.type}</span>
-                </div>
-                <div className="mt-1 text-sm text-slate-600">{event.detail}</div>
-              </div>
-              <div className="shrink-0 text-right text-xs font-semibold text-slate-500">
-                <div>{formatDate(event.timestamp)}</div>
-              </div>
-            </div>
-          ))}
-
-          {!events.length ? (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-              No recent platform activity was found.
-            </div>
-          ) : null}
+    <>
+      <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[240px] flex-1">
+            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search events..." className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] pl-9 pr-3 text-xs text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+          </div>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-8 rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
+            <option value="all">All types</option>
+            <option value="Company">Company</option>
+            <option value="User">User</option>
+          </select>
+          <span className="ml-auto text-[11px] font-semibold text-slate-500">{filtered.length} event{filtered.length !== 1 ? "s" : ""}</span>
         </div>
       </div>
-    </div>
+
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="min-w-full text-xs">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-[#0B3B2E] text-white">
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Date</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Event</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Type</th>
+              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.length === 0 ? (
+              <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-500">No recent platform activity found.</td></tr>
+            ) : pageRows.map((event, idx) => (
+              <tr key={event.id} className={`border-t border-slate-100 hover:bg-slate-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{formatDate(event.timestamp)}</td>
+                <td className="px-3 py-2 font-black text-slate-900">{event.title}</td>
+                <td className="px-3 py-2">
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${event.type === "Company" ? "bg-emerald-100 text-emerald-700" : "bg-orange-100 text-orange-700"}`}>{event.type}</span>
+                </td>
+                <td className="px-3 py-2 text-slate-600">{event.detail}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={ITEMS_PER_PAGE} onPage={setPage} />
+    </>
   );
 };
 
+// ─── Page root ─────────────────────────────────────────────────────────────────
 export default function SystemSetupPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -941,289 +719,228 @@ export default function SystemSetupPage() {
   const activeSection = SECTION_ALIASES[rawSection] || rawSection;
   const companyFilterFromQuery = new URLSearchParams(location.search).get("company") || "";
   const [selectedCompanyId, setSelectedCompanyId] = useState(companyFilterFromQuery);
-  const [confirmDialog, setConfirmDialog] = useState({
-    isOpen: false,
-    title: "",
-    message: "",
-    isDangerous: false,
-    confirmText: "Confirm",
-    onConfirm: null,
-  });
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: "", message: "", isDangerous: false, confirmText: "Confirm", onConfirm: null });
 
   const companyList = Array.isArray(companies) ? companies : [];
   const userList = Array.isArray(users) ? users : [];
-  const companyMap = useMemo(() => new Map(companyList.map((company) => [normalizeId(company), company])), [companyList]);
+  const companyMap = useMemo(() => new Map(companyList.map((c) => [normalizeId(c), c])), [companyList]);
 
   const companyUserCounts = useMemo(() => {
     const counts = new Map();
     userList.forEach((user) => {
-      getUserAssignedCompanyIds(user).forEach((companyId) => {
-        counts.set(companyId, (counts.get(companyId) || 0) + 1);
-      });
+      getUserAssignedCompanyIds(user).forEach((cid) => counts.set(cid, (counts.get(cid) || 0) + 1));
     });
     return counts;
   }, [userList]);
 
   const companyReadiness = useMemo(() => {
     const readiness = new Map();
-    companyList.forEach((company) => {
-      readiness.set(normalizeId(company), evaluateCompanySetup(company, companyUserCounts.get(normalizeId(company)) || 0));
-    });
+    companyList.forEach((c) => readiness.set(normalizeId(c), evaluateCompanySetup(c, companyUserCounts.get(normalizeId(c)) || 0)));
     return readiness;
   }, [companyList, companyUserCounts]);
 
   useEffect(() => {
-    if (!VALID_SECTIONS.includes(activeSection)) {
-      navigate("/system-setup/overview", { replace: true });
-    }
+    if (!VALID_SECTIONS.includes(activeSection)) navigate("/system-setup/overview", { replace: true });
   }, [activeSection, navigate]);
 
-  useEffect(() => {
-    dispatch(getCompanies({ includeDemo: true }));
-  }, [dispatch]);
-
-  useEffect(() => {
-    dispatch(getUsers(selectedCompanyId || undefined));
-  }, [dispatch, selectedCompanyId]);
-
-  useEffect(() => {
-    setSelectedCompanyId(companyFilterFromQuery);
-  }, [companyFilterFromQuery]);
+  useEffect(() => { dispatch(getCompanies({ includeDemo: true })); }, [dispatch]);
+  useEffect(() => { dispatch(getUsers(selectedCompanyId || undefined)); }, [dispatch, selectedCompanyId]);
+  useEffect(() => { setSelectedCompanyId(companyFilterFromQuery); }, [companyFilterFromQuery]);
 
   const isSystemAdmin = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
-  const activeCompanyName = currentCompany?.companyName || currentUser?.company?.companyName || "No active company";
 
-  const goToSection = (section, nextQuery = "") => {
-    navigate(`/system-setup/${section}${nextQuery}`);
-  };
+  const goToSection = (section, nextQuery = "") => navigate(`/system-setup/${section}${nextQuery}`);
 
   const handleCompanyFilterChange = (companyId) => {
     setSelectedCompanyId(companyId);
-    const query = companyId ? `?company=${companyId}` : "";
-    navigate(`/system-setup/users${query}`, { replace: true });
+    navigate(`/system-setup/users${companyId ? `?company=${companyId}` : ""}`, { replace: true });
   };
 
   const handleSwitchAndNavigate = async (company, route, successMessage) => {
     const companyId = normalizeId(company);
-    if (!companyId) {
-      toast.error("The selected company is missing a valid identifier.");
-      return;
-    }
-
+    if (!companyId) { toast.error("The selected company is missing a valid identifier."); return; }
     try {
       await dispatch(switchCompany(companyId));
       navigate(route, { state: { tabTitle: company?.companyName || "Company" } });
-      if (successMessage) {
-        toast.success(successMessage);
-      }
+      if (successMessage) toast.success(successMessage);
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to switch company context.");
     }
   };
 
-  const handleOpenCompanySetup = (company) =>
-    handleSwitchAndNavigate(company, "/company-setup", `Opened ${company?.companyName || "company"} in Company Setup`);
-
-  const handleOpenOperationalSettings = (company) =>
-    handleSwitchAndNavigate(company, "/settings", `Opened ${company?.companyName || "company"} in Operational Settings`);
-
-  const handleOpenWorkspace = (company) =>
-    handleSwitchAndNavigate(company, "/dashboard", `Opened ${company?.companyName || "company"} workspace`);
-
-  const handleManageUsers = (company) => {
-    const companyId = normalizeId(company);
-    if (!companyId) return;
-    handleCompanyFilterChange(companyId);
-  };
-
-  const handleEditCompany = (company) => {
-    const companyId = normalizeId(company);
-    if (!companyId) {
-      toast.error("Unable to open this company record.");
-      return;
-    }
-    navigate(`/add-company/${companyId}`, { state: { tabTitle: company?.companyName || "Company" } });
-  };
+  const handleOpenCompanySetup = (company) => handleSwitchAndNavigate(company, "/company-setup", `Opened ${company?.companyName || "company"} in Company Setup`);
+  const handleOpenOperationalSettings = (company) => handleSwitchAndNavigate(company, "/settings", `Opened ${company?.companyName || "company"} in Operational Settings`);
+  const handleOpenWorkspace = (company) => handleSwitchAndNavigate(company, "/dashboard", `Opened ${company?.companyName || "company"} workspace`);
+  const handleManageUsers = (company) => { const id = normalizeId(company); if (!id) return; handleCompanyFilterChange(id); goToSection("users", `?company=${id}`); };
+  const handleEditCompany = (company) => { const id = normalizeId(company); if (!id) { toast.error("Unable to open this company record."); return; } navigate(`/add-company/${id}`, { state: { tabTitle: company?.companyName || "Company" } }); };
 
   const handleDeleteCompany = (company) => {
-    const companyId = normalizeId(company);
-    if (!companyId) return;
+    const id = normalizeId(company);
+    if (!id) return;
     setConfirmDialog({
-      isOpen: true,
-      title: "Delete company",
+      isOpen: true, title: "Delete company",
       message: `Delete ${company?.companyName || "this company"}? This action cannot be undone.`,
-      isDangerous: true,
-      confirmText: "Delete",
+      isDangerous: true, confirmText: "Delete",
       onConfirm: async () => {
-        try {
-          await dispatch(deleteCompany(companyId));
-          toast.success("Company deleted successfully.");
-        } catch (error) {
-          toast.error(error?.response?.data?.message || error?.message || "Failed to delete company.");
-        } finally {
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        }
+        try { await dispatch(deleteCompany(id)); toast.success("Company deleted successfully."); }
+        catch (error) { toast.error(error?.response?.data?.message || error?.message || "Failed to delete company."); }
+        finally { setConfirmDialog((prev) => ({ ...prev, isOpen: false })); }
       },
     });
   };
 
-  const handleEditUser = (user) => {
-    const userId = normalizeId(user);
-    if (!userId) return;
-    navigate(`/add-user/${userId}`, { state: { tabTitle: "User Access" } });
-  };
+  const handleEditUser = (user) => { const id = normalizeId(user); if (!id) return; navigate(`/add-user/${id}`, { state: { tabTitle: "User Access" } }); };
 
   const handleToggleUserLock = (user) => {
-    const userId = normalizeId(user);
-    if (!userId) return;
-    dispatch(toggleUserLock(userId))
-      .then(() => {
-        toast.success(user?.locked ? "User unlocked successfully." : "User locked successfully.");
-      })
-      .catch((error) => {
-        toast.error(error?.response?.data?.message || error?.message || "Failed to update user lock status.");
-      });
+    const id = normalizeId(user);
+    if (!id) return;
+    dispatch(toggleUserLock(id))
+      .then(() => toast.success(user?.locked ? "User unlocked successfully." : "User locked successfully."))
+      .catch((error) => toast.error(error?.response?.data?.message || error?.message || "Failed to update user lock status."));
   };
 
   const handleDeleteUser = (user) => {
-    const userId = normalizeId(user);
+    const id = normalizeId(user);
     const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim() || user?.email || "this user";
-    if (!userId) return;
+    if (!id) return;
     setConfirmDialog({
-      isOpen: true,
-      title: "Delete user",
+      isOpen: true, title: "Delete user",
       message: `Delete ${name}? This action cannot be undone.`,
-      isDangerous: true,
-      confirmText: "Delete",
+      isDangerous: true, confirmText: "Delete",
       onConfirm: async () => {
-        try {
-          await dispatch(deleteUser(userId));
-          toast.success("User deleted successfully.");
-        } catch (error) {
-          toast.error(error?.response?.data?.message || error?.message || "Failed to delete user.");
-        } finally {
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        }
+        try { await dispatch(deleteUser(id)); toast.success("User deleted successfully."); }
+        catch (error) { toast.error(error?.response?.data?.message || error?.message || "Failed to delete user."); }
+        finally { setConfirmDialog((prev) => ({ ...prev, isOpen: false })); }
       },
     });
   };
 
   const sections = [
-    { key: "overview", label: "Overview", icon: FaChartBar },
-    { key: "companies", label: "Companies", icon: FaBuilding },
-    { key: "users", label: "Users", icon: FaUsers },
-    { key: "trials", label: "Trials", icon: FaBoxOpen },
-    { key: "audit", label: "Audit", icon: FaHistory },
+    { key: "overview",   label: "Overview",   icon: FaChartBar },
+    { key: "companies",  label: "Companies",  icon: FaBuilding },
+    { key: "users",      label: "Users",      icon: FaUsers },
+    { key: "trials",     label: "Trials",     icon: FaBoxOpen },
+    { key: "audit",      label: "Audit Log",  icon: FaHistory },
   ];
 
+  const isLoading = companiesFetching && !companyList.length;
+
   return (
-    <DashboardLayout>
-      <div className="mx-auto flex h-[calc(100vh-76px)] w-full max-w-[1440px] flex-col overflow-hidden px-3 py-3">
-        {!isSystemAdmin ? (
-          <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
-            System Administration is restricted to Milik Admin users.
-          </div>
-        ) : (
-          <>
-            <div className="sticky top-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div>
-                  <div className="text-xs font-black uppercase tracking-[0.22em] text-emerald-700">System Administration</div>
-                  <h1 className="mt-1 text-xl font-black text-slate-900">Control Centre</h1>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs font-black text-slate-700">
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{activeCompanyName}</span>
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{companyList.length} companies</span>
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{userList.length} users</span>
-                </div>
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+
+          {/* ── Sticky header ─────────────────────────────────────────────── */}
+          <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 shadow-sm backdrop-blur">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">System Administration</div>
+                <h1 className="text-sm font-black text-slate-900 leading-none mt-0.5">Control Centre</h1>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] font-black text-slate-700">
+                <span className="rounded border border-slate-200 bg-white px-2 py-0.5">{companyList.length} companies</span>
+                <span className="rounded border border-slate-200 bg-white px-2 py-0.5">{userList.length} users</span>
+                <button onClick={() => { dispatch(getCompanies({ includeDemo: true })); dispatch(getUsers(selectedCompanyId || undefined)); }} className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 hover:bg-slate-100"><FaRedoAlt size={9} /> Refresh</button>
               </div>
             </div>
 
-            <div className="mt-3 flex shrink-0 flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+            {/* Tab bar */}
+            <div className="flex items-center gap-0 border-t border-slate-200 px-3">
               {sections.map((section) => (
-                <SectionButton
+                <button
                   key={section.key}
-                  active={activeSection === section.key}
-                  label={section.label}
-                  icon={section.icon}
                   onClick={() => goToSection(section.key, section.key === "users" && selectedCompanyId ? `?company=${selectedCompanyId}` : "")}
-                />
+                  className={`relative inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold transition-colors ${
+                    activeSection === section.key
+                      ? "border-b-2 border-[#0B3B2E] text-[#0B3B2E]"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <section.icon className="text-[11px]" />
+                  {section.label}
+                </button>
               ))}
             </div>
+          </div>
 
-            <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
-              {companiesFetching && !companyList.length ? (
-                <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Loading companies...</div>
-              ) : null}
-
-              {!companiesFetching || companyList.length ? (
-                <>
-                  {activeSection === "overview" ? (
-                    <OverviewPanel
-                      companies={companyList}
-                      users={userList}
-                      companyReadiness={companyReadiness}
-                      companyUserCounts={companyUserCounts}
-                      onAddCompany={() => navigate("/add-company", { state: { tabTitle: "New Company" } })}
-                      onAddUser={() => navigate("/add-user", { state: { tabTitle: "New User" } })}
-                      onOpenCompanySetup={handleOpenCompanySetup}
-                      onOpenOperationalSettings={handleOpenOperationalSettings}
-                      onOpenWorkspace={handleOpenWorkspace}
-                      onManageUsers={handleManageUsers}
-                    />
-                  ) : null}
-
-                  {activeSection === "companies" ? (
-                    <CompaniesPanel
-                      companies={companyList}
-                      companyReadiness={companyReadiness}
-                      companyUserCounts={companyUserCounts}
-                      onAddCompany={() => navigate("/add-company", { state: { tabTitle: "New Company" } })}
-                      onEditCompany={handleEditCompany}
-                      onDeleteCompany={handleDeleteCompany}
-                      onOpenCompanySetup={handleOpenCompanySetup}
-                      onOpenOperationalSettings={handleOpenOperationalSettings}
-                      onOpenWorkspace={handleOpenWorkspace}
-                      onManageUsers={handleManageUsers}
-                    />
-                  ) : null}
-
-                  {activeSection === "users" ? (
-                    <UsersPanel
-                      users={userList}
-                      companies={companyList}
-                      companyMap={companyMap}
-                      selectedCompanyId={selectedCompanyId}
-                      onSelectedCompanyIdChange={handleCompanyFilterChange}
-                      onAddUser={() => navigate("/add-user", { state: { tabTitle: "New User" } })}
-                      onEditUser={handleEditUser}
-                      onToggleUserLock={handleToggleUserLock}
-                      onDeleteUser={handleDeleteUser}
-                    />
-                  ) : null}
-
-                  {activeSection === "trials" ? (
-                    <TrialsPanel
-                      companies={companyList}
-                      companyReadiness={companyReadiness}
-                      companyUserCounts={companyUserCounts}
-                      onOpenWorkspace={handleOpenWorkspace}
-                      onOpenCompanySetup={handleOpenCompanySetup}
-                    />
-                  ) : null}
-
-                  {activeSection === "audit" ? (
-                    <AuditPanel companies={companyList} users={userList} companyMap={companyMap} />
-                  ) : null}
-                </>
-              ) : null}
-
-              {usersFetching && activeSection === "users" ? (
-                <div className="mt-4 rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">Refreshing users...</div>
-              ) : null}
+          {/* ── Non-admin warning ─────────────────────────────────────────── */}
+          {!isSystemAdmin && (
+            <div className="p-4">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                System Administration is restricted to Milik Admin users.
+              </div>
             </div>
-          </>
-        )}
+          )}
+
+          {/* ── Loading state ─────────────────────────────────────────────── */}
+          {isSystemAdmin && isLoading && (
+            <div className="flex flex-1 items-center justify-center text-sm text-slate-500">Loading companies...</div>
+          )}
+
+          {/* ── Panel content ─────────────────────────────────────────────── */}
+          {isSystemAdmin && !isLoading && (
+            <>
+              {activeSection === "overview" && (
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <OverviewPanel
+                    companies={companyList}
+                    users={userList}
+                    companyReadiness={companyReadiness}
+                    companyUserCounts={companyUserCounts}
+                    onAddCompany={() => navigate("/add-company", { state: { tabTitle: "New Company" } })}
+                    onAddUser={() => navigate("/add-user", { state: { tabTitle: "New User" } })}
+                    onOpenCompanySetup={handleOpenCompanySetup}
+                    onOpenWorkspace={handleOpenWorkspace}
+                  />
+                </div>
+              )}
+
+              {activeSection === "companies" && (
+                <CompaniesPanel
+                  companies={companyList}
+                  companyReadiness={companyReadiness}
+                  companyUserCounts={companyUserCounts}
+                  onAddCompany={() => navigate("/add-company", { state: { tabTitle: "New Company" } })}
+                  onEditCompany={handleEditCompany}
+                  onDeleteCompany={handleDeleteCompany}
+                  onOpenCompanySetup={handleOpenCompanySetup}
+                  onOpenOperationalSettings={handleOpenOperationalSettings}
+                  onOpenWorkspace={handleOpenWorkspace}
+                  onManageUsers={handleManageUsers}
+                />
+              )}
+
+              {activeSection === "users" && (
+                <UsersPanel
+                  users={userList}
+                  companies={companyList}
+                  companyMap={companyMap}
+                  selectedCompanyId={selectedCompanyId}
+                  onSelectedCompanyIdChange={handleCompanyFilterChange}
+                  onAddUser={() => navigate("/add-user", { state: { tabTitle: "New User" } })}
+                  onEditUser={handleEditUser}
+                  onToggleUserLock={handleToggleUserLock}
+                  onDeleteUser={handleDeleteUser}
+                />
+              )}
+
+              {activeSection === "trials" && (
+                <TrialsPanel
+                  companies={companyList}
+                  companyReadiness={companyReadiness}
+                  companyUserCounts={companyUserCounts}
+                  onOpenWorkspace={handleOpenWorkspace}
+                  onOpenCompanySetup={handleOpenCompanySetup}
+                />
+              )}
+
+              {activeSection === "audit" && (
+                <AuditPanel companies={companyList} users={userList} companyMap={companyMap} />
+              )}
+            </>
+          )}
+
+        </div>
       </div>
 
       <MilikConfirmDialog

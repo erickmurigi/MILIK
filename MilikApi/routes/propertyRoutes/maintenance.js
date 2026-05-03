@@ -25,13 +25,13 @@ router.get("/get/stats", verifyUser, getMaintenanceStats)
 // Get single maintenance
 router.get("/:id", verifyUser, getMaintenance)
 
+// Update maintenance status (must be before /:id to avoid route collision)
+router.put("/status/:id", verifyUser, updateMaintenanceStatus)
+
 // Update maintenance
 router.put("/:id", verifyUser, updateMaintenance)
 
 // Delete maintenance
 router.delete("/:id", verifyUser, deleteMaintenance)
-
-// Update maintenance status
-router.put("/status/:id", verifyUser, updateMaintenanceStatus)
 
 export default router

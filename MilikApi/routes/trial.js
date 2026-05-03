@@ -61,8 +61,26 @@ function normalizeText(value = "") {
   return String(value || "").trim();
 }
 
+// Internal / reserved TLDs that should never arrive from real users.
+const BLOCKED_TLDS = new Set(["local", "internal", "test", "invalid", "localhost", "example"]);
+
 function isValidEmail(value = "") {
-  return /^\S+@\S+\.\S+$/.test(String(value || "").trim());
+  const email = String(value || "").trim();
+  // Must match user@domain.tld with TLD >= 2 chars.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return false;
+  const tld = email.split(".").pop().toLowerCase();
+  return !BLOCKED_TLDS.has(tld);
+}
+
+function isValidPhone(value = "") {
+  // Strip all non-digit characters and require at least 7 digits.
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length >= 7;
+}
+
+function isValidName(value = "") {
+  const name = String(value || "").trim();
+  return name.length >= 3 && /\S/.test(name);
 }
 
 function resolveDemoRole(value = "") {
@@ -518,20 +536,20 @@ router.post("/", async (req, res) => {
     const country = normalizeText(payload.country) || "Kenya";
     const notes = normalizeText(payload.notes);
 
-    if (name.length < 2) {
-      return res.status(400).json({ success: false, message: "Please provide your full name" });
+    if (!isValidName(name)) {
+      return res.status(400).json({ success: false, message: "Please provide your full name (at least 3 characters)" });
     }
 
     if (!isValidEmail(email)) {
-      return res.status(400).json({ success: false, message: "Please provide a valid email address" });
+      return res.status(400).json({ success: false, message: "Please provide a valid business email address" });
     }
 
     if (role === "property_manager" && !company) {
       return res.status(400).json({ success: false, message: "Company name is required for demo access" });
     }
 
-    if (!phone) {
-      return res.status(400).json({ success: false, message: "Phone number is required" });
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({ success: false, message: "Please provide a valid phone number" });
     }
 
     const now = new Date();
@@ -685,9 +703,14 @@ router.post("/", async (req, res) => {
     });
   } catch (error) {
     console.error("Trial request error:", error);
-    return res.status(400).json({
+    // 400 only for explicit validation errors thrown by our own logic;
+    // everything else is a server fault and should be 500.
+    const isClientError = error?.status === 400 || error?.isValidation === true;
+    return res.status(isClientError ? 400 : 500).json({
       success: false,
-      message: error?.message || "Failed to submit trial request",
+      message: isClientError
+        ? error.message
+        : "An unexpected error occurred. Please try again.",
     });
   }
 });
@@ -762,7 +785,9 @@ router.post("/access", async (req, res) => {
     const tokenError = error?.name === "JsonWebTokenError" || error?.name === "TokenExpiredError";
     return res.status(tokenError ? 400 : 500).json({
       success: false,
-      message: tokenError ? "This demo access link is invalid or has expired." : error?.message || "Failed to restore demo access.",
+      message: tokenError
+        ? "This demo access link is invalid or has expired."
+        : "An unexpected error occurred restoring your demo. Please try again.",
     });
   }
 });

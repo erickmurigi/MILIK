@@ -9,6 +9,7 @@ import {
   FaShieldAlt,
   FaUserPlus,
 } from 'react-icons/fa';
+import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
@@ -295,24 +296,23 @@ export default function AddUserPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <div className="mx-auto max-w-7xl px-4 py-6">
-        <div className="sticky top-0 z-20 mb-3 flex shrink-0 items-center justify-between rounded-2xl border border-emerald-100 bg-white/95 p-3 shadow-sm backdrop-blur">
+    <DashboardLayout>
+      <div className="mx-auto max-w-5xl px-4 py-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <button onClick={() => navigate('/system-setup/users')} className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-emerald-700 hover:text-emerald-800"><FaArrowLeft /> Back to users</button>
-            <h1 className="text-lg font-black text-slate-900">{isEditing ? 'Update User Access' : 'New User'}</h1>
-
+            <button onClick={() => navigate('/system-setup/users')} className="mb-1 inline-flex items-center gap-1.5 text-xs font-bold text-[#0B3B2E] hover:underline"><FaArrowLeft /> Back to users</button>
+            <h1 className="text-base font-bold text-slate-900">{isEditing ? 'Update User Access' : 'New User'}</h1>
           </div>
-          <div className="rounded-2xl border border-white bg-white/90 px-4 py-3 shadow-sm">
-            <div className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-600">Milik Admin control</div>
-            <div className="text-base font-extrabold text-slate-900">{isSystemAdmin ? 'Multi-company assignment enabled' : 'Single company access only'}</div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-orange-600">Milik Admin</div>
+            <div className="text-xs font-semibold text-slate-700">{isSystemAdmin ? 'Multi-company assignment enabled' : 'Single company access only'}</div>
           </div>
         </div>
 
         {isLoading ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-500">Loading user setup...</div>
+          <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500">Loading user setup...</div>
         ) : (
-          <form onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="rounded-3xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-slate-700">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -562,6 +562,6 @@ export default function AddUserPage() {
           </form>
         )}
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

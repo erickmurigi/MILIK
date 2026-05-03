@@ -482,15 +482,28 @@ const PaymentVouchers = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
-        <div className="mx-auto flex h-full w-full max-w-[96%] min-h-0 flex-1 flex-col gap-2">
-          <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">Count: {stats.count}</span>
-              <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">Total: KES {stats.total.toLocaleString()}</span>
-              <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Paid: KES {stats.paid.toLocaleString()}</span>
-              <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">Draft: {stats.draft}</span>
-            </div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+
+          {/* KPI Strip */}
+          <div className="grid flex-shrink-0 grid-cols-2 gap-2 md:grid-cols-4">
+            {[
+              { label: "Total Vouchers", value: stats.count, sub: `KES ${stats.total.toLocaleString()}`, cls: "bg-slate-900 text-white" },
+              { label: "Paid", value: filtered.filter((v) => v.status === "paid").length, sub: `KES ${stats.paid.toLocaleString()}`, cls: "bg-emerald-50 text-emerald-800 border border-emerald-200" },
+              { label: "Draft", value: stats.draft, sub: "Awaiting action", cls: "bg-amber-50 text-amber-800 border border-amber-200" },
+              { label: "Approved", value: filtered.filter((v) => v.status === "approved").length, sub: "Pending settlement", cls: "bg-blue-50 text-blue-800 border border-blue-200" },
+            ].map((card) => (
+              <div key={card.label} className={`rounded-lg px-3 py-2 shadow-sm ${card.cls}`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-75">{card.label}</span>
+                  <span className="text-sm font-black">{card.value}</span>
+                </div>
+                <p className="truncate text-[9px] font-semibold opacity-50">{card.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm rounded-t-xl">
             <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
               <div className="relative md:col-span-2">
                 <FaSearch className="absolute left-3 top-2.5 text-xs text-slate-400" />

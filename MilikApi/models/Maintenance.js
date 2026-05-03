@@ -40,6 +40,7 @@ const MaintenanceSchema = new mongoose.Schema(
 // Indexes for better query performance
 MaintenanceSchema.index({ business: 1 });
 MaintenanceSchema.index({ business: 1, status: 1 });
+MaintenanceSchema.index({ business: 1, status: 1, priority: 1 });
 MaintenanceSchema.index({ unit: 1 });
 MaintenanceSchema.index({ tenant: 1 });
 MaintenanceSchema.index({ priority: 1 });

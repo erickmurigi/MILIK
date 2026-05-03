@@ -1,5 +1,5 @@
 import { LISTING_UI } from "../../utils/listingPageUtils";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
@@ -17,6 +17,7 @@ import { printPettyCashVoucher, printReplenishmentSummary } from "../../utils/pr
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
+import { hasCompanyPermission } from "../../utils/permissions";
 import {
   approvePettyCashReplenishment,
   createPettyCashAccount,
@@ -121,6 +122,7 @@ const BalancePill = ({ account }) => {
 const PettyCash = () => {
   const dispatch = useDispatch();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
+  const currentUser = useSelector((s) => s.auth?.currentUser);
   const properties = useSelector((s) => s.property?.properties || []);
 
   const [activeTab, setActiveTab] = useState("disbursements");
@@ -154,7 +156,18 @@ const PettyCash = () => {
   const [disbPage, setDisbPage] = useState(1);
   const [repPage, setRepPage] = useState(1);
 
+  const canCreate  = hasCompanyPermission(currentUser, currentCompany, "pettyCash", "create", "accounts");
+  const canApprove = hasCompanyPermission(currentUser, currentCompany, "pettyCash", "approve", "accounts");
+
   const businessId = currentCompany?._id;
+
+  const _uid = currentUser?._id || currentUser?.id;
+  const _pcAccountDraftKey = (businessId && _uid) ? `milik:draft:pc-account:${businessId}:${_uid}` : null;
+  const _pcDisbDraftKey = (businessId && _uid) ? `milik:draft:pc-disb:${businessId}:${_uid}` : null;
+  const _pcRepDraftKey = (businessId && _uid) ? `milik:draft:pc-rep:${businessId}:${_uid}` : null;
+  const _pcAccountDraftRestored = useRef(false);
+  const _pcDisbDraftRestored = useRef(false);
+  const _pcRepDraftRestored = useRef(false);
 
   // ── Load COAs + properties
   useEffect(() => {
@@ -286,13 +299,27 @@ const PettyCash = () => {
     try {
       const created = await createPettyCashAccount({ ...accountForm, business: businessId });
       toast.success("Petty cash account created");
-      setShowNewAccount(false);
+      closeAccountModal();
       setAccountForm({ name: "", custodianName: "", floatAmount: "", glAccountId: "", voucherPrefix: "PCV", notes: "" });
       await loadAccounts();
       setSelectedAccountId(String(created._id || created.data?._id || ""));
     } catch (err) { toast.error(err.message); }
     finally { setSubmitting(false); }
   };
+
+  useEffect(() => {
+    if (!_pcAccountDraftKey || _pcAccountDraftRestored.current) return;
+    _pcAccountDraftRestored.current = true;
+    try {
+      const raw = window.sessionStorage.getItem(_pcAccountDraftKey);
+      if (raw) { const { form: s } = JSON.parse(raw); if (s) { setAccountForm(s); setShowNewAccount(true); } }
+    } catch {}
+  }, [_pcAccountDraftKey]);
+
+  useEffect(() => {
+    if (!_pcAccountDraftKey || !_pcAccountDraftRestored.current || !showNewAccount) return;
+    try { window.sessionStorage.setItem(_pcAccountDraftKey, JSON.stringify({ form: accountForm })); } catch {}
+  }, [_pcAccountDraftKey, accountForm, showNewAccount]);
 
   // ─── Disbursement form
   const today = new Date().toISOString().split("T")[0];
@@ -305,12 +332,26 @@ const PettyCash = () => {
     try {
       const res = await createPettyCashDisbursement({ ...disbForm, business: businessId, pettyCashAccountId: selectedAccountId });
       toast.success(`Voucher ${res?.data?.voucherNumber || ""} recorded`);
-      setShowNewDisbursement(false);
+      closeDisbModal();
       setDisbForm({ date: today, amount: "", description: "", category: "maintenance", propertyId: "", expenseAccountId: "", receiptAttached: false, receiptNote: "" });
       await Promise.all([loadTransactions(), loadAccounts()]);
     } catch (err) { toast.error(err.message); }
     finally { setSubmitting(false); }
   };
+
+  useEffect(() => {
+    if (!_pcDisbDraftKey || _pcDisbDraftRestored.current) return;
+    _pcDisbDraftRestored.current = true;
+    try {
+      const raw = window.sessionStorage.getItem(_pcDisbDraftKey);
+      if (raw) { const { form: s } = JSON.parse(raw); if (s) { setDisbForm(s); setShowNewDisbursement(true); } }
+    } catch {}
+  }, [_pcDisbDraftKey]);
+
+  useEffect(() => {
+    if (!_pcDisbDraftKey || !_pcDisbDraftRestored.current || !showNewDisbursement) return;
+    try { window.sessionStorage.setItem(_pcDisbDraftKey, JSON.stringify({ form: disbForm })); } catch {}
+  }, [_pcDisbDraftKey, disbForm, showNewDisbursement]);
 
   // ─── Replenishment form
   const suggestedAmount = selectedAccount
@@ -321,6 +362,23 @@ const PettyCash = () => {
     if (showReplenishment) setRepForm((p) => ({ ...p, amount: suggestedAmount > 0 ? String(suggestedAmount) : "" }));
   }, [showReplenishment, suggestedAmount]);
 
+  useEffect(() => {
+    if (!_pcRepDraftKey || _pcRepDraftRestored.current) return;
+    _pcRepDraftRestored.current = true;
+    try {
+      const raw = window.sessionStorage.getItem(_pcRepDraftKey);
+      if (raw) {
+        const { form: s } = JSON.parse(raw);
+        if (s) { setRepForm((p) => ({ ...p, bankAccountId: s.bankAccountId || "", notes: s.notes || "" })); setShowReplenishment(true); }
+      }
+    } catch {}
+  }, [_pcRepDraftKey]);
+
+  useEffect(() => {
+    if (!_pcRepDraftKey || !_pcRepDraftRestored.current || !showReplenishment) return;
+    try { window.sessionStorage.setItem(_pcRepDraftKey, JSON.stringify({ form: repForm })); } catch {}
+  }, [_pcRepDraftKey, repForm, showReplenishment]);
+
   const handleRequestReplenishment = async (e) => {
     e.preventDefault();
     if (!repForm.amount || Number(repForm.amount) <= 0) return toast.error("Amount is required");
@@ -328,7 +386,7 @@ const PettyCash = () => {
     try {
       await requestPettyCashReplenishment({ ...repForm, business: businessId, pettyCashAccountId: selectedAccountId });
       toast.success("Replenishment request submitted");
-      setShowReplenishment(false);
+      closeRepModal();
       setRepForm({ amount: "", bankAccountId: "", notes: "" });
       await loadTransactions();
     } catch (err) { toast.error(err.message); }
@@ -383,6 +441,19 @@ const PettyCash = () => {
       await loadTransactions();
     } catch (err) { toast.error(err.message); }
     finally { setSubmitting(false); }
+  };
+
+  const closeAccountModal = () => {
+    if (_pcAccountDraftKey) { try { window.sessionStorage.removeItem(_pcAccountDraftKey); } catch {} }
+    setShowNewAccount(false);
+  };
+  const closeDisbModal = () => {
+    if (_pcDisbDraftKey) { try { window.sessionStorage.removeItem(_pcDisbDraftKey); } catch {} }
+    setShowNewDisbursement(false);
+  };
+  const closeRepModal = () => {
+    if (_pcRepDraftKey) { try { window.sessionStorage.removeItem(_pcRepDraftKey); } catch {} }
+    setShowReplenishment(false);
   };
 
   const pendingRepCount = replenishments.filter((r) => r.status === "pending").length;
@@ -505,7 +576,8 @@ const PettyCash = () => {
                 {/* CRUD buttons */}
                 <button
                   onClick={() => setShowNewAccount(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                  disabled={!canCreate}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <FaPlus size={9} /> New Account
                 </button>
@@ -514,13 +586,15 @@ const PettyCash = () => {
                   <>
                     <button
                       onClick={() => setShowReplenishment(true)}
-                      className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 shadow-sm hover:bg-amber-100"
+                      disabled={!canCreate}
+                      className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 shadow-sm hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <FaMoneyBillWave size={10} /> Replenish
                     </button>
                     <button
                       onClick={() => setShowNewDisbursement(true)}
-                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                      disabled={!canCreate}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                     >
                       <FaPlus size={9} /> Record Disbursement
                     </button>
@@ -536,12 +610,14 @@ const PettyCash = () => {
                   <FaBoxOpen className="mb-3 text-5xl text-slate-300" />
                   <p className="text-sm font-semibold text-slate-600">No petty cash accounts yet</p>
                   <p className="mt-1 text-xs text-slate-400">Create your first account to start tracking petty cash</p>
-                  <button
-                    onClick={() => setShowNewAccount(true)}
-                    className={`mt-5 flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                  >
-                    <FaPlus /> Create Account
-                  </button>
+                  {canCreate && (
+                    <button
+                      onClick={() => setShowNewAccount(true)}
+                      className={`mt-5 flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                    >
+                      <FaPlus /> Create Account
+                    </button>
+                  )}
                 </div>
               ) : activeTab === "disbursements" ? (
 
@@ -607,7 +683,7 @@ const PettyCash = () => {
                             >
                               <FaPrint size={9} />
                             </button>
-                            {row.status === "active" && (
+                            {row.status === "active" && canApprove && (
                               <button
                                 onClick={() => setShowVoidModal(row)}
                                 className="rounded px-2 py-0.5 text-[10px] font-semibold text-red-600 hover:bg-red-50"
@@ -687,7 +763,7 @@ const PettyCash = () => {
                             >
                               <FaPrint size={9} />
                             </button>
-                            {row.status === "pending" && (
+                            {row.status === "pending" && canApprove && (
                               <button
                                 disabled={submitting}
                                 onClick={() => handleApproveReplenishment(row._id)}
@@ -696,7 +772,7 @@ const PettyCash = () => {
                                 Approve
                               </button>
                             )}
-                            {row.status === "approved" && (
+                            {row.status === "approved" && canApprove && (
                               <button
                                 disabled={submitting}
                                 onClick={() => handlePostReplenishment(row._id)}
@@ -705,7 +781,7 @@ const PettyCash = () => {
                                 Post
                               </button>
                             )}
-                            {row.status === "pending" && (
+                            {row.status === "pending" && canApprove && (
                               <button
                                 disabled={submitting}
                                 onClick={() => setShowRejectModal(row)}
@@ -765,7 +841,7 @@ const PettyCash = () => {
       {/* ═══ Modals ═══════════════════════════════════════════════════════════ */}
 
       {/* New Account */}
-      <Modal open={showNewAccount} title="New Petty Cash Account" onClose={() => setShowNewAccount(false)}>
+      <Modal open={showNewAccount} title="New Petty Cash Account" onClose={() => closeAccountModal()}>
         <form onSubmit={handleCreateAccount} className="space-y-3">
           <div>
             <label className={labelCls}>Account Name <span className="text-red-500">*</span></label>
@@ -797,7 +873,7 @@ const PettyCash = () => {
             <textarea className={inputCls} rows={2} value={accountForm.notes} onChange={(e) => setAccountForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" />
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={() => setShowNewAccount(false)} className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="button" onClick={() => closeAccountModal()} className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
             <button type="submit" disabled={submitting} className={`rounded-lg px-5 py-1.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-50`}>
               {submitting ? "Saving…" : "Create Account"}
             </button>
@@ -806,7 +882,7 @@ const PettyCash = () => {
       </Modal>
 
       {/* New Disbursement */}
-      <Modal open={showNewDisbursement} title="Record Disbursement" onClose={() => setShowNewDisbursement(false)}>
+      <Modal open={showNewDisbursement} title="Record Disbursement" onClose={() => closeDisbModal()}>
         <form onSubmit={handleCreateDisbursement} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -855,7 +931,7 @@ const PettyCash = () => {
             </div>
           )}
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={() => setShowNewDisbursement(false)} className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="button" onClick={() => closeDisbModal()} className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
             <button type="submit" disabled={submitting} className={`rounded-lg px-5 py-1.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-50`}>
               {submitting ? "Saving…" : "Record Disbursement"}
             </button>
@@ -864,7 +940,7 @@ const PettyCash = () => {
       </Modal>
 
       {/* Replenishment Request */}
-      <Modal open={showReplenishment} title="Request Replenishment" onClose={() => setShowReplenishment(false)}>
+      <Modal open={showReplenishment} title="Request Replenishment" onClose={() => closeRepModal()}>
         <form onSubmit={handleRequestReplenishment} className="space-y-3">
           {selectedAccount && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs">
@@ -889,7 +965,7 @@ const PettyCash = () => {
             <textarea className={inputCls} rows={2} value={repForm.notes} onChange={(e) => setRepForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes for approver" />
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={() => setShowReplenishment(false)} className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="button" onClick={() => closeRepModal()} className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
             <button type="submit" disabled={submitting} className="rounded-lg bg-amber-600 px-5 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50 shadow-sm">
               {submitting ? "Submitting…" : "Submit Request"}
             </button>

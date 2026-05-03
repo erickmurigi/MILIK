@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FaEdit, FaPlus, FaSave, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -9,6 +9,7 @@ import {
   getServiceProviders,
   updateServiceProvider,
 } from "../../redux/apiCalls";
+import { hasCompanyPermission } from "../../utils/permissions";
 
 const blankForm = {
   name: "",
@@ -41,6 +42,7 @@ const CATEGORY_OPTIONS = [
 
 const ServiceProviders = () => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector((state) => state.auth?.currentUser);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -52,7 +54,30 @@ const ServiceProviders = () => {
   const [form, setForm] = useState(blankForm);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const canCreate = hasCompanyPermission(currentUser, currentCompany, "expenses", "create", "accounts");
+  const canUpdate = hasCompanyPermission(currentUser, currentCompany, "expenses", "update", "accounts");
+  const canDelete = hasCompanyPermission(currentUser, currentCompany, "expenses", "delete", "accounts");
+
+  const _uid = currentUser?._id || currentUser?.id;
+  const _spDraftKey = (currentCompany?._id && _uid) ? `milik:draft:service-provider:${currentCompany._id}:${_uid}` : null;
+  const _spDraftRestored = useRef(false);
+
+  useEffect(() => {
+    if (!_spDraftKey || _spDraftRestored.current) return;
+    _spDraftRestored.current = true;
+    try {
+      const raw = window.sessionStorage.getItem(_spDraftKey);
+      if (raw) { const { form: s } = JSON.parse(raw); if (s) { setForm(s); setShowModal(true); } }
+    } catch {}
+  }, [_spDraftKey]);
+
+  useEffect(() => {
+    if (!_spDraftKey || !_spDraftRestored.current || !showModal || editingId) return;
+    try { window.sessionStorage.setItem(_spDraftKey, JSON.stringify({ form })); } catch {}
+  }, [_spDraftKey, form, showModal, editingId]);
+
   const closeModal = () => {
+    if (_spDraftKey) { try { window.sessionStorage.removeItem(_spDraftKey); } catch {} }
     setShowModal(false);
     setEditingId("");
     setForm(blankForm);
@@ -119,12 +144,14 @@ const ServiceProviders = () => {
   }, [currentPage, safeCurrentPage]);
 
   const openCreate = () => {
+    if (!canCreate) { toast.warning("You don't have permission to create service providers"); return; }
     setEditingId("");
     setForm(blankForm);
     setShowModal(true);
   };
 
   const openEdit = (row) => {
+    if (!canUpdate) { toast.warning("You don't have permission to edit service providers"); return; }
     setEditingId(row._id);
     setForm({
       name: row.name || "",
@@ -176,6 +203,7 @@ const ServiceProviders = () => {
   };
 
   const handleDelete = async (row) => {
+    if (!canDelete) { toast.warning("You don't have permission to delete service providers"); return; }
     if (!window.confirm(`Delete service provider ${row.name}?`)) return;
     try {
       await deleteServiceProvider(row._id, {
@@ -210,7 +238,7 @@ const ServiceProviders = () => {
                 {CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
               <button onClick={clearFilters} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100">Clear Filters</button>
-              <button onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00]"><FaPlus /> Add Service Provider</button>
+              <button onClick={openCreate} disabled={!canCreate} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> Add Service Provider</button>
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
@@ -229,7 +257,7 @@ const ServiceProviders = () => {
                     <td className="px-3 py-1.5 text-slate-700">{row.category || "general"}</td>
                     <td className="px-3 py-1.5 text-slate-700">{row.bankName || row.paybillNumber || row.accountNumber || "-"}</td>
                     <td className="px-3 py-1.5"><span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${row.isActive !== false ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{row.isActive !== false ? "Active" : "Inactive"}</span></td>
-                    <td className="px-3 py-1.5 text-right"><div className="inline-flex gap-1.5"><button onClick={() => openEdit(row)} className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700"><FaEdit /> Edit</button><button onClick={() => handleDelete(row)} className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700"><FaTrash /> Delete</button></div></td>
+                    <td className="px-3 py-1.5 text-right"><div className="inline-flex gap-1.5"><button onClick={() => openEdit(row)} disabled={!canUpdate} className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEdit /> Edit</button><button onClick={() => handleDelete(row)} disabled={!canDelete} className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash /> Delete</button></div></td>
                   </tr>
                 )))}
               </tbody>

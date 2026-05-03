@@ -46,8 +46,7 @@ export const getMaintenances = async (req, res, next) => {
     if (tenant) filter.tenant = tenant;
 
     const maintenances = await Maintenance.find(filter)
-      .populate("unit", "unitNumber property")
-      .populate("unit.property", "name address")
+      .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName name address" } })
       .populate("tenant", "name phone")
       .sort({ priority: -1, createdAt: -1 });
     res.status(200).json(maintenances);
@@ -61,8 +60,7 @@ export const getMaintenance = async (req, res, next) => {
   try {
     const query = scopedMaintenanceQuery(req, req.params.id);
     const maintenance = await Maintenance.findOne(query)
-      .populate("unit", "unitNumber property")
-      .populate("unit.property", "name address landlord")
+      .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName name address" } })
       .populate("tenant", "name phone email");
     if (!maintenance) return res.status(404).json({ message: "Maintenance request not found" });
     res.status(200).json(maintenance);
@@ -71,11 +69,20 @@ export const getMaintenance = async (req, res, next) => {
   }
 };
 
+const MAINTENANCE_SAFE_FIELDS = [
+  "title", "description", "priority", "status", "assignedTo",
+  "estimatedCost", "actualCost", "scheduledDate", "completedDate", "images",
+];
+
 // Update maintenance
 export const updateMaintenance = async (req, res, next) => {
   try {
+    const safeUpdate = {};
+    for (const key of MAINTENANCE_SAFE_FIELDS) {
+      if (key in req.body) safeUpdate[key] = req.body[key];
+    }
     const query = scopedMaintenanceQuery(req, req.params.id);
-    const updatedMaintenance = await Maintenance.findOneAndUpdate(query, { $set: req.body }, { new: true });
+    const updatedMaintenance = await Maintenance.findOneAndUpdate(query, { $set: safeUpdate }, { new: true });
     if (!updatedMaintenance) return res.status(404).json({ message: "Maintenance request not found" });
     res.status(200).json(updatedMaintenance);
   } catch (err) {
@@ -83,10 +90,15 @@ export const updateMaintenance = async (req, res, next) => {
   }
 };
 
+const VALID_STATUSES = ["pending", "in_progress", "completed", "cancelled"];
+
 // Update maintenance status
 export const updateMaintenanceStatus = async (req, res, next) => {
   try {
     const { status, completedDate, actualCost } = req.body;
+    if (!VALID_STATUSES.includes(status)) {
+      return res.status(400).json({ message: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` });
+    }
     const updateData = { status };
 
     if (status === "completed") {
@@ -125,10 +137,13 @@ export const getMaintenanceStats = async (req, res, next) => {
     const completed = await Maintenance.countDocuments({ business, status: "completed" });
     const highPriority = await Maintenance.countDocuments({ business, priority: "high" });
 
-    const maintenanceCosts = await Maintenance.aggregate([
-      { $match: { business: new mongoose.Types.ObjectId(String(business)), status: "completed" } },
-      { $group: { _id: null, totalCost: { $sum: "$actualCost" } } },
-    ]);
+    let maintenanceCosts = [];
+    if (business && mongoose.Types.ObjectId.isValid(String(business))) {
+      maintenanceCosts = await Maintenance.aggregate([
+        { $match: { business: new mongoose.Types.ObjectId(String(business)), status: "completed" } },
+        { $group: { _id: null, totalCost: { $sum: "$actualCost" } } },
+      ]);
+    }
 
     res.status(200).json({
       total,

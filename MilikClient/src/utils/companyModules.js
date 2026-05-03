@@ -68,8 +68,6 @@ export const normalizeCompanyCollection = (companies = []) =>
 export const applyCompanyModeBaseModules = (modules = {}, companyMode = '') => ({
   ...normalizeCompanyModules(modules),
   propertyManagement: true,
-  billing: true,
-  accounts: true,
 });
 
 export const MODULE_LABELS = {

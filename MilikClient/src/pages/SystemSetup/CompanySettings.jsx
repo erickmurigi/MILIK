@@ -23,7 +23,6 @@ import {
 } from "react-icons/fa";
 
 const MILIK_GREEN = "#0B3B2E";
-const MILIK_ORANGE = "#FF8C00";
 
 const TAB_CONFIG = {
   utilities: {
@@ -734,6 +733,67 @@ const CompanySettings = () => {
     return "";
   };
 
+  const COLLECTION_COLUMNS = {
+    utilities: ["Name", "Category", "Description", "Status", "Actions"],
+    periods: ["Name", "Months", "Days", "Status", "Actions"],
+    commissions: ["Name", "Rate", "Applies To", "Description", "Status", "Actions"],
+    expenses: ["Name", "Code", "Category", "Default Amount", "Status", "Actions"],
+  };
+
+  const renderCollectionRow = (tabKey, item) => {
+    const isActive = item?.isActive !== false;
+    return (
+      <tr key={item._id} className="even:bg-slate-50/50 hover:bg-emerald-50/20">
+        <td className="px-3 py-2 font-medium text-slate-900">{item.name || "—"}</td>
+        {tabKey === "utilities" && (
+          <>
+            <td className="px-3 py-2 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
+            <td className="max-w-[200px] truncate px-3 py-2 text-slate-500">{item.description || "—"}</td>
+          </>
+        )}
+        {tabKey === "periods" && (
+          <>
+            <td className="px-3 py-2 text-center text-slate-600">{item.durationInMonths ?? "—"}</td>
+            <td className="px-3 py-2 text-center text-slate-600">{item.durationInDays ?? "—"}</td>
+          </>
+        )}
+        {tabKey === "commissions" && (
+          <>
+            <td className="px-3 py-2 text-center text-slate-600">{item.percentage != null ? `${item.percentage}%` : "—"}</td>
+            <td className="px-3 py-2 capitalize text-slate-600">{String(item.applicableTo || "").replace(/_/g, " ") || "—"}</td>
+            <td className="max-w-[160px] truncate px-3 py-2 text-slate-500">{item.description || "—"}</td>
+          </>
+        )}
+        {tabKey === "expenses" && (
+          <>
+            <td className="px-3 py-2 text-slate-600">{item.code || "—"}</td>
+            <td className="px-3 py-2 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
+            <td className="px-3 py-2 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
+          </>
+        )}
+        <td className="px-3 py-2">
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+            {isActive ? "Active" : "Archived"}
+          </span>
+        </td>
+        <td className="px-3 py-2">
+          <div className="flex items-center gap-1">
+            <button onClick={() => openEditModal(tabKey, item)} className="rounded px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-100">Edit</button>
+            <button
+              onClick={() => toggleItemStatus(tabKey, item, !isActive)}
+              className={`rounded px-2 py-1 text-[10px] font-bold ${isActive ? "text-amber-600 hover:bg-amber-50" : "text-emerald-600 hover:bg-emerald-50"}`}
+            >
+              {isActive ? "Disable" : "Reactivate"}
+            </button>
+            {isActive && (
+              <button onClick={() => archiveItem(tabKey, item)} className="rounded px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50">Archive</button>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
   const renderCollectionTab = (tabKey) => {
     const tab = TAB_CONFIG[tabKey];
     const list = collectionMap[tabKey] || [];
@@ -741,61 +801,37 @@ const CompanySettings = () => {
     const archived = list.length - active;
 
     return (
-      <div className="space-y-4">
-        <Card
-          title={tab.label}
-          subtitle={tab.subtitle}
-          action={
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={showInactive}
-                  onChange={(e) => setShowInactive(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                />
-                Show archived
-              </label>
-              <ActionButton variant="primary" onClick={() => openCreateModal(tabKey)}>
-                <FaPlus /> Add {tab.label.slice(0, -1)}
-              </ActionButton>
-            </div>
-          }
-        >
-          <div className="mb-4 flex flex-wrap gap-2">
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">{active} active</span>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{archived} archived</span>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-2">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">{active} active · {archived} archived</span>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-600">
+              <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="h-3.5 w-3.5" />
+              Show archived
+            </label>
           </div>
-
+          <button onClick={() => openCreateModal(tabKey)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#0d4a38]">
+            <FaPlus className="text-[10px]" /> Add {tab.label.slice(0, -1)}
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto">
           {visibleItems.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-600">
-              {tab.empty}
-            </div>
+            <div className="flex h-40 items-center justify-center text-sm text-slate-500">{tab.empty}</div>
           ) : (
-            <div className="space-y-3">
-              {visibleItems.map((item) => (
-                <SettingRow
-                  key={item._id}
-                  title={item?.name || tab.label.slice(0, -1)}
-                  meta={renderMeta(tabKey, item)}
-                  status={<StatusBadge active={item?.isActive !== false} />}
-                >
-                  <ActionButton onClick={() => openEditModal(tabKey, item)}>
-                    <FaEdit /> Edit
-                  </ActionButton>
-                  <ActionButton onClick={() => toggleItemStatus(tabKey, item, item?.isActive === false)}>
-                    <FaPowerOff /> {item?.isActive === false ? "Reactivate" : "Disable"}
-                  </ActionButton>
-                  {item?.isActive !== false ? (
-                    <ActionButton variant="danger" onClick={() => archiveItem(tabKey, item)}>
-                      <FaArchive /> Archive
-                    </ActionButton>
-                  ) : null}
-                </SettingRow>
-              ))}
-            </div>
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-[#0B3B2E] text-white">
+                  {(COLLECTION_COLUMNS[tabKey] || []).map((h) => (
+                    <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {visibleItems.map((item) => renderCollectionRow(tabKey, item))}
+              </tbody>
+            </table>
           )}
-        </Card>
+        </div>
       </div>
     );
   };
@@ -1146,39 +1182,31 @@ const CompanySettings = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="mx-auto max-w-[1200px] px-4 py-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <FaCog className="text-2xl" style={{ color: MILIK_GREEN }} />
-              <div className="text-2xl font-extrabold text-slate-900">Operational Settings</div>
-            </div>
-            <div className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Use this workspace for reusable operational defaults. These settings are designed to guide future activity and should not rewrite posted accounting history.
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <ActionButton variant="subtle" onClick={() => navigate("/company-setup")}>
-              Open Company Setup <FaArrowRight />
-            </ActionButton>
-          </div>
-        </div>
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
-        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
-          <div className="flex items-start gap-3">
-            <FaExclamationCircle className="mt-0.5 text-base text-amber-600" />
-            <div>
-              <div className="font-extrabold">Future-facing defaults only</div>
-              <div className="mt-1 text-xs leading-5 text-amber-800">
-                Disabling or archiving an item keeps historical invoices, receipts, statements and ledgers intact. Use Company Setup for company identity, integrations, modules and structural configuration.
+          {/* Header */}
+          <div className="flex-shrink-0 border-b border-slate-200 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <FaCog className="text-base text-[#0B3B2E]" />
+                <div>
+                  <h1 className="text-sm font-bold text-slate-900">Operational Settings</h1>
+                  <p className="mt-0.5 text-xs text-slate-500">Reusable defaults — changes here do not affect posted financial history.</p>
+                </div>
               </div>
+              <button
+                onClick={() => navigate("/company-setup")}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Company Setup <FaArrowRight />
+              </button>
             </div>
           </div>
-        </div>
 
-        <div className="mt-5 rounded-2xl border border-white/40 bg-white/50 p-2 backdrop-blur-xl">
-          <div className="flex gap-2 overflow-x-auto">
+          {/* Tab bar — underline style */}
+          <div className="flex flex-shrink-0 gap-0 overflow-x-auto border-b border-slate-200 px-2">
             {Object.entries(TAB_CONFIG).map(([key, tab]) => {
               const Icon = tab.icon;
               const isActive = key === activeTab;
@@ -1186,39 +1214,37 @@ const CompanySettings = () => {
                 <button
                   key={key}
                   onClick={() => switchTab(key)}
-                  className={`flex items-center gap-2 whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-extrabold transition ${
-                    isActive
-                      ? "border-transparent bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white"
-                      : "border-slate-200 bg-white/70 text-slate-800 hover:bg-white"
+                  className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2.5 text-xs font-semibold transition ${
+                    isActive ? "border-[#0B3B2E] text-[#0B3B2E]" : "border-transparent text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  <Icon className="text-sm" />
+                  <Icon />
                   {tab.label}
-                  {!(["tax", "accounting"].includes(key)) ? (
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${isActive ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"}`}>
+                  {!["tax", "accounting"].includes(key) && (
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${isActive ? "bg-[#0B3B2E]/10 text-[#0B3B2E]" : "bg-slate-100 text-slate-500"}`}>
                       {activeCounts[key] ?? 0}
                     </span>
-                  ) : null}
+                  )}
                 </button>
               );
             })}
           </div>
-        </div>
 
-        <div className="mt-4">
-          {loading ? (
-            <Card title="Loading settings" subtitle="Fetching the current company operational defaults.">
-              <div className="flex items-center gap-3 text-sm text-slate-600">
+          {/* Content */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {loading ? (
+              <div className="flex h-40 items-center justify-center gap-2 text-sm text-slate-500">
                 <FaSpinner className="animate-spin" /> Loading...
               </div>
-            </Card>
-          ) : activeTab === "accounting" ? (
-            renderAccountingTab()
-          ) : activeTab === "tax" ? (
-            renderTaxTab()
-          ) : (
-            renderCollectionTab(activeTab)
-          )}
+            ) : activeTab === "accounting" ? (
+              <div className="flex-1 overflow-auto px-4 py-4">{renderAccountingTab()}</div>
+            ) : activeTab === "tax" ? (
+              <div className="flex-1 overflow-auto px-4 py-4">{renderTaxTab()}</div>
+            ) : (
+              renderCollectionTab(activeTab)
+            )}
+          </div>
+
         </div>
       </div>
 

@@ -92,10 +92,20 @@ export const getInspection = async (req, res, next) => {
   }
 };
 
+const INSPECTION_SAFE_FIELDS = [
+  "property", "unit", "tenant", "inspectionNumber", "type", "status",
+  "inspectorName", "scheduledDate", "completedDate", "score", "issuesFound",
+  "recommendations", "nextInspectionDate", "tenantPresent", "notes", "photosCount",
+];
+
 export const updateInspection = async (req, res, next) => {
   try {
+    const safeUpdate = {};
+    for (const key of INSPECTION_SAFE_FIELDS) {
+      if (key in req.body) safeUpdate[key] = req.body[key];
+    }
     const query = scopedInspectionQuery(req, req.params.id);
-    const updated = await Inspection.findOneAndUpdate(query, { $set: req.body }, { new: true })
+    const updated = await Inspection.findOneAndUpdate(query, { $set: safeUpdate }, { new: true })
       .populate("property", "propertyName propertyCode")
       .populate("unit", "unitNumber property")
       .populate("tenant", "name phone");
@@ -134,6 +144,9 @@ export const getInspectionStats = async (req, res, next) => {
       return res.status(400).json({ message: "Business context is required" });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(String(business))) {
+      return res.status(400).json({ message: "Invalid business ID" });
+    }
     const businessObjectId = new mongoose.Types.ObjectId(String(business));
     const [summary] = await Inspection.aggregate([
       { $match: { business: businessObjectId } },
