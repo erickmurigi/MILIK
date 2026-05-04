@@ -72,7 +72,7 @@ const RecentActivity = ({ darkMode }) => {
         id: `receipt-${payment._id}`,
         type: 'receipt',
         title: 'New Receipt Added',
-        description: `${payment.receiptNumber ? `${payment.receiptNumber} • ` : ''}KSh ${(Number(payment.amount || 0)).toLocaleString()}${payment.unit?.unitNumber ? ` for Unit ${payment.unit.unitNumber}` : ''}`,
+        description: `${payment.receiptNumber ? `${payment.receiptNumber} - ` : ''}KSh ${(Number(payment.amount || 0)).toLocaleString()}${payment.unit?.unitNumber ? ` for Unit ${payment.unit.unitNumber}` : ''}`,
         time: payment.createdAt || payment.paymentDate,
         isRead: true
       }));
@@ -284,7 +284,7 @@ const RecentActivity = ({ darkMode }) => {
 
       {activities.length > 2 && (
         <div className={`mt-3 text-[11px] font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'} text-center`}>
-          Scroll to see more • Auto-refresh every 30 seconds
+          Scroll to see more - Auto-refresh every 30 seconds
         </div>
       )}
       {activities.length <= 2 && (

@@ -4,7 +4,6 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -315,46 +314,49 @@ const FinancialOverview = ({ darkMode }) => {
 
       <div ref={chartRef} className="h-[180px] min-h-[180px] min-w-0 w-full">
         {chartSize.width > 0 && chartSize.height > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -24, bottom: 0 }}>
-              <defs>
-                <linearGradient id="expectedFillCompact" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#E85C0D" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#E85C0D" stopOpacity={0.03} />
-                </linearGradient>
-                <linearGradient id="collectedFillCompact" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#31694E" stopOpacity={0.45} />
-                  <stop offset="95%" stopColor="#31694E" stopOpacity={0.04} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#e5e7eb'} vertical={false} />
-              <XAxis dataKey="month" stroke={darkMode ? '#9ca3af' : '#6b7280'} fontSize={10} fontWeight={700} />
-              <YAxis
-                stroke={darkMode ? '#9ca3af' : '#6b7280'}
-                fontSize={10}
-                fontWeight={700}
-                width={36}
-                tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Area
-                type="monotone"
-                dataKey="expected"
-                name={isLandlordMode ? 'Billed' : 'Expected'}
-                stroke="#E85C0D"
-                strokeWidth={2}
-                fill="url(#expectedFillCompact)"
-              />
-              <Area
-                type="monotone"
-                dataKey="collected"
-                name="Collected"
-                stroke="#31694E"
-                strokeWidth={2}
-                fill="url(#collectedFillCompact)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          <AreaChart
+            width={chartSize.width}
+            height={chartSize.height}
+            data={chartData}
+            margin={{ top: 10, right: 10, left: -24, bottom: 0 }}
+          >
+            <defs>
+              <linearGradient id="expectedFillCompact" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#E85C0D" stopOpacity={0.35} />
+                <stop offset="95%" stopColor="#E85C0D" stopOpacity={0.03} />
+              </linearGradient>
+              <linearGradient id="collectedFillCompact" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#31694E" stopOpacity={0.45} />
+                <stop offset="95%" stopColor="#31694E" stopOpacity={0.04} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#e5e7eb'} vertical={false} />
+            <XAxis dataKey="month" stroke={darkMode ? '#9ca3af' : '#6b7280'} fontSize={10} fontWeight={700} />
+            <YAxis
+              stroke={darkMode ? '#9ca3af' : '#6b7280'}
+              fontSize={10}
+              fontWeight={700}
+              width={36}
+              tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Area
+              type="monotone"
+              dataKey="expected"
+              name={isLandlordMode ? 'Billed' : 'Expected'}
+              stroke="#E85C0D"
+              strokeWidth={2}
+              fill="url(#expectedFillCompact)"
+            />
+            <Area
+              type="monotone"
+              dataKey="collected"
+              name="Collected"
+              stroke="#31694E"
+              strokeWidth={2}
+              fill="url(#collectedFillCompact)"
+            />
+          </AreaChart>
         ) : null}
       </div>
     </div>

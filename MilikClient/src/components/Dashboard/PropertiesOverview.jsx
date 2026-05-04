@@ -274,7 +274,7 @@ const PropertiesOverview = ({ darkMode }) => {
           onClick={() => navigate('/properties', { state: { tabTitle: isLandlordMode ? 'My Properties' : 'Properties' } })}
           className="text-xs font-bold text-[#31694E] hover:text-[#E85C0D] transition-colors uppercase tracking-wide"
         >
-          View portfolio →
+          View portfolio &gt;
         </button>
       </div>
 
@@ -352,7 +352,7 @@ const PropertiesOverview = ({ darkMode }) => {
                 <div>
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1">
                     <span>Scheduled rent</span>
-                    <span>{formatMoney(property.expectedCollections)} / {formatMoney(property.bookedRentThisMonth)}</span>
+                    <span>{formatMoney(property.bookedRentThisMonth)} / {formatMoney(property.expectedCollections)}</span>
                   </div>
                   <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                     <div className="h-full rounded-full bg-[#31694E]" style={{ width: `${Math.min(property.expectedBookingRate, 100)}%` }} />

@@ -18,6 +18,10 @@ const normalizeArray = (value) => {
   if (Array.isArray(value)) return value;
   if (Array.isArray(value?.data)) return value.data;
   if (Array.isArray(value?.items)) return value.items;
+  if (Array.isArray(value?.invoices)) return value.invoices;
+  if (Array.isArray(value?.vouchers)) return value.vouchers;
+  if (Array.isArray(value?.paymentVouchers)) return value.paymentVouchers;
+  if (Array.isArray(value?.statements)) return value.statements;
   return [];
 };
 
@@ -76,7 +80,15 @@ const QuickActions = ({ darkMode }) => {
     let active = true;
 
     const loadOperationalData = async () => {
-      if (!businessId) return;
+      if (!businessId) {
+        if (active) {
+          setInvoices([]);
+          setPaymentVouchers([]);
+          setProcessedStatements([]);
+        }
+        return;
+      }
+
       setLoading(true);
       try {
         const [invoiceRes, voucherRes, statementRes] = await Promise.allSettled([
@@ -87,21 +99,9 @@ const QuickActions = ({ darkMode }) => {
 
         if (!active) return;
 
-        setInvoices(
-          invoiceRes.status === 'fulfilled' && Array.isArray(invoiceRes.value?.data)
-            ? invoiceRes.value.data
-            : []
-        );
-        setPaymentVouchers(
-          voucherRes.status === 'fulfilled' && Array.isArray(voucherRes.value?.data)
-            ? voucherRes.value.data
-            : []
-        );
-        setProcessedStatements(
-          statementRes.status === 'fulfilled' && Array.isArray(statementRes.value?.data?.statements)
-            ? statementRes.value.data.statements
-            : []
-        );
+        setInvoices(invoiceRes.status === 'fulfilled' ? normalizeArray(invoiceRes.value?.data) : []);
+        setPaymentVouchers(voucherRes.status === 'fulfilled' ? normalizeArray(voucherRes.value?.data) : []);
+        setProcessedStatements(statementRes.status === 'fulfilled' ? normalizeArray(statementRes.value?.data) : []);
       } finally {
         if (active) setLoading(false);
       }

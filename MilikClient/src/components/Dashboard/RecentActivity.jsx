@@ -113,7 +113,7 @@ const RecentActivity = ({ darkMode }) => {
         id: `receipt-${payment._id}`,
         type: 'receipt',
         title: 'New Receipt Added',
-        description: `${payment.receiptNumber ? `${payment.receiptNumber} • ` : ''}KSh ${(Number(payment.amount || 0)).toLocaleString()}${payment.unit?.unitNumber ? ` for Unit ${payment.unit.unitNumber}` : ''}`,
+        description: `${payment.receiptNumber ? `${payment.receiptNumber} - ` : ''}KSh ${(Number(payment.amount || 0)).toLocaleString()}${payment.unit?.unitNumber ? ` for Unit ${payment.unit.unitNumber}` : ''}`,
         time: payment.createdAt || payment.paymentDate,
         isRead: true
       }));

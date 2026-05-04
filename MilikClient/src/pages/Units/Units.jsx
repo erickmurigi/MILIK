@@ -115,6 +115,28 @@ const Units = () => {
   const [showAddUnitModal, setShowAddUnitModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
+  // ---------------------------
+  // MODAL FORM STATE (kept from your code)
+  // ---------------------------
+  const [formData, setFormData] = useState({
+    property: "",
+    specifiedFloor: "",
+    generalFloorNo: "",
+    unitSpaceNo: "",
+    ownerOccupied: "No",
+    rentPerUnitArea: "",
+    marketRent: "",
+    areaSqFt: "",
+    chargeFreq: "",
+    electricityAccountNo: "",
+    waterAccountNo: "",
+    electricityMeterNo: "",
+    waterMeterNo: "",
+  });
+
+  const [services, setServices] = useState([{ service: "", costPerArea: "", totalCost: "", checked: false }]);
+  const [extraMeters, setExtraMeters] = useState([{ meterNo: "", readingSetup: false }]);
+
   // Draft persistence — survives tab switches for the Add Unit modal
   const _uDraftKey = (currentCompany?._id && (currentUser?._id || currentUser?.id))
     ? `milik:draft:unit-modal:${currentCompany._id}:${currentUser?._id || currentUser?.id || "u"}`
@@ -205,28 +227,6 @@ const Units = () => {
 
   // Reset selectAll whenever page changes
   useEffect(() => setSelectAll(false), [currentPage]);
-
-  // ---------------------------
-  // MODAL FORM STATE (kept from your code)
-  // ---------------------------
-  const [formData, setFormData] = useState({
-    property: "",
-    specifiedFloor: "",
-    generalFloorNo: "",
-    unitSpaceNo: "",
-    ownerOccupied: "No",
-    rentPerUnitArea: "",
-    marketRent: "",
-    areaSqFt: "",
-    chargeFreq: "",
-    electricityAccountNo: "",
-    waterAccountNo: "",
-    electricityMeterNo: "",
-    waterMeterNo: "",
-  });
-
-  const [services, setServices] = useState([{ service: "", costPerArea: "", totalCost: "", checked: false }]);
-  const [extraMeters, setExtraMeters] = useState([{ meterNo: "", readingSetup: false }]);
 
   // Fetch units on mount
   useEffect(() => {

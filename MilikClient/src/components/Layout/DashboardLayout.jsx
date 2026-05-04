@@ -14,7 +14,7 @@ import {
   FaUser, FaUsers, FaAddressCard, FaTag, FaClipboard,
   FaHandshake, FaChartLine, FaChartPie, FaFileAlt, FaBalanceScale,
   FaToolbox, FaDatabase, FaWrench, FaHeadset, FaInfoCircle, FaList,
-  FaBuilding, FaKey, FaUserSlash
+  FaBuilding, FaKey, FaUserSlash, FaRedoAlt
 } from "react-icons/fa";
 import "./dashboard.css";
 import TabManager from "../../components/Layout/TabManager";
@@ -789,7 +789,7 @@ const TopToolbar = ({
                     )}
                   </div>
                   <span className="text-xs opacity-50 transition-opacity" style={{ color: menuInfo.color }}>
-                    →
+                    &gt;
                   </span>
                 </button>
               )}
@@ -857,7 +857,7 @@ const TopToolbar = ({
                   )}
                   <span>{item.label}</span>
                   <span className="text-xs opacity-50 transition-opacity" style={{ color: category.color }}>
-                    →
+                    &gt;
                   </span>
                 </button>
               )}
@@ -910,7 +910,7 @@ const TopToolbar = ({
               )}
               <span>{item.label}</span>
             </div>
-            <span className="text-xs">▶</span>
+            <span className="text-xs">&gt;</span>
           </button>
 
           {hoveredFinancialItem === item.id && nestedSubmenus[item.id] && (
@@ -1038,14 +1038,14 @@ const TopToolbar = ({
             className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="Refresh"
           >
-            ↻
+            <FaRedoAlt aria-hidden="true" />
           </button>
           <button
             onClick={() => navigate("/settings")}
             className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="Settings"
           >
-            ⚙
+            <FaCog aria-hidden="true" />
           </button>
         </div>
       </div>

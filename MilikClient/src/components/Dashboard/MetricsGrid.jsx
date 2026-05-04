@@ -76,7 +76,7 @@ const MetricsGrid = ({ darkMode }) => {
         icon: <FaBuilding />,
         color: 'from-[#1e5a4a] to-[#0f3d2e]',
         iconBg: 'bg-[#1e5a4a]/20',
-        change: '—',
+        change: '-',
         loading: propertiesLoading,
       },
       {
@@ -86,7 +86,7 @@ const MetricsGrid = ({ darkMode }) => {
         icon: <FaHome />,
         color: 'from-[#31694E] to-[#1f4a35]',
         iconBg: 'bg-[#31694E]/25',
-        change: '—',
+        change: '-',
         loading: propertiesLoading,
       },
       {
@@ -96,7 +96,7 @@ const MetricsGrid = ({ darkMode }) => {
         icon: <FaChartPie />,
         color: 'from-[#4a9976] to-[#31694E]',
         iconBg: 'bg-[#4a9976]/25',
-        change: '—',
+        change: '-',
         loading: propertiesLoading,
       },
       {
@@ -106,7 +106,7 @@ const MetricsGrid = ({ darkMode }) => {
         icon: <FaMoneyBillWave />,
         color: 'from-[#E85C0D] to-[#c7490a]',
         iconBg: 'bg-[#E85C0D]/25',
-        change: '—',
+        change: '-',
         loading: propertiesLoading,
       },
     ],
