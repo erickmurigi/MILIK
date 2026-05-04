@@ -38,7 +38,7 @@
 @media (min-width: 1280px) {
   .dashboard-main-grid {
     grid-template-columns: minmax(320px, 1fr) minmax(260px, 0.84fr) minmax(320px, 1fr);
-    align-items: start;
+    align-items: stretch;
   }
 }
 

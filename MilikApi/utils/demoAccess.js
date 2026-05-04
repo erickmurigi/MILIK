@@ -6,6 +6,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 // Exact path set — prefix matching is intentionally avoided to prevent
 // overly broad exemptions (e.g. a future /api/trial-accounts would not exempt).
 const EXEMPT_PATHS = new Set([
+  "/api/auth/login",
   "/api/auth/logout",
   "/api/trial",
   "/api/trial/access",

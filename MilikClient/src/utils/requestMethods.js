@@ -10,6 +10,11 @@ const EXTRA_SESSION_KEYS = ["milik_active_company_id", "milik_demo_mode", "milik
 const rawApiBaseUrl = String(import.meta.env.VITE_API_URL || "/api").trim();
 const BASE_URL = rawApiBaseUrl.endsWith("/") ? rawApiBaseUrl : `${rawApiBaseUrl}/`;
 
+const shouldSkipAuthHeader = (url = "") => {
+  const requestUrl = String(url || "");
+  return /(^|\/)auth\/login(?:\?|$)/.test(requestUrl);
+};
+
 const getStoredUser = () => {
   try {
     const raw = localStorage.getItem("milik_user");
@@ -56,6 +61,14 @@ export const adminRequests = axios.create({
 // Request interceptor - attach auth token from Redux persisted state
 adminRequests.interceptors.request.use(
   (config) => {
+    if (shouldSkipAuthHeader(config.url)) {
+      if (config.headers) {
+        delete config.headers.Authorization;
+        delete config.headers.authorization;
+      }
+      return config;
+    }
+
     // Get token from localStorage (synced by Redux auth on login/logout)
     const token = localStorage.getItem("milik_token");
     if (token) {

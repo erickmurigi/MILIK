@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  LabelList,
   Tooltip,
   XAxis,
   YAxis,
@@ -11,8 +12,8 @@ import {
 import { adminRequests } from '../../utils/requestMethods';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const SNAPSHOT_CATEGORIES = new Set(['RENT_CHARGE', 'UTILITY_CHARGE']);
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const normalizeArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -133,6 +134,8 @@ const FinancialOverview = ({ darkMode }) => {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonthIndex = now.getMonth();
+  const currentMonthName = now.toLocaleString('default', { month: 'long' });
+  const currentMonthLabel = MONTHS[currentMonthIndex];
 
   const isActiveInvoice = (invoice) => !['cancelled', 'reversed'].includes(normalizeText(invoice?.status));
   const isSnapshotInvoice = (invoice) => SNAPSHOT_CATEGORIES.has(String(invoice?.category || '').toUpperCase());
@@ -157,35 +160,46 @@ const FinancialOverview = ({ darkMode }) => {
     return `KSh ${Math.round(numeric).toLocaleString()}`;
   };
 
+  const formatChartMoney = (value) => {
+    const numeric = Number(value || 0);
+    if (numeric >= 1000000) return `KSh ${(numeric / 1000000).toFixed(1)}M`;
+    if (numeric >= 1000) return `KSh ${(numeric / 1000).toFixed(1)}K`;
+    return `KSh ${Math.round(numeric).toLocaleString()}`;
+  };
+
   const chartData = useMemo(() => {
-    const expectedByMonth = new Array(12).fill(0);
-    const collectedByMonth = new Array(12).fill(0);
+    let expected = 0;
+    let collected = 0;
 
     invoices.forEach((invoice) => {
       if (!isActiveInvoice(invoice) || !isSnapshotInvoice(invoice)) return;
       const date = getInvoiceRecognitionDate(invoice);
-      if (!date || date.getFullYear() !== currentYear) return;
-      expectedByMonth[date.getMonth()] += amountFromInvoice(invoice);
+      if (!date || date.getFullYear() !== currentYear || date.getMonth() !== currentMonthIndex) return;
+      expected += amountFromInvoice(invoice);
     });
 
     rentPayments.forEach((payment) => {
       const date = parseDate(payment?.paymentDate || payment?.createdAt);
-      if (!date || date.getFullYear() !== currentYear) return;
+      if (!date || date.getFullYear() !== currentYear || date.getMonth() !== currentMonthIndex) return;
       if (payment?.isConfirmed !== true) return;
       if (payment?.isReversed || payment?.isCancelled || payment?.reversalOf) return;
       if (normalizeText(payment?.postingStatus) === 'reversed') return;
-      collectedByMonth[date.getMonth()] += Math.abs(Number(payment?.amount || 0));
+      collected += Math.abs(Number(payment?.amount || 0));
     });
 
-    return MONTHS.map((month, index) => ({
-      month,
-      expected: expectedByMonth[index],
-      collected: collectedByMonth[index],
-    }));
-  }, [currentYear, invoices, rentPayments]);
+    return [
+      {
+        month: currentMonthLabel,
+        label: currentMonthName,
+        expected,
+        collected,
+      },
+    ];
+  }, [currentMonthIndex, currentMonthLabel, currentMonthName, currentYear, invoices, rentPayments]);
 
-  const currentMonthExpected = chartData[currentMonthIndex]?.expected || 0;
-  const currentMonthCollected = chartData[currentMonthIndex]?.collected || 0;
+  const currentMonthExpected = chartData.reduce((sum, item) => sum + item.expected, 0);
+  const currentMonthCollected = chartData.reduce((sum, item) => sum + item.collected, 0);
+  const remainingToCollect = Math.max(0, currentMonthExpected - currentMonthCollected);
 
   const outstandingArrears = useMemo(
     () =>
@@ -237,6 +251,7 @@ const FinancialOverview = ({ darkMode }) => {
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
+    const displayLabel = payload[0]?.payload?.label || label;
 
     return (
       <div
@@ -244,7 +259,7 @@ const FinancialOverview = ({ darkMode }) => {
           darkMode ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-[#31694E]/20 text-slate-800'
         }`}
       >
-        <p className="font-extrabold mb-2 uppercase tracking-wide text-[10px]">{label}</p>
+        <p className="font-extrabold mb-2 uppercase tracking-wide text-[10px]">{displayLabel}</p>
         {payload.map((entry) => (
           <div key={entry.name} className="flex items-center justify-between gap-4 mb-1 last:mb-0">
             <span className="font-semibold">{entry.name}</span>
@@ -268,8 +283,8 @@ const FinancialOverview = ({ darkMode }) => {
           </h2>
           <p className={`mt-1 text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
             {isLandlordMode
-              ? 'Current-month billed versus collected, aligned to booking dates and live arrears across your portfolio.'
-              : 'Current-month expected versus collected, aligned to booking dates with live arrears across unpaid invoices.'}
+              ? `${currentMonthName} billed versus collected, aligned to booking dates and live arrears across your portfolio.`
+              : `${currentMonthName} expected versus collected, aligned to booking dates with live arrears across unpaid invoices.`}
           </p>
         </div>
         <div
@@ -313,50 +328,76 @@ const FinancialOverview = ({ darkMode }) => {
       </div>
 
       <div ref={chartRef} className="h-[180px] min-h-[180px] min-w-0 w-full">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-4 text-[10px] font-extrabold uppercase tracking-[0.14em]">
+            <span className={`inline-flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#4a6b5e]'}`}>
+              <span className="h-2.5 w-2.5 rounded-sm bg-[#E85C0D]" />
+              {isLandlordMode ? 'Billed' : 'Expected'}
+            </span>
+            <span className={`inline-flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#4a6b5e]'}`}>
+              <span className="h-2.5 w-2.5 rounded-sm bg-[#31694E]" />
+              Collected
+            </span>
+          </div>
+          <div className={`text-[10px] font-extrabold uppercase tracking-[0.14em] ${darkMode ? 'text-gray-300' : 'text-[#1f4a35]'}`}>
+            {formatMoney(remainingToCollect)} remaining
+          </div>
+        </div>
         {chartSize.width > 0 && chartSize.height > 0 ? (
-          <AreaChart
+          <BarChart
             width={chartSize.width}
-            height={chartSize.height}
+            height={chartSize.height - 28}
             data={chartData}
-            margin={{ top: 10, right: 10, left: -24, bottom: 0 }}
+            margin={{ top: 20, right: 12, left: 10, bottom: 0 }}
+            barCategoryGap="42%"
+            barGap={10}
           >
-            <defs>
-              <linearGradient id="expectedFillCompact" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#E85C0D" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="#E85C0D" stopOpacity={0.03} />
-              </linearGradient>
-              <linearGradient id="collectedFillCompact" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#31694E" stopOpacity={0.45} />
-                <stop offset="95%" stopColor="#31694E" stopOpacity={0.04} />
-              </linearGradient>
-            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#e5e7eb'} vertical={false} />
-            <XAxis dataKey="month" stroke={darkMode ? '#9ca3af' : '#6b7280'} fontSize={10} fontWeight={700} />
+            <XAxis
+              dataKey="month"
+              stroke={darkMode ? '#9ca3af' : '#6b7280'}
+              fontSize={10}
+              fontWeight={700}
+            />
             <YAxis
               stroke={darkMode ? '#9ca3af' : '#6b7280'}
               fontSize={10}
               fontWeight={700}
-              width={36}
+              width={48}
               tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Area
-              type="monotone"
+            <Bar
               dataKey="expected"
               name={isLandlordMode ? 'Billed' : 'Expected'}
-              stroke="#E85C0D"
-              strokeWidth={2}
-              fill="url(#expectedFillCompact)"
-            />
-            <Area
-              type="monotone"
+              fill="#E85C0D"
+              radius={[5, 5, 0, 0]}
+            >
+              <LabelList
+                dataKey="expected"
+                position="top"
+                formatter={formatChartMoney}
+                fill={darkMode ? '#f9fafb' : '#334155'}
+                fontSize={10}
+                fontWeight={800}
+              />
+            </Bar>
+            <Bar
               dataKey="collected"
               name="Collected"
-              stroke="#31694E"
-              strokeWidth={2}
-              fill="url(#collectedFillCompact)"
-            />
-          </AreaChart>
+              fill="#31694E"
+              radius={[5, 5, 0, 0]}
+            >
+              <LabelList
+                dataKey="collected"
+                position="top"
+                formatter={formatChartMoney}
+                fill={darkMode ? '#f9fafb' : '#334155'}
+                fontSize={10}
+                fontWeight={800}
+              />
+            </Bar>
+          </BarChart>
         ) : null}
       </div>
     </div>
