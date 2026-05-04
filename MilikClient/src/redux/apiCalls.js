@@ -360,6 +360,24 @@ const resetPersistedWorkspaceCache = async () => {
   });
 };
 
+const clearPreLoginSessionArtifacts = () => {
+  [
+    "milik_token",
+    "milik_user",
+    "milik_active_company_id",
+    "milik_demo_mode",
+    "milik_demo_company_id",
+    "app-tabs",
+    "active-tab",
+  ].forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch (_error) {
+      // no-op
+    }
+  });
+};
+
 const getStoredUser = () => {
   try {
     const raw = localStorage.getItem("milik_user");
@@ -2325,6 +2343,8 @@ export const getTenantTotalDue = async (tenantId) => {
 export const loginUser = (email, password) => async (dispatch) => {
   dispatch(loginStart());
   try {
+    clearPreLoginSessionArtifacts();
+
     const res = await adminRequests.post('/auth/login', {
       email,
       password
