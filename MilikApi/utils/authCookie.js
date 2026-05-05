@@ -38,11 +38,8 @@ export const attachAuthCookie = (res, token) => {
 
 export const clearAuthCookie = (res) => {
   if (!res) return;
-  res.clearCookie(getAuthCookieName(), {
-    ...buildAuthCookieOptions(),
-    maxAge: undefined,
-    expires: new Date(0),
-  });
+  const { maxAge, expires, ...clearOptions } = buildAuthCookieOptions();
+  res.clearCookie(getAuthCookieName(), clearOptions);
 };
 
 export const extractAuthCookieToken = (cookies = {}) => {

@@ -1,5 +1,6 @@
 import { createSlice } from '@reduxjs/toolkit';
 import { normalizeCompanyCollection, normalizeCompanyEntity } from '../utils/companyModules';
+import { markSessionActivity } from '../utils/sessionTimeout';
 
 const normalizeUserCompanyContext = (user = null) => {
   if (!user || typeof user !== 'object') return user;
@@ -44,6 +45,7 @@ const authSlice = createSlice({
       // Also sync to localStorage for interceptor fallback
       localStorage.setItem('milik_token', action.payload.token);
       localStorage.setItem('milik_user', JSON.stringify(state.currentUser));
+      markSessionActivity();
     },
     loginFailure: (state) => {
       state.isFetching = false;
@@ -97,6 +99,7 @@ const authSlice = createSlice({
       state.currentUser = normalizeUserCompanyContext(action.payload.user);
       state.token = action.payload.token;
       state.isLoggedIn = !!action.payload.token;
+      if (state.isLoggedIn) markSessionActivity();
     },
 
     // Clear auth on error

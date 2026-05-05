@@ -7,6 +7,7 @@ import { initializeAuth } from "./redux/authSlice";
 import { getAccessibleCompanies } from "./redux/apiCalls";
 import useInactivityLogout from "./hooks/useInactivityLogout";
 import { clearClientSessionStorage } from "./utils/sessionCleanup";
+import { hasSessionTimedOut } from "./utils/sessionTimeout";
 import "./App.css";
 import { hasCompanyPermission } from "./utils/permissions";
 import { isSelfManagingLandlordCompany } from "./utils/companyModules";
@@ -139,6 +140,11 @@ const getStoredAuthSession = () => {
   }
 
   const user = getStoredUser();
+  if (hasSessionTimedOut()) {
+    clearExpiredStoredSession(Boolean(user?.isDemoUser));
+    return { token: null, user: null };
+  }
+
   if (isTokenExpired(token)) {
     const payload = decodeTokenPayload(token);
     clearExpiredStoredSession(Boolean(user?.isDemoUser || payload?.isDemoUser));

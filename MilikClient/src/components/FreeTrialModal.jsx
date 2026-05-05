@@ -253,7 +253,7 @@ const FreeTrialModal = ({ isOpen, onClose, initialRole = "property_manager" }) =
       onClick={handleOverlayClose}
     >
       <div
-        className="relative w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_32px_80px_rgba(15,23,42,0.24)]"
+        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_32px_80px_rgba(15,23,42,0.24)]"
         onClick={(event) => event.stopPropagation()}
       >
         <button
@@ -266,7 +266,7 @@ const FreeTrialModal = ({ isOpen, onClose, initialRole = "property_manager" }) =
           <FaTimes />
         </button>
 
-        <div className="grid max-h-[92vh] gap-0 overflow-y-auto lg:grid-cols-[1fr_1.05fr] lg:overflow-hidden">
+        <div className="grid w-full overflow-y-auto lg:grid-cols-[1fr_1.05fr] lg:overflow-hidden">
           <div className="relative overflow-hidden bg-[linear-gradient(180deg,#0B3B2E_0%,#0E4C3D_100%)] px-7 py-8 text-white md:px-9 md:py-10">
             <div className="absolute -right-12 top-10 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
             <div className="absolute -left-10 bottom-6 h-40 w-40 rounded-full bg-[#FF8C00]/20 blur-3xl" />
@@ -319,7 +319,7 @@ const FreeTrialModal = ({ isOpen, onClose, initialRole = "property_manager" }) =
             </div>
           </div>
 
-          <div className="bg-[linear-gradient(180deg,#ffffff_0%,#f8fbf9_100%)] px-6 py-7 md:px-8 md:py-8">
+          <div className="bg-[linear-gradient(180deg,#ffffff_0%,#f8fbf9_100%)] px-6 py-7 md:px-8 md:py-8 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
             <div className="mb-6">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Start here</p>
               <h3 className="mt-2 text-2xl font-extrabold text-slate-900 md:text-[2rem]">Short form. Clear next step.</h3>

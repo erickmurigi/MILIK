@@ -9,6 +9,7 @@ const SESSION_KEYS = [
   "active-tab",
   "milik-open-modules",
   "milik-active-module",
+  "milik_last_activity_at",
   "persist:root",
 ];
 
