@@ -17,6 +17,7 @@ import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggr
 import { resolveLandlordRemittancePayableAccount } from "../../services/propertyAccountingService.js";
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { logAuditEvent } from "../../utils/auditLogger.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -46,6 +47,9 @@ const populateReceiptListQuery = (query) =>
     .populate("reversedBy", "surname otherNames email");
 
 const safeLower = (value = "") => String(value || "").trim().toLowerCase();
+
+const receiptLabel = (payment = {}) =>
+  payment?.receiptNumber || payment?.referenceNumber || String(payment?._id || "receipt");
 
 const normalizeDepositHolder = (value = "") => {
   const normalized = safeLower(value);
@@ -2991,6 +2995,18 @@ export const confirmPayment = async (req, res, next) => {
     }
 
     const populated = await populateReceiptQuery(RentPayment.findById(existingPayment._id));
+    await logAuditEvent({
+      req,
+      company: existingPayment.business,
+      action: "receipts.confirm",
+      category: "finance",
+      severity: "critical",
+      targetType: "Receipt",
+      targetId: existingPayment._id,
+      targetName: receiptLabel(existingPayment),
+      message: `Confirmed receipt ${receiptLabel(existingPayment)}`,
+      metadata: { amount: existingPayment.amount, tenant: existingPayment.tenant, unit: existingPayment.unit },
+    });
     return res.status(200).json(populated);
   } catch (err) {
     return next(err);
@@ -3035,6 +3051,18 @@ export const unconfirmPayment = async (req, res, next) => {
     await payment.save();
 
     await recomputeTenantBalance(payment.tenant, payment.business);
+    await logAuditEvent({
+      req,
+      company: payment.business,
+      action: "receipts.unconfirm",
+      category: "finance",
+      severity: "critical",
+      targetType: "Receipt",
+      targetId: payment._id,
+      targetName: receiptLabel(payment),
+      message: `Unconfirmed receipt ${receiptLabel(payment)}`,
+      metadata: { amount: payment.amount, tenant: payment.tenant, unit: payment.unit },
+    });
 
     return res.status(200).json({
       success: true,
@@ -3084,6 +3112,18 @@ export const deletePayment = async (req, res, next) => {
     await recomputeInvoiceStatusesForTenant({
       businessId: payment.business,
       tenantId: payment.tenant,
+    });
+    await logAuditEvent({
+      req,
+      company: payment.business,
+      action: "receipts.delete",
+      category: "finance",
+      severity: "critical",
+      targetType: "Receipt",
+      targetId: payment._id,
+      targetName: receiptLabel(payment),
+      message: `Deleted unposted receipt ${receiptLabel(payment)}`,
+      metadata: { amount: payment.amount, tenant: payment.tenant, unit: payment.unit },
     });
 
     return res.status(200).json({ message: "Payment deleted successfully" });
@@ -3304,6 +3344,25 @@ export const reversePayment = async (req, res, next) => {
 
     const populatedOriginal = await populateReceiptQuery(RentPayment.findById(payment._id));
     const populatedReversal = await populateReceiptQuery(RentPayment.findById(reversalEntry._id));
+    await logAuditEvent({
+      req,
+      company: businessId,
+      action: "receipts.reverse",
+      category: "finance",
+      severity: "critical",
+      targetType: "Receipt",
+      targetId: payment._id,
+      targetName: receiptLabel(payment),
+      message: `Reversed receipt ${receiptLabel(payment)}`,
+      metadata: {
+        amount: payment.amount,
+        reason,
+        reversalReceipt: receiptLabel(reversalEntry),
+        reversalId: reversalEntry._id,
+        tenant: payment.tenant,
+        unit: payment.unit,
+      },
+    });
 
     return res.status(200).json({
       success: true,

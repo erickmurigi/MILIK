@@ -2,18 +2,49 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { FaFileInvoiceDollar, FaMoneyBillWave, FaPlus, FaReceipt, FaRedoAlt, FaSearch } from "react-icons/fa";
+import {
+  FaArrowRight,
+  FaEye,
+  FaFileInvoice,
+  FaMoneyBillWave,
+  FaPlus,
+  FaPrint,
+  FaReceipt,
+  FaRedoAlt,
+  FaSearch,
+  FaSpinner,
+  FaTimes,
+  FaTrash,
+} from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
-import { getRentPayments, createTenantInvoice } from "../../redux/apiCalls";
-import { getTenantInvoices } from "../../redux/invoiceApi";
+import { createTenantInvoice, deleteTenantInvoice, getTenantInvoices } from "../../redux/invoiceApi";
+import { adminRequests } from "../../utils/requestMethods";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { hasCompanyPermission } from "../../utils/permissions";
+import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
+const MILIK_ORANGE = "bg-[#FF8C00]";
+const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 const ITEMS_PER_PAGE = 50;
+
+const emptyFilters = {
+  status: "ACTIVE",
+  invoiceNo: "",
+  tenantName: "",
+  propertyId: "any",
+  unitId: "any",
+  depositTypeId: "any",
+  holder: "any",
+  fromDate: "",
+  toDate: "",
+};
+
+const todayInput = () => new Date().toISOString().slice(0, 10);
 
 const ensureArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -21,7 +52,6 @@ const ensureArray = (value) => {
   if (Array.isArray(value?.tenants)) return value.tenants;
   if (Array.isArray(value?.units)) return value.units;
   if (Array.isArray(value?.properties)) return value.properties;
-  if (Array.isArray(value?.rentPayments)) return value.rentPayments;
   return [];
 };
 
@@ -32,26 +62,15 @@ const safeId = (value) => {
   return String(value);
 };
 
-const todayInput = () => new Date().toISOString().split("T")[0];
-
-const formatInvoiceDescriptionPeriod = (value) => {
-  const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return "";
-  return `${date.toLocaleString("en-US", { month: "short" })}/${String(date.getFullYear()).slice(-2)}`;
-};
-
-const buildDepositInvoiceDescription = (invoiceDate) => `${formatInvoiceDescriptionPeriod(invoiceDate)} Security Deposit`;
-
 const normalizeDepositHolder = (value = "") => {
-  const normalized = String(value || "").trim().toLowerCase();
+  const normalized = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
   if (["landlord", "held_by_landlord"].includes(normalized)) return "landlord";
   if (
     [
-      "management company",
       "management_company",
-      "propertymanager",
-      "property manager",
+      "management",
       "property_manager",
+      "propertymanager",
       "manager",
     ].includes(normalized)
   ) {
@@ -63,135 +82,248 @@ const normalizeDepositHolder = (value = "") => {
 const formatDepositHolderLabel = (value = "") =>
   normalizeDepositHolder(value) === "landlord" ? "Landlord" : "Management Company";
 
-const getTenantDisplayName = (tenant) =>
+const formatCurrency = (value = 0) => `KES ${Number(value || 0).toLocaleString()}`;
+
+const formatDateDisplay = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatTenantName = (tenant = {}) =>
   tenant?.name ||
   tenant?.tenantName ||
   [tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ") ||
   "Unnamed Tenant";
 
-const getPropertyName = (tenant, units = [], properties = []) => {
-  const direct = tenant?.unit?.property?.propertyName || tenant?.property?.propertyName || tenant?.propertyName;
-  if (direct) return direct;
+const formatUnitName = (unit = {}) =>
+  unit?.unitNumber || unit?.unitName || unit?.name || "-";
 
-  const unitId = tenant?.unit?._id || tenant?.unit;
-  const matchedUnit = units.find((unit) => String(unit?._id || "") === String(unitId || ""));
-  const propertyId = matchedUnit?.property?._id || matchedUnit?.property || tenant?.property?._id || tenant?.property;
-  const matchedProperty = properties.find((property) => String(property?._id || "") === String(propertyId || ""));
+const formatPropertyName = (property = {}) =>
+  property?.propertyName || property?.name || "-";
 
-  return matchedUnit?.property?.propertyName || matchedProperty?.propertyName || matchedProperty?.name || "-";
+const normalizeStatus = (value = "") => String(value || "").trim().toLowerCase();
+
+const mapInvoiceStatusLabel = ({ rawStatus = "", outstanding = 0, appliedAmount = 0 }) => {
+  const status = normalizeStatus(rawStatus);
+  if (status === "paid") return "Paid";
+  if (status === "partially_paid") return "Partially Paid";
+  if (status === "cancelled") return "Cancelled";
+  if (status === "reversed") return "Reversed";
+  if (outstanding <= 0) return "Paid";
+  return appliedAmount > 0 ? "Partially Paid" : "Issued";
 };
 
-const getUnitName = (tenant, units = []) => {
-  if (tenant?.unit?.unitNumber) return tenant.unit.unitNumber;
-  const unitId = tenant?.unit?._id || tenant?.unit;
-  const matchedUnit = units.find((unit) => String(unit?._id || "") === String(unitId || ""));
-  return matchedUnit?.unitNumber || matchedUnit?.unitName || matchedUnit?.name || "-";
+const getStatusBadgeClass = (status = "") => {
+  if (status === "Paid") return "bg-green-100 text-green-700";
+  if (status === "Partially Paid") return "bg-amber-100 text-amber-700";
+  if (status === "Cancelled" || status === "Reversed") return "bg-slate-100 text-slate-700";
+  return "bg-orange-100 text-orange-700";
 };
 
-const buildAppliedAmountsByInvoice = (payments = []) => {
-  const appliedByInvoice = new Map();
+const slugify = (value = "") =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "deposit";
 
-  payments.forEach((payment) => {
-    if (payment?.ledgerType !== "receipts") return;
-    if (payment?.isConfirmed !== true) return;
-    if (payment?.isCancelled === true || payment?.isReversed === true || payment?.reversalOf) return;
-    if (String(payment?.postingStatus || "").toLowerCase() === "reversed") return;
+const getPrimaryLandlordId = ({ property = {}, tenant = {} } = {}) => {
+  const propertyLandlords = Array.isArray(property?.landlords) ? property.landlords : [];
+  const primary =
+    propertyLandlords.find((item) => item?.isPrimary) ||
+    propertyLandlords.find(Boolean) ||
+    null;
 
-    (Array.isArray(payment?.allocations) ? payment.allocations : []).forEach((allocation) => {
-      const invoiceId = String(allocation?.invoice || allocation?.invoiceId || "");
-      if (!invoiceId) return;
-      const amount = Number(allocation?.appliedAmount || 0);
-      if (!amount) return;
-      appliedByInvoice.set(invoiceId, Number(appliedByInvoice.get(invoiceId) || 0) + amount);
-    });
-  });
-
-  return appliedByInvoice;
+  return (
+    primary?.landlordId?._id ||
+    primary?.landlordId ||
+    primary?._id ||
+    primary ||
+    tenant?.landlord?._id ||
+    tenant?.landlord ||
+    null
+  );
 };
 
-const buildRecognizedDepositAmountsByTenant = (payments = []) => {
-  const totals = new Map();
+const buildDepositDescription = ({ depositType, tenantName, invoiceDate }) => {
+  const typeLabel = depositType?.name || "Deposit";
+  const parsedDate = invoiceDate ? new Date(invoiceDate) : new Date();
+  const period = Number.isNaN(parsedDate.getTime())
+    ? ""
+    : `${parsedDate.toLocaleString("en-US", { month: "short" })}/${String(parsedDate.getFullYear()).slice(-2)}`;
+  return `${period ? `${period} ` : ""}${typeLabel}${tenantName ? ` - ${tenantName}` : ""}`;
+};
 
-  payments.forEach((payment) => {
-    if (payment?.ledgerType !== "receipts") return;
-    if (payment?.isConfirmed !== true) return;
-    if (payment?.isCancelled === true || payment?.isReversed === true || payment?.reversalOf) return;
-    if (String(payment?.postingStatus || "").toLowerCase() === "reversed") return;
-
-    const tenantId = safeId(payment?.tenant);
-    if (!tenantId) return;
-
-    const allocationSummary = payment?.allocationSummary || {};
-    const recognizedAmount = Math.max(
-      0,
-      Number(allocationSummary.deposit || 0),
-      String(payment?.paymentType || "").toLowerCase() === "deposit" ? Number(payment?.amount || 0) : 0
-    );
-
-    if (recognizedAmount <= 0) return;
-    totals.set(tenantId, Number(totals.get(tenantId) || 0) + recognizedAmount);
-  });
-
-  return totals;
+const fallbackDepositType = {
+  _id: "security_deposit",
+  name: "Security Deposit",
+  code: "SECURITY",
+  defaultAmount: 0,
+  refundable: true,
+  isFallback: true,
 };
 
 const TenantDeposits = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const isLandlordWorkspace = useMemo(() => isSelfManagingLandlordCompany(currentCompany || null), [currentCompany]);
-  const holderColumnLabel = isLandlordWorkspace ? "Owner / Landlord" : "Deposit Holder";
-
+  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
   const tenants = useSelector((state) => ensureArray(state.tenant?.tenants));
   const units = useSelector((state) => ensureArray(state.unit?.units));
   const properties = useSelector((state) => ensureArray(state.property?.properties));
-  const activeProperties = useMemo(
-    () => properties.filter((property) => String(property?.status || "active").toLowerCase() !== "archived"),
-    [properties]
-  );
-  const rentPayments = useSelector((state) => ensureArray(state.rentPayment?.rentPayments));
 
-  const [tenantInvoices, setTenantInvoices] = useState([]);
-  const [filters, setFilters] = useState({
-    search: "",
-    propertyId: "all",
-    holder: "all",
-    status: "all",
-  });
-  const [billingModal, setBillingModal] = useState({ open: false, row: null });
-  const [billingForm, setBillingForm] = useState({
+  const isLandlordWorkspace = useMemo(() => isSelfManagingLandlordCompany(currentCompany || null), [currentCompany]);
+  const holderColumnLabel = isLandlordWorkspace ? "Owner / Landlord" : "Deposit Holder";
+  const canCreateInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "create", "propertyManagement");
+  const canDeleteInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "delete", "propertyManagement");
+  const canExportInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "export", "propertyManagement");
+
+  const [depositInvoices, setDepositInvoices] = useState([]);
+  const [depositTypes, setDepositTypes] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [draftFilters, setDraftFilters] = useState(emptyFilters);
+  const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedInvoices, setSelectedInvoices] = useState([]);
+  const [selectAll, setSelectAll] = useState(false);
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [tenantPropertyFilter, setTenantPropertyFilter] = useState("any");
+  const [depositForm, setDepositForm] = useState({
+    tenantId: "",
+    depositTypeId: "",
     amount: "",
     invoiceDate: todayInput(),
     dueDate: todayInput(),
+    depositHeldBy: "",
     description: "",
   });
-  const [isSaving, setIsSaving] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
 
-  const resetFilters = () => {
-    setFilters({
-      search: "",
-      propertyId: "all",
-      holder: "all",
-      status: "all",
-    });
-  };
+  const tenantLookup = useMemo(() => new Map(tenants.map((tenant) => [String(tenant?._id || ""), tenant])), [tenants]);
+  const unitLookup = useMemo(() => new Map(units.map((unit) => [String(unit?._id || ""), unit])), [units]);
+  const propertyLookup = useMemo(() => new Map(properties.map((property) => [String(property?._id || ""), property])), [properties]);
 
-  const loadInvoices = useCallback(async () => {
+  const activeProperties = useMemo(
+    () => properties.filter((property) => normalizeStatus(property?.status || "active") !== "archived"),
+    [properties]
+  );
+
+  const activeDepositTypes = useMemo(() => {
+    const rows = Array.isArray(depositTypes) ? depositTypes : [];
+    const activeRows = rows.filter((item) => item?.isActive !== false);
+    return activeRows.length > 0 ? activeRows : [fallbackDepositType];
+  }, [depositTypes]);
+
+  const depositTypeLookup = useMemo(() => {
+    const map = new Map();
+    activeDepositTypes.forEach((item) => map.set(String(item?._id || item?.code || item?.name || ""), item));
+    return map;
+  }, [activeDepositTypes]);
+
+  const unitsForFilter = useMemo(() => {
+    if (draftFilters.propertyId === "any") return units;
+    return units.filter((unit) => safeId(unit?.property) === String(draftFilters.propertyId));
+  }, [draftFilters.propertyId, units]);
+
+  const tenantOptions = useMemo(() => {
+    return tenants
+      .map((tenant) => {
+        const unitId = safeId(tenant?.unit);
+        const unit = unitLookup.get(unitId) || {};
+        const propertyId = safeId(tenant?.property) || safeId(unit?.property) || safeId(tenant?.unit?.property);
+        const property = propertyLookup.get(propertyId) || tenant?.property || unit?.property || {};
+        return {
+          tenant,
+          tenantId: safeId(tenant),
+          tenantName: formatTenantName(tenant),
+          unitName: formatUnitName(unit || tenant?.unit),
+          propertyId,
+          propertyName: formatPropertyName(property),
+        };
+      })
+      .filter((option) => {
+        if (!option.tenantId) return false;
+        if (tenantPropertyFilter !== "any" && String(option.propertyId) !== String(tenantPropertyFilter)) return false;
+        return true;
+      })
+      .sort((a, b) => a.tenantName.localeCompare(b.tenantName));
+  }, [tenantPropertyFilter, tenants, unitLookup, propertyLookup]);
+
+  const resolveTenantContext = useCallback(
+    (tenantId) => {
+      const tenant = tenantLookup.get(String(tenantId || "")) || null;
+      if (!tenant) return null;
+
+      const unitId = safeId(tenant?.unit);
+      const unit = unitLookup.get(unitId) || tenant?.unit || null;
+      const propertyId =
+        safeId(tenant?.property) ||
+        safeId(unit?.property) ||
+        safeId(tenant?.unit?.property);
+      const property = propertyLookup.get(propertyId) || tenant?.property || unit?.property || null;
+
+      return {
+        tenant,
+        tenantId: safeId(tenant),
+        tenantName: formatTenantName(tenant),
+        unit,
+        unitId: safeId(unit) || unitId,
+        unitName: formatUnitName(unit),
+        property,
+        propertyId: safeId(property) || propertyId,
+        propertyName: formatPropertyName(property),
+        landlordId: getPrimaryLandlordId({ property, tenant }),
+        depositAmount: Number(tenant?.depositAmount ?? unit?.deposit ?? tenant?.unit?.deposit ?? 0),
+        depositHeldBy:
+          normalizeDepositHolder(tenant?.depositHeldBy || property?.depositHeldBy) ||
+          (isLandlordWorkspace ? "landlord" : "manager"),
+      };
+    },
+    [isLandlordWorkspace, propertyLookup, tenantLookup, unitLookup]
+  );
+
+  const loadDepositInvoices = useCallback(async () => {
     if (!currentCompany?._id) {
-      setTenantInvoices([]);
+      setDepositInvoices([]);
       return;
     }
 
+    setLoading(true);
     try {
       const rows = await getTenantInvoices({
         business: currentCompany._id,
         category: "DEPOSIT_CHARGE",
+        includeSnapshots: true,
       });
-      setTenantInvoices(Array.isArray(rows) ? rows : []);
+      setDepositInvoices(Array.isArray(rows) ? rows : []);
     } catch (error) {
-      console.error("Failed to load tenant deposit invoices:", error);
-      setTenantInvoices([]);
+      console.error("Failed to load deposit invoices:", error);
+      setDepositInvoices([]);
+      toast.error(error?.message || "Failed to load deposit invoices.");
+    } finally {
+      setLoading(false);
+    }
+  }, [currentCompany?._id]);
+
+  const loadDepositTypes = useCallback(async () => {
+    if (!currentCompany?._id) {
+      setDepositTypes([]);
+      return;
+    }
+
+    try {
+      const response = await adminRequests.get(`/company-settings/${currentCompany._id}`);
+      setDepositTypes(Array.isArray(response?.data?.depositTypes) ? response.data.depositTypes : []);
+    } catch (error) {
+      console.error("Failed to load deposit types:", error);
+      setDepositTypes([]);
     }
   }, [currentCompany?._id]);
 
@@ -200,409 +332,693 @@ const TenantDeposits = () => {
     dispatch(getTenants({ business: currentCompany._id }));
     dispatch(getUnits({ business: currentCompany._id }));
     dispatch(getProperties({ business: currentCompany._id }));
-    getRentPayments(dispatch, currentCompany._id, null, null, null, null, "deposit");
-    loadInvoices();
-  }, [dispatch, currentCompany?._id, loadInvoices]);
+    loadDepositInvoices();
+    loadDepositTypes();
+  }, [currentCompany?._id, dispatch, loadDepositInvoices, loadDepositTypes]);
 
   useEffect(() => {
-    const handleRefresh = () => {
-      loadInvoices();
-      if (currentCompany?._id) {
-        getRentPayments(dispatch, currentCompany._id, null, null, null, null, "deposit");
-      }
-    };
-
+    const handleRefresh = () => loadDepositInvoices();
     window.addEventListener("invoicesUpdated", handleRefresh);
     return () => window.removeEventListener("invoicesUpdated", handleRefresh);
-  }, [dispatch, currentCompany?._id, loadInvoices]);
-
-  const invoiceMapByTenant = useMemo(() => {
-    return tenantInvoices.reduce((acc, invoice) => {
-      const tenantId = safeId(invoice?.tenant);
-      if (!tenantId) return acc;
-      if (!acc[tenantId]) acc[tenantId] = [];
-      acc[tenantId].push(invoice);
-      return acc;
-    }, {});
-  }, [tenantInvoices]);
-
-  const appliedByInvoice = useMemo(() => buildAppliedAmountsByInvoice(rentPayments), [rentPayments]);
-  const recognizedDepositPaidByTenant = useMemo(
-    () => buildRecognizedDepositAmountsByTenant(rentPayments),
-    [rentPayments]
-  );
+  }, [loadDepositInvoices]);
 
   const depositRows = useMemo(() => {
-    return tenants
-      .map((tenant) => {
-        const tenantId = safeId(tenant);
-        const unitId = tenant?.unit?._id || tenant?.unit || null;
-        const matchedUnit = units.find((unit) => String(unit?._id || "") === String(unitId || "")) || null;
-        const propertyId =
-          tenant?.property?._id ||
-          tenant?.property ||
-          matchedUnit?.property?._id ||
-          matchedUnit?.property ||
-          tenant?.unit?.property?._id ||
-          tenant?.unit?.property ||
-          null;
-        const matchedProperty =
-          properties.find((property) => String(property?._id || "") === String(propertyId || "")) || null;
-        const depositAmount = Number(tenant?.depositAmount ?? matchedUnit?.deposit ?? tenant?.unit?.deposit ?? 0);
-        const depositHolder = formatDepositHolderLabel(
-          tenant?.depositHeldBy || matchedProperty?.depositHeldBy || (isLandlordWorkspace ? "landlord" : "manager")
+    return depositInvoices
+      .map((invoice, index) => {
+        const invoiceTenantId = safeId(invoice?.tenant);
+        const tenant = tenantLookup.get(invoiceTenantId) || (typeof invoice?.tenant === "object" ? invoice.tenant : {});
+        const invoiceUnitId = safeId(invoice?.unit) || safeId(tenant?.unit);
+        const unit = unitLookup.get(invoiceUnitId) || (typeof invoice?.unit === "object" ? invoice.unit : {});
+        const invoicePropertyId = safeId(invoice?.property) || safeId(tenant?.property) || safeId(unit?.property);
+        const property = propertyLookup.get(invoicePropertyId) || (typeof invoice?.property === "object" ? invoice.property : {});
+        const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
+        const amount = Number(invoice?.adjustedAmount ?? invoice?.amount ?? 0);
+        const appliedAmount = Math.max(0, Number(invoice?.appliedAmount ?? 0));
+        const outstandingAmount = Math.max(
+          0,
+          Number(invoice?.outstanding ?? Math.max(0, amount - appliedAmount))
         );
-        const invoices = (invoiceMapByTenant[tenantId] || []).filter((invoice) => {
-          const status = String(invoice?.status || "").toLowerCase();
-          return !["cancelled", "reversed"].includes(status);
+        const status = mapInvoiceStatusLabel({
+          rawStatus: invoice?.computedStatus || invoice?.status,
+          outstanding: outstandingAmount,
+          appliedAmount,
         });
-
-        const latestInvoice =
-          [...invoices].sort(
-            (a, b) =>
-              new Date(b?.invoiceDate || b?.createdAt || 0).getTime() -
-              new Date(a?.invoiceDate || a?.createdAt || 0).getTime()
-          )[0] || null;
-
-        const billed = invoices.reduce(
-          (sum, invoice) => sum + Number(invoice?.adjustedAmount ?? invoice?.amount ?? 0),
-          0
-        );
-        const invoiceAppliedPaid = invoices.reduce((sum, invoice) => {
-          const invoiceId = String(invoice?._id || "");
-          return sum + Math.max(0, Number(appliedByInvoice.get(invoiceId) || 0));
-        }, 0);
-        const recognizedReceiptPaid = Math.max(0, Number(recognizedDepositPaidByTenant.get(tenantId) || 0));
-        const paid = Math.max(invoiceAppliedPaid, recognizedReceiptPaid);
-        const outstanding = Math.max(0, billed - paid);
-
-        let status = "Not configured";
-        if (depositAmount > 0 && billed <= 0) status = "Unbilled";
-        if (billed > 0 && paid <= 0) status = "Billed";
-        if (billed > 0 && paid > 0 && outstanding > 0) status = "Partially paid";
-        if (billed > 0 && outstanding <= 0) status = "Fully paid";
+        const depositTypeLabel =
+          metadata?.depositTypeName ||
+          metadata?.billItemLabel ||
+          invoice?.description ||
+          "Deposit";
+        const depositTypeId = String(metadata?.depositTypeId || metadata?.billItemKey || slugify(depositTypeLabel));
+        const invoiceDate = invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt || null;
 
         return {
-          tenantId,
-          tenant,
-          unit: matchedUnit,
-          property: matchedProperty,
-          propertyId: String(propertyId || ""),
-          tenantName: getTenantDisplayName(tenant),
-          propertyName: getPropertyName(tenant, units, properties),
-          unitName: getUnitName(tenant, units),
-          depositAmount,
-          depositHolder,
-          billed,
-          paid,
-          outstanding,
+          key: safeId(invoice) || `${invoice?.invoiceNumber || "deposit"}-${index}`,
+          id: invoice?.invoiceNumber || safeId(invoice) || "-",
+          invoiceId: safeId(invoice),
+          tenantId: invoiceTenantId,
+          tenantName: invoice?.tenant?.name || formatTenantName(tenant),
+          propertyId: invoicePropertyId,
+          propertyName: invoice?.property?.propertyName || formatPropertyName(property),
+          unitId: invoiceUnitId,
+          unitName: invoice?.unit?.unitNumber || formatUnitName(unit),
+          depositTypeId,
+          depositTypeLabel,
+          holder: formatDepositHolderLabel(invoice?.depositHeldBy || metadata?.depositHeldBy || tenant?.depositHeldBy || property?.depositHeldBy),
+          amount,
+          appliedAmount,
+          outstandingAmount,
           status,
-          invoices,
-          latestInvoiceNumber: latestInvoice?.invoiceNumber || "-",
-          latestInvoiceDescription: String(latestInvoice?.description || "").trim() || "-",
-          latestInvoiceDate: latestInvoice?.invoiceDate || latestInvoice?.createdAt || null,
-          canBill: depositAmount > 0 && invoices.length === 0,
+          rawStatus: normalizeStatus(invoice?.computedStatus || invoice?.status),
+          invoiceDate,
+          invoiceDateLabel: formatDateDisplay(invoiceDate),
+          dueDate: invoice?.dueDate || null,
+          dueDateLabel: formatDateDisplay(invoice?.dueDate),
+          createdAt: invoice?.createdAt || invoiceDate,
+          createdDate: formatDateDisplay(invoice?.createdAt || invoiceDate),
+          description: invoice?.description || depositTypeLabel,
+          originalInvoice: invoice,
         };
       })
-      .filter((row) => {
-        if (filters.propertyId !== "all" && row.propertyId !== String(filters.propertyId)) return false;
-        if (filters.holder !== "all" && String(row.depositHolder).toLowerCase() !== String(filters.holder).toLowerCase())
-          return false;
-        if (filters.status !== "all" && String(row.status).toLowerCase() !== String(filters.status).toLowerCase())
-          return false;
-        if (filters.search) {
-          const search = filters.search.toLowerCase();
-          const haystack = `${row.tenantName} ${row.propertyName} ${row.unitName}`.toLowerCase();
-          if (!haystack.includes(search)) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => a.tenantName.localeCompare(b.tenantName));
-  }, [
-    tenants,
-    units,
-    properties,
-    invoiceMapByTenant,
-    appliedByInvoice,
-    recognizedDepositPaidByTenant,
-    filters,
-    isLandlordWorkspace,
-  ]);
+      .sort((a, b) => new Date(b.invoiceDate || b.createdAt || 0) - new Date(a.invoiceDate || a.createdAt || 0));
+  }, [depositInvoices, propertyLookup, tenantLookup, unitLookup]);
 
-  const totals = useMemo(() => {
-    return depositRows.reduce(
-      (acc, row) => ({
-        configured: acc.configured + row.depositAmount,
-        billed: acc.billed + row.billed,
-        paid: acc.paid + row.paid,
-        outstanding: acc.outstanding + row.outstanding,
-      }),
-      { configured: 0, billed: 0, paid: 0, outstanding: 0 }
-    );
-  }, [depositRows]);
+  const filteredRows = useMemo(() => {
+    return depositRows.filter((row) => {
+      if (appliedFilters.status === "ACTIVE" && ["cancelled", "reversed"].includes(row.rawStatus)) return false;
+      if (appliedFilters.status === "Issued" && !["Issued", "Partially Paid"].includes(row.status)) return false;
+      if (appliedFilters.status === "Paid" && row.status !== "Paid") return false;
+      if (appliedFilters.invoiceNo && !row.id.toLowerCase().includes(appliedFilters.invoiceNo.toLowerCase())) return false;
+      if (appliedFilters.tenantName && !row.tenantName.toLowerCase().includes(appliedFilters.tenantName.toLowerCase())) return false;
+      if (appliedFilters.propertyId !== "any" && String(row.propertyId) !== String(appliedFilters.propertyId)) return false;
+      if (appliedFilters.unitId !== "any" && String(row.unitId) !== String(appliedFilters.unitId)) return false;
+      if (appliedFilters.depositTypeId !== "any") {
+        const expected = String(appliedFilters.depositTypeId);
+        if (String(row.depositTypeId) !== expected && !String(row.depositTypeId).includes(expected)) return false;
+      }
+      if (appliedFilters.holder !== "any" && normalizeDepositHolder(row.holder) !== appliedFilters.holder) return false;
 
+      const invoiceTime = row.invoiceDate ? new Date(row.invoiceDate).getTime() : 0;
+      if (appliedFilters.fromDate) {
+        const from = new Date(`${appliedFilters.fromDate}T00:00:00`).getTime();
+        if (invoiceTime < from) return false;
+      }
+      if (appliedFilters.toDate) {
+        const to = new Date(`${appliedFilters.toDate}T23:59:59`).getTime();
+        if (invoiceTime > to) return false;
+      }
+      return true;
+    });
+  }, [appliedFilters, depositRows]);
 
-  const totalPages = Math.max(1, Math.ceil(depositRows.length / ITEMS_PER_PAGE));
+  const totals = useMemo(
+    () =>
+      filteredRows.reduce(
+        (acc, row) => ({
+          count: acc.count + 1,
+          amount: acc.amount + row.amount,
+          paid: acc.paid + row.appliedAmount,
+          outstanding: acc.outstanding + row.outstandingAmount,
+        }),
+        { count: 0, amount: 0, paid: 0, outstanding: 0 }
+      ),
+    [filteredRows]
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const paginatedRows = depositRows.slice(startIndex, endIndex);
+  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, filteredRows.length);
+  const currentPageRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const selectedCount = selectedInvoices.length;
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters, depositRows.length]);
+    setSelectedInvoices([]);
+    setSelectAll(false);
+  }, [appliedFilters]);
 
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
   }, [currentPage, safeCurrentPage]);
 
-  const openBillDepositModal = (row) => {
-    if (!row?.canBill) return;
-    setBillingModal({ open: true, row });
-    setBillingForm({
-      amount: String(row.depositAmount || ""),
+  useEffect(() => {
+    const pageKeys = currentPageRows.map((row) => row.key);
+    setSelectAll(pageKeys.length > 0 && pageKeys.every((key) => selectedInvoices.includes(key)));
+  }, [currentPageRows, selectedInvoices]);
+
+  const applySearch = () => setAppliedFilters({ ...draftFilters });
+
+  const resetFilters = () => {
+    setDraftFilters(emptyFilters);
+    setAppliedFilters(emptyFilters);
+  };
+
+  const syncDepositFormDefaults = ({ tenantId, depositTypeId, invoiceDate = todayInput(), dueDate = todayInput() }) => {
+    const context = resolveTenantContext(tenantId);
+    const depositType = depositTypeLookup.get(String(depositTypeId || "")) || activeDepositTypes[0] || fallbackDepositType;
+    const amount = Number(depositType?.defaultAmount || 0) > 0
+      ? Number(depositType.defaultAmount)
+      : Number(context?.depositAmount || 0);
+    const holder = context?.depositHeldBy || (isLandlordWorkspace ? "landlord" : "manager");
+
+    return {
+      tenantId: tenantId || "",
+      depositTypeId: String(depositType?._id || depositType?.code || ""),
+      amount: amount > 0 ? String(amount) : "",
+      invoiceDate,
+      dueDate,
+      depositHeldBy: holder,
+      description: buildDepositDescription({
+        depositType,
+        tenantName: context?.tenantName || "",
+        invoiceDate,
+      }),
+    };
+  };
+
+  const openDepositModal = () => {
+    const firstType = activeDepositTypes[0] || fallbackDepositType;
+    setTenantPropertyFilter("any");
+    setDepositForm(syncDepositFormDefaults({
+      tenantId: "",
+      depositTypeId: firstType?._id || firstType?.code || "",
       invoiceDate: todayInput(),
       dueDate: todayInput(),
-      description: buildDepositInvoiceDescription(todayInput()),
-    });
+    }));
+    setShowDepositModal(true);
+  };
+
+  const closeDepositModal = () => {
+    if (saving) return;
+    setShowDepositModal(false);
+  };
+
+  const updateDepositTenant = (tenantId) => {
+    setDepositForm((prev) =>
+      syncDepositFormDefaults({
+        tenantId,
+        depositTypeId: prev.depositTypeId,
+        invoiceDate: prev.invoiceDate || todayInput(),
+        dueDate: prev.dueDate || todayInput(),
+      })
+    );
+  };
+
+  const updateDepositType = (depositTypeId) => {
+    setDepositForm((prev) =>
+      syncDepositFormDefaults({
+        tenantId: prev.tenantId,
+        depositTypeId,
+        invoiceDate: prev.invoiceDate || todayInput(),
+        dueDate: prev.dueDate || todayInput(),
+      })
+    );
   };
 
   const handleCreateDepositInvoice = async () => {
-    const row = billingModal.row;
-    if (!row?.tenantId || !currentCompany?._id) return;
+    if (!currentCompany?._id) return;
+    const context = resolveTenantContext(depositForm.tenantId);
+    const depositType = depositTypeLookup.get(String(depositForm.depositTypeId || "")) || activeDepositTypes[0] || fallbackDepositType;
+    const amount = Number(depositForm.amount || 0);
+    const holder = normalizeDepositHolder(depositForm.depositHeldBy) || (isLandlordWorkspace ? "landlord" : "manager");
 
-    const landlordId =
-      row.property?.landlords?.[0]?.landlordId?._id ||
-      row.property?.landlords?.[0]?.landlordId ||
-      row.property?.landlords?.[0]?._id ||
-      row.property?.landlords?.[0] ||
-      row.tenant?.landlord?._id ||
-      row.tenant?.landlord ||
-      null;
-
-    const unitId = row.unit?._id || row.tenant?.unit?._id || row.tenant?.unit || null;
-    const propertyId = row.property?._id || row.tenant?.property?._id || row.tenant?.property || null;
-    const amount = Number(billingForm.amount || 0);
-    const normalizedDepositHolder =
-      normalizeDepositHolder(
-        row?.tenant?.depositHeldBy ||
-          row?.depositHolder ||
-          row?.property?.depositHeldBy ||
-          (isLandlordWorkspace ? "landlord" : "manager")
-      ) || (isLandlordWorkspace ? "landlord" : "manager");
-
-    if (!propertyId || !unitId) {
-      toast.error("Tenant deposit context is incomplete. Check property and unit linkage first.");
+    if (!context?.tenantId) {
+      toast.error("Select a tenant before creating the deposit invoice.");
       return;
     }
-
+    if (!context.propertyId || !context.unitId) {
+      toast.error("Tenant deposit context is incomplete. Check the tenant property and unit linkage first.");
+      return;
+    }
     if (amount <= 0) {
       toast.error("Enter a valid deposit amount.");
       return;
     }
+    if (new Date(depositForm.dueDate) < new Date(depositForm.invoiceDate)) {
+      toast.error("Due date cannot be before invoice date.");
+      return;
+    }
 
-    setIsSaving(true);
+    setSaving(true);
     try {
+      const depositTypeKey = slugify(depositType?.code || depositType?.name || "deposit");
       await createTenantInvoice({
         business: currentCompany._id,
-        property: propertyId,
-        landlord: landlordId || undefined,
-        tenant: row.tenantId,
-        unit: unitId,
+        property: context.propertyId,
+        landlord: context.landlordId || undefined,
+        tenant: context.tenantId,
+        unit: context.unitId,
         category: "DEPOSIT_CHARGE",
         amount,
-        depositHeldBy: normalizedDepositHolder,
-        ledgerMode: normalizedDepositHolder === "landlord" ? "off_ledger" : undefined,
-        description: billingForm.description || `Security deposit charge for ${row.tenantName}`,
-        invoiceDate: billingForm.invoiceDate,
-        dueDate: billingForm.dueDate,
+        depositHeldBy: holder,
+        description:
+          depositForm.description ||
+          buildDepositDescription({
+            depositType,
+            tenantName: context.tenantName,
+            invoiceDate: depositForm.invoiceDate,
+          }),
+        invoiceDate: depositForm.invoiceDate,
+        dueDate: depositForm.dueDate,
         metadata: {
-          billItemKey: "deposit:security",
-          billItemLabel: "Security Deposit",
+          billItemKey: `deposit:${depositTypeKey}`,
+          billItemLabel: depositType?.name || "Deposit",
+          depositTypeId: depositType?.isFallback ? "" : safeId(depositType),
+          depositTypeCode: depositType?.code || "",
+          depositTypeName: depositType?.name || "Deposit",
+          refundable: depositType?.refundable !== false,
           invoicePriorityCategory: "deposit",
           sourceTransactionType: "tenant_deposit_module",
           includeInLandlordStatement: false,
           includeInCategoryTotals: false,
-          depositHeldBy: normalizedDepositHolder,
-          ledgerMode: normalizedDepositHolder === "landlord" ? "off_ledger" : undefined,
+          depositHeldBy: holder,
+          ledgerMode: holder === "landlord" ? "off_ledger" : "on_ledger",
         },
       });
 
-      toast.success("Tenant deposit invoice created successfully.");
-      setBillingModal({ open: false, row: null });
-      setBillingForm({ amount: "", invoiceDate: todayInput(), dueDate: todayInput(), description: "" });
-      await loadInvoices();
+      toast.success("Deposit invoice created successfully.");
+      setShowDepositModal(false);
+      await loadDepositInvoices();
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {
       toast.error(
         error?.response?.data?.error ||
           error?.response?.data?.message ||
           error?.message ||
-          "Failed to create tenant deposit invoice."
+          "Failed to create deposit invoice."
       );
     } finally {
-      setIsSaving(false);
+      setSaving(false);
     }
   };
 
+  const toggleRowSelection = (key) => {
+    setSelectedInvoices((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]));
+  };
+
+  const toggleSelectAll = () => {
+    const pageKeys = currentPageRows.map((row) => row.key);
+    if (selectAll) {
+      setSelectedInvoices((prev) => prev.filter((key) => !pageKeys.includes(key)));
+      setSelectAll(false);
+      return;
+    }
+    setSelectedInvoices((prev) => Array.from(new Set([...prev, ...pageKeys])));
+    setSelectAll(true);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (!canDeleteInvoice || selectedInvoices.length === 0) return;
+    const selectedRows = depositRows.filter((row) => selectedInvoices.includes(row.key));
+    const confirmed = window.confirm(`Delete ${selectedRows.length} selected deposit invoice(s)?`);
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      for (const row of selectedRows) {
+        if (row.invoiceId) {
+          await deleteTenantInvoice(row.invoiceId);
+        }
+      }
+      toast.success("Selected deposit invoice(s) deleted successfully.");
+      setSelectedInvoices([]);
+      await loadDepositInvoices();
+      window.dispatchEvent(new Event("invoicesUpdated"));
+    } catch (error) {
+      toast.error(error?.message || "Failed to delete selected deposit invoices.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteSingle = async (row) => {
+    if (!canDeleteInvoice || !row?.invoiceId) return;
+    const confirmed = window.confirm(`Delete deposit invoice ${row.id}?`);
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      await deleteTenantInvoice(row.invoiceId);
+      toast.success("Deposit invoice deleted successfully.");
+      setSelectedInvoices((prev) => prev.filter((key) => key !== row.key));
+      await loadDepositInvoices();
+      window.dispatchEvent(new Event("invoicesUpdated"));
+    } catch (error) {
+      toast.error(error?.message || "Failed to delete deposit invoice.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handlePrintList = () => {
+    if (!canExportInvoice || filteredRows.length === 0) return;
+    const rowsHtml = filteredRows
+      .map(
+        (row) => `
+          <tr>
+            <td>${row.id}</td>
+            <td>${row.tenantName}</td>
+            <td>${row.propertyName}</td>
+            <td>${row.unitName}</td>
+            <td>${row.depositTypeLabel}</td>
+            <td>${row.holder}</td>
+            <td>${row.invoiceDateLabel}</td>
+            <td>${row.dueDateLabel}</td>
+            <td>${formatCurrency(row.amount)}</td>
+            <td>${formatCurrency(row.outstandingAmount)}</td>
+            <td>${row.status}</td>
+          </tr>`
+      )
+      .join("");
+
+    const printWindow = window.open("", "_blank", "width=1100,height=800");
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Deposit Invoices Register</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #172b24; padding: 24px; }
+            h1 { font-size: 18px; margin: 0 0 4px; }
+            p { margin: 0 0 14px; font-size: 12px; color: #52635d; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th { background: #0B3B2E; color: white; text-align: left; padding: 7px; }
+            td { border-bottom: 1px solid #dbe4df; padding: 7px; }
+          </style>
+        </head>
+        <body>
+          <h1>Deposit Invoices Register</h1>
+          <p>${currentCompany?.name || currentCompany?.companyName || ""} - ${filteredRows.length} invoice(s)</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Invoice #</th><th>Tenant</th><th>Property</th><th>Unit</th><th>Deposit Type</th>
+                <th>Holder</th><th>Invoice Date</th><th>Due Date</th><th>Amount</th><th>Outstanding</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
+  const totalFilteredCount = filteredRows.length;
+
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="grid grid-cols-4 gap-1">
-            <div className="rounded-md border border-slate-200 bg-white px-2 py-1 shadow-sm">
-              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Configured Deposits</p>
-              <p className="text-[10px] font-black leading-tight text-slate-900">KES {totals.configured.toLocaleString()}</p>
-            </div>
-            <div className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 shadow-sm">
-              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-blue-700">Billed</p>
-              <p className="text-[10px] font-black leading-tight text-blue-800">KES {totals.billed.toLocaleString()}</p>
-            </div>
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 shadow-sm">
-              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700">Paid</p>
-              <p className="text-[10px] font-black leading-tight text-emerald-800">KES {totals.paid.toLocaleString()}</p>
-            </div>
-            <div className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 shadow-sm">
-              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-orange-700">Outstanding</p>
-              <p className="text-[10px] font-black leading-tight text-orange-800">KES {totals.outstanding.toLocaleString()}</p>
-            </div>
-          </div>
+      <div className="h-[calc(100dvh-152px)] max-h-[calc(100dvh-152px)] overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
+        <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+            <div className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-gray-50/95 p-2 shadow-sm backdrop-blur">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                  Total Deposit Invoices: {totals.count}
+                </span>
+                <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  Total Amount: {formatCurrency(totals.amount)}
+                </span>
+                <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                  Outstanding: {formatCurrency(totals.outstanding)}
+                </span>
+              </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-2 py-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-[240px] flex-1">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
-                  <input
-                    type="text"
-                    value={filters.search}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Tenant, property, or unit"
-                    className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[10px] shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                  />
-                </div>
-
-                <select
-                  value={filters.propertyId}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                  className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "ACTIVE" }))}
+                  className={`rounded px-3 py-1 text-xs font-semibold transition-colors ${
+                    draftFilters.status === "ACTIVE"
+                      ? `${MILIK_GREEN} text-white`
+                      : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                  }`}
                 >
-                  <option value="all">All properties</option>
+                  Issued + Paid
+                </button>
+                <button
+                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "Issued" }))}
+                  className={`rounded px-3 py-1 text-xs font-semibold transition-colors ${
+                    draftFilters.status === "Issued"
+                      ? `${MILIK_GREEN} text-white`
+                      : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  Issued
+                </button>
+                <button
+                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "Paid" }))}
+                  className={`rounded px-3 py-1 text-xs font-semibold transition-colors ${
+                    draftFilters.status === "Paid"
+                      ? `${MILIK_GREEN} text-white`
+                      : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  Paid
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={draftFilters.invoiceNo}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))}
+                  placeholder="Invoice #"
+                  className={LISTING_UI.filterInput}
+                />
+                <input
+                  type="text"
+                  value={draftFilters.tenantName}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantName: e.target.value }))}
+                  placeholder="Tenant name"
+                  className={LISTING_UI.filterInput}
+                />
+                <select
+                  value={draftFilters.propertyId}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, unitId: "any" }))}
+                  className={LISTING_UI.filterSelect}
+                >
+                  <option value="any">Property</option>
                   {activeProperties.map((property) => (
                     <option key={property._id} value={property._id}>
-                      {property.propertyName || property.name}
+                      {formatPropertyName(property)}
                     </option>
                   ))}
                 </select>
-
                 <select
-                  value={filters.holder}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, holder: e.target.value }))}
-                  className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                  value={draftFilters.unitId}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, unitId: e.target.value }))}
+                  className={LISTING_UI.filterSelect}
                 >
-                  <option value="all">All holders</option>
-                  {!isLandlordWorkspace && <option value="Management Company">Management Company</option>}
-                  <option value="Landlord">{isLandlordWorkspace ? "Owner / Landlord" : "Landlord"}</option>
+                  <option value="any">Unit</option>
+                  {unitsForFilter.map((unit) => (
+                    <option key={unit._id} value={unit._id}>
+                      {formatUnitName(unit)}
+                    </option>
+                  ))}
                 </select>
-
                 <select
-                  value={filters.status}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                  value={draftFilters.depositTypeId}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, depositTypeId: e.target.value }))}
+                  className={LISTING_UI.filterSelect}
                 >
-                  <option value="all">All statuses</option>
-                  <option value="not configured">Not configured</option>
-                  <option value="unbilled">Unbilled</option>
-                  <option value="billed">Billed</option>
-                  <option value="partially paid">Partially paid</option>
-                  <option value="fully paid">Fully paid</option>
+                  <option value="any">Deposit type</option>
+                  {activeDepositTypes.map((type) => (
+                    <option key={type._id || type.code || type.name} value={type._id || `deposit:${slugify(type.code || type.name)}`}>
+                      {type.name}
+                    </option>
+                  ))}
                 </select>
-
+                <select
+                  value={draftFilters.holder}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, holder: e.target.value }))}
+                  className={LISTING_UI.filterSelect}
+                >
+                  <option value="any">{holderColumnLabel}</option>
+                  {!isLandlordWorkspace && <option value="manager">Management Company</option>}
+                  <option value="landlord">{isLandlordWorkspace ? "Owner / Landlord" : "Landlord"}</option>
+                </select>
+                <input
+                  type="date"
+                  value={draftFilters.fromDate}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
+                  className={LISTING_UI.filterInput}
+                  title="From date"
+                />
+                <input
+                  type="date"
+                  value={draftFilters.toDate}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))}
+                  className={LISTING_UI.filterInput}
+                  title="To date"
+                />
+                <button
+                  onClick={applySearch}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
+                >
+                  <FaSearch className="text-xs" />
+                  Search
+                </button>
                 <button
                   onClick={resetFilters}
-                  className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
+                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                 >
-                  <FaRedoAlt /> Reset
+                  <FaRedoAlt className="text-xs" />
+                  Reset
                 </button>
-
                 <button
-                  onClick={loadInvoices}
-                  className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  onClick={loadDepositInvoices}
+                  disabled={loading}
+                  className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-1 text-xs text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60"
                 >
-                  <FaRedoAlt /> Refresh
+                  {loading ? <FaSpinner className="animate-spin text-xs" /> : <FaRedoAlt className="text-xs" />}
+                  Refresh
                 </button>
-
                 <button
-                  onClick={() => navigate("/receipts")}
-                  className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-black text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                  onClick={handleDeleteSelected}
+                  disabled={!canDeleteInvoice || selectedCount === 0 || deleting}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
+                    selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "cursor-not-allowed bg-gray-400"
+                  }`}
                 >
-                  <FaReceipt /> Deposit Receipts
+                  <FaTrash className="text-xs" />
+                  Delete
                 </button>
-
-                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 shadow-sm">
-                  Rows
-                  <span className="text-sm text-slate-900">{depositRows.length}</span>
-                </div>
+                <button
+                  onClick={handlePrintList}
+                  disabled={!canExportInvoice || totalFilteredCount === 0}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
+                    totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
+                  }`}
+                >
+                  <FaPrint className="text-xs" />
+                  Print List
+                </button>
+                <button
+                  type="button"
+                  onClick={openDepositModal}
+                  disabled={!canCreateInvoice}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
+                    canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
+                  }`}
+                >
+                  <FaPlus className="text-xs" />
+                  New Deposit Invoice
+                </button>
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1100px] table-fixed text-[10px]">
+            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+              <table className="w-full min-w-[1480px] text-xs">
                 <thead>
                   <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
-                    <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.12em]">Tenant</th>
-                    <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.12em]">Property / Unit</th>
-                    <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.12em]">{holderColumnLabel}</th>
-                    <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.12em]">Deposit Invoice</th>
-                    <th className="px-2 py-1.5 text-right text-[10px] font-black uppercase tracking-[0.12em]">Configured</th>
-                    <th className="px-2 py-1.5 text-right text-[10px] font-black uppercase tracking-[0.12em]">Billed</th>
-                    <th className="px-2 py-1.5 text-right text-[10px] font-black uppercase tracking-[0.12em]">Paid</th>
-                    <th className="px-2 py-1.5 text-right text-[10px] font-black uppercase tracking-[0.12em]">Outstanding</th>
-                    <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-[0.12em]">Status</th>
-                    <th className="px-2 py-1.5 text-right text-[10px] font-black uppercase tracking-[0.12em]">Actions</th>
+                    <th className="px-3 py-2 text-left">
+                      <input type="checkbox" checked={currentPageRows.length > 0 && selectAll} onChange={toggleSelectAll} />
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold">Invoice #</th>
+                    <th className="px-3 py-2 text-left font-semibold">Tenant</th>
+                    <th className="px-3 py-2 text-left font-semibold">Property</th>
+                    <th className="px-3 py-2 text-left font-semibold">Unit</th>
+                    <th className="px-3 py-2 text-left font-semibold">Deposit Type</th>
+                    <th className="px-3 py-2 text-left font-semibold">{holderColumnLabel}</th>
+                    <th className="px-3 py-2 text-center font-semibold">Booking / Invoice Date</th>
+                    <th className="px-3 py-2 text-center font-semibold">Due Date</th>
+                    <th className="px-3 py-2 text-right font-semibold">Amount</th>
+                    <th className="px-3 py-2 text-right font-semibold">Paid</th>
+                    <th className="px-3 py-2 text-right font-semibold">Outstanding</th>
+                    <th className="px-3 py-2 text-center font-semibold">Status</th>
+                    <th className="px-3 py-2 text-center font-semibold">Created</th>
+                    <th className="px-3 py-2 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {depositRows.length === 0 ? (
+                  {loading && currentPageRows.length === 0 ? (
                     <tr>
-                      <td colSpan="10" className="px-4 py-10 text-center text-slate-500">
-                        No tenant deposits matched the current filters.
+                      <td colSpan="15" className="px-4 py-8 text-center text-gray-500">
+                        <FaSpinner className="mb-2 inline-block animate-spin text-2xl text-gray-300" />
+                        <p className="mt-1 text-sm font-semibold">Loading deposit invoices...</p>
+                      </td>
+                    </tr>
+                  ) : totalFilteredCount === 0 ? (
+                    <tr>
+                      <td colSpan="15" className="px-4 py-8 text-center text-gray-500">
+                        <FaFileInvoice className="mb-2 inline-block text-4xl text-gray-300" />
+                        <p className="mt-1 text-sm font-semibold">No deposit invoices found</p>
+                        <p className="mt-1 text-xs text-gray-400">Create a deposit invoice to see it in this register.</p>
                       </td>
                     </tr>
                   ) : (
-                    paginatedRows.map((row, index) => (
-                      <tr key={row.tenantId} className={`border-t border-slate-100 align-top ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-slate-50`}>
-                        <td className="px-2 py-1.5">
-                          <div className="font-semibold text-slate-900">{row.tenantName}</div>
-                          <div className="text-xs text-slate-500">Tenant ID: {row.tenantId}</div>
+                    currentPageRows.map((row, idx) => (
+                      <tr
+                        key={row.key}
+                        className={`cursor-pointer border-b border-slate-200 transition-colors ${
+                          selectedInvoices.includes(row.key)
+                            ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
+                            : idx % 2 === 0
+                            ? "bg-white hover:bg-blue-50/40"
+                            : "bg-slate-50 hover:bg-blue-50/40"
+                        }`}
+                        onClick={() => navigate(`/tenant/${row.tenantId}/statement`)}
+                      >
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedInvoices.includes(row.key)}
+                            onChange={() => toggleRowSelection(row.key)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
                         </td>
-                        <td className="px-2 py-1.5">
-                          <div className="font-semibold text-slate-900">{row.propertyName}</div>
-                          <div className="text-xs text-slate-500">Unit: {row.unitName}</div>
+                        <td className="px-3 py-2 font-bold text-blue-700">{row.id}</td>
+                        <td className="px-3 py-2 font-bold text-slate-900">{row.tenantName}</td>
+                        <td className="px-3 py-2 font-semibold text-slate-900">{row.propertyName}</td>
+                        <td className="px-3 py-2 font-semibold text-slate-900">{row.unitName}</td>
+                        <td className="px-3 py-2 font-semibold text-orange-700">
+                          <div>{row.depositTypeLabel}</div>
+                          <div className="max-w-[220px] truncate text-[10px] font-normal text-slate-500">{row.description}</div>
                         </td>
-                        <td className="px-2 py-1.5 text-slate-700">{row.depositHolder}</td>
-                        <td className="px-2 py-1.5">
-                          <div className="font-semibold text-slate-900">{row.latestInvoiceNumber}</div>
-                          <div className="text-xs text-slate-500">{row.latestInvoiceDescription}</div>
-                          <div className="text-[10px] text-slate-400">{row.latestInvoiceDate ? new Date(row.latestInvoiceDate).toLocaleDateString() : "Not billed yet"}</div>
+                        <td className="px-3 py-2 text-slate-700">{row.holder}</td>
+                        <td className="px-3 py-2 text-center text-gray-700">{row.invoiceDateLabel}</td>
+                        <td className="px-3 py-2 text-center text-gray-700">{row.dueDateLabel}</td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-900">{formatCurrency(row.amount)}</td>
+                        <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(row.appliedAmount)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-900">{formatCurrency(row.outstandingAmount)}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${getStatusBadgeClass(row.status)}`}>
+                            {row.status}
+                          </span>
                         </td>
-                        <td className="px-2 py-1.5 text-right font-semibold text-slate-900">KES {row.depositAmount.toLocaleString()}</td>
-                        <td className="px-2 py-1.5 text-right text-slate-700">KES {row.billed.toLocaleString()}</td>
-                        <td className="px-2 py-1.5 text-right text-slate-700">KES {row.paid.toLocaleString()}</td>
-                        <td className="px-2 py-1.5 text-right font-semibold text-slate-900">KES {row.outstanding.toLocaleString()}</td>
-                        <td className="px-2 py-1.5">
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-700">{row.status}</span>
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <button onClick={() => navigate(`/tenant/${row.tenantId}/statement`)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-black text-slate-700 transition hover:bg-slate-100">
-                              <FaFileInvoiceDollar /> Statement
+                        <td className="px-3 py-2 text-center text-gray-600">{row.createdDate}</td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => navigate(`/tenant/${row.tenantId}/statement`)}
+                              className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+                              title="View tenant statement"
+                            >
+                              <FaEye size={12} />
                             </button>
-                            <button onClick={() => navigate(`/receipts/new?tenant=${row.tenantId}`)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-black text-slate-700 transition hover:bg-slate-100">
-                              <FaReceipt /> Receipt
+                            <button
+                              onClick={() => navigate(`/receipts/new?tenant=${row.tenantId}`)}
+                              className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800"
+                              title="Create receipt"
+                            >
+                              <FaReceipt size={12} />
                             </button>
-                            <button onClick={() => openBillDepositModal(row)} disabled={!row.canBill} className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-black text-white transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:cursor-not-allowed disabled:opacity-50`}>
-                              <FaPlus /> Bill Deposit
+                            <button
+                              onClick={() => handleDeleteSingle(row)}
+                              disabled={!canDeleteInvoice || deleting}
+                              className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-40"
+                              title={canDeleteInvoice ? "Delete invoice" : "You do not have permission to delete invoices"}
+                            >
+                              <FaTrash size={12} />
+                            </button>
+                            <button
+                              onClick={() => navigate(`/tenant/${row.tenantId}/statement`)}
+                              className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"
+                              title="Open statement"
+                            >
+                              <FaArrowRight size={12} />
                             </button>
                           </div>
                         </td>
@@ -612,14 +1028,46 @@ const TenantDeposits = () => {
                 </tbody>
               </table>
             </div>
-            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-2 py-1.5">
-              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, depositRows.length)}</span> of <span className="font-bold text-slate-900">{depositRows.length}</span> tenant deposit rows</div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                  <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                  <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+
+            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
+              <p>
+                <span className="font-semibold">Showing:</span> {totalFilteredCount === 0 ? 0 : startIndex + 1}
+                {" - "}
+                {endIndex} of {totalFilteredCount} deposit invoice(s)
+                {appliedFilters.status !== "ACTIVE" && ` - Status: ${appliedFilters.status}`}
+              </p>
+              <div className="flex items-center gap-3">
+                <p>
+                  <span className="font-semibold">Selected:</span> {selectedCount}
+                  {totalFilteredCount > 0 && (
+                    <>
+                      {" - "}
+                      <span className="font-semibold">Total:</span> {formatCurrency(totals.amount)}
+                    </>
+                  )}
+                </p>
+                <div className="h-4 w-px bg-slate-300" />
+                <span className="text-slate-500">Per page: {ITEMS_PER_PAGE}</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={safeCurrentPage === 1}
+                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <span className="rounded border border-slate-200 bg-white px-2.5 py-0.5 font-semibold text-slate-700">
+                    Page {safeCurrentPage} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={safeCurrentPage === totalPages}
+                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
             </div>
@@ -627,97 +1075,143 @@ const TenantDeposits = () => {
         </div>
       </div>
 
-      {billingModal.open && billingModal.row && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Bill Tenant Deposit</h3>
-                <p className="text-xs text-slate-600 mt-1">
-                  {billingModal.row.tenantName} • {billingModal.row.propertyName} • {billingModal.row.unitName}
-                </p>
-              </div>
+      {showDepositModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4 sm:items-center sm:p-6">
+          <div className="flex w-full max-w-3xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+            <div className="sticky top-0 z-20 flex items-center justify-between bg-[#0B3B2E] px-5 py-3 text-white">
+              <h3 className="text-sm font-bold tracking-wide">New Deposit Invoice</h3>
               <button
-                type="button"
-                onClick={() => setBillingModal({ open: false, row: null })}
-                className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+                onClick={closeDepositModal}
+                className="rounded bg-white/20 px-2 py-1 text-xs font-semibold hover:bg-white/30"
               >
-                Close
+                <FaTimes />
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-                <p className="font-semibold">
-                  {isLandlordWorkspace ? "Owner-held deposit" : "Deposit holder"}: {billingModal.row.depositHolder}
-                </p>
-                <p className="mt-1">
-                  Configured deposit: KES {Number(billingModal.row.depositAmount || 0).toLocaleString()}
-                </p>
-                <p className="mt-1 text-xs">
-                  {isLandlordWorkspace
-                    ? "This creates an owner-held deposit invoice using the existing deposit accounting flow. Deposit invoices remain non-taxable."
-                    : "This creates a deposit invoice using the existing deposit accounting flow. Deposit invoices remain non-taxable."}
-                </p>
-              </div>
+            <div className="flex-1 space-y-4 overflow-y-auto p-5">
+              {depositTypes.length === 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+                  No custom deposit types are active in Operational Settings yet, so Security Deposit is available as a fallback.
+                </div>
+              )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Amount</label>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">Property Filter</label>
+                  <select
+                    value={tenantPropertyFilter}
+                    onChange={(e) => {
+                      setTenantPropertyFilter(e.target.value);
+                      setDepositForm((prev) => ({ ...prev, tenantId: "" }));
+                    }}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  >
+                    <option value="any">All properties</option>
+                    {activeProperties.map((property) => (
+                      <option key={property._id} value={property._id}>
+                        {formatPropertyName(property)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">Tenant *</label>
+                  <select
+                    value={depositForm.tenantId}
+                    onChange={(e) => updateDepositTenant(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  >
+                    <option value="">Select tenant</option>
+                    {tenantOptions.map((option) => (
+                      <option key={option.tenantId} value={option.tenantId}>
+                        {option.tenantName} - {option.propertyName} / {option.unitName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">Deposit Type *</label>
+                  <select
+                    value={depositForm.depositTypeId}
+                    onChange={(e) => updateDepositType(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  >
+                    {activeDepositTypes.map((type) => (
+                      <option key={type._id || type.code || type.name} value={type._id || type.code || type.name}>
+                        {type.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">Amount *</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
-                    value={billingForm.amount}
-                    onChange={(e) => setBillingForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                    value={depositForm.amount}
+                    onChange={(e) => setDepositForm((prev) => ({ ...prev, amount: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Invoice date</label>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">Invoice Date</label>
                   <input
                     type="date"
-                    value={billingForm.invoiceDate}
-                    onChange={(e) => setBillingForm((prev) => ({ ...prev, invoiceDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                    value={depositForm.invoiceDate}
+                    onChange={(e) => setDepositForm((prev) => ({ ...prev, invoiceDate: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Due date</label>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">Due Date</label>
                   <input
                     type="date"
-                    value={billingForm.dueDate}
-                    onChange={(e) => setBillingForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                    value={depositForm.dueDate}
+                    onChange={(e) => setDepositForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">{holderColumnLabel}</label>
+                  <select
+                    value={depositForm.depositHeldBy}
+                    onChange={(e) => setDepositForm((prev) => ({ ...prev, depositHeldBy: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    disabled={isLandlordWorkspace}
+                  >
+                    {!isLandlordWorkspace && <option value="manager">Management Company</option>}
+                    <option value="landlord">{isLandlordWorkspace ? "Owner / Landlord" : "Landlord"}</option>
+                  </select>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Description</label>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">Description</label>
                   <textarea
-                    value={billingForm.description}
-                    onChange={(e) => setBillingForm((prev) => ({ ...prev, description: e.target.value }))}
+                    value={depositForm.description}
+                    onChange={(e) => setDepositForm((prev) => ({ ...prev, description: e.target.value }))}
                     rows="3"
-                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
+            <div className="sticky bottom-0 z-20 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4">
               <button
                 type="button"
-                onClick={() => setBillingModal({ open: false, row: null })}
-                className="px-2 py-1.5 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                onClick={closeDepositModal}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleCreateDepositInvoice}
-                disabled={isSaving}
-                className={`inline-flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-60`}
+                disabled={saving}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-60`}
               >
-                <FaMoneyBillWave /> {isSaving ? "Saving..." : "Create Deposit Invoice"}
+                {saving ? <FaSpinner className="animate-spin" /> : <FaMoneyBillWave />}
+                {saving ? "Saving..." : "Create Deposit Invoice"}
               </button>
             </div>
           </div>

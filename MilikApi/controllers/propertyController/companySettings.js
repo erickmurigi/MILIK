@@ -14,6 +14,7 @@ import {
   canonicalizeBillingPeriodKey,
   ensureSettingsBillingPeriods,
 } from "../../services/billingPeriodService.js";
+import { logAuditEvent } from "../../utils/auditLogger.js";
 
 const normalizeText = (value = "") => String(value ?? "").trim();
 const normalizeLower = (value = "") => normalizeText(value).toLowerCase();
@@ -169,6 +170,30 @@ const ACCOUNTING_DEFAULT_FIELDS = [
   "leaseAgreementFeeIncomeAccount",
 ];
 
+const DEFAULT_DEPOSIT_TYPES = [
+  {
+    name: "Security Deposit",
+    code: "SECURITY",
+    defaultAmount: 0,
+    refundable: true,
+    description: "Standard refundable tenant security deposit.",
+  },
+  {
+    name: "Water Deposit",
+    code: "WATER",
+    defaultAmount: 0,
+    refundable: true,
+    description: "Refundable utility deposit for water services.",
+  },
+  {
+    name: "Electricity Deposit",
+    code: "ELECTRICITY",
+    defaultAmount: 0,
+    refundable: true,
+    description: "Refundable utility deposit for electricity services.",
+  },
+];
+
 const ensureSettingsDocument = async (businessId) => {
   let settings = await findCompanySettings(businessId);
   if (!settings) {
@@ -247,6 +272,11 @@ export const getCompanySettings = async (req, res, next) => {
           { _id: new mongoose.Types.ObjectId(), name: "Cleaning", category: "supplies" },
           { _id: new mongoose.Types.ObjectId(), name: "Repairs", category: "maintenance" },
         ],
+        depositTypes: DEFAULT_DEPOSIT_TYPES.map((item) => ({
+          _id: new mongoose.Types.ObjectId(),
+          ...item,
+          isActive: true,
+        })),
         taxSettings: defaults.taxSettings,
         taxCodes: defaults.taxCodes,
       });
@@ -660,6 +690,108 @@ export const deleteExpenseItem = async (req, res, next) => {
   }
 };
 
+export const addDepositType = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const name = normalizeText(req.body?.name);
+    const description = normalizeText(req.body?.description);
+    const code = normalizeText(req.body?.code).toUpperCase();
+    const defaultAmount = toNumber(req.body?.defaultAmount, 0);
+    const refundable = req.body?.refundable === undefined ? true : Boolean(req.body.refundable);
+
+    if (!name) {
+      return res.status(400).json({ message: "Deposit type name is required" });
+    }
+
+    if (defaultAmount < 0) {
+      return res.status(400).json({ message: "Default deposit amount cannot be negative" });
+    }
+
+    const settings = await ensureSettingsDocument(businessId);
+    ensureUniqueCollectionName({ items: settings.depositTypes, name, label: "Deposit type" });
+
+    const newDepositType = {
+      _id: new mongoose.Types.ObjectId(),
+      name,
+      description,
+      code,
+      defaultAmount,
+      refundable,
+      isActive: true,
+    };
+
+    settings.depositTypes.push(newDepositType);
+    await settings.save();
+
+    res.status(201).json({ depositType: newDepositType, settings, message: "Deposit type added successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateDepositType = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const { depositTypeId } = req.params;
+    const settings = await findCompanySettings(businessId);
+    if (!settings) {
+      return res.status(404).json({ message: "Settings not found" });
+    }
+
+    const depositType = settings.depositTypes.id(depositTypeId);
+    if (!depositType) {
+      return res.status(404).json({ message: "Deposit type not found" });
+    }
+
+    if (req.body?.name !== undefined) {
+      const name = normalizeText(req.body.name);
+      if (!name) {
+        return res.status(400).json({ message: "Deposit type name is required" });
+      }
+      ensureUniqueCollectionName({
+        items: settings.depositTypes,
+        name,
+        excludeId: depositTypeId,
+        label: "Deposit type",
+      });
+      depositType.name = name;
+    }
+    if (req.body?.description !== undefined) depositType.description = normalizeText(req.body.description);
+    if (req.body?.code !== undefined) depositType.code = normalizeText(req.body.code).toUpperCase();
+    if (req.body?.defaultAmount !== undefined) {
+      const defaultAmount = toNumber(req.body.defaultAmount, 0);
+      if (defaultAmount < 0) {
+        return res.status(400).json({ message: "Default deposit amount cannot be negative" });
+      }
+      depositType.defaultAmount = defaultAmount;
+    }
+    if (req.body?.refundable !== undefined) depositType.refundable = Boolean(req.body.refundable);
+    if (req.body?.isActive !== undefined) depositType.isActive = Boolean(req.body.isActive);
+
+    await settings.save();
+    res.status(200).json({ depositType, settings, message: "Deposit type updated successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteDepositType = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const { depositTypeId } = req.params;
+    return await archiveEmbeddedSetting({
+      req,
+      res,
+      businessId,
+      itemId: depositTypeId,
+      collectionKey: "depositTypes",
+      successLabel: "Deposit type",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const updateAccountingDefaults = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
@@ -684,6 +816,18 @@ export const updateAccountingDefaults = async (req, res, next) => {
 
     settings.accountingDefaults = nextDefaults;
     await settings.save();
+    await logAuditEvent({
+      req,
+      company: businessId,
+      action: "settings.accounting_defaults.update",
+      category: "settings",
+      severity: "critical",
+      targetType: "CompanySettings",
+      targetId: settings._id,
+      targetName: "Accounting defaults",
+      message: "Updated accounting defaults",
+      metadata: { fields: Object.keys(incomingDefaults || {}) },
+    });
 
     return res.status(200).json({
       message: "Accounting defaults updated successfully",
@@ -724,6 +868,21 @@ export const updateTaxConfiguration = async (req, res, next) => {
 
     await settings.save();
     await settings.populate?.("accountingDefaults.tenantReceivableAccount accountingDefaults.rentIncomeAccount accountingDefaults.utilityRechargeIncomeAccount accountingDefaults.penaltyIncomeAccount accountingDefaults.depositLiabilityAccount accountingDefaults.managementCommissionIncomeAccount accountingDefaults.leaseAgreementFeeIncomeAccount");
+    await logAuditEvent({
+      req,
+      company: businessId,
+      action: "settings.tax.update",
+      category: "settings",
+      severity: "critical",
+      targetType: "CompanySettings",
+      targetId: settings._id,
+      targetName: "Tax configuration",
+      message: "Updated tax configuration",
+      metadata: {
+        taxEnabled: Boolean(settings.taxSettings?.enabled),
+        taxCodeCount: Array.isArray(settings.taxCodes) ? settings.taxCodes.length : 0,
+      },
+    });
 
     res.status(200).json({
       message: "Tax configuration updated successfully",

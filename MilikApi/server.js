@@ -48,6 +48,7 @@ import landlordStandingOrdersRoutes from "./routes/propertyRoutes/landlordStandi
 import landlordAdvancementsRoutes from "./routes/propertyRoutes/landlordAdvancements.js";
 import landlordReceiptsRoutes from "./routes/propertyRoutes/landlordReceipts.js";
 import pettyCashRoutes from "./routes/propertyRoutes/pettyCash.js";
+import auditLogRoutes from "./routes/auditLogs.js";
 import { blockDemoWrites } from "./utils/demoAccess.js";
 import {
   canAccessCompanyId,
@@ -447,6 +448,7 @@ app.use("/api/company-settings", cacheShortLived, companySettingsRoutes);
 app.use("/api/journals", journalEntriesRoutes);
 app.use("/api/financial-reports", financialReportsRoutes);
 app.use("/api/petty-cash", pettyCashRoutes);
+app.use("/api/audit-logs", auditLogRoutes);
 
 app.use((err, req, res, next) => {
   const errorStatus = err.status || err.statusCode || 500;

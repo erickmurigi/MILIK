@@ -7,6 +7,7 @@ import { normalizeCompanyModules, serializeCompanyForClient } from '../utils/com
 import { buildTemporaryPassword, normalizeBoolean } from '../utils/onboardingAccess.js';
 import { sendUserOnboardingEmail } from '../utils/onboardingMailer.js';
 import { sanitizePermissionMap } from '../utils/accessMatrix.js';
+import { logAuditEvent } from '../utils/auditLogger.js';
 
 const router = express.Router();
 
@@ -327,6 +328,18 @@ router.post('/', verifyUser, async (req, res) => {
 
     const user = new User(payload);
     await user.save();
+    await logAuditEvent({
+      req,
+      company: primaryCompany,
+      action: 'users.create',
+      category: 'users',
+      severity: 'critical',
+      targetType: 'User',
+      targetId: user._id,
+      targetName: `${user.surname || ''} ${user.otherNames || ''}`.trim() || user.email,
+      message: `Created user ${`${user.surname || ''} ${user.otherNames || ''}`.trim() || user.email}`,
+      metadata: { email: user.email, profile: user.profile, companyCount: companyIds.length },
+    });
 
     let onboardingEmail = { attempted: false, sent: false, skipped: true, error: null };
     if (shouldSendOnboardingEmail) {
@@ -425,6 +438,23 @@ router.put('/:id', verifyUser, async (req, res) => {
     );
 
     const user = await User.findByIdAndUpdate(req.params.id, updatePayload, { new: true, runValidators: true });
+    await logAuditEvent({
+      req,
+      company: primaryCompany,
+      action: 'users.update',
+      category: 'users',
+      severity: 'critical',
+      targetType: 'User',
+      targetId: user._id,
+      targetName: `${user.surname || ''} ${user.otherNames || ''}`.trim() || user.email,
+      message: `Updated user ${`${user.surname || ''} ${user.otherNames || ''}`.trim() || user.email}`,
+      metadata: {
+        email: user.email,
+        profile: user.profile,
+        passwordChanged: Boolean(req.body?.password),
+        companyCount: companyIds.length,
+      },
+    });
     const serialized = await serializeUser(user);
     res.json({ ...serialized, accessSummary: buildAccessSummary(serialized) });
   } catch (error) {
@@ -448,6 +478,18 @@ router.delete('/:id', verifyUser, async (req, res) => {
     if (!shared) return res.status(403).json({ message: 'You do not have access to this user' });
 
     await User.findByIdAndDelete(req.params.id);
+    await logAuditEvent({
+      req,
+      company: user.primaryCompany || user.company,
+      action: 'users.delete',
+      category: 'users',
+      severity: 'critical',
+      targetType: 'User',
+      targetId: user._id,
+      targetName: name,
+      message: `Deleted user ${name}`,
+      metadata: { email: user.email, profile: user.profile },
+    });
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -470,6 +512,18 @@ router.patch('/:id/toggle-lock', verifyUser, async (req, res) => {
 
     user.locked = !user.locked;
     await user.save();
+    await logAuditEvent({
+      req,
+      company: user.primaryCompany || user.company,
+      action: user.locked ? 'users.lock' : 'users.unlock',
+      category: 'users',
+      severity: 'critical',
+      targetType: 'User',
+      targetId: user._id,
+      targetName: `${user.surname || ''} ${user.otherNames || ''}`.trim() || user.email,
+      message: `${user.locked ? 'Locked' : 'Unlocked'} user ${`${user.surname || ''} ${user.otherNames || ''}`.trim() || user.email}`,
+      metadata: { email: user.email, locked: user.locked },
+    });
     res.json({ locked: user.locked });
   } catch (error) {
     res.status(500).json({ message: error.message });

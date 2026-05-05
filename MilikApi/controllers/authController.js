@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import { buildTemporaryPassword, normalizeBoolean } from "../utils/onboardingAccess.js";
 import { sendUserOnboardingEmail } from "../utils/onboardingMailer.js";
 import { attachAuthCookie, clearAuthCookie } from "../utils/authCookie.js";
+import { logAuditEvent } from "../utils/auditLogger.js";
 
 const getJWTSecret = () => {
   const secret = process.env.JWT_SECRET;
@@ -423,6 +424,19 @@ export const loginUser = async (req, res, next) => {
     const token = createAuthToken(user);
     const userDetails = sanitizeUserForResponse(await attachCompanyCollections(user));
     const serializedCompany = userDetails.company || null;
+
+    await logAuditEvent({
+      req,
+      company: user.company,
+      actor: user,
+      action: "auth.login",
+      category: "auth",
+      severity: "important",
+      targetType: "User",
+      targetId: user._id,
+      targetName: `${user.surname || ""} ${user.otherNames || ""}`.trim() || user.email,
+      message: `${`${user.surname || ""} ${user.otherNames || ""}`.trim() || user.email} signed in`,
+    });
 
     attachAuthCookie(res, token);
 

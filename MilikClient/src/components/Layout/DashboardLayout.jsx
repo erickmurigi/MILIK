@@ -335,6 +335,7 @@ const TopToolbar = ({
         "system-admin-workspace": "/system-setup/overview",
         "property-workspace": "/dashboard",
         settings: "/settings",
+        activities: "/company-setup?tab=activities",
       };
     }
 
@@ -444,6 +445,7 @@ const TopToolbar = ({
           submenu: [
             { id: "company-setup-home", label: "Company Setup", icon: FaBuilding },
             { id: "settings", label: "Settings", icon: FaCog },
+            { id: "activities", label: "Activities", icon: FaClipboard },
           ],
         },
         {

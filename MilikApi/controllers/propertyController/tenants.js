@@ -16,6 +16,7 @@ import Inspection from "../../models/Inspection.js";
 import MeterReading from "../../models/MeterReading.js";
 import { createTenantInvoiceRecord, resolveLeaseAgreementFeeIncomeAccount } from "./tenantInvoices.js";
 import { isAgreementNumberDuplicateError, saveLeaseWithUniqueAgreementNumber } from "../../services/agreementNumberService.js";
+import { logAuditEvent } from "../../utils/auditLogger.js";
 
 
 const ACTIVE_TENANT_STATUSES = ["active", "overdue"];
@@ -25,6 +26,8 @@ const normalizePropertyServiceMode = (value = "Managing") => {
   const normalized = String(value || "").trim().toLowerCase();
   return normalized === "letting" ? "Letting" : "Managing";
 };
+
+const tenantLabel = (tenant = {}) => tenant?.name || tenant?.tenantCode || String(tenant?._id || "tenant");
 
 const getPrimaryLandlordIdFromProperty = (propertyDoc = {}) => {
   const landlords = Array.isArray(propertyDoc?.landlords) ? propertyDoc.landlords : [];
@@ -893,6 +896,24 @@ export const createTenant = async (req, res, next) => {
       });
     }
 
+    await logAuditEvent({
+      req,
+      company: businessId,
+      action: "tenants.create",
+      category: "property",
+      severity: "important",
+      targetType: "Tenant",
+      targetId: savedTenant._id,
+      targetName: tenantLabel(savedTenant),
+      message: `Created tenant ${tenantLabel(savedTenant)}`,
+      metadata: {
+        tenantCode: savedTenant.tenantCode,
+        unit: savedTenant.unit,
+        additionalUnits: savedTenant.additionalUnits,
+        rent: savedTenant.rent,
+      },
+    });
+
     return res.status(201).json({
       success: true,
       data: populatedTenant,
@@ -1259,6 +1280,39 @@ export const updateTenant = async (req, res, next) => {
       action: "upsert",
     });
 
+    const criticalFields = [
+      "unit",
+      "additionalUnits",
+      "rent",
+      "depositAmount",
+      "depositHeldBy",
+      "paymentMethod",
+      "status",
+      "moveInDate",
+      "moveOutDate",
+    ].filter((field) => Object.prototype.hasOwnProperty.call(normalizedPayload, field));
+
+    if (criticalFields.length) {
+      await logAuditEvent({
+        req,
+        company: tenant.business,
+        action: "tenants.update",
+        category: "property",
+        severity: criticalFields.some((field) => ["unit", "additionalUnits", "status"].includes(field)) ? "critical" : "important",
+        targetType: "Tenant",
+        targetId: tenant._id,
+        targetName: tenantLabel(updatedTenant),
+        message: `Updated tenant ${tenantLabel(updatedTenant)}`,
+        metadata: {
+          fields: criticalFields,
+          previousStatus: tenant.status,
+          nextStatus: updatedTenant.status,
+          previousUnit: tenant.unit,
+          nextUnit: updatedTenant.unit?._id || updatedTenant.unit,
+        },
+      });
+    }
+
     return res.status(200).json({
       success: true,
       data: updatedTenant,
@@ -1326,6 +1380,21 @@ export const deleteTenant = async (req, res, next) => {
     });
 
     await Tenant.findByIdAndDelete(req.params.id);
+    await logAuditEvent({
+      req,
+      company: tenant.business,
+      action: "tenants.delete",
+      category: "property",
+      severity: "critical",
+      targetType: "Tenant",
+      targetId: tenant._id,
+      targetName: tenantLabel(tenant),
+      message: `Deleted tenant ${tenantLabel(tenant)}`,
+      metadata: {
+        unit: tenant.unit,
+        additionalUnits: tenant.additionalUnits,
+      },
+    });
 
     return res.status(200).json({
       success: true,
@@ -1455,6 +1524,30 @@ export const updateTenantStatus = async (req, res, next) => {
       typeof updatedTenantDoc?.toObject === "function"
         ? updatedTenantDoc.toObject()
         : updatedTenantDoc;
+
+    await logAuditEvent({
+      req,
+      company: tenant.business,
+      action: status === "terminated" ? "tenants.terminate" : "tenants.status.update",
+      category: "property",
+      severity: "critical",
+      targetType: "Tenant",
+      targetId: tenant._id,
+      targetName: tenantLabel(updatedTenant),
+      message: status === "terminated"
+        ? `Terminated tenant ${tenantLabel(updatedTenant)}`
+        : `Changed tenant ${tenantLabel(updatedTenant)} status to ${status}`,
+      metadata: {
+        previousStatus: tenant.status,
+        nextStatus: status,
+        terminationDate: updateData.terminationDate || null,
+        terminationReason,
+        depositRefundAmount: updateData.depositRefundAmount,
+        depositRefundStatus: updateData.depositRefundStatus,
+        previousUnits: previousOccupiedUnitIds,
+        nextUnits: nextOccupiedUnitIds,
+      },
+    });
 
     return res.status(200).json({
       ...updatedTenant,
@@ -1681,6 +1774,26 @@ export const transferTenantUnit = async (req, res, next) => {
       nextUnitIds: getTenantAssignedUnitIds(updatedTenant),
       tenantId: tenant._id,
       effectiveDate,
+    });
+
+    await logAuditEvent({
+      req,
+      company: tenant.business,
+      action: "tenants.transfer_unit",
+      category: "property",
+      severity: "critical",
+      targetType: "Tenant",
+      targetId: tenant._id,
+      targetName: tenantLabel(updatedTenant),
+      message: `Transferred tenant ${tenantLabel(updatedTenant)} to another unit`,
+      metadata: {
+        fromUnit: previousPrimaryUnitId,
+        toUnit: nextPrimaryUnitId,
+        previousAdditionalUnits: previousAdditionalUnitIds,
+        nextAdditionalUnits: getTenantAssignedUnitIds(updatedTenant).filter((id) => id !== nextPrimaryUnitId),
+        effectiveDate,
+        reason,
+      },
     });
 
     return res.status(200).json({

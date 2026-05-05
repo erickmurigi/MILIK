@@ -46,6 +46,7 @@ const tabs = [
   { key: "payments", label: "PAYMENTS", icon: <FaMoneyCheckAlt /> },
   { key: "email", label: "EMAIL", icon: <FaEnvelope /> },
   { key: "sms", label: "SMS", icon: <FaSms /> },
+  { key: "activities", label: "ACTIVITIES", icon: <FaHistory /> },
 ];
 
 const validTabKeys = new Set(tabs.map((tab) => tab.key));
@@ -737,6 +738,12 @@ export default function CompanySetupPage() {
   const [smsTemplateModalOpen, setSmsTemplateModalOpen] = useState(false);
   const [smsTemplateForm, setSmsTemplateForm] = useState(null);
   const [taxConfig, setTaxConfig] = useState(normalizeTaxConfiguration());
+  const [activityView, setActivityView] = useState("activities");
+  const [activityCategory, setActivityCategory] = useState("all");
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [userSessions, setUserSessions] = useState([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
 
   const activeTab = validTabKeys.has(searchParams.get("tab")) ? searchParams.get("tab") : "details";
   const activeSmsSection = validSmsSections.has(searchParams.get("smsTab")) ? searchParams.get("smsTab") : "configuration";
@@ -765,6 +772,49 @@ export default function CompanySetupPage() {
   useEffect(() => {
     setCompany(normalizeForm(currentCompany));
   }, [currentCompany]);
+
+  useEffect(() => {
+    if (activeTab !== "activities" || !currentCompany?._id) return undefined;
+
+    let cancelled = false;
+    const loadAuditTrail = async () => {
+      setLoadingAudit(true);
+      try {
+        const [logRes, sessionRes] = await Promise.all([
+          adminRequests.get("/audit-logs", {
+            params: { companyId: currentCompany._id, category: activityCategory, limit: 200 },
+          }),
+          adminRequests.get("/audit-logs/sessions", {
+            params: { companyId: currentCompany._id },
+          }),
+        ]);
+
+        if (cancelled) return;
+        setAuditLogs(Array.isArray(logRes?.data?.logs) ? logRes.data.logs : []);
+        setUserSessions(Array.isArray(sessionRes?.data?.sessions) ? sessionRes.data.sessions : []);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error?.response?.data?.message || "Failed to load company activities");
+        }
+      } finally {
+        if (!cancelled) setLoadingAudit(false);
+      }
+    };
+
+    loadAuditTrail();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, activityCategory, activityRefreshKey, currentCompany?._id]);
+
+  useEffect(() => {
+    if (activeTab !== "activities") return undefined;
+    const intervalId = window.setInterval(() => {
+      setActivityRefreshKey((key) => key + 1);
+    }, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [activeTab]);
 
   useEffect(() => {
     if (currentCompany?._id) {
@@ -2913,6 +2963,143 @@ export default function CompanySetupPage() {
     </div>
   );
 
+  const getSessionStatus = (user = {}) => {
+    if (user.locked) return { label: "Locked", className: "border-amber-200 bg-amber-50 text-amber-700" };
+    if (user.isActive === false) return { label: "Inactive", className: "border-slate-200 bg-slate-50 text-slate-600" };
+    if (!user.lastLogin) return { label: "Never signed in", className: "border-rose-200 bg-rose-50 text-rose-700" };
+    const ageDays = Math.floor((Date.now() - new Date(user.lastLogin).getTime()) / (1000 * 60 * 60 * 24));
+    if (ageDays <= 1) return { label: "Recently active", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+    if (ageDays <= 30) return { label: "Active", className: "border-blue-200 bg-blue-50 text-blue-700" };
+    return { label: "Dormant", className: "border-orange-200 bg-orange-50 text-orange-700" };
+  };
+
+  const renderActivitiesTab = () => {
+    const criticalCount = auditLogs.filter((log) => log.severity === "critical").length;
+    const signedInCount = userSessions.filter((user) => Boolean(user.lastLogin)).length;
+    const lockedCount = userSessions.filter((user) => user.locked || user.isActive === false).length;
+
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">Logged events</div>
+            <div className="mt-1 text-2xl font-extrabold text-slate-900">{auditLogs.length}</div>
+          </div>
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 shadow-sm">
+            <div className="text-[11px] font-black uppercase tracking-wide text-rose-700">Critical events</div>
+            <div className="mt-1 text-2xl font-extrabold text-slate-900">{criticalCount}</div>
+          </div>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-sm">
+            <div className="text-[11px] font-black uppercase tracking-wide text-emerald-700">Users signed in</div>
+            <div className="mt-1 text-2xl font-extrabold text-slate-900">{signedInCount} / {userSessions.length}</div>
+          </div>
+        </div>
+
+        <Card
+          title="Company Activity & Sessions"
+          subtitle="Critical user access, sign-in, setup and settings events for this company."
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => setActivityRefreshKey((key) => key + 1)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Refresh</button>
+              <button onClick={() => setActivityView("activities")} className={`rounded-xl border px-3 py-2 text-xs font-bold ${activityView === "activities" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}>Activities</button>
+              <button onClick={() => setActivityView("sessions")} className={`rounded-xl border px-3 py-2 text-xs font-bold ${activityView === "sessions" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}>Sessions</button>
+            </div>
+          }
+        >
+          {activityView === "activities" ? (
+            <div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <select value={activityCategory} onChange={(event) => setActivityCategory(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-600">
+                  <option value="all">All categories</option>
+                  <option value="auth">Sign-ins</option>
+                  <option value="users">User access</option>
+                  <option value="company">Company setup</option>
+                  <option value="settings">Operational settings</option>
+                  <option value="finance">Receipts & finance</option>
+                  <option value="property">Tenants & property</option>
+                </select>
+                <div className="text-xs font-semibold text-slate-500">{loadingAudit ? "Loading..." : `${auditLogs.length} event${auditLogs.length === 1 ? "" : "s"}`}</div>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-slate-200">
+                <table className="min-w-full text-xs">
+                  <thead>
+                    <tr className="bg-[#0B3B2E] text-white">
+                      <th className="px-3 py-2 text-left font-black uppercase tracking-wide">When</th>
+                      <th className="px-3 py-2 text-left font-black uppercase tracking-wide">Who</th>
+                      <th className="px-3 py-2 text-left font-black uppercase tracking-wide">Activity</th>
+                      <th className="px-3 py-2 text-left font-black uppercase tracking-wide">Area</th>
+                      <th className="px-3 py-2 text-left font-black uppercase tracking-wide">Target</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.length === 0 ? (
+                      <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No critical company activity has been logged yet.</td></tr>
+                    ) : auditLogs.map((log, index) => (
+                      <tr key={log._id} className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
+                        <td className="px-3 py-2 whitespace-nowrap text-slate-600">{formatDateTime(log.createdAt)}</td>
+                        <td className="px-3 py-2">
+                          <div className="font-black text-slate-900">{log.actorName || log.actorEmail || "System"}</div>
+                          <div className="text-[11px] text-slate-500">{log.actorEmail || ""}</div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="font-black text-slate-900">{log.message}</div>
+                          <div className="text-[11px] text-slate-500">{log.action}</div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${log.severity === "critical" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-slate-50 text-slate-700"}`}>{log.category}</span>
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">{log.targetName || log.targetType || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+                <span>{userSessions.length} user{userSessions.length === 1 ? "" : "s"} in company</span>
+                <span>{lockedCount} locked or inactive</span>
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-slate-200">
+                <table className="min-w-full text-xs">
+                  <thead>
+                    <tr className="bg-[#0B3B2E] text-white">
+                      <th className="px-3 py-2 text-left font-black uppercase tracking-wide">User</th>
+                      <th className="px-3 py-2 text-left font-black uppercase tracking-wide">Role</th>
+                      <th className="px-3 py-2 text-left font-black uppercase tracking-wide">Last sign-in</th>
+                      <th className="px-3 py-2 text-left font-black uppercase tracking-wide">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userSessions.length === 0 ? (
+                      <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">No users found for this company.</td></tr>
+                    ) : userSessions.map((user, index) => {
+                      const status = getSessionStatus(user);
+                      const name = `${user.surname || ""} ${user.otherNames || ""}`.trim() || user.email || "User";
+                      return (
+                        <tr key={user._id} className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
+                          <td className="px-3 py-2">
+                            <div className="font-black text-slate-900">{name}</div>
+                            <div className="text-[11px] text-slate-500">{user.email}</div>
+                          </td>
+                          <td className="px-3 py-2 text-slate-600">{user.adminAccess ? "Company Admin" : user.setupAccess || user.companySetupAccess ? "Setup Admin" : user.profile || "User"}</td>
+                          <td className="px-3 py-2 text-slate-600">{user.lastLogin ? formatDateTime(user.lastLogin) : "Never"}</td>
+                          <td className="px-3 py-2"><span className={`rounded-full border px-2 py-1 text-[10px] font-black ${status.className}`}>{status.label}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  };
+
   const renderTab = () => {
     switch (activeTab) {
       case "details":
@@ -2923,6 +3110,8 @@ export default function CompanySetupPage() {
         return renderEmailTab();
       case "sms":
         return renderSmsTab();
+      case "activities":
+        return renderActivitiesTab();
       default:
         return (
           <Card title="Coming Soon" subtitle="This tab is preserved and ready for the next implementation pass.">
@@ -2934,7 +3123,7 @@ export default function CompanySetupPage() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto max-w-[1200px] px-4 py-5">
+      <div className="w-full px-4 py-5 2xl:px-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="text-xl font-extrabold text-slate-900">Company Setup</div>

@@ -13,6 +13,9 @@ import {
   addExpenseItem,
   updateExpenseItem,
   deleteExpenseItem,
+  addDepositType,
+  updateDepositType,
+  deleteDepositType,
   updateAccountingDefaults,
   updateTaxConfiguration,
 } from "../controllers/propertyController/companySettings.js";
@@ -48,5 +51,10 @@ router.put("/:businessId/accounting-defaults", verifyUser, updateAccountingDefau
 router.post("/:businessId/expenses", verifyUser, addExpenseItem);
 router.put("/:businessId/expenses/:expenseId", verifyUser, updateExpenseItem);
 router.delete("/:businessId/expenses/:expenseId", verifyUser, deleteExpenseItem);
+
+// Deposit Types
+router.post("/:businessId/deposits", verifyUser, addDepositType);
+router.put("/:businessId/deposits/:depositTypeId", verifyUser, updateDepositType);
+router.delete("/:businessId/deposits/:depositTypeId", verifyUser, deleteDepositType);
 
 export default router;

@@ -31,6 +31,7 @@ import {
 } from "../utils/companyModules.js";
 import { canAccessCompanyId, normalizeCompanyId } from "./verifyToken.js";
 import { isSystemAdminUser, hasCompanySetupAccess } from "../utils/permissionControl.js";
+import { logAuditEvent } from "../utils/auditLogger.js";
 import { ensureSystemChartOfAccounts } from "../services/chartOfAccountsService.js";
 import {
   buildCompanyInternalCopyRecipients,
@@ -1414,7 +1415,29 @@ export const updateCompany = async (req, res, next) => {
       company.companyCode = buildCompanyCode(req.body.companyName);
     }
 
+    const changedAreas = [
+      req.body.paymentIntegration ? "payments" : null,
+      req.body.communication?.emailProfiles ? "email profiles" : null,
+      req.body.communication?.smsProfiles ? "SMS profiles" : null,
+      req.body.communication?.smsTemplates ? "SMS templates" : null,
+      req.body.modules ? "modules" : null,
+      req.body.companyMode ? "operating mode" : null,
+    ].filter(Boolean);
+
     const updatedCompany = await company.save();
+
+    await logAuditEvent({
+      req,
+      company: updatedCompany._id,
+      action: "company.update",
+      category: "company",
+      severity: changedAreas.length ? "critical" : "important",
+      targetType: "Company",
+      targetId: updatedCompany._id,
+      targetName: updatedCompany.companyName,
+      message: `Updated company setup${changedAreas.length ? ` (${changedAreas.join(", ")})` : ""}`,
+      metadata: { changedAreas },
+    });
 
     res.status(200).json({
       success: true,

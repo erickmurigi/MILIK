@@ -69,6 +69,20 @@ const expenseItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const depositTypeSchema = new mongoose.Schema(
+  {
+    _id: mongoose.Schema.Types.ObjectId,
+    name: { type: String, required: true },
+    description: { type: String, default: "" },
+    code: { type: String, default: "", trim: true },
+    defaultAmount: { type: Number, default: 0 },
+    refundable: { type: Boolean, default: true },
+    isActive: { type: Boolean, default: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const taxCodeSchema = new mongoose.Schema(
   {
     _id: mongoose.Schema.Types.ObjectId,
@@ -172,6 +186,10 @@ const CompanySettingsSchema = new mongoose.Schema(
       type: [expenseItemSchema],
       default: [],
     },
+    depositTypes: {
+      type: [depositTypeSchema],
+      default: [],
+    },
     taxSettings: {
       type: taxSettingsSchema,
       default: () => ({}),
@@ -197,6 +215,7 @@ CompanySettingsSchema.index({ "utilityTypes.isActive": 1 });
 CompanySettingsSchema.index({ "billingPeriods.isActive": 1 });
 CompanySettingsSchema.index({ "billingPeriods.key": 1 });
 CompanySettingsSchema.index({ "expenseItems.isActive": 1 });
+CompanySettingsSchema.index({ "depositTypes.isActive": 1 });
 CompanySettingsSchema.index({ "taxCodes.key": 1 });
 
 export default mongoose.model("CompanySettings", CompanySettingsSchema);

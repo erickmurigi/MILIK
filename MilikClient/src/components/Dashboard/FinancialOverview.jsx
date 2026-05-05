@@ -36,12 +36,10 @@ const getInvoiceRecognitionDate = (invoice) =>
 const FinancialOverview = ({ darkMode }) => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const units = useSelector((state) => normalizeArray(state.unit?.units));
   const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
   const rentPayments = useMemo(() => normalizeArray(rawRentPayments), [rawRentPayments]);
 
   const [invoices, setInvoices] = useState([]);
-  const [processedStatements, setProcessedStatements] = useState([]);
   const chartRef = useRef(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
 
@@ -60,20 +58,17 @@ const FinancialOverview = ({ darkMode }) => {
       if (!businessId) {
         if (active) {
           setInvoices([]);
-          setProcessedStatements([]);
         }
         return;
       }
 
-      const [invoiceRes, statementRes] = await Promise.allSettled([
-        adminRequests.get(`/tenant-invoices?business=${businessId}&includeSnapshots=true`),
-        adminRequests.get(`/processed-statements/business/${businessId}`),
-      ]);
+      const invoiceRes = await adminRequests
+        .get(`/tenant-invoices?business=${businessId}&includeSnapshots=true`)
+        .catch(() => ({ data: [] }));
 
       if (!active) return;
 
-      const invoicePayload = invoiceRes.status === 'fulfilled' ? invoiceRes.value?.data : [];
-      const statementPayload = statementRes.status === 'fulfilled' ? statementRes.value?.data : [];
+      const invoicePayload = invoiceRes?.data || [];
 
       setInvoices(
         Array.isArray(invoicePayload)
@@ -82,16 +77,6 @@ const FinancialOverview = ({ darkMode }) => {
           ? invoicePayload.invoices
           : Array.isArray(invoicePayload?.data)
           ? invoicePayload.data
-          : []
-      );
-
-      setProcessedStatements(
-        Array.isArray(statementPayload?.statements)
-          ? statementPayload.statements
-          : Array.isArray(statementPayload)
-          ? statementPayload
-          : Array.isArray(statementPayload?.data)
-          ? statementPayload.data
           : []
       );
     };
@@ -212,36 +197,6 @@ const FinancialOverview = ({ darkMode }) => {
 
   const collectionRate = currentMonthExpected > 0 ? (currentMonthCollected / currentMonthExpected) * 100 : 0;
 
-  const unpostedReceipts = useMemo(
-    () =>
-      rentPayments.filter(
-        (payment) =>
-          !payment?.reversalOf &&
-          !payment?.isReversed &&
-          !payment?.isCancelled &&
-          (normalizeText(payment?.postingStatus) === 'unposted' || payment?.isConfirmed !== true)
-      ).length,
-    [rentPayments]
-  );
-
-  const pendingStatements = useMemo(
-    () =>
-      processedStatements.filter((item) => {
-        if (normalizeText(item?.status) === 'reversed') return false;
-        return (
-          ['processed', 'unpaid', 'part_paid'].includes(normalizeText(item?.status)) ||
-          Number(item?.balanceDue || 0) > 0 ||
-          Number(item?.recoveryBalance || 0) > 0
-        );
-      }).length,
-    [processedStatements]
-  );
-
-  const occupiedUnits = useMemo(
-    () => units.filter((unit) => normalizeText(unit?.status) === 'occupied' || unit?.isVacant === false).length,
-    [units]
-  );
-
   const cards = [
     { label: isLandlordMode ? 'Billed' : 'Expected', value: formatMoney(currentMonthExpected) },
     { label: 'Collected', value: formatMoney(currentMonthCollected) },
@@ -310,24 +265,7 @@ const FinancialOverview = ({ darkMode }) => {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-700/20' : 'border-[#dce9e1] bg-white/90'}`}>
-          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>
-            Unposted receipts
-          </div>
-          <div className={`mt-2 text-lg font-extrabold ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>{unpostedReceipts}</div>
-        </div>
-        <div className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-700/20' : 'border-[#dce9e1] bg-white/90'}`}>
-          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>
-            {isLandlordMode ? 'Occupied units' : 'Pending statements'}
-          </div>
-          <div className={`mt-2 text-lg font-extrabold ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>
-            {isLandlordMode ? occupiedUnits : pendingStatements}
-          </div>
-        </div>
-      </div>
-
-      <div ref={chartRef} className="h-[180px] min-h-[180px] min-w-0 w-full">
+      <div ref={chartRef} className="h-[265px] min-h-[265px] min-w-0 w-full">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-4 text-[10px] font-extrabold uppercase tracking-[0.14em]">
             <span className={`inline-flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#4a6b5e]'}`}>

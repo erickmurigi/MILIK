@@ -57,6 +57,14 @@ const TAB_CONFIG = {
     subtitle:
       "Maintain reusable deduction and expense labels for future voucher and operational workflows.",
   },
+  deposits: {
+    label: "Deposit Types",
+    icon: FaArchive,
+    endpoint: "deposits",
+    empty: "No deposit types saved yet.",
+    subtitle:
+      "Maintain reusable tenant deposit invoice types for future security, utility and custom deposit charges.",
+  },
   tax: {
     label: "Tax Configuration",
     icon: FaCog,
@@ -72,6 +80,7 @@ const emptyForms = {
   periods: { name: "", durationInMonths: 1, durationInDays: 30, isActive: true },
   commissions: { name: "", percentage: "", applicableTo: "rent", description: "", isActive: true },
   expenses: { name: "", description: "", code: "", category: "other", defaultAmount: 0, isActive: true },
+  deposits: { name: "", description: "", code: "", defaultAmount: 0, refundable: true, isActive: true },
 };
 
 const toClientTaxCodeId = (value, fallback) => {
@@ -450,6 +459,7 @@ const CompanySettings = () => {
       periods: (settings?.billingPeriods || []).filter((item) => item?.isActive !== false).length,
       commissions: (settings?.commissions || []).filter((item) => item?.isActive !== false).length,
       expenses: (settings?.expenseItems || []).filter((item) => item?.isActive !== false).length,
+      deposits: (settings?.depositTypes || []).filter((item) => item?.isActive !== false).length,
     }),
     [settings]
   );
@@ -496,6 +506,7 @@ const CompanySettings = () => {
     periods: settings?.billingPeriods || [],
     commissions: settings?.commissions || [],
     expenses: settings?.expenseItems || [],
+    deposits: settings?.depositTypes || [],
   };
 
   const visibleItems = useMemo(() => {
@@ -539,6 +550,10 @@ const CompanySettings = () => {
       }
       if (modalTab === "expenses") {
         payload.defaultAmount = Number(payload.defaultAmount || 0);
+      }
+      if (modalTab === "deposits") {
+        payload.defaultAmount = Number(payload.defaultAmount || 0);
+        payload.refundable = payload.refundable !== false;
       }
 
       if (editingItem?._id) {
@@ -730,6 +745,17 @@ const CompanySettings = () => {
         .join(" • ");
     }
 
+    if (tabKey === "deposits") {
+      return [
+        item?.code ? `Code: ${item.code}` : null,
+        `Default amount: ${Number(item?.defaultAmount || 0).toLocaleString()}`,
+        item?.refundable === false ? "Non-refundable" : "Refundable",
+        item?.description,
+      ]
+        .filter(Boolean)
+        .join(" - ");
+    }
+
     return "";
   };
 
@@ -738,6 +764,7 @@ const CompanySettings = () => {
     periods: ["Name", "Months", "Days", "Status", "Actions"],
     commissions: ["Name", "Rate", "Applies To", "Description", "Status", "Actions"],
     expenses: ["Name", "Code", "Category", "Default Amount", "Status", "Actions"],
+    deposits: ["Name", "Code", "Default Amount", "Refundable", "Description", "Status", "Actions"],
   };
 
   const renderCollectionRow = (tabKey, item) => {
@@ -769,6 +796,14 @@ const CompanySettings = () => {
             <td className="px-3 py-2 text-slate-600">{item.code || "—"}</td>
             <td className="px-3 py-2 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
             <td className="px-3 py-2 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
+          </>
+        )}
+        {tabKey === "deposits" && (
+          <>
+            <td className="px-3 py-2 text-slate-600">{item.code || "—"}</td>
+            <td className="px-3 py-2 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
+            <td className="px-3 py-2 text-slate-600">{item.refundable === false ? "No" : "Yes"}</td>
+            <td className="max-w-[180px] truncate px-3 py-2 text-slate-500">{item.description || "—"}</td>
           </>
         )}
         <td className="px-3 py-2">
@@ -1139,6 +1174,40 @@ const CompanySettings = () => {
               </Select>
             </div>
           </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
+            <Input value={formData.description || ""} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Optional guidance" />
+          </div>
+        </div>
+      );
+    }
+
+    if (tabKey === "deposits") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Name *</label>
+            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="Security Deposit" />
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Code</label>
+              <Input value={formData.code || ""} onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))} placeholder="SECURITY" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Default Amount</label>
+              <Input type="number" min="0" step="0.01" value={formData.defaultAmount || 0} onChange={(e) => setFormData((prev) => ({ ...prev, defaultAmount: e.target.value }))} />
+            </div>
+          </div>
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={formData.refundable !== false}
+              onChange={(e) => setFormData((prev) => ({ ...prev, refundable: e.target.checked }))}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            Refundable deposit
+          </label>
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
             <Input value={formData.description || ""} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Optional guidance" />
