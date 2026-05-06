@@ -121,6 +121,9 @@ export const ACCESS_SECTIONS = [
       { resource: 'carwash-staff', action: 'view', label: 'View Car Wash staff', moduleKey: 'carwash' },
       { resource: 'carwash-staff', action: 'manage', label: 'Manage Car Wash staff', moduleKey: 'carwash' },
       { resource: 'carwash-reports', action: 'view', label: 'View Car Wash reports', moduleKey: 'carwash' },
+      { resource: 'carwash-commissions', action: 'view', label: 'View staff commissions', moduleKey: 'carwash' },
+      { resource: 'carwash-commissions', action: 'manage', label: 'Manage commission rules', moduleKey: 'carwash' },
+      { resource: 'carwash-commissions', action: 'pay', label: 'Pay staff commissions', moduleKey: 'carwash' },
     ],
   },
 ];
@@ -162,6 +165,11 @@ export const LEGACY_PERMISSION_ALIASES = {
   'carwash-services': { view: ['carwash.services.view', 'carwash.services.manage'], manage: ['carwash.services.manage'] },
   'carwash-staff': { view: ['carwash.staff.view', 'carwash.staff.manage'], manage: ['carwash.staff.manage'] },
   'carwash-reports': { view: ['carwash.reports.view'] },
+  'carwash-commissions': {
+    view: ['carwash.commissions.view', 'carwash.commissions.manage', 'carwash.commissions.pay'],
+    manage: ['carwash.commissions.manage'],
+    pay: ['carwash.commissions.pay'],
+  },
 };
 
 export const normalizePermissionMap = (rawPermissions = {}) => {

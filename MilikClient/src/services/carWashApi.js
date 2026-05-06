@@ -34,6 +34,12 @@ export const carWashApi = {
   createStaff: async (payload) => unwrap(await adminRequests.post("/carwash/staff", payload)),
   updateStaff: async (id, payload) => unwrap(await adminRequests.put(`/carwash/staff/${id}`, payload)),
   deleteStaff: async (id) => unwrap(await adminRequests.delete(`/carwash/staff/${id}`)),
+  listCommissionRules: async (params = {}) => unwrap(await adminRequests.get("/carwash/commissions/rules", { params })),
+  createCommissionRule: async (payload) => unwrap(await adminRequests.post("/carwash/commissions/rules", payload)),
+  updateCommissionRule: async (id, payload) => unwrap(await adminRequests.put(`/carwash/commissions/rules/${id}`, payload)),
+  listCommissions: async (params = {}) => unwrap(await adminRequests.get("/carwash/commissions", { params })),
+  listCommissionPayouts: async (params = {}) => unwrap(await adminRequests.get("/carwash/commissions/payouts", { params })),
+  createCommissionPayout: async (payload) => unwrap(await adminRequests.post("/carwash/commissions/payouts", payload)),
 };
 
 export const todayISO = () => new Date().toISOString().slice(0, 10);

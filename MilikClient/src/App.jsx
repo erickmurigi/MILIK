@@ -90,6 +90,7 @@ import CarWashCashbooks from "./pages/CarWash/CarWashCashbooks";
 import CarWashChartOfAccounts from "./pages/CarWash/CarWashChartOfAccounts";
 import CarWashStaff from "./pages/CarWash/CarWashStaff";
 import CarWashReports from "./pages/CarWash/CarWashReports";
+import CarWashCommissions from "./pages/CarWash/CarWashCommissions";
 
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
 const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
@@ -496,6 +497,7 @@ function App() {
         <Route path="/carwash/chart-of-accounts" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="chartOfAccounts" moduleKey="accounts"><CarWashChartOfAccounts /></PermissionRoute></CompanyModuleRoute>} />
         <Route path="/carwash/staff" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-staff" moduleKey="carwash"><CarWashStaff /></PermissionRoute></CompanyModuleRoute>} />
         <Route path="/carwash/reports" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashReports /></PermissionRoute></CompanyModuleRoute>} />
+        <Route path="/carwash/commissions" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissions /></PermissionRoute></CompanyModuleRoute>} />
         <Route path="/system-setup" element={<SuperAdminRoute><Navigate to="/system-setup/overview" replace /></SuperAdminRoute>} />
         <Route path="/system-setup/overview" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
         <Route path="/system-setup/companies" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />

@@ -47,6 +47,7 @@ const getPageTitle = (pathname) => {
     '/carwash/cashbooks': 'Cashbooks',
     '/carwash/chart-of-accounts': 'Chart of Accounts',
     '/carwash/staff': 'Staff',
+    '/carwash/commissions': 'Commissions',
     '/carwash/reports': 'Reports',
     '/moduleDashboard': 'Choose Module',
     '/system-setup': 'Companies',

@@ -5,6 +5,7 @@ import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId } from "../services/businessScope.js";
+import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
 
 const JOB_STATUSES = new Set(["waiting", "washing", "done", "paid", "cancelled"]);
 
@@ -210,6 +211,11 @@ export const updateJob = async (req, res, next) => {
     applyPaymentStatus(existing, paidAmount);
 
     await existing.save();
+    if (existing.status === "cancelled") {
+      await cancelJobCommissions({ req, business, jobId: existing._id });
+    } else {
+      await accrueCommissionForJob({ req, job: existing });
+    }
     res.status(200).json({ success: true, data: existing, job: existing, message: "Car Wash job updated" });
   } catch (error) {
     next(error);
@@ -241,6 +247,11 @@ export const updateJobStatus = async (req, res, next) => {
       { new: true, runValidators: true }
     );
     if (!job) return next(createError(404, "Car Wash job not found"));
+    if (status === "cancelled") {
+      await cancelJobCommissions({ req, business, jobId: job._id });
+    } else {
+      await accrueCommissionForJob({ req, job });
+    }
     res.status(200).json({ success: true, data: job, job, message: "Car Wash job status updated" });
   } catch (error) {
     next(error);

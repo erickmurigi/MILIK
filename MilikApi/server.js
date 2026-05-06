@@ -56,6 +56,7 @@ import carWashDepositRoutes from "./modules/carwash/routes/deposits.js";
 import carWashExpenseRoutes from "./modules/carwash/routes/expenses.js";
 import carWashStaffRoutes from "./modules/carwash/routes/staff.js";
 import carWashReportRoutes from "./modules/carwash/routes/reports.js";
+import carWashCommissionRoutes from "./modules/carwash/routes/commissions.js";
 import { blockDemoWrites } from "./utils/demoAccess.js";
 import {
   canAccessCompanyId,
@@ -469,6 +470,7 @@ app.use("/api/carwash/deposits", carWashDepositRoutes);
 app.use("/api/carwash/expenses", carWashExpenseRoutes);
 app.use("/api/carwash/staff", carWashStaffRoutes);
 app.use("/api/carwash/reports", carWashReportRoutes);
+app.use("/api/carwash/commissions", carWashCommissionRoutes);
 
 app.use((err, req, res, next) => {
   const errorStatus = err.status || err.statusCode || 500;

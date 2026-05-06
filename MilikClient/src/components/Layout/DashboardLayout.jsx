@@ -83,6 +83,7 @@ const MENU_PERMISSION_MAP = {
   "carwash-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: "accounts" },
   "carwash-staff": { resource: "carwash-staff", action: "view", moduleKey: "carwash" },
   "carwash-reports": { resource: "carwash-reports", action: "view", moduleKey: "carwash" },
+  "carwash-commissions": { resource: "carwash-commissions", action: "view", moduleKey: "carwash" },
 };
 
 const filterMenuByPermissions = (items = [], currentUser = {}, activeCompany = null) =>
@@ -363,6 +364,7 @@ const TopToolbar = ({
         "carwash-chart-of-accounts": "/carwash/chart-of-accounts",
         "carwash-staff": "/carwash/staff",
         "carwash-reports": "/carwash/reports",
+        "carwash-commissions": "/carwash/commissions",
         documentation: "/help/documentation",
         support: "/help/support",
         about: "/help/about",
@@ -443,6 +445,7 @@ const TopToolbar = ({
       "carwash-chart-of-accounts": "/carwash/chart-of-accounts",
       "carwash-staff": "/carwash/staff",
       "carwash-reports": "/carwash/reports",
+      "carwash-commissions": "/carwash/commissions",
       documentation: "/help/documentation",
       support: "/help/support",
       about: "/help/about",
@@ -521,6 +524,7 @@ const TopToolbar = ({
             { id: "carwash-expenses", label: "Expenses", icon: FaFileInvoice },
             { id: "carwash-cashbooks", label: "Cashbooks", icon: FaWallet },
             { id: "carwash-chart-of-accounts", label: "Chart of Accounts", icon: FaBook },
+            { id: "carwash-commissions", label: "Commissions", icon: FaHandshake },
             { id: "carwash-reports", label: "Reports", icon: FaChartLine },
           ],
         },

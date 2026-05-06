@@ -22,6 +22,8 @@ const LEDGER_CATEGORIES = [
   "REVERSAL",
   "PETTY_CASH_EXPENSE",
   "PETTY_CASH_REPLENISHMENT",
+  "CARWASH_COMMISSION_ACCRUAL",
+  "CARWASH_COMMISSION_PAYOUT",
 ];
 
 const SOURCE_TYPES = [
@@ -42,12 +44,14 @@ const SOURCE_TYPES = [
   "recurring_deduction",
   "petty_cash_disbursement",
   "petty_cash_replenishment",
+  "carwash_commission",
+  "carwash_commission_payout",
   "other",
 ];
 
 const ENTRY_STATUS = ["draft", "approved", "reversed", "void"];
 
-const RECEIVER_TYPES = ["manager", "landlord", "tenant", "vendor", "system", "n/a"];
+const RECEIVER_TYPES = ["manager", "landlord", "tenant", "vendor", "staff", "system", "n/a"];
 
 const DIRECTION_TYPES = ["debit", "credit"];
 

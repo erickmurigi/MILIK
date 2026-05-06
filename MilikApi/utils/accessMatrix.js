@@ -29,6 +29,7 @@ const DEFINITIONS = [
   { resource: 'carwash-expenses', moduleKey: 'carwash', actions: ['view', 'create', 'update'] },
   { resource: 'carwash-staff', moduleKey: 'carwash', actions: ['view', 'manage'] },
   { resource: 'carwash-reports', moduleKey: 'carwash', actions: ['view'] },
+  { resource: 'carwash-commissions', moduleKey: 'carwash', actions: ['view', 'manage', 'pay'] },
 ];
 
 const LEGACY_ALIASES = {
@@ -116,6 +117,11 @@ const LEGACY_ALIASES = {
     manage: ['carwash.staff.manage'],
   },
   'carwash-reports': { view: ['carwash.reports.view'] },
+  'carwash-commissions': {
+    view: ['carwash.commissions.view', 'carwash.commissions.manage', 'carwash.commissions.pay'],
+    manage: ['carwash.commissions.manage'],
+    pay: ['carwash.commissions.pay'],
+  },
 };
 
 const normalizeBoolean = (value) => value === true;

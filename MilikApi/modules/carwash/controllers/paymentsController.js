@@ -4,6 +4,7 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId } from "../services/businessScope.js";
+import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
 
 const PAYMENT_METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const RECONCILIATION_STATUSES = new Set(["pending", "reconciled", "flagged"]);
@@ -122,6 +123,10 @@ export const recordPayment = async (req, res, next) => {
       updatedBy: userId,
     });
     const updatedJob = await refreshJobPaymentStatus(business, job._id);
+    await accrueCommissionForJob({ req, job: updatedJob });
+    if (updatedJob.paymentStatus === "paid") {
+      await markJobCommissionsPayable({ business, jobId: updatedJob._id });
+    }
     res.status(201).json({ success: true, data: payment, payment, job: updatedJob, message: "Car Wash payment recorded" });
   } catch (error) {
     next(error);

@@ -16,6 +16,7 @@ const SYSTEM_CHART_TEMPLATE = [
   { code: "2130", name: "Unallocated Receipts", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
   { code: "2140", name: "Tax Payables", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
   { code: "2150", name: "Landlord Funds Held", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "2160", name: "Car Wash Staff Commissions Payable", type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities", isSystem: true, isHeader: false, isPosting: true },
 
   { code: "3100", name: "Owner's Equity", type: "equity", group: "equity", subGroup: "Equity", isSystem: true, isHeader: false, isPosting: true },
   { code: "3200", name: "Retained Earnings", type: "equity", group: "equity", subGroup: "Equity", isSystem: true, isHeader: false, isPosting: true },
@@ -47,7 +48,7 @@ const SYSTEM_CHART_CODES = SYSTEM_CHART_TEMPLATE.map((account) => account.code);
 const ensureCache = new Map();
 const ENSURE_CACHE_TTL_MS = 5 * 60 * 1000;
 const VALID_MODULE_SCOPES = new Set(["general", "propertyManagement", "carwash"]);
-const CARWASH_ACCOUNT_CODES = new Set(["4400", "5310", "5311", "5312"]);
+const CARWASH_ACCOUNT_CODES = new Set(["2160", "4400", "5310", "5311", "5312"]);
 const SHARED_CASHBOOK_CODES = new Set(["1100", "1110", "1130"]);
 
 const moduleScopesForAccount = (account = {}) => {
