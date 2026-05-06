@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { normalizeCompanyOperatingMode } from './companyModules.js';
+import { COMPANY_OPERATING_MODES, normalizeCompanyOperatingMode } from './companyModules.js';
 
 // ========== USER SCHEMAS ==========
 export const loginSchema = z.object({
@@ -213,35 +213,10 @@ const paymentIntegrationSchema = z.object({
   mpesaPaybills: mpesaPaybillCrudSchema.optional(),
 }).optional();
 
-const normalizeCompanyModeInput = (value = '') =>
-  String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, '_');
-
-const COMPANY_MODE_INPUTS = new Set([
-  'property_manager',
-  'property_manager_company',
-  'manager',
-  'property_management',
-  'property_management_company',
-  'agency',
-  'landlord',
-  'self_managing_landlord',
-  'self_managed_landlord',
-  'self_landlord',
-  'self_managing_owner',
-  'owner',
-]);
-
 const companyModeSchema = z
   .string()
   .trim()
-  .min(1, 'Company operating mode is required')
-  .refine((value) => COMPANY_MODE_INPUTS.has(normalizeCompanyModeInput(value)), {
-    message: 'Invalid company operating mode',
-  })
-  .transform((value) => normalizeCompanyOperatingMode(value));
+  .transform((value) => normalizeCompanyOperatingMode(value || COMPANY_OPERATING_MODES.OTHER));
 
 // ========== COMPANY SCHEMAS ==========
 export const createCompanySchema = z.object({

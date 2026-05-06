@@ -23,12 +23,14 @@ const getActiveStorageKey = (companyKey) => `${ACTIVE_STORAGE_KEY_PREFIX}-${comp
 
 const buildInitialTabsByWorkspace = () => ({
   [WORKSPACE_IDS.PROPERTY]: [getWorkspaceDefaultTab(WORKSPACE_IDS.PROPERTY)],
+  [WORKSPACE_IDS.CARWASH]: [getWorkspaceDefaultTab(WORKSPACE_IDS.CARWASH)],
   [WORKSPACE_IDS.SYSTEM_ADMIN]: [getWorkspaceDefaultTab(WORKSPACE_IDS.SYSTEM_ADMIN)],
   [WORKSPACE_IDS.COMPANY_SETUP]: [getWorkspaceDefaultTab(WORKSPACE_IDS.COMPANY_SETUP)],
 });
 
 const buildInitialActiveTabs = () => ({
   [WORKSPACE_IDS.PROPERTY]: 'dashboard',
+  [WORKSPACE_IDS.CARWASH]: 'carwash-dashboard',
   [WORKSPACE_IDS.SYSTEM_ADMIN]: 'system-admin-home',
   [WORKSPACE_IDS.COMPANY_SETUP]: 'company-setup-home',
 });
@@ -36,6 +38,16 @@ const buildInitialActiveTabs = () => ({
 const getPageTitle = (pathname) => {
   const routeNames = {
     '/dashboard': 'Dashboard',
+    '/carwash/dashboard': 'Dashboard',
+    '/carwash/jobs': 'Jobs',
+    '/carwash/services': 'Services',
+    '/carwash/payments': 'Payments',
+    '/carwash/deposits': 'Deposits',
+    '/carwash/expenses': 'Expenses',
+    '/carwash/cashbooks': 'Cashbooks',
+    '/carwash/chart-of-accounts': 'Chart of Accounts',
+    '/carwash/staff': 'Staff',
+    '/carwash/reports': 'Reports',
     '/moduleDashboard': 'Choose Module',
     '/system-setup': 'Companies',
     '/system-setup/companies': 'Companies',

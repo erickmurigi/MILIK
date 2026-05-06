@@ -123,6 +123,7 @@ router.get("/", verifyUser, requireCompanyModule("accounts"), async (req, res) =
       type: req.query.type || null,
       group: req.query.group || null,
       search: req.query.search || null,
+      moduleScope: req.query.moduleScope || null,
     });
 
     return res.status(200).json(accounts.map(serializeAccount));
@@ -388,6 +389,7 @@ router.post("/", verifyUser, requireCompanyModule("accounts"), async (req, res) 
       isHeader: payload.isHeader,
       isPosting: payload.isHeader ? false : payload.isPosting,
       isSystem: false,
+      moduleScopes: payload.moduleScopes || [],
       balance: 0,
     });
 
@@ -486,6 +488,9 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res
     account.level = level;
     account.isHeader = payload.isHeader;
     account.isPosting = payload.isHeader ? false : payload.isPosting;
+    if (payload.moduleScopes !== undefined) {
+      account.moduleScopes = payload.moduleScopes;
+    }
 
     await account.save();
 

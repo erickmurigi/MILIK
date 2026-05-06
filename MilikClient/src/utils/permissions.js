@@ -92,6 +92,8 @@ export const hasCompanyPermission = (
     academics: 'academics',
     projectManagement: 'projectManagement',
     assetValuation: 'assetValuation',
+    pos: 'inventory',
+    carwash: 'carwash',
   };
   const accessText = String(moduleAccess?.[map[moduleKey] || moduleKey] || '').toLowerCase();
 

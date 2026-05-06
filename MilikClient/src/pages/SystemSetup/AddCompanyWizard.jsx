@@ -6,6 +6,7 @@ import {
   FaArrowLeft,
   FaBuilding,
   FaCalculator,
+  FaCar,
   FaCalendarAlt,
   FaCheckCircle,
   FaBoxes,
@@ -44,7 +45,7 @@ const MODULE_OPTIONS = [
     label: "Property Management",
     description: "Properties, units, landlords, tenants and leases.",
     icon: FaBuilding,
-    core: true,
+    core: false,
   },
   {
     key: "billing",
@@ -88,9 +89,14 @@ const MODULE_OPTIONS = [
     icon: FaShieldAlt,
     core: false,
   },
+  {
+    key: "carwash",
+    label: "MILIK Car Wash",
+    description: "Wash jobs, services, payments, staff and daily car wash operations.",
+    icon: FaCar,
+    core: false,
+  },
 ];
-
-const CORE_LOCKED_KEYS = new Set(["propertyManagement"]);
 
 const COMPANY_MODE_OPTIONS = [
   {
@@ -103,6 +109,11 @@ const COMPANY_MODE_OPTIONS = [
     label: "Self-Managing Landlord",
     description: "Landlord manages their own properties directly. Simplified workflow without commission structures.",
   },
+  {
+    key: COMPANY_OPERATING_MODES.OTHER,
+    label: "Other",
+    description: "General business workspace for companies that do not use property management workflows.",
+  },
 ];
 
 const ALL_MODULE_KEYS = [
@@ -110,6 +121,7 @@ const ALL_MODULE_KEYS = [
   "telcoDealership", "procurement", "hr", "facilityManagement",
   "hotelManagement", "propertySale", "frontOffice", "dms",
   "academics", "projectManagement", "assetValuation", "pos", "securityServices",
+  "carwash",
 ];
 
 const buildInitialModules = () =>
@@ -138,8 +150,8 @@ const INITIAL_STATE = {
   phoneNo: "",
   slogan: "",
   logo: "",
-  companyMode: COMPANY_OPERATING_MODES.PROPERTY_MANAGER,
-  modules: applyCompanyModeBaseModules(buildInitialModules(), COMPANY_OPERATING_MODES.PROPERTY_MANAGER),
+  companyMode: COMPANY_OPERATING_MODES.OTHER,
+  modules: applyCompanyModeBaseModules(buildInitialModules(), COMPANY_OPERATING_MODES.OTHER),
 };
 
 const mapCompanyToForm = (company = {}) => ({
@@ -177,6 +189,14 @@ const readFileAsDataUrl = (file) =>
 
 const isValidEmailFormat = (value = "") =>
   /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(value).trim());
+
+const getApiErrorMessage = (error, fallback = "Failed to save company") => {
+  const data = error?.response?.data || {};
+  const firstFieldError = Array.isArray(data.errors) && data.errors.length
+    ? data.errors.find((item) => item?.message)?.message
+    : "";
+  return firstFieldError || data.message || data.error || error?.message || fallback;
+};
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -267,7 +287,6 @@ const AddCompanyWizard = () => {
   };
 
   const toggleModule = (key) => {
-    if (CORE_LOCKED_KEYS.has(key)) return;
     setFormData((prev) => ({
       ...prev,
       modules: { ...prev.modules, [key]: !prev.modules[key] },
@@ -351,7 +370,7 @@ const AddCompanyWizard = () => {
       navigate("/system-setup/companies", { replace: true, state: { tabTitle: "Companies" } });
     } catch (err) {
       const apiErrors = err?.response?.data?.errors;
-      const firstMsg = err?.response?.data?.message || err?.message || "Failed to save company";
+      const firstMsg = getApiErrorMessage(err);
       if (Array.isArray(apiErrors) && apiErrors.length) {
         const mapped = {};
         apiErrors.forEach(({ field, message }) => { if (field) mapped[field] = message; });

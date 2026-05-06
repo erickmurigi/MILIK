@@ -49,6 +49,13 @@ import landlordAdvancementsRoutes from "./routes/propertyRoutes/landlordAdvancem
 import landlordReceiptsRoutes from "./routes/propertyRoutes/landlordReceipts.js";
 import pettyCashRoutes from "./routes/propertyRoutes/pettyCash.js";
 import auditLogRoutes from "./routes/auditLogs.js";
+import carWashServiceRoutes from "./modules/carwash/routes/services.js";
+import carWashJobRoutes from "./modules/carwash/routes/jobs.js";
+import carWashPaymentRoutes from "./modules/carwash/routes/payments.js";
+import carWashDepositRoutes from "./modules/carwash/routes/deposits.js";
+import carWashExpenseRoutes from "./modules/carwash/routes/expenses.js";
+import carWashStaffRoutes from "./modules/carwash/routes/staff.js";
+import carWashReportRoutes from "./modules/carwash/routes/reports.js";
 import { blockDemoWrites } from "./utils/demoAccess.js";
 import {
   canAccessCompanyId,
@@ -402,6 +409,12 @@ app.get("/api", (req, res) => {
       dashboard: "/api/dashboard",
       tenantInvoices: "/api/tenant-invoices",
       communications: "/api/communications",
+      carwashServices: "/api/carwash/services",
+      carwashJobs: "/api/carwash/jobs",
+      carwashPayments: "/api/carwash/payments",
+      carwashExpenses: "/api/carwash/expenses",
+      carwashStaff: "/api/carwash/staff",
+      carwashReports: "/api/carwash/reports/daily-summary",
       documentation: "https://github.com/erickmurigi/MilikApi/blob/main/README.md",
     },
   });
@@ -449,6 +462,13 @@ app.use("/api/journals", journalEntriesRoutes);
 app.use("/api/financial-reports", financialReportsRoutes);
 app.use("/api/petty-cash", pettyCashRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
+app.use("/api/carwash/services", carWashServiceRoutes);
+app.use("/api/carwash/jobs", carWashJobRoutes);
+app.use("/api/carwash/payments", carWashPaymentRoutes);
+app.use("/api/carwash/deposits", carWashDepositRoutes);
+app.use("/api/carwash/expenses", carWashExpenseRoutes);
+app.use("/api/carwash/staff", carWashStaffRoutes);
+app.use("/api/carwash/reports", carWashReportRoutes);
 
 app.use((err, req, res, next) => {
   const errorStatus = err.status || err.statusCode || 500;

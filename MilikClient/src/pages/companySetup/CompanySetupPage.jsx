@@ -34,7 +34,7 @@ import {
 } from "react-icons/fa";
 import { getChartOfAccounts, getCompany, updateCompany } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
-import { COMPANY_OPERATING_MODES, MODULE_LABELS, applyCompanyModeBaseModules, normalizeCompanyModules, normalizeCompanyOperatingMode } from "../../utils/companyModules";
+import { COMPANY_OPERATING_MODES, MODULE_LABELS, normalizeCompanyModules, normalizeCompanyOperatingMode } from "../../utils/companyModules";
 
 const PAYMENT_DRAFT_ID = "__new_mpesa_paybill__";
 const EMAIL_DRAFT_ID = "__new_email_profile__";
@@ -51,13 +51,14 @@ const tabs = [
 
 const validTabKeys = new Set(tabs.map((tab) => tab.key));
 
-const coreModuleKeys = ["propertyManagement", "accounts", "billing"];
+const primaryModuleKeys = ["propertyManagement", "accounts", "billing"];
 const companyOperatingModeOptions = [
   { value: COMPANY_OPERATING_MODES.PROPERTY_MANAGER, label: "Property Manager", description: "Use property-manager wording, landlord workflows, and multi-landlord operations across the workspace." },
   { value: COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD, label: "Self-Managing Landlord", description: "Use owner-managed wording and defaults while preserving the same accounting-safe transaction engine." },
+  { value: COMPANY_OPERATING_MODES.OTHER, label: "Other", description: "Use neutral company wording for businesses that do not run property-management or landlord workflows." },
 ];
 const moduleCategories = [
-  { key: "core", title: "Core Modules", description: "These modules form the live property and accounting foundation of MILIK and stay enabled." },
+  { key: "primary", title: "Primary Modules", description: "Choose the main operational modules this company will use." },
   { key: "expansion", title: "Expansion Modules", description: "Enable only the additional modules this company truly uses. Disabled modules remain out of the workspace without deleting data." },
 ];
 
@@ -230,7 +231,7 @@ const normalizeForm = (company = {}) => {
     fiscalStartYear: company.fiscalStartYear || new Date().getFullYear(),
     operationPeriodType: company.operationPeriodType || "Monthly",
     companyMode,
-    modules: applyCompanyModeBaseModules(normalizeCompanyModules(company), companyMode),
+    modules: normalizeCompanyModules(company),
   };
 };
 
@@ -1009,21 +1010,19 @@ export default function CompanySetupPage() {
     setCompany((prev) => ({
       ...prev,
       companyMode: normalizedMode,
-      modules: applyCompanyModeBaseModules(prev.modules, normalizedMode),
     }));
   };
 
   const handleModuleToggle = (moduleKey, checked) => {
     setCompany((prev) => {
-      const baseModules = applyCompanyModeBaseModules(prev.modules, prev.companyMode);
       const nextModules = {
-        ...baseModules,
-        [moduleKey]: coreModuleKeys.includes(moduleKey) ? true : checked,
+        ...normalizeCompanyModules(prev.modules),
+        [moduleKey]: checked,
       };
 
       return {
         ...prev,
-        modules: applyCompanyModeBaseModules(nextModules, prev.companyMode),
+        modules: nextModules,
       };
     });
   };
@@ -1046,6 +1045,8 @@ export default function CompanySetupPage() {
     fiscalStartMonth: company.fiscalStartMonth,
     fiscalStartYear: company.fiscalStartYear,
     operationPeriodType: company.operationPeriodType,
+    companyMode: normalizeCompanyOperatingMode(company.companyMode),
+    modules: normalizeCompanyModules(company.modules),
   });
 
   const beginCreatePaymentConfig = () => {
@@ -1963,7 +1964,7 @@ export default function CompanySetupPage() {
               <div className="flex items-center justify-between gap-3">
                 <span>Operating mode</span>
                 <span className="font-bold text-slate-900">
-                  {selectedMode === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD ? "Self-Managing Landlord" : "Property Manager"}
+                  {companyOperatingModeOptions.find((option) => option.value === selectedMode)?.label || "Other"}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">
@@ -1989,6 +1990,7 @@ export default function CompanySetupPage() {
                 <Select value={selectedMode} onChange={(e) => handleCompanyModeChange(e.target.value)}>
                   <option value={COMPANY_OPERATING_MODES.PROPERTY_MANAGER}>Property Manager</option>
                   <option value={COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD}>Self-Managing Landlord</option>
+                  <option value={COMPANY_OPERATING_MODES.OTHER}>Other</option>
                 </Select>
               </div>
               <div>
@@ -2040,7 +2042,7 @@ export default function CompanySetupPage() {
   };
 
   const renderModulesTab = () => {
-    const normalizedModules = applyCompanyModeBaseModules(company.modules, company.companyMode);
+    const normalizedModules = normalizeCompanyModules(company.modules);
     const enabledKeys = Object.entries(normalizedModules)
       .filter(([, enabled]) => Boolean(enabled))
       .map(([key]) => key);
@@ -2049,7 +2051,7 @@ export default function CompanySetupPage() {
       <div className="space-y-4">
         <Card
           title="Modules Configuration"
-          subtitle="Core modules stay enabled. Expansion modules can be switched on only when this company truly uses them."
+          subtitle="Enable only the modules this company has subscribed to or will actively use."
           action={
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
               {enabledKeys.length} enabled
@@ -2059,7 +2061,7 @@ export default function CompanySetupPage() {
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             {moduleCategories.map((category) => {
               const categoryKeys = Object.keys(MODULE_LABELS).filter((moduleKey) =>
-                category.key === "core" ? coreModuleKeys.includes(moduleKey) : !coreModuleKeys.includes(moduleKey)
+                category.key === "primary" ? primaryModuleKeys.includes(moduleKey) : !primaryModuleKeys.includes(moduleKey)
               );
 
               return (
@@ -2071,21 +2073,15 @@ export default function CompanySetupPage() {
 
                   <div className="space-y-3">
                     {categoryKeys.map((moduleKey) => {
-                      const isCore = coreModuleKeys.includes(moduleKey);
                       const checked = Boolean(normalizedModules[moduleKey]);
 
                       return (
                         <ToggleRow
                           key={moduleKey}
                           checked={checked}
-                          disabled={isCore}
                           onChange={(e) => handleModuleToggle(moduleKey, e.target.checked)}
                           title={MODULE_LABELS[moduleKey]}
-                          description={
-                            isCore
-                              ? "This module is part of the live MILIK foundation and remains enabled for this company."
-                              : "Enable this only when the company is ready to use the module in the live workspace."
-                          }
+                          description="Enable this only when the company is ready to use the module in the live workspace."
                         />
                       );
                     })}
@@ -3128,8 +3124,8 @@ export default function CompanySetupPage() {
           <div>
             <div className="text-xl font-extrabold text-slate-900">Company Setup</div>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{normalizeCompanyOperatingMode(company.companyMode) === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD ? 'Self-Managing Landlord' : 'Property Manager'}</span>
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{Object.values(applyCompanyModeBaseModules(company.modules || {}, company.companyMode)).filter(Boolean).length} modules assigned</span>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{companyOperatingModeOptions.find((option) => option.value === normalizeCompanyOperatingMode(company.companyMode))?.label || "Other"}</span>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{Object.values(normalizeCompanyModules(company.modules || {})).filter(Boolean).length} modules assigned</span>
             </div>
           </div>
 

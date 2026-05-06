@@ -100,6 +100,29 @@ export const ACCESS_SECTIONS = [
       { resource: 'latePenalties', action: 'process', label: 'Apply late penalties', moduleKey: 'propertyManagement' },
     ],
   },
+  {
+    id: 'carwash',
+    label: 'MILIK Car Wash',
+    permissions: [
+      { resource: 'carwash-dashboard', action: 'view', label: 'Open Car Wash dashboard', moduleKey: 'carwash' },
+      { resource: 'carwash-jobs', action: 'view', label: 'View wash jobs', moduleKey: 'carwash' },
+      { resource: 'carwash-jobs', action: 'create', label: 'Create wash jobs', moduleKey: 'carwash' },
+      { resource: 'carwash-jobs', action: 'update', label: 'Update wash jobs', moduleKey: 'carwash' },
+      { resource: 'carwash-payments', action: 'view', label: 'View Car Wash payments', moduleKey: 'carwash' },
+      { resource: 'carwash-payments', action: 'record', label: 'Record Car Wash payments', moduleKey: 'carwash' },
+      { resource: 'carwash-deposits', action: 'view', label: 'View Car Wash deposits', moduleKey: 'carwash' },
+      { resource: 'carwash-deposits', action: 'create', label: 'Record Car Wash deposits', moduleKey: 'carwash' },
+      { resource: 'carwash-deposits', action: 'update', label: 'Confirm or cancel Car Wash deposits', moduleKey: 'carwash' },
+      { resource: 'carwash-expenses', action: 'view', label: 'View Car Wash expenses', moduleKey: 'carwash' },
+      { resource: 'carwash-expenses', action: 'create', label: 'Record Car Wash expenses', moduleKey: 'carwash' },
+      { resource: 'carwash-expenses', action: 'update', label: 'Approve, pay or cancel Car Wash expenses', moduleKey: 'carwash' },
+      { resource: 'carwash-services', action: 'view', label: 'View Car Wash services', moduleKey: 'carwash' },
+      { resource: 'carwash-services', action: 'manage', label: 'Manage Car Wash services', moduleKey: 'carwash' },
+      { resource: 'carwash-staff', action: 'view', label: 'View Car Wash staff', moduleKey: 'carwash' },
+      { resource: 'carwash-staff', action: 'manage', label: 'Manage Car Wash staff', moduleKey: 'carwash' },
+      { resource: 'carwash-reports', action: 'view', label: 'View Car Wash reports', moduleKey: 'carwash' },
+    ],
+  },
 ];
 
 export const RESOURCE_PERMISSION_MAP = ACCESS_SECTIONS.reduce((acc, section) => {
@@ -131,6 +154,14 @@ export const LEGACY_PERMISSION_ALIASES = {
   journals: { view: ['view_reports'], process: ['post_journal'], reverse: ['reverse_journal'] },
   statements: { view: ['view_statements'], create: ['create_statement'], approve: ['approve_statement'], export: ['view_statements'] },
   landlordPayments: { view: ['view_statements'], process: ['pay_landlord'], export: ['view_statements'] },
+  'carwash-dashboard': { view: ['carwash.dashboard.view'] },
+  'carwash-jobs': { view: ['carwash.jobs.view'], create: ['carwash.jobs.create'], update: ['carwash.jobs.update'] },
+  'carwash-payments': { view: ['carwash.payments.view'], record: ['carwash.payments.record'] },
+  'carwash-deposits': { view: ['carwash.deposits.view'], create: ['carwash.deposits.create'], update: ['carwash.deposits.update'] },
+  'carwash-expenses': { view: ['carwash.expenses.view'], create: ['carwash.expenses.create'], update: ['carwash.expenses.update'] },
+  'carwash-services': { view: ['carwash.services.view', 'carwash.services.manage'], manage: ['carwash.services.manage'] },
+  'carwash-staff': { view: ['carwash.staff.view', 'carwash.staff.manage'], manage: ['carwash.staff.manage'] },
+  'carwash-reports': { view: ['carwash.reports.view'] },
 };
 
 export const normalizePermissionMap = (rawPermissions = {}) => {

@@ -1,6 +1,7 @@
 export const COMPANY_OPERATING_MODES = {
   PROPERTY_MANAGER: 'property_manager',
   SELF_MANAGING_LANDLORD: 'self_managing_landlord',
+  OTHER: 'other',
 };
 
 export const normalizeCompanyOperatingMode = (value = '') => {
@@ -8,6 +9,21 @@ export const normalizeCompanyOperatingMode = (value = '') => {
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, '_');
+
+  if (
+    [
+      COMPANY_OPERATING_MODES.OTHER,
+      'general',
+      'general_business',
+      'other_business',
+      'non_property',
+      'non_property_business',
+      'business',
+      'company',
+    ].includes(normalized)
+  ) {
+    return COMPANY_OPERATING_MODES.OTHER;
+  }
 
   if (
     [
@@ -35,19 +51,23 @@ export const normalizeCompanyOperatingMode = (value = '') => {
     return COMPANY_OPERATING_MODES.PROPERTY_MANAGER;
   }
 
-  return COMPANY_OPERATING_MODES.PROPERTY_MANAGER;
+  return COMPANY_OPERATING_MODES.OTHER;
 };
 
-export const getCompanyOperatingModeLabel = (value = '') =>
-  normalizeCompanyOperatingMode(value) === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD
-    ? 'Self-Managing Landlord'
-    : 'Property Manager';
+export const getCompanyOperatingModeLabel = (value = '') => {
+  const mode = normalizeCompanyOperatingMode(value);
+  if (mode === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD) return 'Self-Managing Landlord';
+  if (mode === COMPANY_OPERATING_MODES.PROPERTY_MANAGER) return 'Property Manager';
+  return 'Other';
+};
 
 export const isSelfManagingLandlordCompany = (company = {}) =>
   normalizeCompanyOperatingMode(company?.companyMode || company?.operatingMode || company?.mode) ===
   COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD;
 
-export const isPropertyManagerCompany = (company = {}) => !isSelfManagingLandlordCompany(company);
+export const isPropertyManagerCompany = (company = {}) =>
+  normalizeCompanyOperatingMode(company?.companyMode || company?.operatingMode || company?.mode) ===
+  COMPANY_OPERATING_MODES.PROPERTY_MANAGER;
 
 export const normalizeCompanyEntity = (company = null) => {
   if (!company || typeof company !== 'object') return company;
@@ -67,7 +87,6 @@ export const normalizeCompanyCollection = (companies = []) =>
 
 export const applyCompanyModeBaseModules = (modules = {}, companyMode = '') => ({
   ...normalizeCompanyModules(modules),
-  propertyManagement: true,
 });
 
 export const MODULE_LABELS = {
@@ -88,6 +107,7 @@ export const MODULE_LABELS = {
   assetValuation: 'Asset Valuation',
   pos: 'POS',
   securityServices: 'Security Services',
+  carwash: 'MILIK Car Wash',
 };
 
 export const COMPANY_MODULE_KEYS = Object.keys(MODULE_LABELS);
@@ -142,4 +162,8 @@ export const getEnabledCompanyModuleKeys = (companyOrModules = {}) =>
     .map(([key]) => key);
 
 export const getCompanyWorkspaceHomeLabel = (company = {}) =>
-  isSelfManagingLandlordCompany(company) ? 'Landlord Workspace' : 'Property Management';
+  isSelfManagingLandlordCompany(company)
+    ? 'Landlord Workspace'
+    : isPropertyManagerCompany(company)
+      ? 'Property Management'
+      : 'Workspace';

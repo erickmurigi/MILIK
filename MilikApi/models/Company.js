@@ -483,7 +483,7 @@ const companySchema = new mongoose.Schema(
     companyMode: {
       type: String,
       enum: Object.values(COMPANY_OPERATING_MODES),
-      default: COMPANY_OPERATING_MODES.PROPERTY_MANAGER,
+      default: COMPANY_OPERATING_MODES.OTHER,
       trim: true,
     },
 
@@ -526,6 +526,10 @@ const companySchema = new mongoose.Schema(
       securityServices: {
         type: Boolean,
         default: companyModuleDefaults.securityServices ?? false,
+      },
+      carwash: {
+        type: Boolean,
+        default: companyModuleDefaults.carwash ?? false,
       },
     },
 

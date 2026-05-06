@@ -13,6 +13,7 @@ import {
   FaEnvelope,
   FaHome,
   FaLock,
+  FaCar,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getCompanyOperatingModeLabel, hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
@@ -91,6 +92,17 @@ const moduleRegistry = [
     status: "coming",
     icon: <FaStore />,
     tint: "milik-icon-orange",
+  },
+  {
+    id: "carwash",
+    moduleKey: "carwash",
+    title: "MILIK Car Wash",
+    subtitle: "Car Wash Management",
+    description: "Manage wash jobs, services, payments, staff, and daily operations.",
+    status: "active",
+    route: "/carwash/dashboard",
+    icon: <FaCar />,
+    tint: "milik-icon-cyan",
   },
   {
     id: "vendoor",

@@ -21,6 +21,14 @@ const DEFINITIONS = [
   { resource: 'journals', moduleKey: 'accounts', actions: ['view', 'process', 'reverse'] },
   { resource: 'financialReports', moduleKey: 'accounts', actions: ['view', 'export'] },
   { resource: 'landlordPayments', moduleKey: 'accounts', actions: ['view', 'process', 'export'] },
+  { resource: 'carwash-dashboard', moduleKey: 'carwash', actions: ['view'] },
+  { resource: 'carwash-jobs', moduleKey: 'carwash', actions: ['view', 'create', 'update'] },
+  { resource: 'carwash-services', moduleKey: 'carwash', actions: ['view', 'manage'] },
+  { resource: 'carwash-payments', moduleKey: 'carwash', actions: ['view', 'record'] },
+  { resource: 'carwash-deposits', moduleKey: 'carwash', actions: ['view', 'create', 'update'] },
+  { resource: 'carwash-expenses', moduleKey: 'carwash', actions: ['view', 'create', 'update'] },
+  { resource: 'carwash-staff', moduleKey: 'carwash', actions: ['view', 'manage'] },
+  { resource: 'carwash-reports', moduleKey: 'carwash', actions: ['view'] },
 ];
 
 const LEGACY_ALIASES = {
@@ -79,6 +87,35 @@ const LEGACY_ALIASES = {
     process: ['pay_landlord'],
     export: ['view_statements'],
   },
+  'carwash-dashboard': { view: ['carwash.dashboard.view'] },
+  'carwash-jobs': {
+    view: ['carwash.jobs.view'],
+    create: ['carwash.jobs.create'],
+    update: ['carwash.jobs.update'],
+  },
+  'carwash-payments': {
+    view: ['carwash.payments.view'],
+    record: ['carwash.payments.record'],
+  },
+  'carwash-deposits': {
+    view: ['carwash.deposits.view'],
+    create: ['carwash.deposits.create'],
+    update: ['carwash.deposits.update'],
+  },
+  'carwash-expenses': {
+    view: ['carwash.expenses.view'],
+    create: ['carwash.expenses.create'],
+    update: ['carwash.expenses.update'],
+  },
+  'carwash-services': {
+    view: ['carwash.services.view', 'carwash.services.manage'],
+    manage: ['carwash.services.manage'],
+  },
+  'carwash-staff': {
+    view: ['carwash.staff.view', 'carwash.staff.manage'],
+    manage: ['carwash.staff.manage'],
+  },
+  'carwash-reports': { view: ['carwash.reports.view'] },
 };
 
 const normalizeBoolean = (value) => value === true;

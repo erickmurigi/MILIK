@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { FaHome, FaTimes, FaCog, FaBuilding } from 'react-icons/fa';
+import { FaHome, FaTimes, FaCog, FaBuilding, FaCar } from 'react-icons/fa';
 import {
   WORKSPACE_IDS,
   getWorkspaceDefaultRoute,
@@ -15,6 +15,13 @@ const MODULES = {
     route: '/dashboard',
     icon: <FaHome className="w-4 h-4" />,
     closable: false,
+  },
+  [WORKSPACE_IDS.CARWASH]: {
+    id: WORKSPACE_IDS.CARWASH,
+    title: 'MILIK Car Wash',
+    route: '/carwash/dashboard',
+    icon: <FaCar className="w-4 h-4" />,
+    closable: true,
   },
   [WORKSPACE_IDS.SYSTEM_ADMIN]: {
     id: WORKSPACE_IDS.SYSTEM_ADMIN,

@@ -28,6 +28,7 @@ const SYSTEM_CHART_TEMPLATE = [
   { code: "4210", name: "Commission Income", type: "income", group: "income", subGroup: "Operating Income", isSystem: true, isHeader: false, isPosting: true },
   { code: "4300", name: "Other Property Income", type: "income", group: "income", subGroup: "Other Income", isSystem: true, isHeader: false, isPosting: true },
   { code: "4301", name: "Advancement Interest Income", type: "income", group: "income", subGroup: "Other Income", isSystem: true, isHeader: false, isPosting: true },
+  { code: "4400", name: "Car Wash Service Income", type: "income", group: "income", subGroup: "Car Wash Income", isSystem: true, isHeader: false, isPosting: true },
 
   { code: "5100", name: "Maintenance Expense", type: "expense", group: "expenses", subGroup: "Operating Expenses", isSystem: true, isHeader: false, isPosting: true },
   { code: "5101", name: "Repairs Expense", type: "expense", group: "expenses", subGroup: "Operating Expenses", isSystem: true, isHeader: false, isPosting: true },
@@ -37,11 +38,33 @@ const SYSTEM_CHART_TEMPLATE = [
   { code: "5200", name: "Management Expense", type: "expense", group: "expenses", subGroup: "Operating Expenses", isSystem: true, isHeader: false, isPosting: true },
   { code: "5201", name: "Bank Charges", type: "expense", group: "expenses", subGroup: "Operating Expenses", isSystem: true, isHeader: false, isPosting: true },
   { code: "5202", name: "Legal / Compliance Expense", type: "expense", group: "expenses", subGroup: "Operating Expenses", isSystem: true, isHeader: false, isPosting: true },
+  { code: "5310", name: "Car Wash Supplies Expense", type: "expense", group: "expenses", subGroup: "Car Wash Expenses", isSystem: true, isHeader: false, isPosting: true },
+  { code: "5311", name: "Car Wash Staff Wages", type: "expense", group: "expenses", subGroup: "Car Wash Expenses", isSystem: true, isHeader: false, isPosting: true },
+  { code: "5312", name: "Car Wash Water and Utilities", type: "expense", group: "expenses", subGroup: "Car Wash Expenses", isSystem: true, isHeader: false, isPosting: true },
 ];
 
 const SYSTEM_CHART_CODES = SYSTEM_CHART_TEMPLATE.map((account) => account.code);
 const ensureCache = new Map();
 const ENSURE_CACHE_TTL_MS = 5 * 60 * 1000;
+const VALID_MODULE_SCOPES = new Set(["general", "propertyManagement", "carwash"]);
+const CARWASH_ACCOUNT_CODES = new Set(["4400", "5310", "5311", "5312"]);
+const SHARED_CASHBOOK_CODES = new Set(["1100", "1110", "1130"]);
+
+const moduleScopesForAccount = (account = {}) => {
+  const code = String(account.code || "").trim().toUpperCase();
+  const name = String(account.name || "").toLowerCase();
+  const subGroup = String(account.subGroup || "").toLowerCase();
+
+  if (SHARED_CASHBOOK_CODES.has(code)) return ["propertyManagement", "carwash"];
+  if (CARWASH_ACCOUNT_CODES.has(code) || name.includes("car wash") || subGroup.includes("car wash")) return ["carwash"];
+  if (["3100", "3200"].includes(code)) return ["general"];
+  return ["propertyManagement"];
+};
+
+const normalizeModuleScopes = (value = []) => {
+  const list = Array.isArray(value) ? value : [value];
+  return [...new Set(list.map((item) => String(item || "").trim()).filter((item) => VALID_MODULE_SCOPES.has(item)))];
+};
 
 const normalizeBusinessId = (businessId) => {
   const raw = typeof businessId === "object" && businessId?._id ? businessId._id : businessId;
@@ -62,7 +85,7 @@ const normalizeGroup = (group, type) => {
   return "assets";
 };
 
-export const ensureSystemChartOfAccounts = async (businessId) => {
+export const ensureSystemChartOfAccounts = async (businessId, options = {}) => {
   const normalizedBusinessId = normalizeBusinessId(businessId);
   if (!normalizedBusinessId) {
     throw new Error("A valid business id is required to initialize chart of accounts.");
@@ -70,17 +93,7 @@ export const ensureSystemChartOfAccounts = async (businessId) => {
 
   const cacheKey = String(normalizedBusinessId);
   const cachedAt = ensureCache.get(cacheKey);
-  if (cachedAt && Date.now() - cachedAt < ENSURE_CACHE_TTL_MS) {
-    return;
-  }
-
-  const existingSystemCount = await ChartOfAccount.countDocuments({
-    business: normalizedBusinessId,
-    code: { $in: SYSTEM_CHART_CODES },
-  });
-
-  if (existingSystemCount >= SYSTEM_CHART_TEMPLATE.length) {
-    ensureCache.set(cacheKey, Date.now());
+  if (!options.force && cachedAt && Date.now() - cachedAt < ENSURE_CACHE_TTL_MS) {
     return;
   }
 
@@ -88,6 +101,9 @@ export const ensureSystemChartOfAccounts = async (businessId) => {
     updateOne: {
       filter: { business: normalizedBusinessId, code: account.code },
       update: {
+        $set: {
+          moduleScopes: normalizeModuleScopes(account.moduleScopes || moduleScopesForAccount(account)),
+        },
         $setOnInsert: {
           business: normalizedBusinessId,
           code: account.code,
@@ -124,13 +140,15 @@ export const findChartOfAccounts = async ({
   type = null,
   group = null,
   search = null,
+  moduleScope = null,
 }) => {
   const normalizedBusinessId = normalizeBusinessId(businessId);
   if (!normalizedBusinessId) {
     throw new Error("A valid business id is required to fetch chart of accounts.");
   }
 
-  await ensureSystemChartOfAccounts(normalizedBusinessId);
+  const scopes = normalizeModuleScopes(moduleScope);
+  await ensureSystemChartOfAccounts(normalizedBusinessId, { force: scopes.includes("carwash") });
 
   const query = { business: normalizedBusinessId };
 
@@ -138,12 +156,35 @@ export const findChartOfAccounts = async ({
   if (type) query.type = String(type).trim().toLowerCase();
   if (group) query.group = normalizeGroup(group, type);
 
+  if (scopes.length) {
+    const scopedMatch = { moduleScopes: { $in: scopes } };
+    if (scopes.includes("carwash")) {
+      query.$and = [
+        ...(query.$and || []),
+        {
+          $or: [
+            scopedMatch,
+            { subGroup: { $regex: "car wash|cashbook", $options: "i" } },
+            { name: { $regex: "car wash", $options: "i" } },
+          ],
+        },
+      ];
+    } else {
+      query.moduleScopes = { $in: scopes };
+    }
+  }
+
   if (search) {
     const pattern = String(search).trim();
-    query.$or = [
-      { code: { $regex: pattern, $options: "i" } },
-      { name: { $regex: pattern, $options: "i" } },
-      { subGroup: { $regex: pattern, $options: "i" } },
+    query.$and = [
+      ...(query.$and || []),
+      {
+        $or: [
+          { code: { $regex: pattern, $options: "i" } },
+          { name: { $regex: pattern, $options: "i" } },
+          { subGroup: { $regex: pattern, $options: "i" } },
+        ],
+      },
     ];
   }
 
@@ -166,6 +207,9 @@ export const normalizeChartAccountPayload = (payload = {}) => {
     isHeader: Boolean(payload.isHeader),
     isPosting: payload.isHeader ? false : Boolean(payload.isPosting !== false),
     parentAccount: payload.parentAccount || null,
+    moduleScopes: Object.prototype.hasOwnProperty.call(payload, "moduleScopes")
+      ? normalizeModuleScopes(payload.moduleScopes)
+      : undefined,
   };
 };
 

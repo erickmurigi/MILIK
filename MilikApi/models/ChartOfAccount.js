@@ -72,6 +72,13 @@ const ChartOfAccountSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    moduleScopes: {
+      type: [String],
+      enum: ["general", "propertyManagement", "carwash"],
+      default: [],
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -95,6 +102,7 @@ ChartOfAccountSchema.index({ business: 1, type: 1, code: 1 });
 ChartOfAccountSchema.index({ business: 1, group: 1, code: 1 });
 ChartOfAccountSchema.index({ business: 1, parentAccount: 1, code: 1 });
 ChartOfAccountSchema.index({ business: 1, subGroup: 1, code: 1 });
+ChartOfAccountSchema.index({ business: 1, moduleScopes: 1, code: 1 });
 
 const ChartOfAccount =
   mongoose.models.ChartOfAccount ||

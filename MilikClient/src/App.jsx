@@ -10,7 +10,7 @@ import { clearClientSessionStorage } from "./utils/sessionCleanup";
 import { hasSessionTimedOut } from "./utils/sessionTimeout";
 import "./App.css";
 import { hasCompanyPermission } from "./utils/permissions";
-import { isSelfManagingLandlordCompany } from "./utils/companyModules";
+import { hasCompanyModule, isPropertyManagerCompany, isSelfManagingLandlordCompany } from "./utils/companyModules";
 
 import Home from "./pages/Home/Home";
 import DemoAccessEntry from "./pages/Home/DemoAccessEntry";
@@ -80,6 +80,16 @@ import LatePenalties from "./pages/Tools/LatePenalties";
 import MpesaBatchImport from "./pages/Tenants/MpesaBatchImport";
 import SupportDocumentation from "./pages/Help/SupportDocumentation";
 import AboutMilik from "./pages/Help/AboutMilik";
+import CarWashDashboard from "./pages/CarWash/CarWashDashboard";
+import CarWashJobs from "./pages/CarWash/CarWashJobs";
+import CarWashServices from "./pages/CarWash/CarWashServices";
+import CarWashPayments from "./pages/CarWash/CarWashPayments";
+import CarWashDeposits from "./pages/CarWash/CarWashDeposits";
+import CarWashExpenses from "./pages/CarWash/CarWashExpenses";
+import CarWashCashbooks from "./pages/CarWash/CarWashCashbooks";
+import CarWashChartOfAccounts from "./pages/CarWash/CarWashChartOfAccounts";
+import CarWashStaff from "./pages/CarWash/CarWashStaff";
+import CarWashReports from "./pages/CarWash/CarWashReports";
 
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
 const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
@@ -201,7 +211,13 @@ function PermissionRoute({ children, resource, action = "view", moduleKey = null
   return allowed ? children : <Navigate to={fallback} replace />;
 }
 
-function CompanyModeRoute({ children, allowLandlordMode = true, allowPropertyManagerMode = true, fallback = "/dashboard" }) {
+function CompanyModeRoute({
+  children,
+  allowLandlordMode = true,
+  allowPropertyManagerMode = true,
+  allowOtherMode = allowLandlordMode && allowPropertyManagerMode,
+  fallback = "/dashboard",
+}) {
   const { currentUser } = useSelector((state) => state.auth);
   const { currentCompany } = useSelector((state) => state.company);
   const storedSession = getStoredAuthSession();
@@ -213,8 +229,32 @@ function CompanyModeRoute({ children, allowLandlordMode = true, allowPropertyMan
 
   const activeCompany = currentCompany || resolvedUser?.company || null;
   const landlordMode = isSelfManagingLandlordCompany(activeCompany);
+  const propertyManagerMode = isPropertyManagerCompany(activeCompany);
+  const otherMode = !landlordMode && !propertyManagerMode;
 
-  if ((landlordMode && !allowLandlordMode) || (!landlordMode && !allowPropertyManagerMode)) {
+  if (
+    (landlordMode && !allowLandlordMode) ||
+    (propertyManagerMode && !allowPropertyManagerMode) ||
+    (otherMode && !allowOtherMode)
+  ) {
+    return <Navigate to={fallback} replace />;
+  }
+
+  return children;
+}
+
+function CompanyModuleRoute({ children, moduleKey, fallback = "/moduleDashboard" }) {
+  const { currentUser } = useSelector((state) => state.auth);
+  const { currentCompany } = useSelector((state) => state.company);
+  const storedSession = getStoredAuthSession();
+  const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
+  const token = storedSession.token;
+  const isAuthenticated = Boolean(resolvedUser || token);
+
+  if (!isAuthenticated) return <Navigate to={getSignedOutRedirectPath()} replace />;
+
+  const activeCompany = currentCompany || resolvedUser?.company || null;
+  if (!hasCompanyModule(activeCompany, moduleKey) && !resolvedUser?.isSystemAdmin && !resolvedUser?.superAdminAccess) {
     return <Navigate to={fallback} replace />;
   }
 
@@ -446,6 +486,16 @@ function App() {
 
         <Route path="/moduleDashboard" element={<ProtectedRoute><ModulesDashboard /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/carwash/dashboard" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-dashboard" moduleKey="carwash"><CarWashDashboard /></PermissionRoute></CompanyModuleRoute>} />
+        <Route path="/carwash/jobs" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-jobs" moduleKey="carwash"><CarWashJobs /></PermissionRoute></CompanyModuleRoute>} />
+        <Route path="/carwash/services" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-services" moduleKey="carwash"><CarWashServices /></PermissionRoute></CompanyModuleRoute>} />
+        <Route path="/carwash/payments" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-payments" moduleKey="carwash"><CarWashPayments /></PermissionRoute></CompanyModuleRoute>} />
+        <Route path="/carwash/deposits" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-deposits" moduleKey="carwash"><CarWashDeposits /></PermissionRoute></CompanyModuleRoute>} />
+        <Route path="/carwash/expenses" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-expenses" moduleKey="carwash"><CarWashExpenses /></PermissionRoute></CompanyModuleRoute>} />
+        <Route path="/carwash/cashbooks" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="chartOfAccounts" moduleKey="accounts"><CarWashCashbooks /></PermissionRoute></CompanyModuleRoute>} />
+        <Route path="/carwash/chart-of-accounts" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="chartOfAccounts" moduleKey="accounts"><CarWashChartOfAccounts /></PermissionRoute></CompanyModuleRoute>} />
+        <Route path="/carwash/staff" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-staff" moduleKey="carwash"><CarWashStaff /></PermissionRoute></CompanyModuleRoute>} />
+        <Route path="/carwash/reports" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashReports /></PermissionRoute></CompanyModuleRoute>} />
         <Route path="/system-setup" element={<SuperAdminRoute><Navigate to="/system-setup/overview" replace /></SuperAdminRoute>} />
         <Route path="/system-setup/overview" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
         <Route path="/system-setup/companies" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />

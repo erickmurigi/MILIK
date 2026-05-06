@@ -1098,7 +1098,7 @@ export const createCompany = async (req, res, next) => {
       operationPeriodType = "Monthly",
       businessOwner,
       slogan,
-      companyMode = 'property_manager',
+      companyMode = 'other',
       modules = {},
       POBOX,
       Street,

@@ -14,7 +14,7 @@ import {
   FaUser, FaUsers, FaAddressCard, FaTag, FaClipboard,
   FaHandshake, FaChartLine, FaChartPie, FaFileAlt, FaBalanceScale,
   FaToolbox, FaDatabase, FaWrench, FaHeadset, FaInfoCircle, FaList,
-  FaBuilding, FaKey, FaUserSlash, FaRedoAlt
+  FaBuilding, FaKey, FaUserSlash, FaRedoAlt, FaCar
 } from "react-icons/fa";
 import "./dashboard.css";
 import TabManager from "../../components/Layout/TabManager";
@@ -73,6 +73,16 @@ const MENU_PERMISSION_MAP = {
   "meter-readings": { resource: "meterReadings", action: "view", moduleKey: "propertyManagement" },
   maintenance: { resource: "maintenances", action: "view", moduleKey: "propertyManagement" },
   inspections: { resource: "inspections", action: "view", moduleKey: "propertyManagement" },
+  "carwash-dashboard": { resource: "carwash-dashboard", action: "view", moduleKey: "carwash" },
+  "carwash-jobs": { resource: "carwash-jobs", action: "view", moduleKey: "carwash" },
+  "carwash-services": { resource: "carwash-services", action: "view", moduleKey: "carwash" },
+  "carwash-payments": { resource: "carwash-payments", action: "view", moduleKey: "carwash" },
+  "carwash-deposits": { resource: "carwash-deposits", action: "view", moduleKey: "carwash" },
+  "carwash-expenses": { resource: "carwash-expenses", action: "view", moduleKey: "carwash" },
+  "carwash-cashbooks": { resource: "chartOfAccounts", action: "view", moduleKey: "accounts" },
+  "carwash-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: "accounts" },
+  "carwash-staff": { resource: "carwash-staff", action: "view", moduleKey: "carwash" },
+  "carwash-reports": { resource: "carwash-reports", action: "view", moduleKey: "carwash" },
 };
 
 const filterMenuByPermissions = (items = [], currentUser = {}, activeCompany = null) =>
@@ -313,6 +323,7 @@ const TopToolbar = ({
 
   const isSystemAdminWorkspace = currentWorkspace === WORKSPACE_IDS.SYSTEM_ADMIN;
   const isCompanySetupWorkspace = currentWorkspace === WORKSPACE_IDS.COMPANY_SETUP;
+  const isCarWashWorkspace = currentWorkspace === WORKSPACE_IDS.CARWASH;
 
   const routeConfig = useMemo(() => {
     if (isSystemAdminWorkspace) {
@@ -336,6 +347,25 @@ const TopToolbar = ({
         "property-workspace": "/dashboard",
         settings: "/settings",
         activities: "/company-setup?tab=activities",
+      };
+    }
+
+    if (isCarWashWorkspace) {
+      return {
+        "property-workspace": "/dashboard",
+        "carwash-dashboard": "/carwash/dashboard",
+        "carwash-jobs": "/carwash/jobs",
+        "carwash-services": "/carwash/services",
+        "carwash-payments": "/carwash/payments",
+        "carwash-deposits": "/carwash/deposits",
+        "carwash-expenses": "/carwash/expenses",
+        "carwash-cashbooks": "/carwash/cashbooks",
+        "carwash-chart-of-accounts": "/carwash/chart-of-accounts",
+        "carwash-staff": "/carwash/staff",
+        "carwash-reports": "/carwash/reports",
+        documentation: "/help/documentation",
+        support: "/help/support",
+        about: "/help/about",
       };
     }
 
@@ -403,11 +433,21 @@ const TopToolbar = ({
       "meter-readings": "/meter-readings",
       maintenance: "/maintenances",
       inspections: "/inspections",
+      "carwash-dashboard": "/carwash/dashboard",
+      "carwash-jobs": "/carwash/jobs",
+      "carwash-services": "/carwash/services",
+      "carwash-payments": "/carwash/payments",
+      "carwash-deposits": "/carwash/deposits",
+      "carwash-expenses": "/carwash/expenses",
+      "carwash-cashbooks": "/carwash/cashbooks",
+      "carwash-chart-of-accounts": "/carwash/chart-of-accounts",
+      "carwash-staff": "/carwash/staff",
+      "carwash-reports": "/carwash/reports",
       documentation: "/help/documentation",
       support: "/help/support",
       about: "/help/about",
     };
-  }, [activeCompanyContext, currentUser, isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
 
   const mainMenuItems = useMemo(() => {
     if (isSystemAdminWorkspace) {
@@ -458,6 +498,44 @@ const TopToolbar = ({
           ],
         },
       ];
+    }
+
+    if (isCarWashWorkspace) {
+      const carWashItems = [
+        {
+          id: "carwash-operations",
+          label: "Operations",
+          icon: FaCar,
+          submenu: [
+            { id: "carwash-dashboard", label: "Dashboard", icon: FaChartBar },
+            { id: "carwash-jobs", label: "Jobs", icon: FaCar },
+          ],
+        },
+        {
+          id: "carwash-finance",
+          label: "Finance",
+          icon: FaMoneyBillWave,
+          submenu: [
+            { id: "carwash-payments", label: "Payments", icon: FaMoneyBillWave },
+            { id: "carwash-deposits", label: "Deposits", icon: FaMoneyBillWave },
+            { id: "carwash-expenses", label: "Expenses", icon: FaFileInvoice },
+            { id: "carwash-cashbooks", label: "Cashbooks", icon: FaWallet },
+            { id: "carwash-chart-of-accounts", label: "Chart of Accounts", icon: FaBook },
+            { id: "carwash-reports", label: "Reports", icon: FaChartLine },
+          ],
+        },
+        {
+          id: "carwash-setup",
+          label: "Setup",
+          icon: FaCog,
+          submenu: [
+            { id: "carwash-services", label: "Services", icon: FaCog },
+            { id: "carwash-staff", label: "Staff", icon: FaUsers },
+          ],
+        },
+      ];
+
+      return filterMenuByPermissions(carWashItems, currentUser, activeCompanyContext);
     }
 
     const landlordModeHiddenMainMenuIds = isLandlordMode ? new Set(["landlord"]) : new Set();
@@ -630,10 +708,10 @@ const TopToolbar = ({
       });
 
     return filterMenuByPermissions(items, currentUser, activeCompanyContext);
-  }, [activeCompanyContext, currentUser, isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
 
   const nestedSubmenus = useMemo(() => {
-    if (isSystemAdminWorkspace || isCompanySetupWorkspace) {
+    if (isSystemAdminWorkspace || isCompanySetupWorkspace || isCarWashWorkspace) {
       return {};
     }
 
@@ -702,7 +780,7 @@ const TopToolbar = ({
     });
 
     return submenus;
-  }, [activeCompanyContext, currentUser, isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isLandlordMode, isSystemAdminWorkspace]);
 
   const handleMenuItemClick = (menuId) => {
     const route = routeConfig[menuId];
@@ -726,6 +804,9 @@ const TopToolbar = ({
     "rental-receipting": { color: "#10B981", label: "Rental Receipting", icon: FaReceipt },
     expenses: { color: "#FF8C00", label: "Expenses", icon: FaMoneyBillWave },
     "landlord-payments": { color: "#8B5CF6", label: "Landlord Payments", icon: FaHandHolding },
+    "carwash-operations": { color: "#0B3B2E", label: "Operations", icon: FaCar },
+    "carwash-finance": { color: "#0B3B2E", label: "Finance", icon: FaMoneyBillWave },
+    "carwash-setup": { color: "#0B3B2E", label: "Setup", icon: FaCog },
   };
 
   const ProfessionalDropdown = ({ menuId, items }) => {
@@ -1012,6 +1093,7 @@ const TopToolbar = ({
 
         <div className="flex-1" />
 
+        {!isCarWashWorkspace && (
         <div className="flex items-center space-x-1 px-1.5 py-0 text-[11px]">
           <button
             onClick={() => navigate("/tenant/new")}
@@ -1050,6 +1132,7 @@ const TopToolbar = ({
             <FaCog aria-hidden="true" />
           </button>
         </div>
+        )}
       </div>
 
       {activeMenu && (

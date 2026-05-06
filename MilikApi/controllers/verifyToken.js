@@ -68,10 +68,30 @@ const getRequestedCompanyIds = (req) => {
   return [...requested].filter(Boolean);
 };
 
+const getActiveCompanyIdFromRequest = (req) => {
+  const explicit =
+    req.headers?.["x-active-company-id"] ||
+    req.headers?.["x-company-id"] ||
+    req.body?.business ||
+    req.body?.businessId ||
+    req.body?.company ||
+    req.body?.companyId ||
+    req.query?.business ||
+    req.query?.businessId ||
+    req.query?.company ||
+    req.query?.companyId ||
+    null;
+
+  const explicitId = normalizeCompanyId(explicit);
+  if (explicitId && canAccessCompanyId(req.user, explicitId)) return explicitId;
+
+  return normalizeCompanyId(req.user?.company);
+};
+
 const attachResolvedCompany = async (req) => {
   if (req.companyContext) return req.companyContext;
 
-  const companyId = normalizeCompanyId(req.user?.company);
+  const companyId = getActiveCompanyIdFromRequest(req);
   if (!companyId) {
     req.companyContext = null;
     return null;
@@ -79,6 +99,7 @@ const attachResolvedCompany = async (req) => {
 
   const company = await Company.findById(companyId).lean();
   req.companyContext = company ? serializeCompanyForClient(company, req.user) : null;
+  req.userCompany = companyId;
   return req.companyContext;
 };
 
@@ -170,7 +191,7 @@ export const requireCompanyModule = (moduleKey, options = {}) => {
         return next();
       }
 
-      if (!req.user?.company) {
+      if (!getActiveCompanyIdFromRequest(req)) {
         return next(createError(403, "No company associated with user"));
       }
 

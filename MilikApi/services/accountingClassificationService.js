@@ -35,12 +35,14 @@ const SUBGROUP_OPTIONS_BY_TYPE = {
   equity: ["Equity", "Capital", "Retained Earnings", "Reserves", "Other Equity"],
   income: [
     "Operating Income",
+    "Car Wash Income",
     "Rental Income",
     "Commission Income",
     "Other Income",
   ],
   expense: [
     "Operating Expenses",
+    "Car Wash Expenses",
     "Administrative Expenses",
     "Property Expenses",
     "Finance Costs",

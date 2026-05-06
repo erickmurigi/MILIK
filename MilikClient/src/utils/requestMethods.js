@@ -73,8 +73,14 @@ adminRequests.interceptors.request.use(
     const token = localStorage.getItem("milik_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-      return config;
     }
+
+    const activeCompanyId = localStorage.getItem("milik_active_company_id");
+    if (activeCompanyId) {
+      config.headers["x-active-company-id"] = activeCompanyId;
+      config.headers["x-company-id"] = activeCompanyId;
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -126,7 +132,7 @@ adminRequests.interceptors.response.use(
           );
           break;
         default:
-          console.error("API Error:", error.response.data);
+          console.error("API Error:", JSON.stringify(error.response.data, null, 2));
       }
     } else if (error.request) {
       // Request made but no response received

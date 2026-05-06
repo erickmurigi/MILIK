@@ -2,8 +2,8 @@ const MODULE_REGISTRY = {
   propertyManagement: {
     key: 'propertyManagement',
     label: 'Property Management',
-    category: 'core',
-    defaultEnabled: true,
+    category: 'expansion',
+    defaultEnabled: false,
     userAccessKey: 'propertyMgmt',
   },
   accounts: {
@@ -118,6 +118,13 @@ const MODULE_REGISTRY = {
     defaultEnabled: false,
     userAccessKey: null,
   },
+  carwash: {
+    key: 'carwash',
+    label: 'MILIK Car Wash',
+    category: 'expansion',
+    defaultEnabled: false,
+    userAccessKey: null,
+  },
 };
 
 const ACCESS_VALUES = ['Not allowed', 'View only', 'Full access'];
@@ -125,6 +132,7 @@ const ACCESS_VALUES = ['Not allowed', 'View only', 'Full access'];
 export const COMPANY_OPERATING_MODES = {
   PROPERTY_MANAGER: 'property_manager',
   SELF_MANAGING_LANDLORD: 'self_managing_landlord',
+  OTHER: 'other',
 };
 
 export const normalizeCompanyOperatingMode = (value = '') => {
@@ -132,6 +140,21 @@ export const normalizeCompanyOperatingMode = (value = '') => {
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, '_');
+
+  if (
+    [
+      COMPANY_OPERATING_MODES.OTHER,
+      'general',
+      'general_business',
+      'other_business',
+      'non_property',
+      'non_property_business',
+      'business',
+      'company',
+    ].includes(normalized)
+  ) {
+    return COMPANY_OPERATING_MODES.OTHER;
+  }
 
   if (
     [
@@ -159,19 +182,23 @@ export const normalizeCompanyOperatingMode = (value = '') => {
     return COMPANY_OPERATING_MODES.PROPERTY_MANAGER;
   }
 
-  return COMPANY_OPERATING_MODES.PROPERTY_MANAGER;
+  return COMPANY_OPERATING_MODES.OTHER;
 };
 
 export const isSelfManagingLandlordCompany = (company = {}) =>
   normalizeCompanyOperatingMode(company?.companyMode || company?.operatingMode || company?.mode) ===
   COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD;
 
-export const isPropertyManagerCompany = (company = {}) => !isSelfManagingLandlordCompany(company);
+export const isPropertyManagerCompany = (company = {}) =>
+  normalizeCompanyOperatingMode(company?.companyMode || company?.operatingMode || company?.mode) ===
+  COMPANY_OPERATING_MODES.PROPERTY_MANAGER;
 
-export const getCompanyOperatingModeLabel = (value = '') =>
-  normalizeCompanyOperatingMode(value) === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD
-    ? 'Self-Managing Landlord'
-    : 'Property Manager';
+export const getCompanyOperatingModeLabel = (value = '') => {
+  const mode = normalizeCompanyOperatingMode(value);
+  if (mode === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD) return 'Self-Managing Landlord';
+  if (mode === COMPANY_OPERATING_MODES.PROPERTY_MANAGER) return 'Property Manager';
+  return 'Other';
+};
 
 const normalizeText = (value = '') => String(value || '').trim();
 const DEFAULT_COMPANY_UNIT_TYPES = ['studio', '1bed', '2bed', '3bed', '4bed', 'commercial'];

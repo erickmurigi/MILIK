@@ -24,6 +24,7 @@ import {
   FaBriefcase,
   FaLock,
   FaCog,
+  FaCar,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -98,6 +99,14 @@ const moduleRegistry = [
     label: "Security",
     icon: <FaShieldAlt />,
     status: "coming",
+  },
+  {
+    id: "carwash",
+    moduleKey: "carwash",
+    label: "MILIK Car Wash",
+    icon: <FaCar />,
+    to: "/carwash/dashboard",
+    status: "active",
   },
   {
     id: "dms",
