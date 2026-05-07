@@ -316,8 +316,8 @@ const CarWashReports = () => {
       )}
 
       {applied.mode === "daily" && (
-        <div className="mt-2 grid gap-2 xl:grid-cols-[1.15fr_0.85fr]">
-          <ReportTable title="Job Audit" minWidth="900px" right={<button type="button" onClick={() => navigate("/carwash/jobs")} className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase text-[#0B3B2E] hover:text-[#FF8C00]"><FaExternalLinkAlt />Open Jobs</button>}>
+        <div className="mt-2 grid gap-2 xl:grid-cols-[1.65fr_0.35fr]">
+          <ReportTable title="Job Audit" minWidth="100%" right={<button type="button" onClick={() => navigate("/carwash/jobs")} className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase text-[#0B3B2E] hover:text-[#FF8C00]"><FaExternalLinkAlt />Open Jobs</button>}>
             <thead className="bg-[#0B3B2E] text-white">
               <tr><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Time</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Job</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Plate</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Customer</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Service</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Status</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Payment</th><th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Price</th></tr>
             </thead>
@@ -328,7 +328,7 @@ const CarWashReports = () => {
             </tbody>
           </ReportTable>
 
-          <ReportTable title="Payment Audit" right={<button type="button" onClick={() => navigate("/carwash/payments")} className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase text-[#0B3B2E] hover:text-[#FF8C00]"><FaExternalLinkAlt />Open Payments</button>}>
+          <ReportTable title="Payment Audit" minWidth="100%" right={<button type="button" onClick={() => navigate("/carwash/payments")} className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase text-[#0B3B2E] hover:text-[#FF8C00]"><FaExternalLinkAlt />Open Payments</button>}>
             <thead className="bg-[#0B3B2E] text-white">
               <tr><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Time</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Method</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Ref</th><th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Amount</th></tr>
             </thead>

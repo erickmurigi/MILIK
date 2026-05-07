@@ -111,14 +111,84 @@ export const accrueCommissionForJob = async ({ req = null, job }) => {
   if (!job || !["done", "paid"].includes(String(job.status || "").toLowerCase())) return null;
   if (!job.assignedStaff) return null;
 
-  const existing = await CarWashStaffCommission.findOne({ business: job.business, job: job._id, staff: job.assignedStaff });
+  await cancelJobCommissions({
+    req,
+    business: job.business,
+    jobId: job._id,
+    excludeStaff: job.assignedStaff,
+    reason: "Cancelled because the Car Wash job was reassigned to another staff member.",
+  });
+
+  const existing = await CarWashStaffCommission.findOne({
+    business: job.business,
+    job: job._id,
+    staff: job.assignedStaff,
+    status: { $ne: "cancelled" },
+  });
   if (existing) {
+    let shouldSaveExisting = false;
+    if (existing.status !== "paid") {
+      const refreshedRule = await resolveCommissionRuleForJob(job);
+      if (!refreshedRule || Number(refreshedRule.rate || 0) <= 0) {
+        await cancelJobCommissions({
+          req,
+          business: job.business,
+          jobId: job._id,
+          reason: "Cancelled because the Car Wash job no longer matches an active commission rule.",
+        });
+        return null;
+      }
+
+      const refreshedAmount = calculateAmount({
+        type: refreshedRule.commissionType,
+        rate: refreshedRule.rate,
+        baseAmount: job.price,
+      });
+      if (refreshedAmount <= 0) {
+        await cancelJobCommissions({
+          req,
+          business: job.business,
+          jobId: job._id,
+          reason: "Cancelled because the Car Wash job commission amount is zero.",
+        });
+        return null;
+      }
+
+      const termsChanged =
+        String(existing.rule || "") !== String(refreshedRule._id || "") ||
+        String(existing.service || "") !== String(job.service || "") ||
+        String(existing.serviceName || "") !== String(job.serviceName || "") ||
+        Number(existing.baseAmount || 0) !== Number(job.price || 0) ||
+        String(existing.commissionType || "") !== String(refreshedRule.commissionType || "") ||
+        Number(existing.commissionRate || 0) !== Number(refreshedRule.rate || 0) ||
+        Number(existing.commissionAmount || 0) !== Number(refreshedAmount || 0);
+      if (termsChanged && Array.isArray(existing.accrualLedgerEntries) && existing.accrualLedgerEntries.length) {
+        await cancelJobCommissions({
+          req,
+          business: job.business,
+          jobId: job._id,
+          reason: "Cancelled because the Car Wash job commission was recalculated.",
+        });
+        return accrueCommissionForJob({ req, job });
+      }
+
+      existing.service = job.service || null;
+      existing.rule = refreshedRule._id;
+      existing.jobNumber = job.jobNumber || "";
+      existing.serviceName = job.serviceName || "";
+      existing.baseAmount = Number(job.price || 0);
+      existing.commissionType = refreshedRule.commissionType;
+      existing.commissionRate = Number(refreshedRule.rate || 0);
+      existing.commissionAmount = refreshedAmount;
+      shouldSaveExisting = true;
+    }
     if (existing.status !== "paid" && job.paymentStatus === "paid") {
       existing.status = "payable";
       existing.payableAt = existing.payableAt || new Date();
       existing.updatedBy = existing.updatedBy || null;
-      await existing.save();
+      shouldSaveExisting = true;
     }
+    if (shouldSaveExisting) await existing.save();
     if (existing.status !== "cancelled") await postCommissionAccrual({ req, commission: existing });
     return existing;
   }
@@ -160,11 +230,45 @@ export const markJobCommissionsPayable = async ({ business, jobId }) => {
   );
 };
 
-export const cancelJobCommissions = async ({ req = null, business, jobId }) => {
-  const commissions = await CarWashStaffCommission.find({
+export const handleJobPaymentStatusAfterPaymentChange = async ({ business, job, checkOnly = false }) => {
+  if (!business || !job?._id) return;
+  if (String(job.paymentStatus || "").toLowerCase() === "paid") {
+    if (checkOnly) return;
+    await markJobCommissionsPayable({ business, jobId: job._id });
+    return;
+  }
+
+  const paidCommission = await CarWashStaffCommission.findOne({
+    business,
+    job: job._id,
+    status: "paid",
+  }).select("_id payout jobNumber");
+  if (paidCommission) {
+    throw createError(400, "Cannot delete this payment because staff commission has already been paid out.");
+  }
+  if (checkOnly) return;
+
+  await CarWashStaffCommission.updateMany(
+    { business, job: job._id, status: "payable" },
+    { $set: { status: "earned", payableAt: null } }
+  );
+};
+
+export const cancelJobCommissions = async ({
+  req = null,
+  business,
+  jobId,
+  excludeStaff = null,
+  reason = "Cancelled because the Car Wash job was cancelled.",
+}) => {
+  const filter = {
     business,
     job: jobId,
     status: { $in: ["earned", "payable"] },
+  };
+  if (excludeStaff) filter.staff = { $ne: excludeStaff };
+  const commissions = await CarWashStaffCommission.find({
+    ...filter,
   });
   if (!commissions.length) return;
 
@@ -189,7 +293,7 @@ export const cancelJobCommissions = async ({ req = null, business, jobId }) => {
     }
 
     commission.status = "cancelled";
-    commission.notes = "Cancelled because the Car Wash job was cancelled.";
+    commission.notes = reason;
     commission.accrualReversalLedgerEntries = [
       ...(commission.accrualReversalLedgerEntries || []),
       ...reversalEntryIds,

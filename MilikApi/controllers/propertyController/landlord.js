@@ -722,23 +722,21 @@ export const bulkImportLandlords = async (req, res, next) => {
       fallbackErrorMessage: "No valid company user could be resolved for landlord import.",
     });
 
-    // Normalise each row. Placeholder values ("-", "n/a", etc.) are converted to
-    // null so that they bypass required-field and duplicate checks below.
     const normalizedLandlords = landlords.map((item) => {
-      const regIdRaw = normalizeImportField(item.regId);
-      const idNumberRaw = normalizeImportField(item.idNumber) ?? regIdRaw;
+      const regIdRaw = normalizeString(item.regId);
+      const idNumberRaw = normalizeString(item.idNumber) || regIdRaw;
       return {
-        landlordName: normalizeImportField(item.landlordName),
-        landlordType: normalizeImportField(item.landlordType) || "Individual",
+        landlordName: normalizeString(item.landlordName),
+        landlordType: normalizeString(item.landlordType) || "Individual",
         regId: regIdRaw,
         idNumber: idNumberRaw,
-        taxPin: normalizeImportField(item.taxPin),
-        email: normalizeImportEmail(item.email),
-        phoneNumber: normalizeImportField(item.phoneNumber),
-        postalAddress: normalizeImportField(item.postalAddress) || "",
-        location: normalizeImportField(item.location) || "",
-        status: normalizeImportField(item.status) || "Active",
-        portalAccess: normalizeImportField(item.portalAccess) || "Disabled",
+        taxPin: normalizeString(item.taxPin),
+        email: normalizeEmail(item.email),
+        phoneNumber: normalizeString(item.phoneNumber),
+        postalAddress: normalizeString(item.postalAddress) || "",
+        location: normalizeString(item.location) || "",
+        status: normalizeString(item.status) || "Active",
+        portalAccess: normalizeString(item.portalAccess) || "Disabled",
       };
     });
 
@@ -774,14 +772,10 @@ export const bulkImportLandlords = async (req, res, next) => {
       results.totalProcessed++;
 
       try {
-        // Only landlordName is absolutely required for the record to be meaningful.
-        // regId, taxPin, email, phoneNumber are required UNLESS they are placeholders,
-        // in which case they are treated as intentionally absent and will be saved as
-        // empty strings (the model allows this after the placeholder normalisation above).
-        if (!landlordData.landlordName) {
+        if (!landlordData.landlordName || !landlordData.regId || !landlordData.taxPin || !landlordData.phoneNumber) {
           results.failed.push({
-            landlord: "",
-            error: "Landlord name is required",
+            landlord: landlordData.landlordName || "",
+            error: "Landlord name, Reg/ID, Tax PIN, and Phone Number are required",
           });
           continue;
         }
@@ -812,13 +806,11 @@ export const bulkImportLandlords = async (req, res, next) => {
           landlordCode,
           landlordName: landlordData.landlordName,
           landlordType: landlordData.landlordType,
-          // Store empty string for placeholder fields so Mongoose required validators
-          // pass (the Landlord model should allow "" for these fields in import context).
-          regId: landlordData.regId || "",
-          idNumber: landlordData.idNumber || "",
-          taxPin: landlordData.taxPin || "",
+          regId: landlordData.regId,
+          idNumber: landlordData.idNumber,
+          taxPin: landlordData.taxPin,
           email: landlordData.email || "",
-          phoneNumber: landlordData.phoneNumber || "",
+          phoneNumber: landlordData.phoneNumber,
           postalAddress: landlordData.postalAddress,
           location: landlordData.location,
           status: landlordData.status,

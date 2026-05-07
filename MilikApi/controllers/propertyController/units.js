@@ -1021,9 +1021,9 @@ export const bulkImportUnits = async (req, res, next) => {
       });
     }
 
-    const properties = await Property.find({ business: businessId }).select("_id propertyCode");
+    const properties = await Property.find({ business: businessId }).select("_id propertyCode rentPerMeasure securityDeposits");
     const propertyCodeMap = new Map(
-      properties.map((p) => [String(p.propertyCode || "").toLowerCase(), String(p._id)])
+      properties.map((p) => [String(p.propertyCode || "").toLowerCase(), p])
     );
 
     const successful = [];
@@ -1034,13 +1034,32 @@ export const bulkImportUnits = async (req, res, next) => {
       const row = unitsData[i];
 
       try {
-        const propertyId = propertyCodeMap.get(String(row.propertyCode || "").trim().toLowerCase());
+        const property = propertyCodeMap.get(String(row.propertyCode || "").trim().toLowerCase());
 
-        if (!propertyId) {
+        if (!property?._id) {
           failed.push({
             row: i + 2,
             unitNumber: row.unitNumber,
             error: `Property code "${row.propertyCode}" not found`,
+          });
+          continue;
+        }
+        const propertyId = property._id;
+        const normalizedUnitNumber = typeof row.unitNumber === "string" ? row.unitNumber.trim() : String(row.unitNumber || "").trim();
+        if (!normalizedUnitNumber) {
+          failed.push({
+            row: i + 2,
+            unitNumber: row.unitNumber,
+            error: "Unit number is required",
+          });
+          continue;
+        }
+        const normalizedUnitType = typeof row.unitType === "string" ? row.unitType.trim() : String(row.unitType || "").trim();
+        if (!normalizedUnitType) {
+          failed.push({
+            row: i + 2,
+            unitNumber: normalizedUnitNumber,
+            error: "Unit type is required",
           });
           continue;
         }
@@ -1055,15 +1074,19 @@ export const bulkImportUnits = async (req, res, next) => {
           });
           continue;
         }
+        const resolvedRent = calculateRentFromPropertyDefaults(property, row.areaSqFt, row.rent);
+        const resolvedDeposit = calculateDepositFromPropertyDefaults(property, resolvedRent, row.deposit);
 
         const newUnit = new Unit({
-          unitNumber: typeof row.unitNumber === "string" ? row.unitNumber.trim() : row.unitNumber,
+          unitNumber: normalizedUnitNumber,
           property: propertyId,
-          unitType: row.unitType,
-          rent: Number(row.rent || 0),
-          deposit: Number(row.deposit || 0),
+          unitType: normalizedUnitType,
+          rent: resolvedRent,
+          deposit: resolvedDeposit,
           status: requestedStatus,
           isVacant: requestedStatus === "vacant",
+          vacantSince: requestedStatus === "vacant" ? new Date() : null,
+          daysVacant: 0,
           amenities: sanitizeAmenities(row.amenities),
           utilities: sanitizeUtilities(row.utilities),
           billingFrequency: row.billingFrequency || "monthly",
@@ -1097,8 +1120,9 @@ export const bulkImportUnits = async (req, res, next) => {
       await updatePropertyUnitCounts(propertyId);
     }
 
+    const allFailed = successful.length === 0 && failed.length > 0;
     return res.status(200).json({
-      success: true,
+      success: !allFailed,
       data: {
         successful,
         failed,

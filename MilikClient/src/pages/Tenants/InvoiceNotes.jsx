@@ -65,6 +65,23 @@ const isPostingAccount = (account) => account?.isHeader !== true && account?.isP
 const isActiveInvoice = (invoice) => !["cancelled", "reversed"].includes(String(invoice?.status || "").toLowerCase());
 const isPostedInvoice = (invoice) => String(invoice?.postingStatus || "").toLowerCase() === "posted";
 const isActiveNote = (note) => !["cancelled", "reversed"].includes(String(note?.status || "").toLowerCase());
+const ACTIVE_TENANT_STATUSES = new Set(["active", "overdue"]);
+const TERMINATED_TENANT_STATUSES = new Set(["terminated", "moved_out", "evicted", "inactive"]);
+
+const normalizeTenantStatus = (tenant) => String(tenant?.status || "active").trim().toLowerCase();
+const tenantMatchesScope = (tenant, scope = "active") => {
+  const normalized = normalizeTenantStatus(tenant);
+  if (scope === "all") return true;
+  if (scope === "terminated") return TERMINATED_TENANT_STATUSES.has(normalized);
+  return ACTIVE_TENANT_STATUSES.has(normalized);
+};
+
+const getTenantStatusLabel = (tenant) => {
+  const normalized = normalizeTenantStatus(tenant);
+  if (TERMINATED_TENANT_STATUSES.has(normalized)) return "Terminated";
+  if (normalized === "overdue") return "Overdue";
+  return "Active";
+};
 
 const resolvePropertyId = (record) =>
   String(
@@ -217,6 +234,7 @@ const InvoiceNotes = () => {
     filters: {
       propertyId: "",
       tenantId: "",
+      tenantScope: "active",
       noteType: initialNoteType,
       search: "",
       status: "active",
@@ -237,7 +255,7 @@ const InvoiceNotes = () => {
   const noteType = invoiceNotesDraft.noteType || initialNoteType;
   const setNoteType = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, noteType: typeof value === "function" ? value(prev.noteType || initialNoteType) : value }));
   const [currentPage, setCurrentPage] = useState(1);
-  const filters = invoiceNotesDraft.filters || { propertyId: "", tenantId: "", noteType: initialNoteType, search: "", status: "active" };
+  const filters = invoiceNotesDraft.filters || { propertyId: "", tenantId: "", tenantScope: "active", noteType: initialNoteType, search: "", status: "active" };
   const setFilters = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
   const showAddModal = Boolean(invoiceNotesDraft.showAddModal);
   const setShowAddModal = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, showAddModal: typeof value === "function" ? value(Boolean(prev.showAddModal)) : Boolean(value) }));
@@ -245,6 +263,8 @@ const InvoiceNotes = () => {
   const setPropertyId = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, propertyId: typeof value === "function" ? value(prev.propertyId || "") : value }));
   const tenantId = invoiceNotesDraft.tenantId || "";
   const setTenantId = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, tenantId: typeof value === "function" ? value(prev.tenantId || "") : value }));
+  const tenantScope = invoiceNotesDraft.tenantScope || "active";
+  const setTenantScope = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, tenantScope: typeof value === "function" ? value(prev.tenantScope || "active") : value, tenantId: "", sourceInvoiceId: "", invoiceItemSelection: "" }));
   const sourceInvoiceId = invoiceNotesDraft.sourceInvoiceId || "";
   const setSourceInvoiceId = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, sourceInvoiceId: typeof value === "function" ? value(prev.sourceInvoiceId || "") : value }));
   const invoiceItemSelection = invoiceNotesDraft.invoiceItemSelection || "";
@@ -323,14 +343,14 @@ const InvoiceNotes = () => {
   }, [searchParams]);
 
   const propertyScopedTenants = useMemo(() => {
-    if (!propertyId) return tenants;
-    return tenants.filter((tenant) => resolvePropertyId(tenant) === String(propertyId));
-  }, [tenants, propertyId]);
+    const scoped = !propertyId ? tenants : tenants.filter((tenant) => resolvePropertyId(tenant) === String(propertyId));
+    return scoped.filter((tenant) => tenantMatchesScope(tenant, tenantScope));
+  }, [tenants, propertyId, tenantScope]);
 
   const filterScopedTenants = useMemo(() => {
-    if (!filters.propertyId) return tenants;
-    return tenants.filter((tenant) => resolvePropertyId(tenant) === String(filters.propertyId));
-  }, [tenants, filters.propertyId]);
+    const scoped = !filters.propertyId ? tenants : tenants.filter((tenant) => resolvePropertyId(tenant) === String(filters.propertyId));
+    return scoped.filter((tenant) => tenantMatchesScope(tenant, filters.tenantScope || "active"));
+  }, [tenants, filters.propertyId, filters.tenantScope]);
 
   const sourceInvoiceOptions = useMemo(() => {
     const sourceInvoicePool = noteType === "CREDIT_NOTE" ? openInvoices : anchorInvoices.filter(isPostedInvoice);
@@ -352,6 +372,21 @@ const InvoiceNotes = () => {
     () => (tenants || []).find((tenant) => String(tenant?._id || "") === String(tenantId)) || null,
     [tenants, tenantId]
   );
+
+  const tenantMap = useMemo(
+    () => new Map((tenants || []).map((tenant) => [String(tenant?._id || ""), tenant])),
+    [tenants]
+  );
+
+  useEffect(() => {
+    if (!tenantId) return;
+    const stillSelectable = propertyScopedTenants.some((tenant) => String(tenant?._id || "") === String(tenantId));
+    if (!stillSelectable) {
+      setTenantId("");
+      setSourceInvoiceId("");
+      setInvoiceItemSelection("");
+    }
+  }, [propertyScopedTenants, tenantId]);
 
   const debitInvoiceItemOptions = useMemo(() => {
     if (!tenantId) return [];
@@ -485,6 +520,10 @@ const InvoiceNotes = () => {
       if (filters.noteType && String(note.noteType || "").toUpperCase() !== String(filters.noteType)) return false;
       if (filters.propertyId && resolvePropertyId(note) !== String(filters.propertyId)) return false;
       if (filters.tenantId && resolveTenantId(note) !== String(filters.tenantId)) return false;
+      if ((filters.tenantScope || "active") !== "all") {
+        const noteTenant = note?.tenant && typeof note.tenant === "object" ? note.tenant : tenantMap.get(resolveTenantId(note));
+        if (!tenantMatchesScope(noteTenant, filters.tenantScope || "active")) return false;
+      }
       if (filters.status === "active" && !isActiveNote(note)) return false;
       if (filters.status === "reversed" && String(note?.status || "").toLowerCase() !== "reversed") return false;
       if (filters.status === "all") {
@@ -505,7 +544,7 @@ const InvoiceNotes = () => {
         .toLowerCase();
       return haystack.includes(query);
     });
-  }, [notes, filters, propertyMap]);
+  }, [notes, filters, propertyMap, tenantMap]);
 
   const totalPages = Math.max(1, Math.ceil(filteredNotes.length / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -515,7 +554,7 @@ const InvoiceNotes = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.search, filters.propertyId, filters.tenantId, filters.noteType, filters.status, filteredNotes.length]);
+  }, [filters.search, filters.propertyId, filters.tenantId, filters.tenantScope, filters.noteType, filters.status, filteredNotes.length]);
 
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
@@ -540,6 +579,7 @@ const InvoiceNotes = () => {
 
   const resetModalForm = () => {
     setPropertyId("");
+    setTenantScope("active");
     setTenantId("");
     setSourceInvoiceId("");
     setInvoiceItemSelection("");
@@ -649,6 +689,7 @@ const InvoiceNotes = () => {
     setFilters({
       propertyId: "",
       tenantId: "",
+      tenantScope: "active",
       noteType,
       search: "",
       status: "active",
@@ -661,7 +702,7 @@ const InvoiceNotes = () => {
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-2 shadow-sm backdrop-blur">
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6">
                 <div className="relative xl:col-span-2">
                   <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -678,10 +719,15 @@ const InvoiceNotes = () => {
                     <option key={property._id} value={property._id}>{property.propertyName || property.propertyCode || "Unnamed Property"}</option>
                   ))}
                 </select>
+                <select value={filters.tenantScope || "active"} onChange={(e) => setFilters((prev) => ({ ...prev, tenantScope: e.target.value, tenantId: "" }))} className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100">
+                  <option value="active">Active tenants</option>
+                  <option value="terminated">Terminated tenants</option>
+                  <option value="all">All tenants</option>
+                </select>
                 <select value={filters.tenantId} onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value }))} className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100">
                   <option value="">All tenants</option>
                   {filterScopedTenants.map((tenant) => (
-                    <option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)}</option>
+                    <option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)} ({getTenantStatusLabel(tenant)})</option>
                   ))}
                 </select>
                 <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100">
@@ -871,12 +917,20 @@ const InvoiceNotes = () => {
 
                   <label className="space-y-1.5 text-sm font-medium text-slate-700">
                     <span>Tenant</span>
+                    <select value={tenantScope} onChange={(e) => setTenantScope(e.target.value)} disabled={!propertyId} className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100">
+                      <option value="active">Active tenants</option>
+                      <option value="terminated">Terminated tenants</option>
+                      <option value="all">All tenants</option>
+                    </select>
                     <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} disabled={!propertyId} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100">
                       <option value="">{propertyId ? "Select tenant" : "Select property first"}</option>
                       {propertyScopedTenants.map((tenant) => (
-                        <option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)}</option>
+                        <option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)} ({getTenantStatusLabel(tenant)})</option>
                       ))}
                     </select>
+                    {tenantScope === "terminated" ? (
+                      <p className="text-[11px] font-semibold text-amber-700">You are selecting from terminated tenants for a deliberate final adjustment.</p>
+                    ) : null}
                   </label>
 
                   {noteType === "CREDIT_NOTE" ? (

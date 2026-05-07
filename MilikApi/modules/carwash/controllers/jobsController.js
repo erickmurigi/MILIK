@@ -213,6 +213,13 @@ export const updateJob = async (req, res, next) => {
     await existing.save();
     if (existing.status === "cancelled") {
       await cancelJobCommissions({ req, business, jobId: existing._id });
+    } else if (!["done", "paid"].includes(existing.status)) {
+      await cancelJobCommissions({
+        req,
+        business,
+        jobId: existing._id,
+        reason: "Cancelled because the Car Wash job was moved out of the completed workflow.",
+      });
     } else {
       await accrueCommissionForJob({ req, job: existing });
     }
@@ -227,12 +234,14 @@ export const updateJobStatus = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const status = String(req.body.status || "").trim().toLowerCase();
     if (!JOB_STATUSES.has(status)) return next(createError(400, "Invalid Car Wash job status"));
+    const existing = await CarWashJob.findOne({ _id: req.params.id, business }).select("_id paymentStatus").lean();
+    if (!existing) return next(createError(404, "Car Wash job not found"));
     if (status === "paid") {
-      const existing = await CarWashJob.findOne({ _id: req.params.id, business }).select("paymentStatus").lean();
-      if (!existing) return next(createError(404, "Car Wash job not found"));
       if (existing.paymentStatus !== "paid") {
         return next(createError(400, "Record payment before marking a Car Wash job as paid"));
       }
+    } else if (existing.paymentStatus === "paid" && status !== "cancelled") {
+      return next(createError(400, "A fully paid Car Wash job cannot be moved back to an active status"));
     }
     if (status === "cancelled") {
       const paidAmount = await getPaidAmount(business, req.params.id);
@@ -249,6 +258,13 @@ export const updateJobStatus = async (req, res, next) => {
     if (!job) return next(createError(404, "Car Wash job not found"));
     if (status === "cancelled") {
       await cancelJobCommissions({ req, business, jobId: job._id });
+    } else if (!["done", "paid"].includes(status)) {
+      await cancelJobCommissions({
+        req,
+        business,
+        jobId: job._id,
+        reason: "Cancelled because the Car Wash job was moved out of the completed workflow.",
+      });
     } else {
       await accrueCommissionForJob({ req, job });
     }

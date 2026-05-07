@@ -208,7 +208,11 @@ function PermissionRoute({ children, resource, action = "view", moduleKey = null
   const isAuthenticated = Boolean(resolvedUser || token);
 
   if (!isAuthenticated) return <Navigate to={getSignedOutRedirectPath()} replace />;
-  const allowed = hasCompanyPermission(resolvedUser || {}, currentCompany || resolvedUser?.company, resource, action, moduleKey);
+  const activeCompany = currentCompany || resolvedUser?.company || null;
+  if (moduleKey === "propertyManagement" && !hasCompanyModule(activeCompany, moduleKey)) {
+    return <Navigate to={fallback} replace />;
+  }
+  const allowed = hasCompanyPermission(resolvedUser || {}, activeCompany, resource, action, moduleKey);
   return allowed ? children : <Navigate to={fallback} replace />;
 }
 
@@ -255,7 +259,7 @@ function CompanyModuleRoute({ children, moduleKey, fallback = "/moduleDashboard"
   if (!isAuthenticated) return <Navigate to={getSignedOutRedirectPath()} replace />;
 
   const activeCompany = currentCompany || resolvedUser?.company || null;
-  if (!hasCompanyModule(activeCompany, moduleKey) && !resolvedUser?.isSystemAdmin && !resolvedUser?.superAdminAccess) {
+  if (!hasCompanyModule(activeCompany, moduleKey)) {
     return <Navigate to={fallback} replace />;
   }
 
@@ -486,7 +490,7 @@ function App() {
         <Route path="/first-time-password" element={<ProtectedRoute allowMustChangePassword={true}><FirstTimePassword /></ProtectedRoute>} />
 
         <Route path="/moduleDashboard" element={<ProtectedRoute><ModulesDashboard /></ProtectedRoute>} />
-        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<CompanyModuleRoute moduleKey="propertyManagement"><ProtectedRoute><Dashboard /></ProtectedRoute></CompanyModuleRoute>} />
         <Route path="/carwash/dashboard" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-dashboard" moduleKey="carwash"><CarWashDashboard /></PermissionRoute></CompanyModuleRoute>} />
         <Route path="/carwash/jobs" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-jobs" moduleKey="carwash"><CarWashJobs /></PermissionRoute></CompanyModuleRoute>} />
         <Route path="/carwash/services" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-services" moduleKey="carwash"><CarWashServices /></PermissionRoute></CompanyModuleRoute>} />

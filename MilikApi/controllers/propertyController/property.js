@@ -1391,6 +1391,13 @@ export const bulkImportProperties = async (req, res, next) => {
     }
 
     await ensureSystemChartOfAccounts(businessId);
+    const company = await getPropertyCompanyContext(businessId);
+    const createdById = await resolveAuditActorUserId({
+      req,
+      businessId,
+      candidateUserIds: [req.body?.createdBy],
+      fallbackErrorMessage: "No valid company user could be resolved for property import.",
+    });
 
     const normalizedProperties = properties.map((property) => ({
       ...property,
@@ -1416,6 +1423,9 @@ export const bulkImportProperties = async (req, res, next) => {
         typeof property?.landlordName === "string"
           ? property.landlordName.trim()
           : property?.landlordName,
+      letManage: normalizePropertyServiceMode(property?.letManage),
+      lettingFeeMode: property?.lettingFeeMode === "fixed" ? "fixed" : "percentage",
+      lettingFeeValue: property?.lettingFeeValue,
     }));
 
     const lrNumbers = normalizedProperties
@@ -1448,6 +1458,17 @@ export const bulkImportProperties = async (req, res, next) => {
     const allProperties = await Property.find({ business: businessId })
       .select("propertyCode")
       .lean();
+    const landlordLookupValues = normalizedProperties
+      .map((p) => String(p.landlordName || "").trim())
+      .filter(Boolean);
+    const landlordDocs = landlordLookupValues.length
+      ? await Landlord.find({ company: businessId }).select("_id landlordName landlordCode email phoneNumber")
+      : [];
+    const landlordMap = new Map();
+    landlordDocs.forEach((landlord) => {
+      if (landlord.landlordName) landlordMap.set(String(landlord.landlordName).trim().toLowerCase(), landlord);
+      if (landlord.landlordCode) landlordMap.set(String(landlord.landlordCode).trim().toLowerCase(), landlord);
+    });
 
     const results = {
       successful: [],
@@ -1464,6 +1485,12 @@ export const bulkImportProperties = async (req, res, next) => {
 
       if (!property.propertyName) {
         errors.push("Property name is required");
+      }
+      if (!property.propertyType) {
+        errors.push("Property type is required");
+      }
+      if (!isSelfManagingLandlordCompany(company) && !property.landlordName) {
+        errors.push("Landlord name/code is required");
       }
 
       if (property.lrNumber) {
@@ -1501,12 +1528,33 @@ export const bulkImportProperties = async (req, res, next) => {
 
         seenCodesInBatch.add(generatedPropertyCode);
 
-        const createdById =
-          req.user?.id || req.user?._id
-            ? mongoose.Types.ObjectId.isValid(req.user?.id || req.user?._id)
-              ? req.user?.id || req.user?._id
-              : undefined
-            : undefined;
+        const landlordDoc = property.landlordName
+          ? landlordMap.get(String(property.landlordName).trim().toLowerCase())
+          : null;
+        if (!isSelfManagingLandlordCompany(company) && !landlordDoc?._id) {
+          throw new Error(`Landlord "${property.landlordName}" was not found. Use an existing landlord name or landlord code.`);
+        }
+        const requestedLandlords = landlordDoc?._id
+          ? [{
+              landlordId: landlordDoc._id,
+              name: landlordDoc.landlordName,
+              contact: landlordDoc.email || landlordDoc.phoneNumber || "",
+              isPrimary: true,
+            }]
+          : [];
+        const modeAwareAssignment = await buildModeAwarePropertyAssignment({
+          company,
+          businessId,
+          req,
+          requestedLandlords,
+        });
+        const lettingMode = isLettingMode(property.letManage);
+        const resolvedTenantsPaysTo = lettingMode
+          ? "landlord"
+          : (modeAwareAssignment.tenantsPaysTo || "propertyManager");
+        const resolvedDepositHeldBy = lettingMode
+          ? "landlord"
+          : (modeAwareAssignment.depositHeldBy || "propertyManager");
 
         const newProperty = new Property({
           propertyCode: generatedPropertyCode,
@@ -1525,15 +1573,17 @@ export const bulkImportProperties = async (req, res, next) => {
           business: businessId,
           createdBy: createdById,
           updatedBy: createdById,
-          landlords: property.landlordName
-            ? [
-                {
-                  landlordId: null,
-                  name: property.landlordName,
-                  isPrimary: true,
-                },
-              ]
-            : [],
+          letManage: property.letManage,
+          landlords: modeAwareAssignment.landlords,
+          tenantsPaysTo: resolvedTenantsPaysTo,
+          depositHeldBy: resolvedDepositHeldBy,
+          commissionPercentage: modeAwareAssignment.commissionPercentage ?? 0,
+          commissionFixedAmount: modeAwareAssignment.commissionFixedAmount ?? 0,
+          commissionPaymentMode: modeAwareAssignment.commissionPaymentMode || "percentage",
+          commissionRecognitionBasis: modeAwareAssignment.commissionRecognitionBasis || "received",
+          commissionTaxSettings: modeAwareAssignment.commissionTaxSettings || undefined,
+          lettingFeeMode: lettingMode ? property.lettingFeeMode : "percentage",
+          lettingFeeValue: lettingMode ? Math.max(0, parseFloat(property.lettingFeeValue) || 100) : 100,
         });
 
         const savedProperty = await newProperty.save();
@@ -1570,8 +1620,9 @@ export const bulkImportProperties = async (req, res, next) => {
       }
     }
 
+    const allFailed = results.successful.length === 0 && results.failed.length > 0;
     res.status(200).json({
-      success: true,
+      success: !allFailed,
       ...results,
     });
   } catch (err) {

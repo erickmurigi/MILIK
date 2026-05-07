@@ -4,7 +4,7 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId } from "../services/businessScope.js";
-import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
+import { accrueCommissionForJob, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
 
 const PAYMENT_METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const RECONCILIATION_STATUSES = new Set(["pending", "reconciled", "flagged"]);
@@ -136,9 +136,28 @@ export const recordPayment = async (req, res, next) => {
 export const deletePayment = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const payment = await CarWashPayment.findOneAndDelete({ _id: req.params.id, business });
+    const payment = await CarWashPayment.findOne({ _id: req.params.id, business });
     if (!payment) return next(createError(404, "Car Wash payment not found"));
+    const jobBeforeDelete = await CarWashJob.findOne({ _id: payment.job, business }).lean();
+    if (!jobBeforeDelete) return next(createError(404, "Car Wash job not found"));
+
+    const totals = await CarWashPayment.aggregate([
+      { $match: { business: jobBeforeDelete.business, job: jobBeforeDelete._id } },
+      { $group: { _id: "$job", amount: { $sum: "$amount" } } },
+    ]);
+    const paidAfterDelete = Number(totals?.[0]?.amount || 0) - Number(payment.amount || 0);
+    const willRemainPaid = paidAfterDelete >= Number(jobBeforeDelete.price || 0);
+    if (!willRemainPaid) {
+      await handleJobPaymentStatusAfterPaymentChange({
+        business,
+        job: { ...jobBeforeDelete, paymentStatus: paidAfterDelete <= 0 ? "unpaid" : "partial" },
+        checkOnly: true,
+      });
+    }
+
+    await payment.deleteOne();
     const job = await refreshJobPaymentStatus(business, payment.job);
+    await handleJobPaymentStatusAfterPaymentChange({ business, job });
     res.status(200).json({ success: true, job, message: "Car Wash payment deleted" });
   } catch (error) {
     next(error);

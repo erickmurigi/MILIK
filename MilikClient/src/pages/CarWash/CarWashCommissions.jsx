@@ -57,6 +57,7 @@ const CarWashCommissions = () => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const [rules, setRules] = useState([]);
   const [commissions, setCommissions] = useState([]);
+  const [payableCommissions, setPayableCommissions] = useState([]);
   const [payouts, setPayouts] = useState([]);
   const [services, setServices] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -64,7 +65,9 @@ const CarWashCommissions = () => {
   const [ruleForm, setRuleForm] = useState(emptyRule);
   const [payoutForm, setPayoutForm] = useState(emptyPayout);
   const [editingRuleId, setEditingRuleId] = useState("");
+  const [showRulesModal, setShowRulesModal] = useState(false);
   const [showRuleModal, setShowRuleModal] = useState(false);
+  const [showPayoutHistoryModal, setShowPayoutHistoryModal] = useState(false);
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
@@ -74,8 +77,8 @@ const CarWashCommissions = () => {
   const [loading, setLoading] = useState(false);
 
   const selectedStaffPayable = useMemo(
-    () => commissions.filter((item) => item.status === "payable" && (!payoutForm.staff || String(item.staff?._id || item.staff) === String(payoutForm.staff))),
-    [commissions, payoutForm.staff]
+    () => payableCommissions.filter((item) => item.status === "payable" && (!payoutForm.staff || String(item.staff?._id || item.staff) === String(payoutForm.staff))),
+    [payableCommissions, payoutForm.staff]
   );
   const selectedPayoutTotal = useMemo(
     () => selectedStaffPayable
@@ -127,6 +130,7 @@ const CarWashCommissions = () => {
   }, [cashbooks, payoutForm.cashbookAccount]);
 
   const openRule = (rule = null) => {
+    setShowRulesModal(false);
     setEditingRuleId(rule?._id || "");
     setRuleForm(rule ? {
       name: rule.name || "",
@@ -148,6 +152,7 @@ const CarWashCommissions = () => {
       if (editingRuleId) await carWashApi.updateCommissionRule(editingRuleId, payload);
       else await carWashApi.createCommissionRule(payload);
       setShowRuleModal(false);
+      setShowRulesModal(false);
       setRuleForm(emptyRule);
       setEditingRuleId("");
       await load();
@@ -158,19 +163,22 @@ const CarWashCommissions = () => {
   };
 
   const openPayout = async () => {
-    let payableRows = selectedStaffPayable;
-    if (appliedFilters.status !== "payable") {
-      try {
-        const payload = await carWashApi.listCommissions({ status: "payable", staff: appliedFilters.staff || undefined, date: appliedFilters.date || undefined, limit: PAGE_SIZE });
-        payableRows = normalizeListPayload(payload, "commissions");
-      } catch (error) {
-        toast.error(error?.response?.data?.message || "Unable to load payable commissions");
-        return;
-      }
+    let payableRows = [];
+    try {
+      const payload = await carWashApi.listCommissions({
+        status: "payable",
+        staff: appliedFilters.staff || undefined,
+        date: appliedFilters.date || undefined,
+        limit: 200,
+      });
+      payableRows = normalizeListPayload(payload, "commissions");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Unable to load payable commissions");
+      return;
     }
     const firstStaff = payableRows[0]?.staff?._id || "";
     const firstStaffRows = firstStaff ? payableRows.filter((item) => String(item.staff?._id || item.staff) === String(firstStaff)) : [];
-    if (appliedFilters.status !== "payable") setCommissions(payableRows);
+    setPayableCommissions(payableRows);
     setPayoutForm({
       ...emptyPayout,
       staff: firstStaff,
@@ -181,7 +189,7 @@ const CarWashCommissions = () => {
   };
 
   const setPayoutStaff = (staffId) => {
-    const rows = commissions.filter((item) => item.status === "payable" && String(item.staff?._id || item.staff) === String(staffId));
+    const rows = payableCommissions.filter((item) => item.status === "payable" && String(item.staff?._id || item.staff) === String(staffId));
     setPayoutForm((prev) => ({ ...prev, staff: staffId, commissionIds: rows.map((item) => item._id) }));
   };
 
@@ -231,9 +239,17 @@ const CarWashCommissions = () => {
             <FaRedoAlt className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
+          <button type="button" onClick={() => setShowRulesModal(true)} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <FaEdit />
+            Rules
+          </button>
           <button type="button" onClick={() => openRule()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaPlus />
-            Rule
+            New Rule
+          </button>
+          <button type="button" onClick={() => setShowPayoutHistoryModal(true)} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <FaMoneyBillWave />
+            Payouts
           </button>
           <button type="button" onClick={openPayout} disabled={!summary?.payable?.count} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-50">
             <FaMoneyBillWave />
@@ -307,6 +323,83 @@ const CarWashCommissions = () => {
           </div>
         </div>
       </div>
+
+      {showRulesModal && (
+        <Modal
+          title="Commission Rules"
+          subtitle="Review and edit the rules used when jobs are completed."
+          onClose={() => setShowRulesModal(false)}
+          footer={<button type="button" onClick={() => openRule()} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white"><FaPlus /> New Rule</button>}
+        >
+          <div className="overflow-auto border border-slate-200">
+            <table className="w-full min-w-[820px] text-xs">
+              <thead className="bg-[#0B3B2E] text-white">
+                <tr>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Rule</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Service</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Staff</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Rate</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rules.length ? rules.map((rule) => (
+                  <tr key={rule._id} className="border-b border-slate-200 hover:bg-slate-50">
+                    <td className="px-2 py-1 font-extrabold text-slate-900">{rule.name}</td>
+                    <td className="px-2 py-1 text-slate-700">{rule.service?.name || "All services"}</td>
+                    <td className="px-2 py-1 text-slate-700">{rule.staff?.name || "All staff"}</td>
+                    <td className="px-2 py-1 text-right font-bold text-slate-900">{rule.commissionType === "percentage" ? `${rule.rate}%` : formatMoney(rule.rate)}</td>
+                    <td className="px-2 py-1 text-slate-700">{rule.active === false ? "Inactive" : "Active"}</td>
+                    <td className="px-2 py-1 text-right">
+                      <button type="button" onClick={() => openRule(rule)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaEdit /> Edit</button>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={6} className="px-3 py-8 text-center text-xs font-semibold text-slate-500">No commission rules yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Modal>
+      )}
+
+      {showPayoutHistoryModal && (
+        <Modal
+          title="Commission Payouts"
+          subtitle="Audit payouts posted to staff commission payable."
+          onClose={() => setShowPayoutHistoryModal(false)}
+        >
+          <div className="overflow-auto border border-slate-200">
+            <table className="w-full min-w-[860px] text-xs">
+              <thead className="bg-[#0B3B2E] text-white">
+                <tr>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Payout No.</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Staff</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Method</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Cashbook</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Amount</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payouts.length ? payouts.map((row) => (
+                  <tr key={row._id} className="border-b border-slate-200 hover:bg-slate-50">
+                    <td className="px-2 py-1 font-extrabold text-slate-900">{row.payoutNumber}</td>
+                    <td className="px-2 py-1">{row.staff?.name || "Staff"}</td>
+                    <td className="px-2 py-1 uppercase">{row.method}</td>
+                    <td className="px-2 py-1">{row.cashbookAccount?.code} {row.cashbookAccount?.name}</td>
+                    <td className="px-2 py-1 text-right font-extrabold">{formatMoney(row.amount)}</td>
+                    <td className="px-2 py-1">{row.payoutDate ? new Date(row.payoutDate).toLocaleDateString("en-KE") : "-"}</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={6} className="px-3 py-8 text-center text-xs font-semibold text-slate-500">No commission payouts found.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Modal>
+      )}
 
       {showRuleModal && (
         <Modal

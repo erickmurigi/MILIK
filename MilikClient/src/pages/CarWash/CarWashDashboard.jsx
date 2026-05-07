@@ -30,30 +30,31 @@ const formatTime = (value) => {
 const StatCard = ({ label, value, icon: StatIcon, tone = "green" }) => {
   const toneMap = {
     green: {
-      top: "border-t-[#0B3B2E]",
-      icon: "text-[#0B3B2E]",
-      value: "text-[#082F25]",
+      bg: "bg-[#174D3A]",
+      border: "border-[#174D3A]",
+      iconBox: "bg-white/10 text-white",
+      value: "text-white",
+      label: "text-emerald-50",
     },
     orange: {
-      top: "border-t-[#FF8C00]",
-      icon: "text-[#FF8C00]",
-      value: "text-slate-950",
-    },
-    slate: {
-      top: "border-t-[#6B7A72]",
-      icon: "text-[#6B7A72]",
-      value: "text-slate-950",
+      bg: "bg-[#E65F1A]",
+      border: "border-[#E65F1A]",
+      iconBox: "bg-white/10 text-white",
+      value: "text-white",
+      label: "text-orange-50",
     },
   };
   const colors = toneMap[tone] || toneMap.green;
   return (
-    <div className={`border border-t-2 border-slate-200 ${colors.top} bg-white px-3 py-2 shadow-sm`}>
+    <div className={`border ${colors.border} ${colors.bg} px-3 py-2 shadow-sm`}>
       <div className="flex items-start justify-between gap-2">
         <div>
-          <div className="text-[11px] font-bold uppercase tracking-wide text-[#52675D]">{label}</div>
+          <div className={`text-[11px] font-bold uppercase tracking-wide ${colors.label}`}>{label}</div>
           <div className={`mt-1 text-xl font-extrabold leading-none ${colors.value}`}>{value}</div>
         </div>
-        {React.createElement(StatIcon, { className: `mt-0.5 h-3.5 w-3.5 ${colors.icon}` })}
+        <span className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center ${colors.iconBox}`}>
+          {React.createElement(StatIcon, { className: "h-3.5 w-3.5" })}
+        </span>
       </div>
     </div>
   );
@@ -160,8 +161,8 @@ const CarWashDashboard = () => {
         <StatCard label="Today Jobs" value={summary?.todayJobsCount || 0} icon={FaCar} tone="green" />
         <StatCard label="Active Queue" value={activeQueue} icon={FaClock} tone="orange" />
         <StatCard label="Today Revenue" value={formatMoney(totalRevenue)} icon={FaMoneyBillWave} tone="green" />
-        <StatCard label="Cash" value={formatMoney(summary?.cashTotal)} icon={FaMoneyBillWave} tone="slate" />
-        <StatCard label="M-Pesa" value={formatMoney(summary?.mpesaTotal)} icon={FaPhone} tone="slate" />
+        <StatCard label="Cash" value={formatMoney(summary?.cashTotal)} icon={FaMoneyBillWave} tone="orange" />
+        <StatCard label="M-Pesa" value={formatMoney(summary?.mpesaTotal)} icon={FaPhone} tone="green" />
       </div>
 
       <div className="mt-1.5 grid items-start gap-2 xl:grid-cols-[1.15fr_0.85fr]">

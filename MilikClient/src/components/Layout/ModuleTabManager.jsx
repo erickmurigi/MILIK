@@ -7,10 +7,12 @@ import {
   getWorkspaceDefaultRoute,
   getWorkspaceFromRoute,
 } from '../../utils/workspaceRoutes';
+import { hasCompanyModule } from '../../utils/companyModules';
 
 const MODULES = {
   [WORKSPACE_IDS.PROPERTY]: {
     id: WORKSPACE_IDS.PROPERTY,
+    moduleKey: 'propertyManagement',
     title: 'Property Management',
     route: '/dashboard',
     icon: <FaHome className="w-4 h-4" />,
@@ -18,6 +20,7 @@ const MODULES = {
   },
   [WORKSPACE_IDS.CARWASH]: {
     id: WORKSPACE_IDS.CARWASH,
+    moduleKey: 'carwash',
     title: 'MILIK Car Wash',
     route: '/carwash/dashboard',
     icon: <FaCar className="w-4 h-4" />,
@@ -46,21 +49,48 @@ const getModulesStorageKey = (companyKey) => `${MODULES_STORAGE_KEY_PREFIX}-${co
 const getActiveModuleStorageKey = (companyKey) =>
   `${ACTIVE_MODULE_STORAGE_KEY_PREFIX}-${companyKey}`;
 
-const readOpenModules = (companyKey) => {
+const isCompanyWorkspaceAllowed = (company, workspaceId) => {
+  const moduleKey = MODULES[workspaceId]?.moduleKey;
+  if (!moduleKey) return true;
+  if (!company?._id) return workspaceId === WORKSPACE_IDS.PROPERTY;
+  return hasCompanyModule(company, moduleKey);
+};
+
+const getDefaultModulesForCompany = (company) => {
+  if (!company?._id) return [WORKSPACE_IDS.PROPERTY];
+  const enabled = [WORKSPACE_IDS.PROPERTY, WORKSPACE_IDS.CARWASH].filter((workspaceId) =>
+    isCompanyWorkspaceAllowed(company, workspaceId)
+  );
+  return enabled.length ? enabled.slice(0, 1) : [WORKSPACE_IDS.COMPANY_SETUP];
+};
+
+const sanitizeOpenModules = (modules = [], company) => {
+  const normalized = (Array.isArray(modules) ? modules : []).filter(
+    (workspaceId, index, list) =>
+      MODULES[workspaceId] &&
+      list.indexOf(workspaceId) === index &&
+      isCompanyWorkspaceAllowed(company, workspaceId)
+  );
+  return normalized.length ? normalized : getDefaultModulesForCompany(company);
+};
+
+const readOpenModules = (companyKey, company) => {
   const saved = localStorage.getItem(getModulesStorageKey(companyKey));
-  if (!saved) return [WORKSPACE_IDS.PROPERTY];
+  if (!saved) return getDefaultModulesForCompany(company);
 
   try {
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) && parsed.length ? parsed : [WORKSPACE_IDS.PROPERTY];
+    return sanitizeOpenModules(parsed, company);
   } catch (error) {
     console.error('Failed to parse saved open modules:', error);
-    return [WORKSPACE_IDS.PROPERTY];
+    return getDefaultModulesForCompany(company);
   }
 };
 
-const readActiveModule = (companyKey) => {
-  return localStorage.getItem(getActiveModuleStorageKey(companyKey)) || WORKSPACE_IDS.PROPERTY;
+const readActiveModule = (companyKey, company, openModules = []) => {
+  const saved = localStorage.getItem(getActiveModuleStorageKey(companyKey));
+  if (saved && openModules.includes(saved) && isCompanyWorkspaceAllowed(company, saved)) return saved;
+  return openModules[0] || getDefaultModulesForCompany(company)[0];
 };
 
 const ModuleTabManager = ({ darkMode }) => {
@@ -72,8 +102,10 @@ const ModuleTabManager = ({ darkMode }) => {
 
   const currentModule = useMemo(() => getWorkspaceFromRoute(location.pathname), [location.pathname]);
 
-  const [openModules, setOpenModules] = useState(() => readOpenModules(currentCompanyKey));
-  const [activeModule, setActiveModule] = useState(() => readActiveModule(currentCompanyKey));
+  const [openModules, setOpenModules] = useState(() => readOpenModules(currentCompanyKey, currentCompany));
+  const [activeModule, setActiveModule] = useState(() =>
+    readActiveModule(currentCompanyKey, currentCompany, readOpenModules(currentCompanyKey, currentCompany))
+  );
 
   useEffect(() => {
     localStorage.setItem(getModulesStorageKey(currentCompanyKey), JSON.stringify(openModules));
@@ -84,8 +116,8 @@ const ModuleTabManager = ({ darkMode }) => {
     const previousCompanyKey = previousCompanyKeyRef.current;
 
     if (previousCompanyKey !== currentCompanyKey) {
-      const cleanModules = [WORKSPACE_IDS.PROPERTY];
-      const cleanActiveModule = WORKSPACE_IDS.PROPERTY;
+      const cleanModules = getDefaultModulesForCompany(currentCompany);
+      const cleanActiveModule = cleanModules[0];
 
       setOpenModules(cleanModules);
       setActiveModule(cleanActiveModule);
@@ -95,24 +127,39 @@ const ModuleTabManager = ({ darkMode }) => {
 
       previousCompanyKeyRef.current = currentCompanyKey;
 
-      if (location.pathname !== '/dashboard') {
-        navigate('/dashboard', { replace: true });
+      const nextRoute = getWorkspaceDefaultRoute(cleanActiveModule);
+      if (location.pathname !== nextRoute) {
+        navigate(nextRoute, { replace: true });
       }
 
       return;
     }
 
     previousCompanyKeyRef.current = currentCompanyKey;
-  }, [currentCompanyKey, location.pathname, navigate]);
+  }, [currentCompany, currentCompanyKey, location.pathname, navigate]);
 
   useEffect(() => {
-    setOpenModules((prev) => (prev.includes(currentModule) ? prev : [...prev, currentModule]));
+    if (!isCompanyWorkspaceAllowed(currentCompany, currentModule)) {
+      const fallbackModules = getDefaultModulesForCompany(currentCompany);
+      const fallbackModule = fallbackModules[0];
+      setOpenModules(fallbackModules);
+      setActiveModule(fallbackModule);
+      const fallbackRoute = getWorkspaceDefaultRoute(fallbackModule);
+      if (location.pathname !== fallbackRoute) navigate(fallbackRoute, { replace: true });
+      return;
+    }
+
+    setOpenModules((prev) => {
+      const clean = sanitizeOpenModules(prev, currentCompany);
+      return clean.includes(currentModule) ? clean : [...clean, currentModule];
+    });
     setActiveModule(currentModule);
-  }, [currentModule]);
+  }, [currentCompany, currentModule, location.pathname, navigate]);
 
   const switchModule = (moduleId) => {
     const config = MODULES[moduleId];
     if (!config) return;
+    if (!isCompanyWorkspaceAllowed(currentCompany, moduleId)) return;
 
     setActiveModule(moduleId);
     navigate(config.route || getWorkspaceDefaultRoute(moduleId));
@@ -125,14 +172,14 @@ const ModuleTabManager = ({ darkMode }) => {
     setOpenModules(nextModules);
 
     if (moduleId === activeModule) {
-      const nextModule = nextModules[0] || WORKSPACE_IDS.PROPERTY;
+      const nextModule = nextModules[0] || getDefaultModulesForCompany(currentCompany)[0];
       switchModule(nextModule);
     }
   };
 
   const visibleModules = useMemo(
-    () => openModules.map((id) => MODULES[id]).filter(Boolean),
-    [openModules]
+    () => sanitizeOpenModules(openModules, currentCompany).map((id) => MODULES[id]).filter(Boolean),
+    [currentCompany, openModules]
   );
 
   if (visibleModules.length === 0) return null;

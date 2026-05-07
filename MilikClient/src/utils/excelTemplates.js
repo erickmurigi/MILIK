@@ -288,9 +288,7 @@ export const parseLandlordsExcel = (file) => {
           if (!record.taxPin) {
             rowErrors.push('Tax PIN is required');
           }
-          if (!record.email) {
-            rowErrors.push('Email is required');
-          } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.email)) {
+          if (record.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.email)) {
             rowErrors.push('Invalid email format');
           }
           if (!record.phoneNumber) {
@@ -700,12 +698,6 @@ export const parsePropertiesExcel = (file) => {
           if (!record.propertyName) {
             rowErrors.push('Property Name is required');
           }
-          if (!record.lrNumber) {
-            rowErrors.push('LR Number is required');
-          }
-          if (!record.townCityState) {
-            rowErrors.push('Town/City is required');
-          }
           if (!record.landlordName) {
             rowErrors.push('Landlord Name is required');
           }
@@ -1065,14 +1057,16 @@ export const parseUnitsExcel = (file) => {
           const getPropertyCode = (row) => row['Property Code *'] || row['Property Code'] || row['propertyCode'] || '';
           const getUnitType = (row) => row['Unit Type *'] || row['Unit Type'] || row['unitType'] || 'studio';
           const getRent = (row) => {
-            const val = row['Rent *'] || row['Rent'] || row['rent'] || '0';
+            const val = row['Rent *'] || row['Rent'] || row['rent'] || '';
+            if (String(val || '').trim() === '') return undefined;
             const num = parseFloat(val);
-            return isNaN(num) ? 0 : num;
+            return isNaN(num) ? Number.NaN : num;
           };
           const getDeposit = (row) => {
-            const val = row['Deposit *'] || row['Deposit'] || row['deposit'] || '0';
+            const val = row['Deposit *'] || row['Deposit'] || row['deposit'] || '';
+            if (String(val || '').trim() === '') return undefined;
             const num = parseFloat(val);
-            return isNaN(num) ? 0 : num;
+            return isNaN(num) ? Number.NaN : num;
           };
           const getAmenities = (row) => {
             const val = row['Amenities'] || row['amenities'] || '';
@@ -1104,7 +1098,7 @@ export const parseUnitsExcel = (file) => {
         const errors = [];
         
         const validUnitTypes = ['studio', '1bed', '2bed', '3bed', '4bed', 'commercial'];
-        const validStatuses = ['vacant', 'occupied', 'maintenance', 'reserved', 'archived'];
+        const validStatuses = ['vacant', 'maintenance', 'reserved', 'archived'];
         
         // Track duplicates within the file
         const seenUnits = new Set();
@@ -1119,11 +1113,11 @@ export const parseUnitsExcel = (file) => {
           if (!record.propertyCode) {
             rowErrors.push('Property Code is required');
           }
-          if (record.rent <= 0) {
-            rowErrors.push('Rent must be greater than 0');
+          if (record.rent !== undefined && (!Number.isFinite(record.rent) || record.rent < 0)) {
+            rowErrors.push('Rent must be a valid zero-or-greater amount when provided');
           }
-          if (record.deposit < 0) {
-            rowErrors.push('Deposit cannot be negative');
+          if (record.deposit !== undefined && (!Number.isFinite(record.deposit) || record.deposit < 0)) {
+            rowErrors.push('Deposit must be a valid zero-or-greater amount when provided');
           }
           
           // Enum validations
@@ -1694,7 +1688,7 @@ export const parseTenantsExcel = (file) => {
                 "additionalUnits",
               ])
             ),
-            rent: Number.isFinite(rentValue) ? rentValue : rentValue === null ? 0 : Number.NaN,
+            rent: Number.isFinite(rentValue) ? rentValue : rentValue === null ? undefined : Number.NaN,
             depositAmount:
               depositAmountValue === null
                 ? undefined
@@ -1792,9 +1786,9 @@ export const parseTenantsExcel = (file) => {
             rowErrors.push(`Invalid Status. Must be one of: ${validStatuses.join(", ")}`);
           }
 
-          if (record.rent !== 0 && !Number.isFinite(record.rent)) {
+          if (record.rent !== undefined && !Number.isFinite(record.rent)) {
             rowErrors.push("Rent must be numeric when provided");
-          } else if (Number.isFinite(record.rent) && record.rent < 0) {
+          } else if (record.rent !== undefined && Number.isFinite(record.rent) && record.rent < 0) {
             rowErrors.push("Rent cannot be negative");
           }
 
@@ -1857,7 +1851,7 @@ export const parseTenantsExcel = (file) => {
               propertyCode: record.propertyCode,
               unitNumber: record.unitNumber,
               additionalUnitNumbers: record.additionalUnitNumbers,
-              rent: Number(record.rent || 0),
+              rent: record.rent,
               depositAmount: record.depositAmount,
               depositHeldBy: record.depositHeldBy || undefined,
               moveInDate: record.moveInDate,

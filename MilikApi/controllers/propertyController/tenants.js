@@ -1609,8 +1609,9 @@ export const getTenantBalance = async (req, res, next) => {
 
     const totalPaid = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
+    const allFailed = successful.length === 0 && failed.length > 0;
     return res.status(200).json({
-      success: true,
+      success: !allFailed,
       data: {
         tenant: tenant.name,
         currentBalance: tenant.balance,
@@ -1999,10 +2000,28 @@ export const bulkImportTenants = async (req, res, next) => {
           continue;
         }
 
-        const propertyDepositHeldBy = primaryUnitDoc?.property?.depositHeldBy || "propertyManager";
-        const requestedRent = Number(record.rent || 0);
+        const propertyServiceMode = normalizePropertyServiceMode(primaryUnitDoc?.property?.letManage);
+        const isPropertyLetting = propertyServiceMode === "Letting";
+        const propertyDepositHeldBy = isPropertyLetting
+          ? "landlord"
+          : (primaryUnitDoc?.property?.depositHeldBy || "propertyManager");
+        const hasExplicitRent = record.rent !== undefined && record.rent !== null && String(record.rent).trim() !== "";
+        const requestedRent = hasExplicitRent ? Number(record.rent || 0) : 0;
         const computedRent = calculateTenantAssignedRent(requestedUnitDocs, primaryUnitDoc.rent || 0);
-        const depositAmount = Number(record.depositAmount ?? requestedRent ?? primaryUnitDoc.deposit ?? computedRent);
+        const hasExplicitDeposit = record.depositAmount !== undefined && record.depositAmount !== null && String(record.depositAmount).trim() !== "";
+        const depositAmount = Number(
+          hasExplicitDeposit
+            ? record.depositAmount
+            : (primaryUnitDoc.deposit ?? (requestedRent > 0 ? requestedRent : computedRent))
+        );
+        const assignedRent = requestedRent > 0 ? requestedRent : computedRent;
+        const computedLettingFeeAmount = (() => {
+          if (!isPropertyLetting) return 0;
+          const feeMode = primaryUnitDoc?.property?.lettingFeeMode || "percentage";
+          const feeValue = Math.max(0, parseFloat(primaryUnitDoc?.property?.lettingFeeValue ?? 100) || 0);
+          if (feeMode === "fixed") return feeValue;
+          return Math.round((feeValue / 100) * assignedRent * 100) / 100;
+        })();
         const importedUtilities = Array.isArray(record.utilities)
           ? record.utilities
           : Array.isArray(record.additionalUtilities)
@@ -2015,13 +2034,14 @@ export const bulkImportTenants = async (req, res, next) => {
           idNumber: normalizedIdNumber,
           unit: primaryUnitDoc._id,
           additionalUnits: requestedUnits.additional,
-          rent: requestedRent > 0 ? requestedRent : computedRent,
+          rent: assignedRent,
           balance: 0,
           status: importedTenantStatus,
           depositAmount,
           depositHeldBy: normalizeDepositHolder(record.depositHeldBy, propertyDepositHeldBy),
           depositRefundStatus: depositAmount > 0 ? "pending" : "not_applicable",
           depositRefundAmount: depositAmount,
+          lettingFeeAmount: computedLettingFeeAmount,
           paymentMethod: normalizePaymentMethod(record.paymentMethod),
           leaseType,
           moveInDate,
@@ -2036,29 +2056,43 @@ export const bulkImportTenants = async (req, res, next) => {
           },
         });
 
-        await newTenant.save();
+        const savedTenant = await newTenant.save();
         await syncTenantAssignedUnitOccupancy({
           previousUnitIds: [],
-          nextUnitIds: shouldTenantOccupyUnits(newTenant) ? getTenantAssignedUnitIds(newTenant) : [],
-          tenantId: newTenant._id,
+          nextUnitIds: shouldTenantOccupyUnits(savedTenant) ? getTenantAssignedUnitIds(savedTenant) : [],
+          tenantId: savedTenant._id,
           effectiveDate: moveInDate,
         });
 
-        if (importedTenantOccupiesUnits && moveInDate && !Number.isNaN(moveInDate.getTime())) {
-          await syncTenantLeaseRecord({
-            tenantDoc: newTenant,
-            unitDoc: primaryUnitDoc,
-            action: "upsert",
-          });
-        }
+        const populatedTenant = await populateTenantQuery(Tenant.findById(savedTenant._id));
+        const leaseRecord = await syncTenantLeaseRecord({
+          tenantDoc: populatedTenant,
+          unitDoc: primaryUnitDoc,
+          action: "upsert",
+        });
 
         existingIds.add(normalizedIdNumberKey);
         existingCodes.add(String(tenantCode).toLowerCase());
+        if (importedTenantOccupiesUnits) {
+          requestedUnitDocs.forEach((unitDoc) => {
+            const code = unitDoc.property?.propertyCode?.toLowerCase();
+            const number = unitDoc.unitNumber?.toLowerCase();
+            if (code && number) {
+              unitMap.set(`${code}|${number}`, {
+                ...unitDoc,
+                status: "occupied",
+                isVacant: false,
+                lastTenant: savedTenant._id,
+              });
+            }
+          });
+        }
 
         successful.push({
           tenantName: record.tenantName,
-          _id: newTenant._id,
+          _id: savedTenant._id,
           tenantCode,
+          agreementNumber: leaseRecord?.agreementNumber || "",
         });
       } catch (error) {
         failed.push({
