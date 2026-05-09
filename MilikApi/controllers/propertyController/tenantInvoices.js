@@ -3843,8 +3843,8 @@ export const createTenantInvoicesBatch = async (req, res) => {
       return res.status(400).json({ error: "At least one invoice payload is required." });
     }
 
-    if (items.length > 200) {
-      return res.status(400).json({ error: "Batch size too large. Maximum 200 invoices per batch. Split large month-end runs into multiple sequential calls." });
+    if (items.length > 1000) {
+      return res.status(400).json({ error: "Batch size too large. Maximum 1000 invoices per batch." });
     }
 
     const requestedBusinessId = resolveAuthorizedBusinessId(req, req.body.business || items[0]?.business);

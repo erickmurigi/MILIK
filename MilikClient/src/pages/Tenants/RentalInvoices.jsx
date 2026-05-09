@@ -3088,21 +3088,24 @@ const createInvoiceForTenant = async (
         return;
       }
 
-      const batchResponse = await createTenantInvoicesBatch({
-        business:
-          batchItems[0]?.business ||
-          currentCompany?._id ||
-          currentUser?.company?._id ||
-          currentUser?.company,
-        items: batchItems,
-      });
+      const BATCH_CHUNK_SIZE = 500;
+      const batchBusinessId =
+        batchItems[0]?.business ||
+        currentCompany?._id ||
+        currentUser?.company?._id ||
+        currentUser?.company;
+      const allBatchResults = [];
 
-      const successfulRows = Array.isArray(batchResponse?.results)
-        ? batchResponse.results.filter((row) => row?.success)
-        : [];
-      const failedRows = Array.isArray(batchResponse?.results)
-        ? batchResponse.results.filter((row) => !row?.success)
-        : [];
+      for (let chunkStart = 0; chunkStart < batchItems.length; chunkStart += BATCH_CHUNK_SIZE) {
+        const chunk = batchItems.slice(chunkStart, chunkStart + BATCH_CHUNK_SIZE);
+        const chunkResponse = await createTenantInvoicesBatch({ business: batchBusinessId, items: chunk });
+        if (Array.isArray(chunkResponse?.results)) {
+          allBatchResults.push(...chunkResponse.results);
+        }
+      }
+
+      const successfulRows = allBatchResults.filter((row) => row?.success);
+      const failedRows = allBatchResults.filter((row) => !row?.success);
 
       createdCount = new Set(successfulRows.map((row) => String(row?.tenant || "")).filter(Boolean)).size;
       const failedCount = new Set(failedRows.map((row) => String(row?.tenant || "")).filter(Boolean)).size;
