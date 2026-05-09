@@ -1358,7 +1358,7 @@ const confirmTransferUnit = async () => {
       const response = await adminRequests.post("/tenants/bulk-import", {
         tenants: validRecords,
         business: currentCompany._id,
-      }, { timeout: 180000 });
+      }, { timeout: 0 });
 
       await dispatch(getTenants({ business: currentCompany._id, ...(tenantStatusQuery ? { status: tenantStatusQuery } : {}) }));
       await loadInvoices();

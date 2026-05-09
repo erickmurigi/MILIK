@@ -655,7 +655,7 @@ const Units = () => {
       const response = await adminRequests.post('/units/bulk-import', {
         units: validRecords,
         business: currentCompany._id
-      }, { timeout: 120000 });
+      }, { timeout: 0 });
 
       // Refresh units list
       await dispatch(getUnits({ business: currentCompany._id }));

@@ -85,7 +85,7 @@ export const createTenantInvoice = async (invoiceData) => {
 
 export const createTenantInvoicesBatch = async ({ business = null, items = [] } = {}) => {
   try {
-    const res = await adminRequests.post("/tenant-invoices/batch", { business, items });
+    const res = await adminRequests.post("/tenant-invoices/batch", { business, items }, { timeout: 0 });
     return res.data;
   } catch (err) {
     throw extractApiError(err);
