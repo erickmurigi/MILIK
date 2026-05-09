@@ -290,7 +290,7 @@ const RentalAgedAnalysisReport = () => {
         </div>
       </div>
 
-      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
+      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5 pb-10">
         <style>{`
           .milik-report-page select:focus, .milik-report-page input:focus { border-color: #f45b0b; box-shadow: 0 0 0 1px rgba(244, 91, 11, 0.45); outline: none; }
           .milik-report-page select option:checked { background: #f45b0b; color: #ffffff; }

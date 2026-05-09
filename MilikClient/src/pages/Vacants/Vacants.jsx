@@ -771,7 +771,7 @@ const Vacants = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0 pb-10">
         <div className="sticky top-0 z-30 flex-shrink-0 bg-gray-50 px-2 pt-2">
           <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
             <div className="mb-2 flex flex-wrap items-center gap-2">

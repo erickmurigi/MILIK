@@ -825,6 +825,36 @@ export const exportPropertiesToExcel = (properties) => {
 // UNITS EXCEL TEMPLATES
 // ============================================
 
+const normalizeUnitBillingPeriodKey = (value = "") =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+
+const UNIT_BILLING_PERIOD_ALIASES = {
+  month: "monthly",
+  monthly: "monthly",
+  quarter: "quarterly",
+  quarterly: "quarterly",
+  semi_annual: "semi_annual",
+  semiannual: "semi_annual",
+  semi_annually: "semi_annual",
+  biannual: "semi_annual",
+  bi_annually: "semi_annual",
+  annual: "annual",
+  annually: "annual",
+  year: "annual",
+  yearly: "annual",
+};
+
+const canonicalUnitBillingPeriodKey = (value = "") => {
+  const normalized = normalizeUnitBillingPeriodKey(value);
+  return UNIT_BILLING_PERIOD_ALIASES[normalized] || normalized || "monthly";
+};
+
 /**
  * Generate Excel template for Units with instructions
  * @param {Array} properties - Optional array of property objects with propertyCode and propertyName
@@ -838,6 +868,7 @@ export const generateUnitsTemplate = (properties = []) => {
       'Unit Type *',
       'Rent *',
       'Deposit *',
+      'Billing Frequency',
       'Amenities',
       'Utilities Included',
       'Status',
@@ -852,6 +883,7 @@ export const generateUnitsTemplate = (properties = []) => {
     { wch: 18 }, // Unit Type
     { wch: 15 }, // Rent
     { wch: 15 }, // Deposit
+    { wch: 20 }, // Billing Frequency
     { wch: 40 }, // Amenities
     { wch: 25 }, // Utilities Included
     { wch: 15 }, // Status
@@ -884,6 +916,7 @@ export const generateUnitsTemplate = (properties = []) => {
       'Unit Type',
       'Rent',
       'Deposit',
+      'Billing Frequency',
       'Amenities',
       'Utilities Included',
       'Status',
@@ -896,6 +929,7 @@ export const generateUnitsTemplate = (properties = []) => {
       '2bed',
       '35000',
       '70000',
+      'monthly',
       'WiFi, AC, Parking',
       'Water, Garbage',
       'vacant',
@@ -908,6 +942,7 @@ export const generateUnitsTemplate = (properties = []) => {
       '1bed',
       '25000',
       '50000',
+      'quarterly',
       'Gym, Pool',
       'Water',
       'occupied',
@@ -920,6 +955,7 @@ export const generateUnitsTemplate = (properties = []) => {
       'commercial',
       '45000',
       '90000',
+      'annual',
       'Parking, Security',
       'Electricity, Water',
       'vacant',
@@ -932,6 +968,7 @@ export const generateUnitsTemplate = (properties = []) => {
       'studio',
       '15000',
       '30000',
+      'semi_annual',
       '',
       '',
       'maintenance',
@@ -952,7 +989,7 @@ export const generateUnitsTemplate = (properties = []) => {
   ]);
 
   instructionsSheet['!cols'] = [
-    { wch: 80 }, { wch: 15 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 40 }, { wch: 25 }, { wch: 15 }, { wch: 40 }
+    { wch: 80 }, { wch: 15 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 40 }, { wch: 25 }, { wch: 15 }, { wch: 40 }
   ];
 
   // Sheet 3: Dropdown Values Reference
@@ -966,6 +1003,12 @@ export const generateUnitsTemplate = (properties = []) => {
     ['3bed'],
     ['4bed'],
     ['commercial'],
+    [''],
+    ['Billing Frequency Options:'],
+    ['monthly'],
+    ['quarterly'],
+    ['semi_annual'],
+    ['annual'],
     [''],
     ['Status Options:'],
     ['vacant'],
@@ -1076,6 +1119,15 @@ export const parseUnitsExcel = (file) => {
             const val = row['Utilities Included'] || row['utilities'] || '';
             return val.split(',').map(u => u.trim()).filter(u => u);
           };
+          const getBillingFrequency = (row) => {
+            const val =
+              row['Billing Frequency'] ||
+              row['Billing Frequency *'] ||
+              row['billingFrequency'] ||
+              row['billingPeriodKey'] ||
+              '';
+            return canonicalUnitBillingPeriodKey(val || 'monthly');
+          };
           const getStatus = (row) => row['Status'] || row['status'] || 'vacant';
           const getDescription = (row) => row['Description'] || row['description'] || '';
           
@@ -1086,6 +1138,8 @@ export const parseUnitsExcel = (file) => {
             unitType: getUnitType(row).trim().toLowerCase(),
             rent: getRent(row),
             deposit: getDeposit(row),
+            billingFrequency: getBillingFrequency(row),
+            billingPeriodKey: getBillingFrequency(row),
             amenities: getAmenities(row),
             utilities: getUtilities(row),
             status: getStatus(row).trim().toLowerCase(),
@@ -1099,6 +1153,7 @@ export const parseUnitsExcel = (file) => {
         
         const validUnitTypes = ['studio', '1bed', '2bed', '3bed', '4bed', 'commercial'];
         const validStatuses = ['vacant', 'maintenance', 'reserved', 'archived'];
+        const validBillingFrequencies = ['monthly', 'quarterly', 'semi_annual', 'annual'];
         
         // Track duplicates within the file
         const seenUnits = new Set();
@@ -1126,6 +1181,9 @@ export const parseUnitsExcel = (file) => {
           }
           if (record.status && !validStatuses.includes(record.status)) {
             rowErrors.push(`Invalid Status. Must be one of: ${validStatuses.join(', ')}`);
+          }
+          if (record.billingFrequency && !validBillingFrequencies.includes(record.billingFrequency)) {
+            rowErrors.push(`Invalid Billing Frequency. Must be one of: ${validBillingFrequencies.join(', ')}`);
           }
           
           // Check for duplicates within the file (per property)
@@ -1178,6 +1236,7 @@ export const exportUnitsToExcel = (units) => {
     'Unit Type': unit.unitType || '',
     'Rent (KES)': unit.rent || 0,
     'Deposit (KES)': unit.deposit || 0,
+    'Billing Frequency': unit.billingPeriodKey || unit.billingFrequency || 'monthly',
     'Status': unit.status || 'vacant',
     'Tenant': unit.currentTenant?.name || unit.tenant?.name || unit.tenantName || '-',
     'Amenities': unit.amenities?.join(', ') || '',
@@ -1195,6 +1254,7 @@ export const exportUnitsToExcel = (units) => {
     { wch: 15 }, // Type
     { wch: 15 }, // Rent
     { wch: 15 }, // Deposit
+    { wch: 20 }, // Billing Frequency
     { wch: 15 }, // Status
     { wch: 20 }, // Tenant
     { wch: 30 }, // Amenities

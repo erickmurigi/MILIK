@@ -809,7 +809,7 @@ const Landlords = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+      <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2 pb-10">
         {/* Filters Row */}
         <div className="sticky top-0 z-30 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm">
           <div className="space-y-2">

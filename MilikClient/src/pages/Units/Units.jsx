@@ -271,15 +271,10 @@ const Units = () => {
       // Generate unit code: first 2 letters of property name + 4 digit index within property
       const unitCode = `${first2Letters}${String(unitIndexInProperty).padStart(4, '0')}`;
 
-      const tenantName =
-        unit.currentTenant?.name ||
-        unit.lastTenant?.name ||
-        unit.tenant?.name ||
-        unit.tenantName ||
-        "-";
       const rawStatus = (unit.status || "vacant").toLowerCase();
       const hasLiveTenant = Boolean(unit.currentTenant?._id || unit.currentTenant?.name);
       const normalizedStatus = hasLiveTenant && rawStatus !== "archived" ? "occupied" : rawStatus;
+      const tenantName = hasLiveTenant ? (unit.currentTenant?.name || "-") : "-";
       const hasCurrentOccupant = normalizedStatus === "occupied" || hasLiveTenant;
       const hasTenantHistory = Boolean(unit.lastTenant?._id || unit.lastTenant?.name || unit.tenant?._id || unit.tenant?.name);
       const canArchive = normalizedStatus !== "archived" && !hasCurrentOccupant;
@@ -660,7 +655,7 @@ const Units = () => {
       const response = await adminRequests.post('/units/bulk-import', {
         units: validRecords,
         business: currentCompany._id
-      });
+      }, { timeout: 120000 });
 
       // Refresh units list
       await dispatch(getUnits({ business: currentCompany._id }));
@@ -853,7 +848,7 @@ const Units = () => {
   // ---------------------------
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex flex-col h-full min-h-0 p-0 bg-gray-50 overflow-hidden">
+      <div className="flex flex-col h-full min-h-0 p-0 pb-10 bg-gray-50 overflow-hidden">
         {/* Filters Card (consistent style) */}
         <div className="flex-shrink-0 sticky top-0 z-30 bg-gray-50 pt-2 px-2">
           <div className={LISTING_UI.toolbarCard}>

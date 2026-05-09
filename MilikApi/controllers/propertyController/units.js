@@ -182,7 +182,13 @@ const buildEffectiveUnitPayload = ({ unitDoc, currentTenant = null, totalMonthly
   const rawStatus = normalizeUnitStatus(base?.status || "vacant", "vacant");
   const hasCurrentOccupant = Boolean(currentTenant?._id || currentTenant?.name);
 
-  const effectiveStatus = hasCurrentOccupant && rawStatus !== "occupied" ? "occupied" : rawStatus;
+  // Forward heal: has tenant but status says vacant/maintenance → force occupied
+  // Reverse heal: no tenant but status says occupied → force vacant (stale data)
+  const effectiveStatus = hasCurrentOccupant
+    ? "occupied"
+    : rawStatus === "occupied"
+    ? "vacant"
+    : rawStatus;
   const effectiveIsVacant = hasCurrentOccupant ? false : effectiveStatus === "vacant";
   const effectiveVacantSince = hasCurrentOccupant ? null : base?.vacantSince || null;
   const effectiveDaysVacant = hasCurrentOccupant ? 0 : Number(base?.daysVacant || 0);
@@ -196,6 +202,26 @@ const buildEffectiveUnitPayload = ({ unitDoc, currentTenant = null, totalMonthly
     currentTenant: currentTenant || null,
     totalMonthlyAmount,
   };
+};
+
+const persistVacantUnitStateIfNeeded = async (unitDoc) => {
+  if (!unitDoc?._id) return false;
+  const rawStatus = normalizeUnitStatus(unitDoc?.status || "vacant", "vacant");
+  if (rawStatus !== "occupied") return false;
+
+  await Unit.updateOne(
+    { _id: unitDoc._id },
+    {
+      $set: {
+        status: "vacant",
+        isVacant: true,
+        vacantSince: unitDoc.vacantSince || new Date(),
+        daysVacant: 0,
+      },
+    }
+  );
+  await updatePropertyUnitCounts(unitDoc.property?._id || unitDoc.property || null);
+  return true;
 };
 
 const persistOccupiedUnitStateIfNeeded = async (unitDoc, currentTenant = null) => {
@@ -231,6 +257,8 @@ const attachCurrentTenant = async (unitDoc) => {
 
   if (currentTenant?._id) {
     await persistOccupiedUnitStateIfNeeded(unitDoc, currentTenant);
+  } else {
+    await persistVacantUnitStateIfNeeded(unitDoc);
   }
 
   return buildEffectiveUnitPayload({
@@ -555,6 +583,8 @@ export const getUnits = async (req, res, next) => {
 
         if (currentTenant?._id) {
           await persistOccupiedUnitStateIfNeeded(unit, currentTenant);
+        } else {
+          await persistVacantUnitStateIfNeeded(unit);
         }
 
         return buildEffectiveUnitPayload({
@@ -1008,17 +1038,10 @@ export const bulkImportUnits = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
 
     if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message: "Business context is required",
-      });
+      return res.status(400).json({ success: false, message: "Business context is required" });
     }
-
     if (!Array.isArray(unitsData) || unitsData.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No units data provided",
-      });
+      return res.status(400).json({ success: false, message: "No units data provided" });
     }
 
     const properties = await Property.find({ business: businessId }).select("_id propertyCode rentPerMeasure securityDeposits");
@@ -1026,99 +1049,99 @@ export const bulkImportUnits = async (req, res, next) => {
       properties.map((p) => [String(p.propertyCode || "").toLowerCase(), p])
     );
 
-    const successful = [];
+    // Phase 1: validate rows and build unit documents in memory (no DB writes)
+    const validUnits = []; // each entry includes _importRow for error mapping
     const failed = [];
-    const touchedPropertyIds = new Set();
 
     for (let i = 0; i < unitsData.length; i++) {
       const row = unitsData[i];
+      const property = propertyCodeMap.get(String(row.propertyCode || "").trim().toLowerCase());
+
+      if (!property?._id) {
+        failed.push({ row: i + 2, unitNumber: row.unitNumber, error: `Property code "${row.propertyCode}" not found` });
+        continue;
+      }
+
+      const normalizedUnitNumber = typeof row.unitNumber === "string" ? row.unitNumber.trim() : String(row.unitNumber || "").trim();
+      if (!normalizedUnitNumber) {
+        failed.push({ row: i + 2, unitNumber: row.unitNumber, error: "Unit number is required" });
+        continue;
+      }
+
+      const normalizedUnitType = typeof row.unitType === "string" ? row.unitType.trim() : String(row.unitType || "").trim();
+      if (!normalizedUnitType) {
+        failed.push({ row: i + 2, unitNumber: normalizedUnitNumber, error: "Unit type is required" });
+        continue;
+      }
+
+      const requestedStatus = normalizeUnitStatus(row.status || "vacant", "vacant");
+      if (requestedStatus === "occupied") {
+        failed.push({ row: i + 2, unitNumber: row.unitNumber, error: "Occupied units cannot be imported without a linked tenant. Import the unit as vacant, reserved, maintenance, or archived first." });
+        continue;
+      }
+
+      const resolvedRent = calculateRentFromPropertyDefaults(property, row.areaSqFt, row.rent);
+      const resolvedDeposit = calculateDepositFromPropertyDefaults(property, resolvedRent, row.deposit);
+
+      validUnits.push({
+        _importRow: i + 2,
+        unitNumber: normalizedUnitNumber,
+        property: property._id,
+        unitType: normalizedUnitType,
+        rent: resolvedRent,
+        deposit: resolvedDeposit,
+        status: requestedStatus,
+        isVacant: requestedStatus === "vacant",
+        vacantSince: requestedStatus === "vacant" ? new Date() : null,
+        daysVacant: 0,
+        amenities: sanitizeAmenities(row.amenities),
+        utilities: sanitizeUtilities(row.utilities),
+        billingFrequency: row.billingFrequency || row.billingPeriodKey || "monthly",
+        billingPeriodKey: row.billingPeriodKey || row.billingFrequency || "monthly",
+        description: row.description || "",
+        areaSqFt: Number(row.areaSqFt || 0),
+        business: businessId,
+      });
+    }
+
+    // Phase 2: batch insert all valid units in a single DB round-trip
+    const successful = [];
+    const touchedPropertyIds = new Set();
+
+    if (validUnits.length > 0) {
+      const docsToInsert = validUnits.map(({ _importRow, ...doc }) => doc);
+
+      let insertedDocs = [];
+      let writeErrors = [];
 
       try {
-        const property = propertyCodeMap.get(String(row.propertyCode || "").trim().toLowerCase());
-
-        if (!property?._id) {
-          failed.push({
-            row: i + 2,
-            unitNumber: row.unitNumber,
-            error: `Property code "${row.propertyCode}" not found`,
-          });
-          continue;
+        insertedDocs = await Unit.insertMany(docsToInsert, { ordered: false });
+      } catch (bulkErr) {
+        if (bulkErr.name === "MongoBulkWriteError" || bulkErr.writeErrors) {
+          insertedDocs = bulkErr.insertedDocs || [];
+          writeErrors = bulkErr.writeErrors || [];
+        } else {
+          throw bulkErr;
         }
-        const propertyId = property._id;
-        const normalizedUnitNumber = typeof row.unitNumber === "string" ? row.unitNumber.trim() : String(row.unitNumber || "").trim();
-        if (!normalizedUnitNumber) {
-          failed.push({
-            row: i + 2,
-            unitNumber: row.unitNumber,
-            error: "Unit number is required",
-          });
-          continue;
-        }
-        const normalizedUnitType = typeof row.unitType === "string" ? row.unitType.trim() : String(row.unitType || "").trim();
-        if (!normalizedUnitType) {
-          failed.push({
-            row: i + 2,
-            unitNumber: normalizedUnitNumber,
-            error: "Unit type is required",
-          });
-          continue;
-        }
+      }
 
-        const requestedStatus = normalizeUnitStatus(row.status || "vacant", "vacant");
-        if (requestedStatus === "occupied") {
-          failed.push({
-            row: i + 2,
-            unitNumber: row.unitNumber,
-            error:
-              "Occupied units cannot be imported without a linked tenant. Import the unit as vacant, reserved, maintenance, or archived first.",
-          });
-          continue;
-        }
-        const resolvedRent = calculateRentFromPropertyDefaults(property, row.areaSqFt, row.rent);
-        const resolvedDeposit = calculateDepositFromPropertyDefaults(property, resolvedRent, row.deposit);
+      for (const u of insertedDocs) {
+        successful.push({ _id: u._id, unitNumber: u.unitNumber });
+        touchedPropertyIds.add(String(u.property));
+      }
 
-        const newUnit = new Unit({
-          unitNumber: normalizedUnitNumber,
-          property: propertyId,
-          unitType: normalizedUnitType,
-          rent: resolvedRent,
-          deposit: resolvedDeposit,
-          status: requestedStatus,
-          isVacant: requestedStatus === "vacant",
-          vacantSince: requestedStatus === "vacant" ? new Date() : null,
-          daysVacant: 0,
-          amenities: sanitizeAmenities(row.amenities),
-          utilities: sanitizeUtilities(row.utilities),
-          billingFrequency: row.billingFrequency || "monthly",
-          description: row.description || "",
-          areaSqFt: Number(row.areaSqFt || 0),
-          business: businessId,
-        });
-
-        const saved = await newUnit.save();
-        touchedPropertyIds.add(String(propertyId));
-
-        successful.push({
-          _id: saved._id,
-          unitNumber: saved.unitNumber,
-        });
-      } catch (error) {
-        let errorMessage = error.message || "Failed to import unit";
-        if (error.code === 11000) {
+      for (const writeError of writeErrors) {
+        const failedUnit = validUnits[writeError.index];
+        let errorMessage = writeError.errmsg || "Failed to import unit";
+        if (writeError.code === 11000) {
           errorMessage = "A unit with this number already exists for this property";
         }
-
-        failed.push({
-          row: i + 2,
-          unitNumber: row.unitNumber,
-          error: errorMessage,
-        });
+        failed.push({ row: failedUnit._importRow, unitNumber: failedUnit.unitNumber, error: errorMessage });
       }
     }
 
-    for (const propertyId of touchedPropertyIds) {
-      await updatePropertyUnitCounts(propertyId);
-    }
+    // Phase 3: update property unit counts in parallel
+    await Promise.all([...touchedPropertyIds].map((propertyId) => updatePropertyUnitCounts(propertyId)));
 
     const allFailed = successful.length === 0 && failed.length > 0;
     return res.status(200).json({

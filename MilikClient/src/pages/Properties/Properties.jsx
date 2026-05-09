@@ -573,7 +573,7 @@ const Properties = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex flex-col h-full min-h-0 p-0 bg-white overflow-hidden">
+      <div className="flex flex-col h-full min-h-0 p-0 pb-10 bg-white overflow-hidden">
         {/* Filters Card */}
         <div className="flex-shrink-0 sticky top-0 z-30 bg-white pt-2 px-2">
           <div className={LISTING_UI.toolbarCard}>
@@ -952,7 +952,7 @@ const Properties = () => {
                                       <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b-2 border-[#0B3B2E]">📋 Property Details</h4>
                                       <div>
                                         <span className="text-xs font-semibold text-gray-700">Property Type:</span>
-                                        <p className="text-sm font-bold text-gray-900 mt-1">{<property className="propertyCategory"></property> || "N/A"}</p>
+                                        <p className="text-sm font-bold text-gray-900 mt-1">{property.propertyCategory || property.propertyType || "N/A"}</p>
                                       </div>
                                       <div>
                                         <span className="text-xs font-semibold text-gray-700">Specification:</span>

@@ -910,7 +910,7 @@ const TakeOnBalances = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2 pb-10">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="grid grid-cols-3 gap-1">
             {[
