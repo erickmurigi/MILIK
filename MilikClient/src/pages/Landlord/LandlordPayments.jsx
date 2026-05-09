@@ -20,9 +20,10 @@ import {
   FaTrash,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { getLandlords, getRentPayments, getLandlordPayments, createLandlordPayment } from "../../redux/apiCalls";
+import { getLandlords, getRentPayments, getLandlordPayments, createLandlordPayment, getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
+// NOTE: getLandlords is a thunk creator — must be called via dispatch(getLandlords({...}))
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -67,12 +68,13 @@ const LandlordPayments = ({ mode = "payments" }) => {
   });
   // Landlord payment vouchers from backend
   const [landlordPayments, setLandlordPayments] = useState([]);
+  const [cashbookAccounts, setCashbookAccounts] = useState([]);
 
   // Load data
   useEffect(() => {
     const fetchData = async () => {
       if (currentCompany?._id) {
-        getLandlords(dispatch, currentCompany._id);
+        dispatch(getLandlords({ business: currentCompany._id }));
         dispatch(getProperties({ business: currentCompany._id }));
         dispatch(getTenants({ business: currentCompany._id }));
         getRentPayments(dispatch, currentCompany._id);
@@ -84,6 +86,27 @@ const LandlordPayments = ({ mode = "payments" }) => {
     fetchData();
     // eslint-disable-next-line
   }, [dispatch, currentCompany]);
+
+  useEffect(() => {
+    const loadCashbooks = async () => {
+      if (!currentCompany?._id) return;
+      try {
+        const rows = await getChartOfAccounts({ business: currentCompany._id });
+        const CASHBOOK_PATTERN = /cash|bank|m-?pesa|mobile|wallet|petty|till|collection/i;
+        setCashbookAccounts(
+          (Array.isArray(rows) ? rows : []).filter(
+            (row) =>
+              row?.isPosting !== false &&
+              String(row?.type || "").toLowerCase() === "asset" &&
+              CASHBOOK_PATTERN.test(`${row?.name || ""} ${row?.group || ""} ${row?.subGroup || ""}`)
+          )
+        );
+      } catch {
+        // non-critical — cashbook dropdown will be empty, user can still type
+      }
+    };
+    loadCashbooks();
+  }, [currentCompany?._id]);
 
   // Calculate landlord financial data
   const landlordData = useMemo(() => {
@@ -99,24 +122,26 @@ const LandlordPayments = ({ mode = "payments" }) => {
       const propertyBreakdown = [];
 
       landlordProperties.forEach((property) => {
-        // Get tenants in this property
+        // Get tenants in this property (unit.property is populated by backend)
         const propertyTenants = tenants.filter((tenant) => {
-          const tenantPropertyId = tenant.property?._id || tenant.property;
-          return tenantPropertyId === property._id;
+          const tenantPropertyId = String(tenant.unit?.property?._id || tenant.unit?.property || '');
+          return tenantPropertyId && tenantPropertyId === String(property._id);
         });
 
-        // Calculate rent expected
+        // Calculate rent expected (rent lives on tenant, not unit)
         const rentExpected = propertyTenants.reduce((sum, tenant) => {
-          return sum + (tenant.unit?.rent || 0);
+          return sum + (tenant.rent || tenant.unit?.rent || 0);
         }, 0);
 
-        // Calculate rent collected (confirmed payments)
+        // Calculate rent collected (confirmed, non-cancelled, non-reversed payments)
         const rentCollected = rentPayments
           .filter((payment) => {
             const paymentTenantId = payment.tenant?._id || payment.tenant;
             return (
-              propertyTenants.some((t) => t._id === paymentTenantId) &&
-              payment.isConfirmed === true
+              propertyTenants.some((t) => String(t._id) === String(paymentTenantId)) &&
+              payment.isConfirmed === true &&
+              !payment.isCancelled &&
+              !payment.isReversed
             );
           })
           .reduce((sum, payment) => sum + (payment.amount || 0), 0);
@@ -147,8 +172,8 @@ const LandlordPayments = ({ mode = "payments" }) => {
           return (
             sum +
             tenants.filter((t) => {
-              const tPropId = t.property?._id || t.property;
-              return tPropId === prop._id;
+              const tPropId = String(t.unit?.property?._id || t.unit?.property || '');
+              return tPropId && tPropId === String(prop._id);
             }).length
           );
         }, 0),
@@ -689,7 +714,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
                 <span className="rounded-md border border-green-200 bg-green-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-green-700">Paid: Ksh {stats.totalPaid.toLocaleString()}</span>
                 <span className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-orange-700">Balance: Ksh {stats.totalOwed.toLocaleString()}</span>
               </div>
-              <button onClick={() => getLandlords(dispatch, currentCompany._id)} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt /> Refresh</button>
+              <button onClick={() => dispatch(getLandlords({ business: currentCompany._id }))} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt /> Refresh</button>
             </div>
           </div>
 
@@ -923,13 +948,18 @@ const LandlordPayments = ({ mode = "payments" }) => {
 
                 <div>
                   <label className="text-xs font-semibold text-slate-700">Cashbook Account *</label>
-                  <input
-                    type="text"
+                  <select
                     value={paymentForm.cashbook}
                     onChange={(e) => setPaymentForm({ ...paymentForm, cashbook: e.target.value })}
                     className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
-                    placeholder="Cashbook account code/name or ID"
-                  />
+                  >
+                    <option value="">Select cashbook / bank account...</option>
+                    {cashbookAccounts.map((account) => (
+                      <option key={account._id} value={account._id}>
+                        {account.code ? `${account.code} - ` : ""}{account.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -1144,7 +1174,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
                       <thead className="bg-slate-100 text-slate-600 sticky top-0">
                         <tr>
                           <th className="px-4 py-2 text-left">Date</th>
-                          <th className="px-4 py-2 text-left">Voucher</th>
+                          <th className="px-4 py-2 text-left">Method</th>
                           <th className="px-4 py-2 text-left">Reference</th>
                           <th className="px-4 py-2 text-right">Amount</th>
                           <th className="px-4 py-2 text-left">Status</th>
@@ -1157,8 +1187,8 @@ const LandlordPayments = ({ mode = "payments" }) => {
                           </tr>
                         ) : activeDetailHistory.map((payment, index) => (
                           <tr key={payment._id || index} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                            <td className="px-4 py-2">{formatDate(payment.paidDate || payment.createdAt)}</td>
-                            <td className="px-4 py-2 font-semibold text-slate-800">{payment.voucherNo || '-'}</td>
+                            <td className="px-4 py-2">{formatDate(payment.date || payment.createdAt)}</td>
+                            <td className="px-4 py-2 font-semibold text-slate-800">{payment.paymentMethod ? payment.paymentMethod.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '-'}</td>
                             <td className="px-4 py-2 text-slate-600">{payment.reference || payment.referenceNumber || '-'}</td>
                             <td className="px-4 py-2 text-right font-bold text-slate-900">Ksh {Number(payment.amount || 0).toLocaleString()}</td>
                             <td className="px-4 py-2">

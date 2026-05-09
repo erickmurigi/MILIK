@@ -112,9 +112,22 @@ const PropertiesOverview = ({ darkMode }) => {
   const isActiveInvoice = (invoice) => !['cancelled', 'reversed'].includes(normalizeText(invoice?.status));
   const isActivePayment = (payment) => {
     const postingStatus = normalizeText(payment?.postingStatus);
-    return !payment?.reversalOf && !payment?.isReversed && !payment?.isCancelled && postingStatus !== 'reversed';
+    return (
+      payment?.isConfirmed === true &&
+      !payment?.reversalOf &&
+      !payment?.isReversed &&
+      !payment?.isCancelled &&
+      postingStatus !== 'reversed'
+    );
   };
+  // Gross amount (includes tax) — used for collections comparison
   const amountFromInvoice = (invoice) => Number(invoice?.adjustedAmount ?? invoice?.netAmount ?? invoice?.amount ?? 0);
+  // Net amount (pre-tax) — used to compare booked rent against tenant.rent which is also pre-tax
+  const netAmountFromInvoice = (invoice) => {
+    const gross = Number(invoice?.adjustedAmount ?? invoice?.amount ?? 0);
+    const tax = Number(invoice?.taxSnapshot?.taxAmount ?? 0);
+    return Math.max(0, gross - tax);
+  };
 
   const formatMoney = (value) => {
     const numeric = Number(value || 0);
@@ -176,7 +189,7 @@ const PropertiesOverview = ({ darkMode }) => {
       const invoicedThisMonth = periodInvoices.reduce((sum, invoice) => sum + amountFromInvoice(invoice), 0);
       const bookedRentThisMonth = periodInvoices
         .filter((invoice) => String(invoice?.category || '').toUpperCase() === 'RENT_CHARGE')
-        .reduce((sum, invoice) => sum + amountFromInvoice(invoice), 0);
+        .reduce((sum, invoice) => sum + netAmountFromInvoice(invoice), 0);
 
       const expectedCollections = tenants
         .filter((tenant) => isOperationalTenant(tenant))
@@ -198,18 +211,29 @@ const PropertiesOverview = ({ darkMode }) => {
           return sum + additionalPropertyRent;
         }, 0);
 
+      // Build tenant ID set for this property as a fallback when payment.unit is missing
+      const propertyTenantIds = new Set(
+        tenants
+          .filter((t) => {
+            const tUnitId = String(normalizeId(t?.unit) || '');
+            const additionalIds = Array.isArray(t?.additionalUnits)
+              ? t.additionalUnits.map((u) => String(normalizeId(u) || '')).filter(Boolean)
+              : [];
+            return (tUnitId && unitIds.has(tUnitId)) || additionalIds.some((id) => unitIds.has(id));
+          })
+          .map((t) => String(normalizeId(t?._id) || ''))
+          .filter(Boolean)
+      );
+
       const monthlyCollectionRaw = rentPayments
         .filter((payment) => {
           const paymentDate = parseDate(payment?.paymentDate || payment?.createdAt);
           if (!paymentDate) return false;
+          if (paymentDate.getMonth() !== currentMonth || paymentDate.getFullYear() !== currentYear) return false;
+          if (!isActivePayment(payment)) return false;
           const unitId = String(normalizeId(payment?.unit) || '');
-          return (
-            unitId &&
-            unitIds.has(unitId) &&
-            paymentDate.getMonth() === currentMonth &&
-            paymentDate.getFullYear() === currentYear &&
-            isActivePayment(payment)
-          );
+          const tenantId = String(normalizeId(payment?.tenant) || '');
+          return (unitId && unitIds.has(unitId)) || (tenantId && propertyTenantIds.has(tenantId));
         })
         .reduce((sum, payment) => sum + Math.abs(Number(payment?.amount || 0)), 0);
 

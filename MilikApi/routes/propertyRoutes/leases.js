@@ -1,14 +1,15 @@
 // routes/lease.js
 import express from "express"
-import { 
-  createLease, 
-  getLease, 
-  getLeases, 
-  updateLease, 
+import {
+  createLease,
+  getLease,
+  getLeases,
+  updateLease,
   deleteLease,
   signLease,
   getExpiringLeases,
-  renewLease 
+  renewLease,
+  generateLeaseDocument,
 } from "../../controllers/propertyController/lease.js"
 import { verifyUser } from "../../controllers/verifyToken.js"
 
@@ -37,5 +38,8 @@ router.put("/sign/:id", verifyUser, signLease)
 
 // Renew lease
 router.put("/renew/:id", verifyUser, renewLease)
+
+// Generate PDF document
+router.post("/:id/generate-document", verifyUser, generateLeaseDocument)
 
 export default router

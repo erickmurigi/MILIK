@@ -853,111 +853,135 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     const tenantQuery = { business: businessId };
     if (req.query.tenantId) tenantQuery._id = toObjectId(req.query.tenantId);
 
-    const tenants = await Tenant.find(tenantQuery)
+    // Stream tenants 200 at a time so memory stays bounded regardless of tenant count.
+    // Snapshot computation and search/status filtering happen per chunk.
+    const REPORT_CHUNK = 200;
+    const allRows = [];
+    let chunk = [];
+
+    const processChunk = async (tenants) => {
+      const baseRows = tenants.map((tenant) => {
+        const unit = tenant?.unit || {};
+        const property = unit?.property || {};
+        const landlord = pickPrimaryLandlord(property);
+        return {
+          tenantId: String(tenant?._id || ""),
+          tenantName: tenant?.tenantName || tenant?.name || "Unknown Tenant",
+          unitId: String(unit?._id || tenant?.unit || ""),
+          unitNumber: unit?.unitNumber || unit?.name || "N/A",
+          propertyId: String(property?._id || unit?.property || ""),
+          propertyName: property?.propertyName || property?.name || "N/A",
+          landlordId: String(landlord?.landlordId || ""),
+          landlordName: landlord?.name || "N/A",
+        };
+      })
+        .filter((row) => !req.query.propertyId || String(row.propertyId) === String(req.query.propertyId))
+        .filter((row) => !req.query.landlordId || String(row.landlordId) === String(req.query.landlordId));
+
+      if (baseRows.length === 0) return;
+
+      const chunkTenantIds = baseRows.map((row) => row.tenantId).filter(Boolean);
+      const snapshotMap = await computeTenantInvoiceSnapshotsBatch({
+        businessId,
+        tenantIds: chunkTenantIds,
+        asOfDate,
+        invoiceQuery: {},
+      });
+
+      for (const row of baseRows) {
+        const snapshot = snapshotMap.get(String(row.tenantId)) || { invoiceSnapshots: [], receiptAllocations: [] };
+        const invoices = normalizeArray(snapshot.invoiceSnapshots);
+        const receipts = normalizeArray(snapshot.receiptAllocations);
+
+        let totalInvoiced = 0;
+        let totalPaidApplied = 0;
+        let outstanding = 0;
+        let rentBalance = 0;
+        let utilityBalance = 0;
+        let penaltyBalance = 0;
+        let depositBalance = 0;
+        let otherBalance = 0;
+        let oldestDueDate = null;
+
+        invoices.forEach((invoice) => {
+          const amount = Number(invoice?.amount || 0);
+          const applied = Number(invoice?.applied || 0);
+          const remaining = Number(invoice?.outstanding || 0);
+          const category = String(invoice?.category || "").toUpperCase();
+          totalInvoiced += amount;
+          totalPaidApplied += applied;
+          outstanding += remaining;
+          if (category === "RENT_CHARGE") rentBalance += remaining;
+          else if (category === "UTILITY_CHARGE") utilityBalance += remaining;
+          else if (category === "LATE_PENALTY_CHARGE") penaltyBalance += remaining;
+          else if (category === "DEPOSIT_CHARGE") depositBalance += remaining;
+          else otherBalance += remaining;
+          const reportDueDate = resolveInvoiceDueDateForReports(invoice);
+          if (remaining > 0 && reportDueDate && (!oldestDueDate || new Date(reportDueDate) < new Date(oldestDueDate))) {
+            oldestDueDate = reportDueDate;
+          }
+        });
+
+        let unappliedCredit = 0;
+        let lastPaymentDate = null;
+        receipts.forEach((receipt) => {
+          unappliedCredit += Number(receipt?.unappliedAmount || 0);
+          if (receipt?.paymentDate && (!lastPaymentDate || new Date(receipt.paymentDate) > new Date(lastPaymentDate))) {
+            lastPaymentDate = receipt.paymentDate;
+          }
+        });
+
+        const netBalance = round2(outstanding - unappliedCredit);
+        const status = netBalance > 0.009 ? "owing" : netBalance < -0.009 ? "credit" : "settled";
+
+        const search = safeLower(req.query.search || "");
+        if (search) {
+          const haystack = `${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase();
+          if (!haystack.includes(search)) continue;
+        }
+        if (req.query.status && req.query.status !== "all" && status !== req.query.status) continue;
+
+        allRows.push({
+          ...row,
+          totalInvoiced: round2(totalInvoiced),
+          totalPaidApplied: round2(totalPaidApplied),
+          outstanding: round2(outstanding),
+          unappliedCredit: round2(unappliedCredit),
+          netBalance,
+          rentBalance: round2(rentBalance),
+          utilityBalance: round2(utilityBalance),
+          penaltyBalance: round2(penaltyBalance),
+          depositBalance: round2(depositBalance),
+          otherBalance: round2(otherBalance),
+          oldestDueDate: oldestDueDate || null,
+          lastPaymentDate: lastPaymentDate || null,
+          status,
+        });
+      }
+    };
+
+    const tenantCursor = Tenant.find(tenantQuery)
       .populate({
         path: "unit",
         select: "unitNumber name property",
         populate: { path: "property", select: "propertyName name landlords" },
       })
       .sort({ name: 1, createdAt: 1 })
-      .lean();
+      .lean()
+      .cursor();
 
-    const baseRows = tenants.map((tenant) => {
-      const unit = tenant?.unit || {};
-      const property = unit?.property || {};
-      const landlord = pickPrimaryLandlord(property);
-      return {
-        tenantId: String(tenant?._id || ""),
-        tenantName: tenant?.tenantName || tenant?.name || "Unknown Tenant",
-        unitId: String(unit?._id || tenant?.unit || ""),
-        unitNumber: unit?.unitNumber || unit?.name || "N/A",
-        propertyId: String(property?._id || unit?.property || ""),
-        propertyName: property?.propertyName || property?.name || "N/A",
-        landlordId: String(landlord?.landlordId || ""),
-        landlordName: landlord?.name || "N/A",
-      };
-    }).filter((row) => !req.query.propertyId || String(row.propertyId) === String(req.query.propertyId))
-      .filter((row) => !req.query.landlordId || String(row.landlordId) === String(req.query.landlordId));
-
-    const tenantIds = baseRows.map((row) => row.tenantId).filter(Boolean);
-    const snapshotMap = await computeTenantInvoiceSnapshotsBatch({
-      businessId,
-      tenantIds,
-      asOfDate,
-      invoiceQuery: {},
-    });
-
-    const rows = baseRows.map((row) => {
-      const snapshot = snapshotMap.get(String(row.tenantId)) || { invoiceSnapshots: [], receiptAllocations: [] };
-      const invoices = normalizeArray(snapshot.invoiceSnapshots);
-      const receipts = normalizeArray(snapshot.receiptAllocations);
-
-      let totalInvoiced = 0;
-      let totalPaidApplied = 0;
-      let outstanding = 0;
-      let rentBalance = 0;
-      let utilityBalance = 0;
-      let penaltyBalance = 0;
-      let depositBalance = 0;
-      let otherBalance = 0;
-      let oldestDueDate = null;
-
-      invoices.forEach((invoice) => {
-        const amount = Number(invoice?.amount || 0);
-        const applied = Number(invoice?.applied || 0);
-        const remaining = Number(invoice?.outstanding || 0);
-        const category = String(invoice?.category || "").toUpperCase();
-        totalInvoiced += amount;
-        totalPaidApplied += applied;
-        outstanding += remaining;
-        if (category === "RENT_CHARGE") rentBalance += remaining;
-        else if (category === "UTILITY_CHARGE") utilityBalance += remaining;
-        else if (category === "LATE_PENALTY_CHARGE") penaltyBalance += remaining;
-        else if (category === "DEPOSIT_CHARGE") depositBalance += remaining;
-        else otherBalance += remaining;
-        const reportDueDate = resolveInvoiceDueDateForReports(invoice);
-        if (remaining > 0 && reportDueDate && (!oldestDueDate || new Date(reportDueDate) < new Date(oldestDueDate))) {
-          oldestDueDate = reportDueDate;
-        }
-      });
-
-      let unappliedCredit = 0;
-      let lastPaymentDate = null;
-      receipts.forEach((receipt) => {
-        unappliedCredit += Number(receipt?.unappliedAmount || 0);
-        if (receipt?.paymentDate && (!lastPaymentDate || new Date(receipt.paymentDate) > new Date(lastPaymentDate))) {
-          lastPaymentDate = receipt.paymentDate;
-        }
-      });
-
-      const netBalance = round2(outstanding - unappliedCredit);
-      const status = netBalance > 0.009 ? "owing" : netBalance < -0.009 ? "credit" : "settled";
-
-      return {
-        ...row,
-        totalInvoiced: round2(totalInvoiced),
-        totalPaidApplied: round2(totalPaidApplied),
-        outstanding: round2(outstanding),
-        unappliedCredit: round2(unappliedCredit),
-        netBalance,
-        rentBalance: round2(rentBalance),
-        utilityBalance: round2(utilityBalance),
-        penaltyBalance: round2(penaltyBalance),
-        depositBalance: round2(depositBalance),
-        otherBalance: round2(otherBalance),
-        oldestDueDate: oldestDueDate || null,
-        lastPaymentDate: lastPaymentDate || null,
-        status,
-      };
-    }).filter((row) => {
-      const search = safeLower(req.query.search || "");
-      if (search) {
-        const haystack = `${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase();
-        if (!haystack.includes(search)) return false;
+    for await (const tenantDoc of tenantCursor) {
+      chunk.push(tenantDoc);
+      if (chunk.length >= REPORT_CHUNK) {
+        await processChunk(chunk);
+        chunk = [];
       }
-      if (req.query.status && req.query.status !== "all" && row.status !== req.query.status) return false;
-      return true;
-    });
+    }
+    if (chunk.length > 0) {
+      await processChunk(chunk);
+    }
+
+    const rows = allRows;
 
     const summary = rows.reduce((acc, row) => {
       acc.totalInvoiced += row.totalInvoiced;

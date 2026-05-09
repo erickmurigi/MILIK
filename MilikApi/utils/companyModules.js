@@ -292,7 +292,7 @@ const EMAIL_PROFILE_USAGE_TAGS = [
   'onboarding',
 ];
 
-const SMS_PROFILE_PROVIDERS = ['generic', 'africas_talking', 'twilio', 'custom_http'];
+const SMS_PROFILE_PROVIDERS = ['generic', 'africas_talking', 'twilio', 'mtech', 'custom_http'];
 
 export const SMS_TEMPLATE_DEFINITIONS = [
   {
@@ -303,8 +303,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Dear {tenantName}, we have received KES {amount} for {propertyName} Unit {unitNumber}. Receipt No: {receiptNumber}. Thank you.',
-    placeholders: ['tenantName', 'amount', 'propertyName', 'unitNumber', 'receiptNumber'],
+      'Dear {tenantName}, we have received {amount} for {propertyName} Unit {unitNumber} via {paymentMethod}. Receipt: {receiptNumber} ({paymentDate}). Ref: {referenceNumber}. - {companyName}',
+    placeholders: ['tenantName', 'tenantCode', 'amount', 'propertyName', 'unitNumber', 'receiptNumber', 'paymentDate', 'paymentMethod', 'paymentType', 'referenceNumber', 'dueDate', 'bankingDate', 'description', 'companyName', 'companyPhone'],
   },
   {
     key: 'invoice_sms_tenant',
@@ -314,8 +314,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Dear {tenantName}, your invoice {invoiceNumber} for {propertyName} Unit {unitNumber} is KES {amountDue}, due on {dueDate}.',
-    placeholders: ['tenantName', 'invoiceNumber', 'propertyName', 'unitNumber', 'amountDue', 'dueDate'],
+      'Dear {tenantName} ({tenantCode}), invoice {invoiceNumber} ({category}) for {propertyName} Unit {unitNumber}: {amountDue} due {dueDate}. - {companyName}',
+    placeholders: ['tenantName', 'tenantCode', 'invoiceNumber', 'category', 'propertyName', 'unitNumber', 'amountDue', 'dueDate', 'invoiceDate', 'invoiceStatus', 'rentAmount', 'description', 'companyName', 'companyPhone'],
   },
   {
     key: 'overdue_reminder_tenant',
@@ -325,8 +325,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Reminder: your overdue balance for {propertyName} Unit {unitNumber} is KES {overdueAmount}. Please clear it as soon as possible.',
-    placeholders: ['tenantName', 'propertyName', 'unitNumber', 'overdueAmount', 'dueDate'],
+      'Dear {tenantName}, your overdue balance for {propertyName} Unit {unitNumber} is {overdueAmount}. Monthly rent: {rent}. Please clear this immediately to avoid penalties. - {companyName}',
+    placeholders: ['tenantName', 'tenantCode', 'propertyName', 'unitNumber', 'overdueAmount', 'balance', 'rent', 'moveInDate', 'companyName', 'companyPhone'],
   },
   {
     key: 'landlord_statement_ready',
@@ -336,8 +336,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Hello {landlordName}, your statement for {propertyName} covering {statementPeriod} is ready for review.',
-    placeholders: ['landlordName', 'propertyName', 'statementPeriod', 'statementDate'],
+      'Hello {landlordName}, your {statementType} statement for {propertyName} ({statementPeriod}) is ready. Net Due: {netAmountDue}. Commission: {commissionAmount}. - {companyName}',
+    placeholders: ['landlordName', 'landlordCode', 'propertyName', 'statementPeriod', 'statementDate', 'statementNumber', 'statementType', 'netAmountDue', 'totalRentInvoiced', 'totalRentReceived', 'commissionAmount', 'commissionPercentage', 'totalExpenses', 'companyName', 'companyPhone'],
   },
   {
     key: 'landlord_payment_sms',
@@ -347,8 +347,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Hello {landlordName}, KES {amount} has been paid to you for {propertyName} on {paymentDate}. Ref: {referenceNumber}.',
-    placeholders: ['landlordName', 'amount', 'propertyName', 'paymentDate', 'referenceNumber'],
+      'Hello {landlordName} ({landlordCode}), {amount} paid for {propertyName} on {paymentDate}. Ref: {referenceNumber}. Stmt: {statementNumber}. - {companyName}',
+    placeholders: ['landlordName', 'landlordCode', 'amount', 'propertyName', 'paymentDate', 'referenceNumber', 'statementNumber', 'statementPeriod', 'companyName', 'companyPhone'],
   },
   {
     key: 'maintenance_update_tenant',
@@ -358,8 +358,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Hello {recipientName}, maintenance update for {propertyName} Unit {unitNumber}: {issueTitle} is now {status}.',
-    placeholders: ['recipientName', 'propertyName', 'unitNumber', 'issueTitle', 'status', 'scheduledDate', 'completionDate'],
+      'Hello {recipientName}, maintenance update for {propertyName} Unit {unitNumber}: {issueTitle} is now {status}. - {companyName}',
+    placeholders: ['recipientName', 'propertyName', 'unitNumber', 'issueTitle', 'status', 'scheduledDate', 'completionDate', 'companyName', 'companyPhone'],
   },
   {
     key: 'maintenance_update_landlord',
@@ -369,8 +369,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Hello {recipientName}, maintenance update for {propertyName} Unit {unitNumber}: {issueTitle} is now {status}.',
-    placeholders: ['recipientName', 'propertyName', 'unitNumber', 'issueTitle', 'status', 'scheduledDate', 'completionDate'],
+      'Hello {recipientName}, maintenance update for {propertyName} Unit {unitNumber}: {issueTitle} is now {status}. - {companyName}',
+    placeholders: ['recipientName', 'propertyName', 'unitNumber', 'issueTitle', 'status', 'scheduledDate', 'completionDate', 'companyName', 'companyPhone'],
   },
   {
     key: 'tenant_notice_sms',
@@ -380,8 +380,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Hello {tenantName}, this is an update from {companyName} regarding {propertyName} Unit {unitNumber}. Kindly contact us if you need any clarification.',
-    placeholders: ['tenantName', 'companyName', 'propertyName', 'unitNumber'],
+      'Hello {tenantName}, this is a notice from {companyName} regarding {propertyName} Unit {unitNumber}. Your current balance is {balance}. Monthly rent: {rent}. Kindly contact us for any queries.',
+    placeholders: ['tenantName', 'tenantCode', 'companyName', 'companyPhone', 'propertyName', 'unitNumber', 'rent', 'balance', 'overdueAmount', 'moveInDate', 'leaseType', 'depositAmount', 'tenantStatus', 'idNumber'],
   },
   {
     key: 'landlord_notice_sms',
@@ -391,8 +391,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Hello {landlordName}, this is an update from {companyName}. Kindly contact us for any clarification regarding your account.',
-    placeholders: ['landlordName', 'companyName'],
+      'Hello {landlordName} ({landlordCode}), this is a notice from {companyName}. Kindly contact us for any clarification regarding your account.',
+    placeholders: ['landlordName', 'landlordCode', 'landlordType', 'taxPin', 'companyName', 'companyPhone', 'companyEmail'],
   },
   {
     key: 'penalty_notice_sms',
@@ -402,8 +402,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Hello {tenantName}, a penalty invoice {invoiceNumber} of {amountDue} has been raised for {propertyName} Unit {unitNumber}. Due date: {dueDate}.',
-    placeholders: ['tenantName', 'invoiceNumber', 'amountDue', 'propertyName', 'unitNumber', 'dueDate'],
+      'Dear {tenantName} ({tenantCode}), penalty invoice {invoiceNumber} of {amountDue} raised for {propertyName} Unit {unitNumber}. Due: {dueDate}. Orig. Invoice: {sourceInvoiceNumber}. - {companyName}',
+    placeholders: ['tenantName', 'tenantCode', 'invoiceNumber', 'amountDue', 'propertyName', 'unitNumber', 'dueDate', 'invoiceDate', 'sourceInvoiceNumber', 'description', 'companyName', 'companyPhone'],
   },
   {
     key: 'meter_usage_notification_sms',
@@ -413,8 +413,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Hello {tenantName}, your {utilityType} reading for {propertyName} Unit {unitNumber} is {unitsConsumed} units for {billingPeriod}. Charge: {amount}.',
-    placeholders: ['tenantName', 'utilityType', 'propertyName', 'unitNumber', 'unitsConsumed', 'billingPeriod', 'amount'],
+      'Hello {tenantName}, your {utilityType} reading for {propertyName} Unit {unitNumber} ({billingPeriod}): {previousReading}→{currentReading} ({unitsConsumed} units). Charge: {amount}. - {companyName}',
+    placeholders: ['tenantName', 'tenantCode', 'utilityType', 'meterNumber', 'propertyName', 'unitNumber', 'billingPeriod', 'readingDate', 'previousReading', 'currentReading', 'unitsConsumed', 'rate', 'amount', 'companyName', 'companyPhone'],
   },
 ];
 
@@ -496,13 +496,38 @@ export const getPrimarySmsProfile = (profiles = [], defaultSmsProfileId = null) 
   );
 };
 
+const checkProviderIsConfigured = (provider = 'generic', profile = {}, hasApiKey = false) => {
+  const senderId = normalizeText(profile?.senderId);
+  const accountUsername = normalizeText(profile?.accountUsername);
+  const callbackUrl = normalizeText(profile?.callbackUrl);
+  switch (provider) {
+    case 'africas_talking':
+      // Africa's Talking requires accountUsername (username) and apiKey; senderId is optional
+      return Boolean(accountUsername && hasApiKey);
+    case 'twilio':
+      // Twilio requires accountSid (accountUsername), authToken (apiKey), and from-number (senderId)
+      return Boolean(accountUsername && hasApiKey && senderId);
+    case 'mtech':
+      // MTech requires apiKey, senderId, and the specific API endpoint URL (no universal default)
+      return Boolean(hasApiKey && senderId && callbackUrl);
+    case 'custom_http':
+      // Custom HTTP only requires a callbackUrl
+      return Boolean(callbackUrl);
+    case 'generic':
+    default:
+      // Generic requires a callbackUrl to dispatch
+      return Boolean(callbackUrl);
+  }
+};
+
 export const buildSmsProfileStatus = (profile = {}) => {
   const provider = normalizeSmsProvider(profile?.provider);
   const senderId = normalizeText(profile?.senderId);
   const accountUsername = normalizeText(profile?.accountUsername);
   const hasApiKey = Boolean(normalizeText(profile?.apiKeyEncrypted || profile?.apiKey)) || Boolean(profile?.hasApiKey);
-  const hasAny = Boolean(senderId || accountUsername || hasApiKey || normalizeText(profile?.name));
-  const isConfigured = Boolean(provider && senderId && accountUsername && hasApiKey);
+  const callbackUrl = normalizeText(profile?.callbackUrl);
+  const hasAny = Boolean(senderId || accountUsername || hasApiKey || callbackUrl || normalizeText(profile?.name));
+  const isConfigured = Boolean(provider) && checkProviderIsConfigured(provider, profile, hasApiKey);
 
   if (!hasAny) {
     return {

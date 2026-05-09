@@ -1067,6 +1067,31 @@ const recomputeTenantBalance = async (tenantId, businessId, options = {}) => {
   });
 };
 
+// Incremental balance update — keeps Tenant.balance approximately correct
+// between full recompute cycles. recomputeTenantFinancialState remains the
+// authoritative reconciler and must still be called after batch operations
+// and on any balance-sensitive page load.
+export const applyIncrementalBalanceDelta = async ({
+  tenantId,
+  businessId,
+  delta,
+  session = null,
+}) => {
+  if (!tenantId || !businessId) return null;
+  try {
+    const opts = { new: true, runValidators: false };
+    if (session !== null) opts.session = session;
+    return await Tenant.findOneAndUpdate(
+      { _id: tenantId, business: businessId },
+      { $inc: { balance: delta } },
+      opts
+    ).lean();
+  } catch (err) {
+    console.error("applyIncrementalBalanceDelta error:", err);
+    return null;
+  }
+};
+
 const getInvoicePriorityGroup = (invoice = {}) => {
   const category = String(invoice?.category || "").toUpperCase();
   const explicitPriority = String(invoice?.metadata?.invoicePriorityCategory || "")
@@ -1450,7 +1475,7 @@ const getActiveInvoicesForTenant = async ({ businessId, tenantId, asOfDate = nul
   TenantInvoice.find({
     business: businessId,
     tenant: tenantId,
-    status: { $nin: ["cancelled", "reversed"] },
+    status: { $in: ["pending", "paid", "partially_paid"] },
     ...buildAsOfDateFilter("invoiceDate", asOfDate),
   })
     .select(TENANT_SNAPSHOT_INVOICE_FIELDS)
@@ -1468,7 +1493,7 @@ const getActiveInvoicesForTenants = async ({ businessId, tenantIds = [], asOfDat
   return TenantInvoice.find({
     business: businessId,
     tenant: tenantFilter,
-    status: { $nin: ["cancelled", "reversed"] },
+    status: { $in: ["pending", "paid", "partially_paid"] },
     ...buildAsOfDateFilter("invoiceDate", asOfDate),
     ...(extraQuery && typeof extraQuery === "object" ? extraQuery : {}),
   })
@@ -3412,6 +3437,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
         };
       }
 
+      await applyIncrementalBalanceDelta({ tenantId: invoice.tenant, businessId: invoice.business, delta: 0 });
       await recomputeTenantFinancialState({
         businessId: invoice.business,
         tenantId: invoice.tenant,
@@ -3455,6 +3481,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
       touchedAccountIds
     );
 
+    await applyIncrementalBalanceDelta({ tenantId: invoice.tenant, businessId: invoice.business, delta: Math.abs(Number(invoice.amount || 0)) });
     await recomputeTenantFinancialState({
       businessId: invoice.business,
       tenantId: invoice.tenant,
@@ -3816,8 +3843,8 @@ export const createTenantInvoicesBatch = async (req, res) => {
       return res.status(400).json({ error: "At least one invoice payload is required." });
     }
 
-    if (items.length > 500) {
-      return res.status(400).json({ error: "Batch size too large. Split into smaller batches of 500 or less." });
+    if (items.length > 200) {
+      return res.status(400).json({ error: "Batch size too large. Maximum 200 invoices per batch. Split large month-end runs into multiple sequential calls." });
     }
 
     const requestedBusinessId = resolveAuthorizedBusinessId(req, req.body.business || items[0]?.business);
@@ -3958,26 +3985,14 @@ export const createTenantInvoicesBatch = async (req, res) => {
       20
     );
 
-    await Promise.all([
-      touchedAccountIds.size > 0
-        ? aggregateChartOfAccountBalances(businessId, Array.from(touchedAccountIds))
-        : Promise.resolve(),
-      touchedTenantIds.size > 0
-        ? runTasksInChunks(
-            Array.from(touchedTenantIds),
-            async (tenantId) => {
-              await recomputeTenantFinancialState({ businessId, tenantId });
-            },
-            12
-          )
-        : Promise.resolve(),
-    ]);
-
     const finalizedResults = results.filter(Boolean);
     const createdCount = finalizedResults.filter((row) => row.success).length;
     const failedCount = finalizedResults.length - createdCount;
 
-    return res.status(createdCount > 0 ? 201 : 200).json({
+    // Send response immediately — balances are already approximately correct from
+    // the incremental deltas applied during creation. Full recomputes run in the
+    // background so they never block the HTTP response at scale.
+    res.status(createdCount > 0 ? 201 : 200).json({
       success: createdCount > 0,
       business: businessId,
       summary: {
@@ -3986,6 +4001,29 @@ export const createTenantInvoicesBatch = async (req, res) => {
         failed: failedCount,
       },
       results: finalizedResults,
+    });
+
+    const tenantRecomputeIds = Array.from(touchedTenantIds);
+    const accountRecomputeIds = Array.from(touchedAccountIds);
+    setImmediate(async () => {
+      try {
+        await Promise.all([
+          accountRecomputeIds.length > 0
+            ? aggregateChartOfAccountBalances(businessId, accountRecomputeIds)
+            : Promise.resolve(),
+          tenantRecomputeIds.length > 0
+            ? runTasksInChunks(
+                tenantRecomputeIds,
+                async (tenantId) => {
+                  await recomputeTenantFinancialState({ businessId, tenantId });
+                },
+                12
+              )
+            : Promise.resolve(),
+        ]);
+      } catch (err) {
+        console.error("Batch invoice background recompute error:", err);
+      }
     });
   } catch (error) {
     console.error("Batch tenant invoice creation error:", error);
@@ -4134,6 +4172,7 @@ export const deleteTenantInvoice = async (req, res) => {
         null,
         `Invoice ${invoice.invoiceNumber || invoice._id} was permanently deleted`
       );
+      await applyIncrementalBalanceDelta({ tenantId: invoice.tenant, businessId: invoice.business, delta: -Math.abs(Number(invoice.amount || 0)) });
       await recomputeTenantFinancialState({
         businessId: invoice.business,
         tenantId: invoice.tenant,
@@ -4219,6 +4258,7 @@ export const deleteTenantInvoice = async (req, res) => {
       `Invoice ${invoice.invoiceNumber || invoice._id} was ${cancellationStatus}`
     );
 
+    await applyIncrementalBalanceDelta({ tenantId: invoice.tenant, businessId: invoice.business, delta: -Math.abs(Number(invoice.amount || 0)) });
     await recomputeTenantFinancialState({
       businessId: invoice.business,
       tenantId: invoice.tenant,

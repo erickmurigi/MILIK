@@ -152,38 +152,42 @@ const FinancialOverview = ({ darkMode }) => {
     return `KSh ${Math.round(numeric).toLocaleString()}`;
   };
 
+  const formatChartMoneySkipZero = (value) => (Number(value) > 0 ? formatChartMoney(value) : '');
+
   const chartData = useMemo(() => {
-    let expected = 0;
-    let collected = 0;
+    // All 12 months of the current year in normal calendar order; future months show 0
+    return MONTHS.map((monthLabel, m) => {
+      let expected = 0;
+      let collected = 0;
 
-    invoices.forEach((invoice) => {
-      if (!isActiveInvoice(invoice) || !isSnapshotInvoice(invoice)) return;
-      const date = getInvoiceRecognitionDate(invoice);
-      if (!date || date.getFullYear() !== currentYear || date.getMonth() !== currentMonthIndex) return;
-      expected += amountFromInvoice(invoice);
-    });
+      invoices.forEach((invoice) => {
+        if (!isActiveInvoice(invoice) || !isSnapshotInvoice(invoice)) return;
+        const date = getInvoiceRecognitionDate(invoice);
+        if (!date || date.getFullYear() !== currentYear || date.getMonth() !== m) return;
+        expected += amountFromInvoice(invoice);
+      });
 
-    rentPayments.forEach((payment) => {
-      const date = parseDate(payment?.paymentDate || payment?.createdAt);
-      if (!date || date.getFullYear() !== currentYear || date.getMonth() !== currentMonthIndex) return;
-      if (payment?.isConfirmed !== true) return;
-      if (payment?.isReversed || payment?.isCancelled || payment?.reversalOf) return;
-      if (normalizeText(payment?.postingStatus) === 'reversed') return;
-      collected += Math.abs(Number(payment?.amount || 0));
-    });
+      rentPayments.forEach((payment) => {
+        const date = parseDate(payment?.paymentDate || payment?.createdAt);
+        if (!date || date.getFullYear() !== currentYear || date.getMonth() !== m) return;
+        if (payment?.isConfirmed !== true) return;
+        if (payment?.isReversed || payment?.isCancelled || payment?.reversalOf) return;
+        if (normalizeText(payment?.postingStatus) === 'reversed') return;
+        collected += Math.abs(Number(payment?.amount || 0));
+      });
 
-    return [
-      {
-        month: currentMonthLabel,
-        label: currentMonthName,
+      return {
+        month: monthLabel,
+        label: new Date(currentYear, m, 1).toLocaleString('default', { month: 'long', year: 'numeric' }),
         expected,
         collected,
-      },
-    ];
-  }, [currentMonthIndex, currentMonthLabel, currentMonthName, currentYear, invoices, rentPayments]);
+      };
+    });
+  }, [currentYear, invoices, rentPayments]);
 
-  const currentMonthExpected = chartData.reduce((sum, item) => sum + item.expected, 0);
-  const currentMonthCollected = chartData.reduce((sum, item) => sum + item.collected, 0);
+  const currentMonthData = chartData[currentMonthIndex] || { expected: 0, collected: 0 };
+  const currentMonthExpected = currentMonthData.expected;
+  const currentMonthCollected = currentMonthData.collected;
   const remainingToCollect = Math.max(0, currentMonthExpected - currentMonthCollected);
 
   const outstandingArrears = useMemo(
@@ -238,8 +242,8 @@ const FinancialOverview = ({ darkMode }) => {
           </h2>
           <p className={`mt-1 text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
             {isLandlordMode
-              ? `${currentMonthName} billed versus collected, aligned to booking dates and live arrears across your portfolio.`
-              : `${currentMonthName} expected versus collected, aligned to booking dates with live arrears across unpaid invoices.`}
+              ? `${currentYear} full-year billed vs collected — current month stats in cards below.`
+              : `${currentYear} full-year expected vs collected — current month stats in cards below.`}
           </p>
         </div>
         <div
@@ -247,7 +251,7 @@ const FinancialOverview = ({ darkMode }) => {
             darkMode ? 'bg-[#31694E]/20 text-[#8bd1b0]' : 'bg-[#ECF6F1] text-[#1f4a35]'
           }`}
         >
-          this month
+          {currentYear}
         </div>
       </div>
 
@@ -286,9 +290,9 @@ const FinancialOverview = ({ darkMode }) => {
             width={chartSize.width}
             height={chartSize.height - 28}
             data={chartData}
-            margin={{ top: 20, right: 12, left: 10, bottom: 0 }}
-            barCategoryGap="42%"
-            barGap={10}
+            margin={{ top: 20, right: 8, left: 10, bottom: 0 }}
+            barCategoryGap="25%"
+            barGap={4}
           >
             <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#e5e7eb'} vertical={false} />
             <XAxis
@@ -305,35 +309,11 @@ const FinancialOverview = ({ darkMode }) => {
               tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Bar
-              dataKey="expected"
-              name={isLandlordMode ? 'Billed' : 'Expected'}
-              fill="#E85C0D"
-              radius={[5, 5, 0, 0]}
-            >
-              <LabelList
-                dataKey="expected"
-                position="top"
-                formatter={formatChartMoney}
-                fill={darkMode ? '#f9fafb' : '#334155'}
-                fontSize={10}
-                fontWeight={800}
-              />
+            <Bar dataKey="expected" name={isLandlordMode ? 'Billed' : 'Expected'} fill="#E85C0D" radius={[5, 5, 0, 0]}>
+              <LabelList dataKey="expected" position="top" formatter={formatChartMoneySkipZero} fill={darkMode ? '#f9fafb' : '#334155'} fontSize={9} fontWeight={800} />
             </Bar>
-            <Bar
-              dataKey="collected"
-              name="Collected"
-              fill="#31694E"
-              radius={[5, 5, 0, 0]}
-            >
-              <LabelList
-                dataKey="collected"
-                position="top"
-                formatter={formatChartMoney}
-                fill={darkMode ? '#f9fafb' : '#334155'}
-                fontSize={10}
-                fontWeight={800}
-              />
+            <Bar dataKey="collected" name="Collected" fill="#31694E" radius={[5, 5, 0, 0]}>
+              <LabelList dataKey="collected" position="top" formatter={formatChartMoneySkipZero} fill={darkMode ? '#f9fafb' : '#334155'} fontSize={9} fontWeight={800} />
             </Bar>
           </BarChart>
         ) : null}

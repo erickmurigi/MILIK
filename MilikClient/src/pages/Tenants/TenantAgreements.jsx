@@ -1,19 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
+import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import {
   FaCheck,
+  FaChevronLeft,
+  FaChevronRight,
   FaClock,
+  FaCompressAlt,
   FaEdit,
+  FaExpandAlt,
   FaFileSignature,
-  FaFilter,
+  FaFilePdf,
   FaPlus,
   FaRedoAlt,
   FaSearch,
   FaSyncAlt,
   FaTimes,
   FaTrash,
-  FaUser,
   FaFileContract,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -24,6 +28,7 @@ import { getUnits } from "../../redux/unitRedux";
 import {
   createLease,
   deleteLease,
+  generateLeaseDocument,
   getLeases,
   renewLease,
   signLease,
@@ -34,6 +39,10 @@ const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
+
+const TERMINATED_STATUSES = new Set(["terminated", "moved_out", "evicted", "inactive"]);
+const isActiveTenant = (tenant) =>
+  !TERMINATED_STATUSES.has(String(tenant?.status || "active").trim().toLowerCase());
 const ITEMS_PER_PAGE = 50;
 const AGREEMENT_STATUS_OPTIONS = [
   "draft",
@@ -144,11 +153,20 @@ const TenantAgreements = () => {
     search: "",
     expiringOnly: false,
   });
+  const [draftFilters, setDraftFilters] = useState({
+    status: "any",
+    property: "any",
+    search: "",
+    expiringOnly: false,
+  });
   const [currentPage, setCurrentPage] = useState(1);
-  const [expandedAgreementId, setExpandedAgreementId] = useState(null);
+  const [expandedAgreements, setExpandedAgreements] = useState(new Set());
+  const [selectedAgreements, setSelectedAgreements] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(buildInitialForm());
   const [submitting, setSubmitting] = useState(false);
+  const [generatingDocId, setGeneratingDocId] = useState(null);
+  const [includeTerminatedTenants, setIncludeTerminatedTenants] = useState(false);
 
   const loadData = async () => {
     if (!currentCompany?._id) return;
@@ -262,7 +280,7 @@ const TenantAgreements = () => {
     return agreementRows.filter((row) => {
       if (queryTenantId && row.tenantId !== queryTenantId) return false;
       if (filters.status !== "any" && row.status !== filters.status) return false;
-      if (filters.property !== "any" && row.propertyId !== filters.property) return false;
+      if (filters.property !== "any" && row.propertyName !== filters.property) return false;
       if (filters.expiringOnly && !row.isExpiring) return false;
       const query = String(filters.search || "").trim().toLowerCase();
       if (!query) return true;
@@ -277,9 +295,71 @@ const TenantAgreements = () => {
     });
   }, [agreementRows, filters, queryTenantId]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const sortedFilteredRows = useMemo(() => {
+    const sorted = [...filteredRows];
+    sorted.sort((a, b) => {
+      const propertyCompare = String(a.propertyName || "").localeCompare(String(b.propertyName || ""), undefined, { sensitivity: "base" });
+      if (propertyCompare !== 0) return propertyCompare;
+      const tenantCompare = String(a.tenantName || "").localeCompare(String(b.tenantName || ""), undefined, { sensitivity: "base" });
+      if (tenantCompare !== 0) return tenantCompare;
+      return String(a.agreementNumber || "").localeCompare(String(b.agreementNumber || ""), undefined, { sensitivity: "base" });
+    });
+    return sorted;
+  }, [filteredRows]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedFilteredRows.length / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const pagedRows = filteredRows.slice((safeCurrentPage - 1) * ITEMS_PER_PAGE, safeCurrentPage * ITEMS_PER_PAGE);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const pagedRows = sortedFilteredRows.slice(startIndex, endIndex);
+
+  const uniqueProperties = useMemo(() => {
+    const names = agreementRows
+      .map((row) => row.propertyName)
+      .filter(Boolean);
+    return ["any", ...Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))];
+  }, [agreementRows]);
+
+  const toggleAgreementSelect = (id) => {
+    setSelectedAgreements((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+  const toggleSelectAllAgreements = () => {
+    const allIds = pagedRows.map((r) => r.id);
+    const allSelected = allIds.length > 0 && allIds.every((id) => selectedAgreements.includes(id));
+    setSelectedAgreements(allSelected ? [] : allIds);
+  };
+  const toggleAgreementExpand = (id) => {
+    setExpandedAgreements((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const expandAllAgreements = () => {
+    setExpandedAgreements(new Set(sortedFilteredRows.map((row) => row.id)));
+  };
+  const collapseAllAgreements = () => {
+    setExpandedAgreements(new Set());
+  };
+  const handleSearchFilters = () => {
+    setFilters(draftFilters);
+    setCurrentPage(1);
+  };
+  const handleResetFilters = () => {
+    const resetFilters = { status: "any", property: "any", search: "", expiringOnly: false };
+    setDraftFilters(resetFilters);
+    setFilters(resetFilters);
+    setCurrentPage(1);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setForm(buildInitialForm());
+    setIncludeTerminatedTenants(false);
+  };
 
   const openNewModal = (tenantId = queryTenantId || "") => {
     const tenant = tenantsById.get(tenantId) || null;
@@ -385,13 +465,28 @@ const TenantAgreements = () => {
         await createLease(dispatch, payload);
         toast.success("Tenant agreement created successfully.");
       }
-      setModalOpen(false);
-      setForm(buildInitialForm());
+      closeModal();
       await loadData();
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to save tenant agreement.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleGenerateDocument = async (row) => {
+    setGeneratingDocId(row.id);
+    try {
+      const updated = await generateLeaseDocument(dispatch, row.id);
+      toast.success("Lease document generated successfully.");
+      if (updated?.documentUrl) {
+        window.open(updated.documentUrl, "_blank", "noreferrer");
+      }
+      await loadData();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error?.message || "Failed to generate lease document.");
+    } finally {
+      setGeneratingDocId(null);
     }
   };
 
@@ -457,137 +552,129 @@ const TenantAgreements = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
-        <div className="sticky top-0 z-20 bg-gray-50 px-2 pt-2">
-          <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-            <div className="grid grid-cols-5 gap-1">
-              {[
-                { label: "Total", value: summary.total, tone: "bg-slate-50 border-slate-200 text-slate-800" },
-                { label: "Active", value: summary.active, tone: "bg-emerald-50 border-emerald-200 text-emerald-800" },
-                { label: "Pending", value: summary.pending, tone: "bg-blue-50 border-blue-200 text-blue-800" },
-                { label: "Expiring Soon", value: summary.expiring, tone: "bg-amber-50 border-amber-200 text-amber-800" },
-                { label: "Terminated", value: summary.terminated, tone: "bg-red-50 border-red-200 text-red-700" },
-              ].map((card) => (
-                <div key={card.label} className={`rounded-md border px-2 py-1 ${card.tone}`}>
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em]">{card.label}</div>
-                  <div className="mt-1 text-[11px] font-black">{card.value}</div>
-                </div>
+        <div className="flex-shrink-0 sticky top-0 z-30 border-b border-gray-200 bg-white px-2 pt-1">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <select
+              value={draftFilters.property}
+              onChange={(event) => setDraftFilters((prev) => ({ ...prev, property: event.target.value }))}
+              className={LISTING_UI.filterSelect}
+            >
+              {uniqueProperties.map((propertyName) => (
+                <option key={propertyName} value={propertyName}>
+                  {propertyName === "any" ? "All Properties" : toListingCaps(propertyName)}
+                </option>
               ))}
+            </select>
+
+            <select
+              value={draftFilters.status}
+              onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))}
+              className={LISTING_UI.filterSelect}
+            >
+              <option value="any">All Status</option>
+              {AGREEMENT_STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>{getStatusLabel(status)}</option>
+              ))}
+            </select>
+
+            <label className="inline-flex items-center gap-2 rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white">
+              <input
+                type="checkbox"
+                checked={draftFilters.expiringOnly}
+                onChange={(event) => setDraftFilters((prev) => ({ ...prev, expiringOnly: event.target.checked }))}
+                className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+              />
+              Expiring in 30 days
+            </label>
+
+            <div className="relative min-w-[260px] flex-1">
+              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400" />
+              <input
+                type="text"
+                value={draftFilters.search}
+                onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(event.target.value) }))}
+                placeholder="Search agreement, tenant, property or unit"
+                className="w-full rounded border border-gray-300 bg-white py-1 pl-9 pr-3 text-xs shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
             </div>
           </div>
         </div>
 
-        <div className="px-2 pt-2">
-          <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-1.5 py-1 text-[11px] text-gray-800 shadow-sm">
-                <FaSearch className="text-[11px]" />
-                <input
-                  value={filters.search}
-                  onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
-                  placeholder="Search agreement, tenant, property or unit"
-                  className="w-full bg-transparent text-[11px] outline-none"
-                />
-              </div>
-
-              <select
-                value={filters.status}
-                onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}
-                className="rounded border border-orange-300 bg-orange-50 px-2 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none"
-              >
-                <option value="any">All Statuses</option>
-                {AGREEMENT_STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>{getStatusLabel(status)}</option>
-                ))}
-              </select>
-
-              <select
-                value={filters.property}
-                onChange={(event) => setFilters((prev) => ({ ...prev, property: event.target.value }))}
-                className="rounded border border-orange-300 bg-orange-50 px-2 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none"
-              >
-                <option value="any">All Properties</option>
-                {[...(Array.isArray(properties) ? properties : [])]
-                  .sort((a, b) => String(a?.propertyName || a?.name || "").localeCompare(String(b?.propertyName || b?.name || ""), undefined, { sensitivity: "base" }))
-                  .map((property) => (
-                    <option key={property._id} value={property._id}>
-                      {property.propertyCode ? `${property.propertyCode} - ${property.propertyName || property.name}` : property.propertyName || property.name}
-                    </option>
-                  ))}
-              </select>
-
-              <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-2 py-1 text-[11px] font-medium text-gray-700 shadow-sm">
-                <input
-                  type="checkbox"
-                  checked={filters.expiringOnly}
-                  onChange={(event) => setFilters((prev) => ({ ...prev, expiringOnly: event.target.checked }))}
-                />
-                Expiring in 30 days
-              </label>
-
-              <button
-                onClick={() => setFilters({ status: "any", property: "any", search: "", expiringOnly: false })}
-                className={`flex items-center gap-2 rounded-md px-3 py-1 text-[11px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-              >
-                <FaRedoAlt className="text-[11px]" />
-                Reset
-              </button>
-
-
-              <button
-                onClick={() => loadData()}
-                className={`flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-black text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-              >
-                <FaSyncAlt className="text-[11px]" /> Refresh
-              </button>
-
-              <button
-                onClick={() => openNewModal()}
-                className={`flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-black text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-              >
-                <FaPlus className="text-[11px]" /> New Agreement
-              </button>            </div>
+        <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-2 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={expandAllAgreements} className="rounded p-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-200" title="Expand all">
+              <FaExpandAlt />
+            </button>
+            <button onClick={collapseAllAgreements} className="rounded p-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-200" title="Collapse all">
+              <FaCompressAlt />
+            </button>
+            <span className="text-xs font-bold text-gray-700">{selectedAgreements.length} selected</span>
+            <span className="text-xs font-bold text-gray-500">
+              Total {summary.total} | Active {summary.active} | Pending {summary.pending} | Expiring {summary.expiring} | Terminated {summary.terminated}
+            </span>
+            <button
+              onClick={() => selectedAgreements.length === 1 && openEditModal(sortedFilteredRows.find((row) => row.id === selectedAgreements[0]))}
+              disabled={selectedAgreements.length !== 1}
+              className="flex items-center gap-1 rounded bg-blue-500 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FaEdit size={10} />
+              <span>Edit</span>
+            </button>
+            <button onClick={() => openNewModal()} className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-medium text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>
+              <FaPlus className="text-xs" />
+              <span>New Agreement</span>
+            </button>
+            <button onClick={handleSearchFilters} className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-medium text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
+              <FaSearch className="text-xs" />
+              <span>Search</span>
+            </button>
+            <button onClick={handleResetFilters} className="flex items-center gap-1 rounded bg-gray-500 px-3 py-1 text-xs font-medium text-white shadow-sm transition-colors hover:bg-gray-600">
+              <FaRedoAlt className="text-xs" />
+              <span>Reset</span>
+            </button>
+            <button onClick={() => loadData()} className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-medium text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
+              <FaSyncAlt className="text-xs" />
+              <span>Refresh</span>
+            </button>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden px-2 py-2">
-          <div className="flex h-full min-h-0 flex-col rounded-lg border border-gray-200 bg-white shadow-sm">
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1180px] table-fixed border-collapse text-[11px]" style={{ tableLayout: "fixed" }}>
-                <colgroup>
-                  <col style={{ width: "90px" }} />
-                  <col style={{ width: "130px" }} />
-                  <col style={{ width: "145px" }} />
-                  <col style={{ width: "90px" }} />
-                  <col style={{ width: "88px" }} />
-                  <col style={{ width: "82px" }} />
-                  <col style={{ width: "82px" }} />
-                  <col style={{ width: "82px" }} />
-                  <col style={{ width: "80px" }} />
-                  <col style={{ width: "255px" }} />
-                </colgroup>
+        <div className="min-h-0 flex-1 overflow-auto px-2 py-1">
+              <table className="w-full min-w-[1320px] border-collapse">
                 <thead>
-                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                    <th className="px-1.5 py-1 text-left font-bold">Agreement</th>
-                    <th className="px-1.5 py-1 text-left font-bold">Tenant</th>
-                    <th className="px-1.5 py-1 text-left font-bold">Property / Unit</th>
-                    <th className="px-1.5 py-1 text-left font-bold">Status</th>
-                    <th className="px-1.5 py-1 text-left font-bold">Start</th>
-                    <th className="px-1.5 py-1 text-left font-bold">End</th>
-                    <th className="px-1.5 py-1 text-right font-bold">Rent</th>
-                    <th className="px-1.5 py-1 text-right font-bold">Deposit</th>
-                    <th className="px-1.5 py-1 text-left font-bold">Signatures</th>
-                    <th className="px-1.5 py-1 text-left font-bold">Actions</th>
+                  <tr className={`${MILIK_GREEN} text-xs text-white`}>
+                    <th className="w-6 border-r border-gray-400 px-2 py-1.5 text-center font-bold">
+                      <input
+                        type="checkbox"
+                        checked={pagedRows.length > 0 && pagedRows.every((r) => selectedAgreements.includes(r.id))}
+                        onChange={toggleSelectAllAgreements}
+                        onClick={(event) => event.stopPropagation()}
+                        className="cursor-pointer rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                      />
+                    </th>
+                    <th className="w-6 border-r border-gray-400 px-2 py-1.5 text-center font-bold">+</th>
+                    <th className="min-w-[130px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Agreement</th>
+                    <th className="min-w-[150px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Tenant</th>
+                    <th className="min-w-[150px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Property</th>
+                    <th className="min-w-[90px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Unit</th>
+                    <th className="min-w-[95px] border-r border-gray-400 px-2 py-1.5 text-center font-bold">Status</th>
+                    <th className="min-w-[115px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Start</th>
+                    <th className="min-w-[115px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">End</th>
+                    <th className="min-w-[100px] border-r border-gray-400 px-2 py-1.5 text-right font-bold">Rent</th>
+                    <th className="min-w-[105px] border-r border-gray-400 px-2 py-1.5 text-right font-bold">Deposit</th>
+                    <th className="min-w-[130px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Signatures</th>
+                    <th className="min-w-[320px] px-2 py-1.5 text-left font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pagedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-10 text-center text-[11px] text-gray-500">
+                      <td colSpan={13} className="px-3 py-4 text-center text-xs font-semibold text-gray-600">
                         {isFetchingLeases ? "Loading agreements..." : "No tenant agreements found for the selected filters."}
                       </td>
                     </tr>
                   ) : (
-                    pagedRows.map((row) => {
+                    pagedRows.map((row, idx) => {
                       const normalizedStatus = String(row.status || "").toLowerCase();
                       const tenantPending = !row.signedByTenant;
                       const landlordPending = !row.signedByLandlord;
@@ -598,25 +685,70 @@ const TenantAgreements = () => {
                       const canDelete = ["draft", "cancelled"].includes(normalizedStatus) && tenantPending && landlordPending;
                       const hasDocument = Boolean(String(row.raw?.documentUrl || "").trim());
 
+                      const isExpanded = expandedAgreements.has(row.id);
+                      const isSelected = selectedAgreements.includes(row.id);
+                      const isFirstOfProperty = idx === 0 || pagedRows[idx - 1].propertyName !== row.propertyName;
+
                       return (
                       <React.Fragment key={row.id}>
-                      <tr onClick={() => setExpandedAgreementId((prev) => (prev === row.id ? null : row.id))} className="cursor-pointer border-b border-gray-200 transition hover:bg-[#f9fbfa]">
-                        <td className="px-1.5 py-1 align-top">
-                          <div className="font-black text-[#0B3B2E]">{row.agreementNumber}</div>
-                          <div className="mt-1 text-[11px] text-slate-500">{getStatusLabel(row.leaseType)}</div>
+                        {isFirstOfProperty && (
+                          <tr className="bg-transparent">
+                            <td colSpan={13} className="px-2 pb-1 pt-1.5">
+                              <h3 className="text-sm font-extrabold uppercase tracking-normal text-black">
+                                {toListingCaps(row.propertyName)}
+                              </h3>
+                              <div className="mt-1 h-[2px] w-full bg-[#FF8C00]" />
+                            </td>
+                          </tr>
+                        )}
+                      <tr
+                        onClick={() => toggleAgreementSelect(row.id)}
+                        className={`cursor-pointer border-b text-xs transition-colors ${
+                          row.isExpiring ? "border-red-200" : "border-gray-200"
+                        } ${
+                          isSelected
+                            ? "bg-orange-50 hover:bg-orange-100"
+                            : row.isExpiring
+                              ? "bg-red-50/70 hover:bg-red-100/80"
+                              : "bg-white hover:bg-gray-50"
+                        }`}
+                      >
+                        <td className="border-r border-gray-200 px-2 py-1 text-center" onClick={(event) => event.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(event) => {
+                              event.stopPropagation();
+                              toggleAgreementSelect(row.id);
+                            }}
+                            onClick={(event) => event.stopPropagation()}
+                            className="cursor-pointer rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                          />
+                        </td>
+                        <td
+                          className="cursor-pointer border-r border-gray-200 px-2 py-1 text-center"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleAgreementExpand(row.id);
+                            }}
+                          >
+                          <span>{isExpanded ? "v" : ">"}</span>
+                        </td>
+                        <td className="border-r border-gray-200 px-2 py-1 font-mono text-xs font-bold text-[#0B3B2E]">
+                          <div>{toListingCaps(row.agreementNumber)}</div>
+                          <div className="mt-0.5 font-sans font-normal text-gray-600">{getStatusLabel(row.leaseType)}</div>
                           {row.isExpiring && (
-                            <div className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">
+                            <div className="mt-1 text-[10px] font-semibold text-red-700">
                               Expires in {row.daysToExpiry} day{row.daysToExpiry === 1 ? "" : "s"}
                             </div>
                           )}
                         </td>
-                        <td className="px-1.5 py-1 align-top">
-                          <div className="font-bold text-gray-900">{row.tenantName}</div>
-                          <div className="mt-1 text-[11px] text-slate-500">{row.tenantCode || "No code"}</div>
+                        <td className="border-r border-gray-200 px-2 py-1">
+                          <div className="font-bold text-gray-900">{toListingCaps(row.tenantName)}</div>
+                          <div className="mt-0.5 text-xs text-gray-600">{toListingCaps(row.tenantCode || "No code")}</div>
                         </td>
-                        <td className="px-1.5 py-1 align-top">
+                        <td className="border-r border-gray-200 px-2 py-1 font-bold text-gray-900">
                           <div className="font-semibold text-gray-900">{row.propertyCode ? `${row.propertyCode} • ${row.propertyName}` : row.propertyName}</div>
-                          <div className="mt-1 text-[11px] text-slate-500">{row.unitLabel !== "-" ? row.unitLabel : "No unit linked"}</div>
                           {hasDocument && (
                             <a
                               href={row.raw.documentUrl}
@@ -628,17 +760,20 @@ const TenantAgreements = () => {
                             </a>
                           )}
                         </td>
-                        <td className="px-1.5 py-1 align-top">
-                          <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${getStatusTone(row.status)}`}>
+                        <td className="border-r border-gray-200 px-2 py-1 font-bold text-gray-900">
+                          {toListingCaps(row.unitLabel !== "-" ? row.unitLabel : "No unit linked")}
+                        </td>
+                        <td className="border-r border-gray-200 px-2 py-1 text-center">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${getStatusTone(row.status)}`}>
                             {getStatusLabel(row.status)}
                           </span>
                         </td>
-                        <td className="px-1.5 py-1 align-top whitespace-nowrap">{formatDateLabel(row.startDate)}</td>
-                        <td className="px-1.5 py-1 align-top whitespace-nowrap">{formatDateLabel(row.endDate)}</td>
-                        <td className="px-1.5 py-1 text-right align-top whitespace-nowrap font-bold">{formatCurrency(row.rentAmount)}</td>
-                        <td className="px-1.5 py-1 text-right align-top whitespace-nowrap font-bold">{formatCurrency(row.depositAmount)}</td>
-                        <td className="px-1.5 py-1 align-top">
-                          <div className="space-y-1 text-[11px]">
+                        <td className="border-r border-gray-200 px-2 py-1 font-bold text-gray-900">{formatDateLabel(row.startDate)}</td>
+                        <td className={`border-r border-gray-200 px-2 py-1 font-bold ${row.isExpiring ? "text-red-700" : "text-gray-900"}`}>{formatDateLabel(row.endDate)}</td>
+                        <td className="border-r border-gray-200 px-2 py-1 text-right font-bold text-gray-900">{formatCurrency(row.rentAmount)}</td>
+                        <td className="border-r border-gray-200 px-2 py-1 text-right font-bold text-gray-900">{formatCurrency(row.depositAmount)}</td>
+                        <td className="border-r border-gray-200 px-2 py-1">
+                          <div className="space-y-1 text-xs">
                             <div className={row.signedByTenant ? "text-emerald-700 font-semibold" : "text-slate-500"}>
                               Tenant: {row.signedByTenant ? "Signed" : "Pending"}
                             </div>
@@ -647,7 +782,7 @@ const TenantAgreements = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="px-1.5 py-1 align-top">
+                        <td className="px-2 py-1" onClick={(event) => event.stopPropagation()}>
                           <div className="flex flex-wrap gap-1.5">
                             {canEdit && (
                               <button
@@ -657,6 +792,14 @@ const TenantAgreements = () => {
                                 <FaEdit className="inline mr-1" /> Edit
                               </button>
                             )}
+                            <button
+                              onClick={(event) => { event.stopPropagation(); handleGenerateDocument(row); }}
+                              disabled={generatingDocId === row.id}
+                              className={`rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-orange-700 transition hover:bg-orange-100 ${generatingDocId === row.id ? "opacity-60 cursor-not-allowed" : ""}`}
+                            >
+                              <FaFilePdf className="inline mr-1" />
+                              {generatingDocId === row.id ? "Generating..." : hasDocument ? "Regenerate Doc" : "Generate Doc"}
+                            </button>
                             {canSign && tenantPending && (
                               <button
                                 onClick={(event) => { event.stopPropagation(); handleSign(row, "tenant"); }}
@@ -706,10 +849,10 @@ const TenantAgreements = () => {
                           </div>
                         </td>
                       </tr>
-                        {expandedAgreementId === row.id && (
-                          <tr className="border-b border-gray-200 bg-slate-50">
-                            <td colSpan={10} className="px-1.5 py-1">
-                              <div className="grid gap-2 text-[11px] md:grid-cols-4">
+                        {isExpanded && (
+                          <tr className="border-b border-gray-200 bg-gray-100">
+                            <td colSpan={13} className="px-3 py-1.5">
+                              <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-4">
                                 <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Lease period</span><p className="font-semibold text-slate-900">{formatDateLabel(row.startDate)} → {formatDateLabel(row.endDate)}</p></div>
                                 <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Rent</span><p className="font-semibold text-slate-900">{formatCurrency(row.rentAmount)}</p></div>
                                 <div><span className="font-black uppercase tracking-[0.12em] text-slate-500">Deposit</span><p className="font-semibold text-slate-900">{formatCurrency(row.depositAmount)}</p></div>
@@ -726,30 +869,49 @@ const TenantAgreements = () => {
               </table>
             </div>
 
-            <div className="flex items-center justify-between border-t border-gray-200 px-1.5 py-1 text-[11px] text-slate-600">
-              <div>
-                Showing {pagedRows.length ? (safeCurrentPage - 1) * ITEMS_PER_PAGE + 1 : 0} to {Math.min(safeCurrentPage * ITEMS_PER_PAGE, filteredRows.length)} of {filteredRows.length} agreement(s)
+            <div className="sticky bottom-0 z-20 flex flex-shrink-0 items-center justify-between border-t border-gray-200 bg-white px-2 py-2">
+              <div className="text-xs font-bold text-gray-600">
+                Showing {pagedRows.length > 0 ? startIndex + 1 : 0} to {Math.min(endIndex, sortedFilteredRows.length)} of {sortedFilteredRows.length} agreements
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  onClick={() => setCurrentPage(safeCurrentPage - 1)}
                   disabled={safeCurrentPage === 1}
-                  className="rounded border border-gray-300 px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded p-1 text-xs text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Prev
+                  <FaChevronLeft size={12} />
                 </button>
-                <span>Page {safeCurrentPage} of {totalPages}</span>
+                <div className="flex items-center gap-0.5">
+                  {[...Array(totalPages)].map((_, i) => {
+                    const page = i + 1;
+                    if (page === 1 || page === totalPages || (page >= safeCurrentPage - 1 && page <= safeCurrentPage + 1)) {
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`rounded px-2 py-0.5 text-xs font-bold transition-colors ${
+                            safeCurrentPage === page ? `${MILIK_ORANGE} text-white` : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      );
+                    }
+                    if (page === safeCurrentPage - 2 || page === safeCurrentPage + 2) {
+                      return <span key={page} className="px-1 text-xs text-gray-400">...</span>;
+                    }
+                    return null;
+                  })}
+                </div>
                 <button
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  onClick={() => setCurrentPage(safeCurrentPage + 1)}
                   disabled={safeCurrentPage === totalPages}
-                  className="rounded border border-gray-300 px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded p-1 text-xs text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Next
+                  <FaChevronRight size={12} />
                 </button>
               </div>
             </div>
-          </div>
-        </div>
 
         {modalOpen && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4">
@@ -759,7 +921,7 @@ const TenantAgreements = () => {
                   <h2 className="text-lg font-black text-gray-900">{form._id ? "Edit Tenant Agreement" : "New Tenant Agreement"}</h2>
                   <p className="mt-1 text-[11px] text-gray-600">Capture rent terms, deposit, due day, and renewal details in one place.</p>
                 </div>
-                <button onClick={() => { setModalOpen(false); setForm(buildInitialForm()); }} className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
+                <button onClick={closeModal} className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
                   <FaTimes />
                 </button>
               </div>
@@ -774,10 +936,20 @@ const TenantAgreements = () => {
                       className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     >
                       <option value="">Select tenant</option>
-                      {(Array.isArray(tenants) ? tenants : []).map((tenant) => (
-                        <option key={tenant._id} value={tenant._id}>{tenant.name} {tenant.tenantCode ? `(${tenant.tenantCode})` : ""}</option>
-                      ))}
+                      {(Array.isArray(tenants) ? tenants : [])
+                        .filter((tenant) => includeTerminatedTenants || isActiveTenant(tenant))
+                        .map((tenant) => (
+                          <option key={tenant._id} value={tenant._id}>{tenant.name} {tenant.tenantCode ? `(${tenant.tenantCode})` : ""}</option>
+                        ))}
                     </select>
+                    <label className="mt-1.5 inline-flex cursor-pointer items-center gap-2 text-[11px] text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={includeTerminatedTenants}
+                        onChange={(e) => setIncludeTerminatedTenants(e.target.checked)}
+                      />
+                      Include terminated tenants
+                    </label>
                   </div>
                   <div>
                     <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Unit</label>
@@ -916,7 +1088,7 @@ const TenantAgreements = () => {
                 <div className="mt-5 flex items-center justify-end gap-2 border-t border-gray-200 pt-4">
                   <button
                     type="button"
-                    onClick={() => { setModalOpen(false); setForm(buildInitialForm()); }}
+                    onClick={closeModal}
                     className="rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50"
                   >
                     Cancel

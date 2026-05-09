@@ -32,5 +32,6 @@ const auditLogSchema = new mongoose.Schema(
 
 auditLogSchema.index({ company: 1, createdAt: -1 });
 auditLogSchema.index({ company: 1, category: 1, createdAt: -1 });
+auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 365 * 24 * 60 * 60 });
 
 export default mongoose.model("AuditLog", auditLogSchema);

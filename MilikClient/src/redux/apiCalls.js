@@ -1797,6 +1797,18 @@ export const renewLease = async (dispatch, id, renewData) => {
   }
 };
 
+// Generate lease document PDF
+export const generateLeaseDocument = async (dispatch, id) => {
+  dispatch(updateLeaseStart());
+  try {
+    const res = await adminRequests.post(`/leases/${id}/generate-document`);
+    dispatch(updateLeaseSuccess(res.data));
+    return res.data;
+  } catch (err) {
+    dispatch(updateLeaseFailure());
+    throw err;
+  }
+};
 
 // Get all expense properties
 export const getExpenseProperties = async (dispatch, business, category = null, property = null, unit = null, startDate = null, endDate = null) => {
@@ -2499,18 +2511,13 @@ export const createTenantInvoicesBatch = async ({ business = null, items = [] } 
   return res.data;
 };
 
-// Cancel tenant invoice
-export const cancelTenantInvoice = async (invoiceId) => {
-  const res = await adminRequests.delete(`/tenant-invoices/${invoiceId}`);
-  return res.data;
-};
-
-
-// Delete tenant invoice
+// Delete / cancel tenant invoice (soft-reversal — backend treats DELETE as reverse)
 export const deleteTenantInvoice = async (invoiceId) => {
   const res = await adminRequests.delete(`/tenant-invoices/${invoiceId}`);
   return res.data;
 };
+
+export const cancelTenantInvoice = deleteTenantInvoice;
 
 // ========== JOURNAL ENTRIES SECTION ==========
 
@@ -2649,6 +2656,21 @@ export const sendCommunicationMessage = async (payload) => {
   const res = await adminRequests.post('/communications/send', payload);
   return res.data;
 };
+
+export const getSmsLogs = async (business, { limit = 30, channel, contextType, status } = {}) => {
+  const params = new URLSearchParams({ business, limit });
+  if (channel) params.set('channel', channel);
+  if (contextType) params.set('contextType', contextType);
+  if (status) params.set('status', status);
+  const res = await adminRequests.get(`/communications/sms-logs?${params}`);
+  return res.data;
+};
+
+export const sendTestSms = async (payload) => {
+  const res = await adminRequests.post('/communications/test-sms', payload);
+  return res.data;
+};
+
 export const listMpesaCollections = async (params = {}) => {
   const res = await adminRequests.get("/mpesa-collections", { params });
   return res.data;

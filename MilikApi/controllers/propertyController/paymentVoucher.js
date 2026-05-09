@@ -1263,6 +1263,12 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
         });
       }
 
+      // Allow settlement account to be provided inline (e.g. from the "Mark Paid" quick modal)
+      const inlineSettlementId = req.body?.settlementAccount || null;
+      if (inlineSettlementId && isValidObjectId(inlineSettlementId) && !voucher.settlementAccount) {
+        voucher.settlementAccount = inlineSettlementId;
+      }
+
       if (!voucher.settlementAccount || !isValidObjectId(voucher.settlementAccount)) {
         return res.status(400).json({
           success: false,
@@ -1332,18 +1338,27 @@ export const deletePaymentVoucher = async (req, res, next) => {
     if (row.status !== "draft") {
       const actorUserId = await resolveActorUserId(req, business);
 
-      if (row.status !== "reversed") {
-        await reverseVoucherLedgerEntries({
-          voucher: row,
-          userId: actorUserId,
-          reason: `Voucher ${row.voucherNo} removed from active voucher list`,
-        });
-
-        row.status = "reversed";
-        row.reversedAt = new Date();
-        row.reversedBy = actorUserId;
-        row.reversalReason = `Voucher removed from active list instead of hard deletion for audit safety.`;
+      if (row.status === "reversed") {
+        // Already reversed — financial entries already undone; safe to hard-delete the voucher row.
+        await deleteExpenseRecordForVoucher(row);
+        await releaseSourceRequisitionFromVoucher({ voucher: row, businessId: business });
+        await PaymentVoucher.findOneAndDelete({ _id: req.params.id, business });
+        await syncLinkedProcessedStatementForVoucher({ voucher: row, businessId: business });
+        emitToCompany(row.business, "voucher:deleted", { voucherId: row._id });
+        return res.status(200).json({ success: true, message: "Reversed payment voucher deleted" });
       }
+
+      // approved or paid — reverse the GL entries first, keep the row for audit trail
+      await reverseVoucherLedgerEntries({
+        voucher: row,
+        userId: actorUserId,
+        reason: `Voucher ${row.voucherNo} removed from active voucher list`,
+      });
+
+      row.status = "reversed";
+      row.reversedAt = new Date();
+      row.reversedBy = actorUserId;
+      row.reversalReason = `Voucher removed from active list instead of hard deletion for audit safety.`;
 
       await deleteExpenseRecordForVoucher(row);
       await releaseSourceRequisitionFromVoucher({ voucher: row, businessId: business });

@@ -449,23 +449,18 @@ const authorizeTenantAccess = (req, tenant) => {
 };
 
 const generateNextTenantCode = async (businessId) => {
-  const existingTenants = await Tenant.find({
-    business: businessId,
-    tenantCode: { $regex: /^TT\d+$/ },
-  })
-    .select("tenantCode")
-    .lean();
-
-  if (existingTenants.length > 0) {
-    const numbers = existingTenants
-      .map((t) => parseInt(String(t.tenantCode || "").replace("TT", ""), 10))
-      .filter((n) => !Number.isNaN(n));
-
-    const maxNumber = numbers.length ? Math.max(...numbers) : 0;
-    return `TT${String(maxNumber + 1).padStart(4, "0")}`;
-  }
-
-  return "TT0001";
+  const result = await Tenant.aggregate([
+    {
+      $match: {
+        business: new mongoose.Types.ObjectId(String(businessId)),
+        tenantCode: { $regex: /^TT\d+$/ },
+      },
+    },
+    { $project: { num: { $toInt: { $substr: ["$tenantCode", 2, -1] } } } },
+    { $group: { _id: null, maxNum: { $max: "$num" } } },
+  ]);
+  const maxNumber = result[0]?.maxNum ?? 0;
+  return `TT${String(maxNumber + 1).padStart(4, "0")}`;
 };
 
 export const updatePropertyUnitCounts = async (propertyId) => {
@@ -992,12 +987,21 @@ export const getTenants = async (req, res, next) => {
       filter.unit = unit;
     }
 
-    const tenants = await Tenant.find(filter)
-      .populate("unit", "unitNumber property rent status utilities")
-      .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
-      .populate("additionalUnits", "unitNumber property rent status utilities")
-      .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy")
-      .sort({ createdAt: -1 });
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit) || 2000));
+    const skip = (page - 1) * limit;
+
+    const [tenants, total] = await Promise.all([
+      Tenant.find(filter)
+        .populate("unit", "unitNumber property rent status utilities")
+        .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
+        .populate("additionalUnits", "unitNumber property rent status utilities")
+        .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Tenant.countDocuments(filter),
+    ]);
 
     const enrichedTenants = tenants.map((tenantDoc) => {
       const tenant = typeof tenantDoc?.toObject === "function" ? tenantDoc.toObject() : tenantDoc;
@@ -1011,6 +1015,9 @@ export const getTenants = async (req, res, next) => {
       success: true,
       data: enrichedTenants,
       count: enrichedTenants.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
     });
   } catch (err) {
     next(err);

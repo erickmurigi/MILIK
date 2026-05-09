@@ -160,7 +160,7 @@ const emailProfileCrudSchema = z
 const smsProfileSchema = z.object({
   _id: z.string().optional(),
   name: z.string().optional(),
-  provider: z.enum(["generic", "africas_talking", "twilio", "custom_http"]).optional(),
+  provider: z.enum(["generic", "africas_talking", "twilio", "mtech", "custom_http"]).optional(),
   senderId: z.string().optional(),
   accountUsername: z.string().optional(),
   apiKey: z.union([z.string(), z.literal("")]).optional(),

@@ -1356,6 +1356,7 @@ export const getPropertyTenants = async (req, res, next) => {
 
     const units = await Unit.find({ property: req.params.id }).distinct("_id");
     const tenants = await Tenant.find({
+      business: userBusinessId,
       $or: [{ unit: { $in: units } }, { additionalUnits: { $in: units } }],
     }).populate("unit", "unitNumber rent");
 

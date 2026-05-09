@@ -35,15 +35,21 @@ const MetricsGrid = ({ darkMode }) => {
   }, [dispatch, currentCompany?._id]);
 
   const totalProperties = properties.length;
-  const totalUnits = units.length;
-  const occupiedUnits = units.filter((u) => u.status === 'occupied').length;
+  const totalUnits = units.filter((u) => {
+    const s = String(u?.status || '').trim().toLowerCase();
+    return !['off_market', 'inactive', 'archived', 'disabled'].includes(s);
+  }).length;
+  const occupiedUnits = units.filter((u) => {
+    const s = String(u?.status || '').trim().toLowerCase();
+    return s === 'occupied' || s === 'notice_given' || s === 'reserved';
+  }).length;
   const occupancyRate = totalUnits > 0 ? ((occupiedUnits / totalUnits) * 100).toFixed(1) : '0.0';
 
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
 
   const thisMonthPayments = rentPayments.filter((payment) => {
-    const paymentDate = new Date(payment?.createdAt || payment?.paymentDate || 0);
+    const paymentDate = new Date(payment?.paymentDate || payment?.createdAt || 0);
     return (
       !Number.isNaN(paymentDate.getTime()) &&
       paymentDate.getMonth() === currentMonth &&

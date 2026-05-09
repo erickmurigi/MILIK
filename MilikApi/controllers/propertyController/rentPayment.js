@@ -9,6 +9,7 @@ import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import {
+  applyIncrementalBalanceDelta,
   computeTenantInvoiceSnapshots,
   recomputeInvoiceStatusesForTenant,
   recomputeTenantFinancialState,
@@ -1968,6 +1969,7 @@ export const createPayment = async (req, res, next) => {
           ? await confirmNonCashDirectToLandlordReceipt(savedPayment, actorUserId)
           : await postReceiptJournal(savedPayment, actorUserId);
 
+        await applyIncrementalBalanceDelta({ tenantId: savedPayment.tenant, businessId: savedPayment.business, delta: -Math.abs(Number(savedPayment.amount || 0)) });
         await recomputeTenantBalance(savedPayment.tenant, savedPayment.business);
 
         if (posting.entries?.length) {
@@ -2627,6 +2629,7 @@ export const updatePaymentAllocations = async (req, res, next) => {
       }
     }
 
+    await applyIncrementalBalanceDelta({ tenantId: payment.tenant, businessId: payment.business, delta: Math.abs(Number(payment.amount || 0)) });
     await recomputeTenantBalance(payment.tenant, payment.business);
 
     if (releasePosting.touchedAccountIds?.length > 0) {
@@ -2951,6 +2954,7 @@ export const confirmPayment = async (req, res, next) => {
         ? await confirmNonCashDirectToLandlordReceipt(existingPayment, actorUserId)
         : await postReceiptJournal(existingPayment, actorUserId);
 
+      await applyIncrementalBalanceDelta({ tenantId: existingPayment.tenant, businessId: existingPayment.business, delta: -Math.abs(Number(existingPayment.amount || 0)) });
       await recomputeTenantBalance(existingPayment.tenant, existingPayment.business);
 
       if (posting.entries?.length) {
@@ -3050,6 +3054,7 @@ export const unconfirmPayment = async (req, res, next) => {
     payment.postingError = null;
     await payment.save();
 
+    await applyIncrementalBalanceDelta({ tenantId: payment.tenant, businessId: payment.business, delta: Math.abs(Number(payment.amount || 0)) });
     await recomputeTenantBalance(payment.tenant, payment.business);
     await logAuditEvent({
       req,

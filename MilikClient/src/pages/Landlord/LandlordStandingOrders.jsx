@@ -200,7 +200,7 @@ const LandlordStandingOrders = () => {
   useEffect(() => {
     if (!currentCompany?._id) return;
 
-    dispatch(getLandlords({ company: currentCompany._id }));
+    dispatch(getLandlords({ business: currentCompany._id }));
     dispatch(getProperties({ business: currentCompany._id }));
 
     let mounted = true;

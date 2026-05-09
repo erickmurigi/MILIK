@@ -253,7 +253,7 @@ const buildCandidateRows = async ({ businessId, rule, runDate }) => {
 
   const invoices = await TenantInvoice.find({
     business: businessId,
-    status: { $nin: ["cancelled", "reversed", "paid"] },
+    status: { $in: ["pending", "partially_paid"] },
     dueDate: { $lt: runAt },
     category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE"] },
   })

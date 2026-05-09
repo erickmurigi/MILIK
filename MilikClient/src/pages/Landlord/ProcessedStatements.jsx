@@ -7,6 +7,7 @@ import {
   FaChevronDown,
   FaChevronUp,
   FaDownload,
+  FaEnvelope,
   FaHourglass,
   FaMoneyBillWave,
   FaPrint,
@@ -23,6 +24,7 @@ import {
 import PayLandlordModal from "../../components/Modals/PayLandlordModal";
 import RecordLandlordRecoveryModal from "../../components/Modals/RecordLandlordRecoveryModal";
 import PostCommissionModal from "../../components/Modals/PostCommissionModal";
+import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { adminRequests } from "../../utils/requestMethods";
 import { getChartOfAccounts } from "../../redux/apiCalls";
 
@@ -32,7 +34,9 @@ const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 const ITEMS_PER_PAGE = 50;
 
-const money = (value) => Number(value || 0).toFixed(2);
+const money = (value) => Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const displayMoney = (value) => `KSh ${money(value)}`;
+const formatPaymentMethod = (method) => method ? method.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—';
 const formatDate = (dateString) => {
   if (!dateString) return "N/A";
   return new Date(dateString).toLocaleDateString("en-GB");
@@ -68,6 +72,7 @@ const ProcessedStatements = () => {
   const canProcessLandlordPayments = hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "process", "accounts");
   const canReverseProcessedStatement = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "reverse", "accounts");
   const canExportProcessedStatement = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "export", "accounts");
+  const canSendCommunications = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "send", "accounts");
   const { statements, loading } = useSelector((state) => state.processedStatements);
 
   const [activeTab, setActiveTab] = useState("outstanding");
@@ -78,6 +83,7 @@ const ProcessedStatements = () => {
   const [showPayModal, setShowPayModal] = useState(null);
   const [showRecoveryModal, setShowRecoveryModal] = useState(null);
   const [showCommissionModal, setShowCommissionModal] = useState(null);
+  const [commModalStatement, setCommModalStatement] = useState(null);
   const [cashbookOptions, setCashbookOptions] = useState([]);
 
   const businessId = useMemo(
@@ -551,9 +557,10 @@ const ProcessedStatements = () => {
                 <div className="flex flex-1 items-center justify-center p-12 text-center"><p className="text-lg text-gray-500">No {activeTab} statements found</p></div>
               ) : (
                 <div className="flex-1 min-h-0 overflow-auto">
-                  <table className="w-full min-w-[1040px] text-sm">
+                  <table className="w-full min-w-[1160px] text-sm">
                     <thead>
                       <tr className="sticky top-0 z-10 border-b bg-[#0B3B2E] text-white">
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-white">STMT #</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-white">LANDLORD</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-white">PROPERTY</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-white">PERIOD</th>
@@ -570,6 +577,9 @@ const ProcessedStatements = () => {
                         return (
                           <React.Fragment key={statement._id}>
                             <tr className="border-b transition hover:bg-gray-50">
+                              <td className="px-4 py-3 text-xs font-mono text-slate-500">
+                                {statement.sourceStatementNumber || '—'}
+                              </td>
                               <td className="px-4 py-3">{statement.landlord?.landlordName || "N/A"}</td>
                               <td className="px-4 py-3">
                                 <div>
@@ -578,9 +588,9 @@ const ProcessedStatements = () => {
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-sm">{formatPeriodRange(statement)}</td>
-                              <td className="px-4 py-3 text-right font-semibold">{money(getStatementDisplayAmount(statement))}</td>
+                              <td className="px-4 py-3 text-right font-semibold">{displayMoney(getStatementDisplayAmount(statement))}</td>
                               <td className="px-4 py-3 text-right">
-                                {money(isNegative ? statement.amountRecovered || 0 : statement.amountPaid || 0)}
+                                {displayMoney(isNegative ? statement.amountRecovered || 0 : statement.amountPaid || 0)}
                               </td>
                               <td className="px-4 py-3 text-center">{getStatusBadge(statement)}</td>
                               <td className="px-4 py-3 text-center">
@@ -595,7 +605,7 @@ const ProcessedStatements = () => {
 
                             {expandedRow === statement._id && (
                               <tr className="border-b bg-gray-50">
-                                <td colSpan="7" className="px-4 py-4">
+                                <td colSpan="8" className="px-4 py-4">
                                   <div className="space-y-4">
                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                                       <div>
@@ -664,6 +674,66 @@ const ProcessedStatements = () => {
                                       </div>
                                     </div>
 
+                                    {Array.isArray(statement.paymentHistory) && statement.paymentHistory.length > 0 && (
+                                      <div>
+                                        <p className="mb-2 text-sm font-semibold text-slate-700">Payment History</p>
+                                        <div className="overflow-hidden rounded border border-slate-200">
+                                          <table className="w-full text-xs">
+                                            <thead className="bg-slate-100 text-slate-600">
+                                              <tr>
+                                                <th className="px-3 py-2 text-left font-semibold">Date</th>
+                                                <th className="px-3 py-2 text-left font-semibold">Method</th>
+                                                <th className="px-3 py-2 text-left font-semibold">Reference</th>
+                                                <th className="px-3 py-2 text-right font-semibold">Amount</th>
+                                                <th className="px-3 py-2 text-left font-semibold">Notes</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {statement.paymentHistory.map((ph, i) => (
+                                                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                                  <td className="px-3 py-2">{formatDate(ph.paymentDate)}</td>
+                                                  <td className="px-3 py-2">{formatPaymentMethod(ph.paymentMethod)}</td>
+                                                  <td className="px-3 py-2 font-mono text-slate-500">{ph.paymentReference || '—'}</td>
+                                                  <td className="px-3 py-2 text-right font-semibold text-emerald-700">{displayMoney(ph.amount)}</td>
+                                                  <td className="px-3 py-2 text-slate-500">{ph.notes || '—'}</td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {Array.isArray(statement.recoveryHistory) && statement.recoveryHistory.length > 0 && (
+                                      <div>
+                                        <p className="mb-2 text-sm font-semibold text-slate-700">Recovery History</p>
+                                        <div className="overflow-hidden rounded border border-red-200">
+                                          <table className="w-full text-xs">
+                                            <thead className="bg-red-50 text-red-700">
+                                              <tr>
+                                                <th className="px-3 py-2 text-left font-semibold">Date</th>
+                                                <th className="px-3 py-2 text-left font-semibold">Method</th>
+                                                <th className="px-3 py-2 text-left font-semibold">Reference</th>
+                                                <th className="px-3 py-2 text-right font-semibold">Amount Recovered</th>
+                                                <th className="px-3 py-2 text-left font-semibold">Notes</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {statement.recoveryHistory.map((rh, i) => (
+                                                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50/40'}>
+                                                  <td className="px-3 py-2">{formatDate(rh.paymentDate)}</td>
+                                                  <td className="px-3 py-2">{formatPaymentMethod(rh.paymentMethod)}</td>
+                                                  <td className="px-3 py-2 font-mono text-slate-500">{rh.paymentReference || '—'}</td>
+                                                  <td className="px-3 py-2 text-right font-semibold text-red-700">{displayMoney(rh.amount)}</td>
+                                                  <td className="px-3 py-2 text-slate-500">{rh.notes || '—'}</td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+                                    )}
+
                                     {statement.status === "reversed" && (
                                       <div className="rounded-lg border border-gray-300 bg-gray-100 p-3 text-sm text-gray-700">
                                         <p className="font-semibold">Reversed Processed Statement</p>
@@ -691,6 +761,15 @@ const ProcessedStatements = () => {
                                         className="flex items-center gap-2 rounded bg-gray-700 px-3 py-2 text-sm text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                                       >
                                         <FaPrint /> Print
+                                      </button>
+
+                                      <button
+                                        onClick={() => setCommModalStatement(statement)}
+                                        disabled={!canSendCommunications}
+                                        title={canSendCommunications ? "Email statement to landlord" : "You do not have permission to send communications"}
+                                        className="flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-sm text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        <FaEnvelope /> Email Statement
                                       </button>
 
                                       {!isNegative && statement.status !== "reversed" && ["unpaid", "part_paid"].includes(statement.status) && canProcessLandlordPayments && (
@@ -797,6 +876,21 @@ const ProcessedStatements = () => {
           statement={statements.find((s) => s._id === showCommissionModal)}
           onClose={() => setShowCommissionModal(null)}
           onSubmit={(commissionData) => handlePostCommission(showCommissionModal, commissionData)}
+        />
+      )}
+
+      {commModalStatement && (
+        <CommunicationComposerModal
+          open={Boolean(commModalStatement)}
+          onClose={() => setCommModalStatement(null)}
+          businessId={businessId}
+          contextType="processed_statement"
+          recordIds={[commModalStatement._id]}
+          defaultChannel="email"
+          allowedChannels={["email"]}
+          title={`Email Statement — ${commModalStatement.landlord?.landlordName || "Landlord"}`}
+          subtitle={`${commModalStatement.property?.propertyCode || ""} · ${formatPeriodRange(commModalStatement)}`}
+          onSent={() => setCommModalStatement(null)}
         />
       )}
     </>

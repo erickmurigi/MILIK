@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
+import { LISTING_UI } from "../../utils/listingPageUtils";
 import {
   FaFileInvoice,
   FaPlus,
@@ -23,6 +24,9 @@ import {
 } from "../../redux/invoiceApi";
 import { adminRequests } from "../../utils/requestMethods";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
+
+const MILIK_GREEN = "bg-[#0B3B2E]";
+const MILIK_ORANGE = "bg-[#FF8C00]";
 
 const todayInput = () => new Date().toISOString().split("T")[0];
 
@@ -99,12 +103,44 @@ const resolvePropertyName = (record, propertyMap) => {
 };
 
 const resolveTenantId = (record) => String(record?.tenant?._id || record?.tenant || "");
+
+const resolveUnitName = (record, tenantMap) => {
+  const direct =
+    record?.unit?.unitNumber ||
+    record?.unit?.unitName ||
+    record?.unit?.name ||
+    record?.unitName;
+  if (direct) return direct;
+  const tenant = tenantMap.get(resolveTenantId(record));
+  return tenant?.unit?.unitNumber || tenant?.unit?.unitName || tenant?.unit?.name || tenant?.unitName || "-";
+};
+
 const getStatusChip = (status) => {
   const normalized = String(status || "draft").toLowerCase();
   if (normalized === "posted") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (normalized === "reversed") return "border-amber-200 bg-amber-50 text-amber-700";
   if (normalized === "cancelled") return "border-rose-200 bg-rose-50 text-rose-700";
   return "border-slate-200 bg-slate-50 text-slate-700";
+};
+
+const getNotePaymentState = (note = {}) => {
+  const noteType = String(note?.noteType || note?.documentType || "").toUpperCase();
+  const status = String(note?.status || "").toLowerCase();
+  const paymentStatus = String(note?.paymentStatus || note?.metadata?.paymentStatus || "").toLowerCase();
+  const amount = Number(note?.amount || 0);
+  const paidAmount = Number(note?.amountPaid ?? note?.paidAmount ?? note?.metadata?.amountPaid ?? 0);
+  const balance = Number(note?.balance ?? note?.balanceDue ?? note?.remainingBalance ?? note?.outstanding ?? note?.metadata?.balance ?? NaN);
+
+  if (status === "reversed") return { label: "Reversed", className: "bg-slate-100 text-slate-700" };
+  if (status === "cancelled") return { label: "Cancelled", className: "bg-rose-100 text-rose-700" };
+  if (noteType === "CREDIT_NOTE") return { label: "Credit Applied", className: "bg-blue-100 text-blue-700" };
+  if (paymentStatus === "paid" || status === "paid" || Number.isFinite(balance) && balance <= 0) {
+    return { label: "Paid", className: "bg-green-100 text-green-700" };
+  }
+  if (["part_paid", "partially_paid", "partial"].includes(paymentStatus) || paidAmount > 0 && paidAmount < amount) {
+    return { label: "Part Paid", className: "bg-amber-100 text-amber-700" };
+  }
+  return { label: "Unpaid", className: "bg-orange-100 text-orange-700" };
 };
 
 const normalizeInvoiceItemKey = (invoice) => {
@@ -289,6 +325,7 @@ const InvoiceNotes = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busyNoteId, setBusyNoteId] = useState("");
+  const [selectedNotes, setSelectedNotes] = useState([]);
 
   const propertyMap = useMemo(
     () => new Map((properties || []).map((item) => [String(item?._id || ""), item])),
@@ -560,6 +597,16 @@ const InvoiceNotes = () => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
   }, [currentPage, safeCurrentPage]);
 
+  const toggleNoteSelect = (id) => {
+    setSelectedNotes((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+  const toggleSelectAllNotes = () => {
+    const allIds = paginatedNotes.map((n) => String(n._id));
+    const allSelected = allIds.length > 0 && allIds.every((id) => selectedNotes.includes(id));
+    setSelectedNotes(allSelected ? [] : allIds);
+  };
   const summaryCards = useMemo(() => {
     const activeNotes = filteredNotes.filter(isActiveNote);
     const reversedNotes = filteredNotes.filter(
@@ -696,173 +743,295 @@ const InvoiceNotes = () => {
     });
   };
 
+  const handleSearchFilters = () => {
+    setCurrentPage(1);
+  };
+
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
-        <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-2 shadow-sm backdrop-blur">
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6">
-                <div className="relative xl:col-span-2">
-                  <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+      <div className="h-[calc(100dvh-152px)] max-h-[calc(100dvh-152px)] overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
+        <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+
+            {/* ── STICKY HEADER ── */}
+            <div className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-gray-50/95 p-2 shadow-sm backdrop-blur">
+
+              {/* Row 1 – summary chips */}
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                  Total Notes: {filteredNotes.length}
+                </span>
+                <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  Active: {formatCurrency(summaryCards.activeValue)}
+                </span>
+                <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                  Total Value: {formatCurrency(summaryCards.totalValue)}
+                </span>
+                {selectedNotes.length > 0 && (
+                  <span className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                    {selectedNotes.length} selected
+                  </span>
+                )}
+              </div>
+
+              {/* Row 2 – note type toggles */}
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setNoteType("CREDIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "CREDIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "credit"); setSearchParams(p, { replace: true }); }}
+                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${filters.noteType === "CREDIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}
+                >
+                  Credit Notes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setNoteType("DEBIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "DEBIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "debit"); setSearchParams(p, { replace: true }); }}
+                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${filters.noteType === "DEBIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}
+                >
+                  Debit Notes
+                </button>
+              </div>
+
+              {/* Row 3 – filters + action buttons */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400" />
                   <input
                     type="text"
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Search note no, tenant, source invoice, property..."
-                    className="h-8 w-full rounded-md border border-slate-300 bg-white py-1.5 pl-8 pr-2.5 text-[11px] text-slate-900 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    placeholder="Search note, tenant, property..."
+                    className="rounded border border-gray-300 py-1 pl-8 pr-3 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   />
                 </div>
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))} className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100">
+                <select
+                  value={filters.propertyId}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))}
+                  className={LISTING_UI.filterSelect}
+                >
                   <option value="">All properties</option>
-                  {properties.map((property) => (
-                    <option key={property._id} value={property._id}>{property.propertyName || property.propertyCode || "Unnamed Property"}</option>
+                  {properties.map((p) => (
+                    <option key={p._id} value={p._id}>{p.propertyName || p.propertyCode || "Unnamed Property"}</option>
                   ))}
                 </select>
-                <select value={filters.tenantScope || "active"} onChange={(e) => setFilters((prev) => ({ ...prev, tenantScope: e.target.value, tenantId: "" }))} className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100">
+                <select
+                  value={filters.tenantScope || "active"}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, tenantScope: e.target.value, tenantId: "" }))}
+                  className={LISTING_UI.filterSelect}
+                >
                   <option value="active">Active tenants</option>
                   <option value="terminated">Terminated tenants</option>
                   <option value="all">All tenants</option>
                 </select>
-                <select value={filters.tenantId} onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value }))} className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100">
+                <select
+                  value={filters.tenantId}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value }))}
+                  className={LISTING_UI.filterSelect}
+                >
                   <option value="">All tenants</option>
-                  {filterScopedTenants.map((tenant) => (
-                    <option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)} ({getTenantStatusLabel(tenant)})</option>
+                  {filterScopedTenants.map((t) => (
+                    <option key={t._id} value={t._id}>{getTenantDisplayName(t)} ({getTenantStatusLabel(t)})</option>
                   ))}
                 </select>
-                <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100">
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  className={LISTING_UI.filterSelect}
+                >
                   <option value="active">Active only</option>
                   <option value="reversed">Reversed</option>
                   <option value="all">All statuses</option>
                 </select>
-              </div>
-
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button type="button" onClick={() => { setNoteType("CREDIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "CREDIT_NOTE" })); const nextParams = new URLSearchParams(searchParams); nextParams.set("type", "credit"); setSearchParams(nextParams, { replace: true }); }} className={`inline-flex h-7 items-center rounded-md border px-2.5 text-[10px] font-bold transition ${filters.noteType === "CREDIT_NOTE" ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}>Credit Notes</button>
-                  <button type="button" onClick={() => { setNoteType("DEBIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "DEBIT_NOTE" })); const nextParams = new URLSearchParams(searchParams); nextParams.set("type", "debit"); setSearchParams(nextParams, { replace: true }); }} className={`inline-flex h-7 items-center rounded-md border px-2.5 text-[10px] font-bold transition ${filters.noteType === "DEBIT_NOTE" ? "border-orange-300 bg-orange-50 text-orange-700" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}>Debit Notes</button>
-                  <span className="inline-flex h-7 items-center rounded-md border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">{noteCountLabel}</span>
-                  <span className="inline-flex h-7 items-center rounded-md border border-emerald-100 bg-emerald-50 px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-700">Active {formatCurrency(summaryCards.activeValue)}</span>
-                  <span className="inline-flex h-7 items-center rounded-md border border-orange-100 bg-orange-50 px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-orange-700">Value {formatCurrency(summaryCards.totalValue)}</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={openAddModal} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white shadow-sm transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"><FaPlus /> Add Note</button>
-                  <button type="button" onClick={loadData} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"><FaRedoAlt /> Refresh</button>
-                  <button type="button" onClick={resetWorkspaceFilters} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"><FaTimes /> Reset Filters</button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleSearchFilters}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} hover:bg-[#e67e00]`}
+                >
+                  <FaSearch className="text-xs" /> Search
+                </button>
+                <button
+                  type="button"
+                  onClick={resetWorkspaceFilters}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}
+                >
+                  <FaRedoAlt className="text-xs" /> Reset
+                </button>
+                <button
+                  type="button"
+                  onClick={loadData}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}
+                >
+                  <FaRedoAlt className="text-xs" /> Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={openAddModal}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} hover:bg-[#e67e00]`}
+                >
+                  <FaPlus className="text-xs" /> Add Note
+                </button>
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-xs">
+            {/* ── TABLE ── */}
+            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+              <table className="w-full min-w-[1320px] text-xs">
                 <thead>
-                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-left text-[11px] font-bold uppercase tracking-[0.16em] text-white">
-                    <th className="px-3 py-2">Date</th>
-                    <th className="px-3 py-2">Note</th>
-                    <th className="px-3 py-2">Tenant</th>
-                    <th className="px-3 py-2">Property</th>
-                    <th className="px-3 py-2">Source Invoice</th>
-                    <th className="px-3 py-2">Charge Type</th>
-                    <th className="px-3 py-2 text-right">Amount</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2 text-right">Actions</th>
+                  <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                    <th className="px-3 py-2 text-left">
+                      <input
+                        type="checkbox"
+                        checked={paginatedNotes.length > 0 && paginatedNotes.every((n) => selectedNotes.includes(String(n._id)))}
+                        onChange={toggleSelectAllNotes}
+                        className="accent-emerald-500"
+                      />
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold">Note #</th>
+                    <th className="px-3 py-2 text-left font-semibold">Tenant</th>
+                    <th className="px-3 py-2 text-left font-semibold">Property</th>
+                    <th className="px-3 py-2 text-left font-semibold">Unit</th>
+                    <th className="px-3 py-2 text-left font-semibold">Description</th>
+                    <th className="px-3 py-2 text-left font-semibold">Type</th>
+                    <th className="px-3 py-2 text-center font-semibold">Note Date</th>
+                    <th className="px-3 py-2 text-center font-semibold">Source Invoice</th>
+                    <th className="px-3 py-2 text-right font-semibold">Amount</th>
+                    <th className="px-3 py-2 text-center font-semibold">Status</th>
+                    <th className="px-3 py-2 text-center font-semibold">Payment</th>
+                    <th className="px-3 py-2 text-center font-semibold">Created</th>
+                    <th className="px-3 py-2 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+                <tbody>
                   {filteredNotes.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-3 py-12 text-center text-sm text-slate-500">
-                        {loading ? "Loading notes..." : "No invoice notes found."}
+                      <td colSpan={14} className="px-4 py-8 text-center text-gray-500">
+                        <FaFileInvoice className="mb-2 inline-block text-4xl text-gray-300" />
+                        <p className="mt-1 text-sm font-semibold">No invoice notes found</p>
+                        <p className="mt-1 text-xs text-gray-400">{loading ? "Loading..." : "Adjust filters or add a new note."}</p>
                       </td>
                     </tr>
                   ) : (
                     paginatedNotes.map((note, index) => (
+                      (() => {
+                        const paymentState = getNotePaymentState(note);
+                        return (
                       <tr
                         key={note._id}
-                        className={`align-top ${index % 2 === 0 ? "bg-white" : "bg-slate-50/70"} hover:bg-slate-50`}
+                        className={`cursor-pointer border-b border-slate-200 transition-colors ${
+                          selectedNotes.includes(String(note._id))
+                            ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
+                            : index % 2 === 0
+                              ? "bg-white hover:bg-blue-50/40"
+                              : "bg-slate-50 hover:bg-blue-50/40"
+                        }`}
+                        onClick={() => toggleNoteSelect(String(note._id))}
                       >
-                        <td className="px-3 py-2 text-xs text-slate-600">
-                          {formatDate(note.noteDate || note.invoiceDate || note.createdAt)}
+                        <td className="px-3 py-2 text-slate-600">
+                          <input
+                            type="checkbox"
+                            checked={selectedNotes.includes(String(note._id))}
+                            onChange={() => toggleNoteSelect(String(note._id))}
+                            onClick={(event) => event.stopPropagation()}
+                            className="accent-emerald-500"
+                          />
                         </td>
                         <td className="px-3 py-2">
-                          <div className="flex items-start gap-2">
-                            <span className="mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                              <FaFileInvoice className="text-sm" />
-                            </span>
-                            <div>
-                              <p className="font-semibold text-slate-900">{note.noteNumber || note.invoiceNumber}</p>
-                              <p className="text-[11px] font-medium text-slate-500">{note.noteType || note.documentType}</p>
-                              {note.description ? (
-                                <p className="mt-1 max-w-[260px] truncate text-[11px] text-slate-500">{note.description}</p>
-                              ) : null}
-                            </div>
-                          </div>
+                          <p className="font-semibold text-blue-700">{note.noteNumber || note.invoiceNumber}</p>
                         </td>
-                        <td className="px-3 py-2 text-xs text-slate-700">
-                          {note?.tenant?.name || note?.tenantName || "-"}
+                        <td className="px-3 py-2 font-semibold text-slate-900">{note?.tenant?.name || note?.tenantName || "-"}</td>
+                        <td className="px-3 py-2 font-semibold text-slate-900">{resolvePropertyName(note, propertyMap)}</td>
+                        <td className="px-3 py-2 font-semibold text-slate-900">{resolveUnitName(note, tenantMap)}</td>
+                        <td className="px-3 py-2 text-orange-700">{note.description || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</td>
+                        <td className="px-3 py-2 text-slate-700">
+                          <span className="rounded bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{humanizeCategory(note.category || "-")}</span>
                         </td>
-                        <td className="px-3 py-2 text-xs text-slate-700">
-                          {resolvePropertyName(note, propertyMap)}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-slate-700">
-                          {note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-slate-700">{note.category || "-"}</td>
-                        <td className="px-3 py-2 text-right font-semibold text-slate-900">
-                          {formatCurrency(note.amount)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase ${getStatusChip(note?.status)}`}>
+                        <td className="px-3 py-2 text-center text-slate-700">{formatDate(note.noteDate || note.invoiceDate || note.createdAt)}</td>
+                        <td className="px-3 py-2 text-center text-slate-700">{note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(note.amount)}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase ${getStatusChip(note?.status)}`}>
                             {note?.status || "posted"}
                           </span>
                         </td>
-                        <td className="px-3 py-2">
-                          <div className="flex justify-end">
-                            {canReverseNote(note) ? (
-                              <button
-                                type="button"
-                                onClick={() => handleReverseNote(note)}
-                                disabled={busyNoteId === String(note._id)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-[11px] font-bold text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                title={String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE" ? "Reverse this debit note only if it is still unpaid" : "Reverse this credit note and restore the source invoice amount"}
-                              >
-                                <FaUndo /> {busyNoteId === String(note._id) ? "Working..." : "Reverse"}
-                              </button>
-                            ) : (
-                              <span className="text-[11px] text-slate-400">-</span>
-                            )}
-                          </div>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${paymentState.className}`}>
+                            {paymentState.label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-slate-700">{formatDate(note.createdAt || note.noteDate || note.invoiceDate)}</td>
+                        <td className="px-3 py-2 text-right">
+                          {canReverseNote(note) ? (
+                            <button
+                              type="button"
+                              onClick={() => handleReverseNote(note)}
+                              disabled={busyNoteId === String(note._id)}
+                              className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-40"
+                              title={String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE" ? "Reverse this debit note only if it is still unpaid" : "Reverse this credit note and restore the source invoice amount"}
+                            >
+                              <FaUndo size={12} />
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">—</span>
+                          )}
                         </td>
                       </tr>
+                        );
+                      })()
                     ))
                   )}
                 </tbody>
               </table>
             </div>
 
-            <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-              <div className="font-semibold">
-                Showing <span className="font-bold text-slate-900">{filteredNotes.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredNotes.length)}</span> of <span className="font-bold text-slate-900">{filteredNotes.length}</span> note{filteredNotes.length === 1 ? "" : "s"}
-                {filters.status !== "all" ? (
-                  <span>
-                    {" "}· Status: <span className="font-bold text-slate-900">{filters.status}</span>
+            {/* ── FOOTER PAGINATION ── */}
+            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
+              <p>
+                <span className="font-semibold">Showing:</span>{" "}
+                {filteredNotes.length === 0 ? 0 : startIndex + 1}
+                {" – "}
+                {Math.min(endIndex, filteredNotes.length)} of {filteredNotes.length} note{filteredNotes.length === 1 ? "" : "s"}
+                {filters.status !== "all" ? ` · Status: ${filters.status}` : ""}
+              </p>
+              <div className="flex items-center gap-3">
+                <p>
+                  <span className="font-semibold">Selected:</span> {selectedNotes.length}
+                  {filteredNotes.length > 0 && (
+                    <>
+                      {" · "}
+                      <span className="font-semibold">Total:</span> {formatCurrency(summaryCards.totalValue)}
+                    </>
+                  )}
+                </p>
+                <div className="h-4 w-px bg-slate-300" />
+                <span className="text-slate-500">Per page: {ITEMS_PER_PAGE}</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={safeCurrentPage === 1}
+                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <span className="rounded border border-slate-200 bg-white px-2.5 py-0.5 font-semibold text-slate-700">
+                    Page {safeCurrentPage} of {totalPages}
                   </span>
-                ) : null}
-                <span>
-                  {" "}· Current type: <span className="font-bold text-slate-900">{filters.noteType === "CREDIT_NOTE" ? "Credit Notes" : "Debit Notes"}</span>
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                <button type="button" onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                <button type="button" onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={safeCurrentPage === totalPages}
+                    className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        {showAddModal ? (
+      {showAddModal ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
             <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
               <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
@@ -1034,7 +1203,6 @@ const InvoiceNotes = () => {
             </div>
           </div>
         ) : null}
-      </div>
     </DashboardLayout>
   );
 };

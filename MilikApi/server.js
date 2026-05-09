@@ -2,6 +2,9 @@ import chartOfAccountsRoutes from "./routes/chartOfAccounts.js";
 import { Server } from "socket.io";
 import { setIO } from "./utils/socketManager.js";
 import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
 import dotenv from "dotenv";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -67,6 +70,11 @@ import { enforceRoutePermissions } from "./utils/routePermissionGuard.js";
 import { syncCriticalIndexes } from "./utils/indexMaintenance.js";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const UPLOADS_ROOT = path.join(__dirname, "uploads");
+fs.mkdirSync(path.join(UPLOADS_ROOT, "leases"), { recursive: true });
 
 const app = express();
 const server = http.createServer(app);
@@ -421,6 +429,8 @@ app.get("/api", (req, res) => {
   });
 });
 
+app.use("/uploads", express.static(UPLOADS_ROOT));
+
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/super-admin", authLimiter);
 app.use("/api/auth", authRoutes);
@@ -500,8 +510,8 @@ async function connect() {
   for (const candidate of connectionCandidates) {
     try {
       await mongoose.connect(candidate.value, {
-        maxPoolSize: 20,
-        minPoolSize: 5,
+        maxPoolSize: 50,
+        minPoolSize: 10,
         socketTimeoutMS: 45000,
         serverSelectionTimeoutMS: 10000,
         heartbeatFrequencyMS: 30000,

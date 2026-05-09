@@ -1558,9 +1558,10 @@ const getTenantPropertyId = (tenant) => {
   const singleBookingTenantOptions = useMemo(() => {
     const normalizedSearch = String(singleBookingTenantSearch || "").trim().toLowerCase();
 
+    const BOOKABLE_STATUSES = new Set(["active", "overdue"]);
     return tenantsFromStore
       .filter((tenant) => {
-        const isActive = String(tenant?.status || "active").toLowerCase() === "active";
+        const isActive = BOOKABLE_STATUSES.has(String(tenant?.status || "active").toLowerCase());
         if (!isActive) return false;
 
         const tenantPropertyId = getTenantPropertyId(tenant);

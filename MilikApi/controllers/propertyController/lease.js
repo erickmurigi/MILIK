@@ -1,10 +1,18 @@
 // controllers/propertyController/lease.js
 import mongoose from "mongoose";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
 import Lease from "../../models/Lease.js";
 import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { canonicalizeBillingPeriodKey } from "../../services/billingPeriodService.js";
+import { generateLeasePdf } from "../../services/leasePdfService.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const LEASE_UPLOADS_DIR = path.join(__dirname, "../../uploads/leases");
 
 const ACTIVE_LEASE_STATUSES = ["draft", "pending_signature", "active"];
 const TERMINAL_LEASE_STATUSES = ["expired", "terminated", "renewed", "cancelled"];
@@ -475,6 +483,53 @@ export const getExpiringLeases = async (req, res, next) => {
     );
 
     return res.status(200).json(leases);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const generateLeaseDocument = async (req, res, next) => {
+  try {
+    const business = resolveBusinessId(req);
+    const filter = business ? { _id: req.params.id, business } : { _id: req.params.id };
+
+    const lease = await Lease.findOne(filter)
+      .populate("tenant", "name tenantCode email phone idNumber")
+      .populate({
+        path: "unit",
+        select: "unitNumber unitName name property rent status",
+        populate: { path: "property", select: "propertyName propertyCode name address" },
+      })
+      .populate("landlord", "landlordName phoneNumber email")
+      .populate("business", "companyName name logo phoneNo phone email postalAddress POBOX roadStreet Street town City country slogan")
+      .lean();
+
+    if (!lease) return res.status(404).json({ message: "Lease not found" });
+
+    const pdfBuffer = await generateLeasePdf(lease);
+
+    fs.mkdirSync(LEASE_UPLOADS_DIR, { recursive: true });
+
+    const safeAgreementNo = String(lease.agreementNumber || lease._id).replace(/[^a-zA-Z0-9\-_]/g, "_");
+    const filename = `${safeAgreementNo}.pdf`;
+    const filePath = path.join(LEASE_UPLOADS_DIR, filename);
+    fs.writeFileSync(filePath, pdfBuffer);
+
+    const protocol = req.protocol;
+    const host = req.get("host");
+    const documentUrl = `${protocol}://${host}/uploads/leases/${filename}`;
+    const documentName = `Lease Agreement - ${lease.agreementNumber || "Document"}.pdf`;
+
+    const updated = await populateLeaseQuery(
+      Lease.findByIdAndUpdate(
+        lease._id,
+        { $set: { documentUrl, documentName } },
+        { new: true, runValidators: true }
+      )
+    );
+
+    emitToCompany(String(lease.business?._id || lease.business || ""), "lease:updated", updated);
+    return res.status(200).json(updated);
   } catch (err) {
     next(err);
   }

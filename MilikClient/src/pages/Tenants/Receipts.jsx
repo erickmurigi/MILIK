@@ -2192,11 +2192,17 @@ const visibleReceiptIds = useMemo(
                     className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
                   >
                     <option value="">Select tenant</option>
-                    {tenants.map((tenant) => (
-                      <option key={tenant._id} value={tenant._id}>
-                        {tenant.name}
-                      </option>
-                    ))}
+                    {tenants
+                      .filter((tenant) => {
+                        if (String(tenant?._id || "") === String(formData.tenantId)) return true;
+                        const s = String(tenant?.status || "active").trim().toLowerCase();
+                        return !["terminated", "moved_out", "evicted", "inactive"].includes(s);
+                      })
+                      .map((tenant) => (
+                        <option key={tenant._id} value={tenant._id}>
+                          {tenant.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
 

@@ -4,8 +4,10 @@ import { normalizeCompanyId } from '../verifyToken.js';
 import {
   getAvailableTemplates,
   getCommunicationPermissionTarget,
+  getSmsLogs,
   previewCommunication,
   sendCommunication,
+  sendTestSms,
 } from '../../services/communicationService.js';
 
 const resolveBusinessId = (req) =>
@@ -79,6 +81,8 @@ export const previewCommunicationController = async (req, res, next) => {
 
     ensurePermission({ req, businessId, contextType, action: 'view' });
 
+    const customBody = String(req.body?.customBody || '').trim();
+
     const result = await previewCommunication({
       businessId,
       contextType,
@@ -86,6 +90,7 @@ export const previewCommunicationController = async (req, res, next) => {
       templateKey,
       recordIds,
       profileId,
+      customBody,
     });
 
     return res.status(200).json(result);
@@ -112,6 +117,8 @@ export const sendCommunicationController = async (req, res, next) => {
 
     ensurePermission({ req, businessId, contextType, action: 'send' });
 
+    const customBody = String(req.body?.customBody || '').trim();
+
     const result = await sendCommunication({
       businessId,
       contextType,
@@ -119,8 +126,44 @@ export const sendCommunicationController = async (req, res, next) => {
       templateKey,
       recordIds,
       profileId,
+      customBody,
     });
 
+    return res.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const getSmsLogsController = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, 'Business is required.'));
+
+    const limit = Math.min(100, Number(req.query?.limit || 30));
+    const channel = String(req.query?.channel || '').trim() || undefined;
+    const contextType = String(req.query?.contextType || '').trim() || undefined;
+    const status = String(req.query?.status || '').trim() || undefined;
+
+    const logs = await getSmsLogs({ businessId, limit, channel, contextType, status });
+    return res.status(200).json(logs);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const sendTestSmsController = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, 'Business is required.'));
+
+    const phone = String(req.body?.phone || '').trim();
+    const message = String(req.body?.message || '').trim();
+    const profileId = String(req.body?.profileId || '').trim();
+
+    if (!phone) return next(createError(400, 'A phone number is required for the test SMS.'));
+
+    const result = await sendTestSms({ businessId, phone, message, profileId });
     return res.status(200).json(result);
   } catch (error) {
     return next(error);

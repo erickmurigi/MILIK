@@ -1587,7 +1587,41 @@ export const testCompanyEmailProfile = async (req, res, next) => {
     }
 
     console.error("Test company email profile error:", err);
-    next(err);
+
+    // Map common SMTP errors to actionable user-facing messages
+    const smtpCode = err?.code || '';
+    const smtpResponse = String(err?.response || err?.message || '').toLowerCase();
+    const responseCode = Number(err?.responseCode || 0);
+
+    let friendlyMessage = err?.message || 'Email test failed.';
+
+    if (smtpCode === 'EAUTH' || responseCode === 535) {
+      if (smtpResponse.includes('gmail') || smtpResponse.includes('google') || smtpResponse.includes('badcredentials')) {
+        friendlyMessage =
+          'Gmail rejected the login. Google no longer accepts regular passwords for SMTP. ' +
+          'You must use a Google App Password: ' +
+          '(1) Enable 2-Step Verification on your Google account, ' +
+          '(2) Go to myaccount.google.com/apppasswords, ' +
+          '(3) Generate an App Password for "Mail", ' +
+          '(4) Save that 16-character code as the password in this email profile.';
+      } else {
+        friendlyMessage =
+          'SMTP authentication failed (535). The username or password saved in this profile is incorrect. ' +
+          'Re-enter the correct credentials and save the profile before testing again.';
+      }
+    } else if (smtpCode === 'ECONNECTION' || smtpCode === 'ETIMEDOUT' || smtpCode === 'ESOCKET') {
+      friendlyMessage =
+        `Cannot connect to ${err?.address || 'the SMTP host'} on port ${err?.port || '—'}. ` +
+        'Check that the SMTP host and port are correct, and that your server can reach the mail provider.';
+    } else if (smtpCode === 'EENVELOPE') {
+      friendlyMessage = 'The sender or recipient address was rejected by the mail server. Verify the Sender Email field.';
+    } else if (responseCode === 550 || responseCode === 553) {
+      friendlyMessage = 'The mail server rejected the sender address. Make sure the Sender Email matches the authenticated account.';
+    } else if (responseCode === 421 || responseCode === 450 || responseCode === 451) {
+      friendlyMessage = 'The mail server is temporarily unavailable or rate-limiting connections. Wait a moment and try again.';
+    }
+
+    next(createError(500, friendlyMessage));
   }
 };
 

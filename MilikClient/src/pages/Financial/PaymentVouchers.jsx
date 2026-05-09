@@ -114,6 +114,8 @@ const PaymentVouchers = () => {
   const [settlementAccounts, setSettlementAccounts] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pendingPayVoucher, setPendingPayVoucher] = useState(null);
+  const [pendingPaySettlementId, setPendingPaySettlementId] = useState("");
   const showModal = Boolean(voucherDraft.showModal);
   const setShowModal = (value) => setVoucherDraft((prev) => ({ ...prev, showModal: typeof value === "function" ? value(Boolean(prev.showModal)) : Boolean(value) }));
   const editingVoucherId = voucherDraft.editingVoucherId || "";
@@ -307,18 +309,23 @@ const PaymentVouchers = () => {
     }
   };
 
-  const updateStatus = async (voucher, status) => {
+  const updateStatus = async (voucher, status, overrideSettlementId = null) => {
     const id = voucher?._id;
     if (!id) return;
 
-    if (status === "paid" && !voucher?.settlementAccountId) {
-      toast.info("Open the voucher, choose a settlement cashbook or petty-cash account, then mark it as paid.");
+    if (status === "paid" && !voucher?.settlementAccountId && !overrideSettlementId) {
+      setPendingPayVoucher(voucher);
+      setPendingPaySettlementId("");
       return;
     }
 
     setRowActionKey(`${id}:${status}`);
     try {
-      const updated = await updatePaymentVoucherStatus(id, { status }, { business: currentCompany?._id, company: currentCompany?._id });
+      const statusPayload = { status };
+      if (status === "paid" && (overrideSettlementId || voucher?.settlementAccountId)) {
+        statusPayload.settlementAccount = overrideSettlementId || voucher.settlementAccountId;
+      }
+      const updated = await updatePaymentVoucherStatus(id, statusPayload, { business: currentCompany?._id, company: currentCompany?._id });
       setVouchers((prev) => prev.map((row) => row._id === id ? normalizeVoucher(updated) : row));
       toast.success(`Voucher marked ${status}`);
     } catch (error) {
@@ -326,6 +333,13 @@ const PaymentVouchers = () => {
     } finally {
       setRowActionKey("");
     }
+  };
+
+  const confirmPendingPay = async () => {
+    if (!pendingPaySettlementId) return toast.warning("Please select a settlement account");
+    const voucher = pendingPayVoucher;
+    setPendingPayVoucher(null);
+    await updateStatus(voucher, "paid", pendingPaySettlementId);
   };
 
   const removeVoucher = async (voucher) => {
@@ -629,6 +643,49 @@ const PaymentVouchers = () => {
           </div>
         </div>
       </div>
+
+      {pendingPayVoucher && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="bg-[#0B3B2E] px-5 py-4 rounded-t-2xl">
+              <p className="text-xs font-black uppercase tracking-widest text-emerald-100">Mark as Paid</p>
+              <h3 className="text-lg font-black text-white">{pendingPayVoucher.voucherNo}</h3>
+            </div>
+            <div className="p-5">
+              <p className="mb-4 text-sm text-slate-600">
+                This voucher has no settlement account set. Select one below to complete the payment.
+              </p>
+              <label className="block">
+                <span className="text-sm font-bold text-slate-700">Settlement Cashbook / Petty Cash</span>
+                <select
+                  value={pendingPaySettlementId}
+                  onChange={(e) => setPendingPaySettlementId(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                >
+                  <option value="">Select account...</option>
+                  {settlementAccounts.map((account) => (
+                    <option key={account._id} value={account._id}>{account.code} - {account.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-5 py-4">
+              <button
+                onClick={() => setPendingPayVoucher(null)}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmPendingPay}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700"
+              >
+                Confirm &amp; Mark Paid
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/45 p-4 sm:items-center sm:p-6">

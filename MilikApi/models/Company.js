@@ -388,7 +388,7 @@ const smsProfileSchema = new mongoose.Schema(
     name: { type: String, trim: true, default: '' },
     provider: {
       type: String,
-      enum: ['generic', 'africas_talking', 'twilio', 'custom_http'],
+      enum: ['generic', 'africas_talking', 'twilio', 'mtech', 'custom_http'],
       default: 'generic',
     },
     senderId: { type: String, trim: true, default: '' },

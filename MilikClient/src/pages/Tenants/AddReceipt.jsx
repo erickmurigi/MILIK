@@ -621,428 +621,479 @@ const AddReceipt = () => {
     }
   };
 
+  const amountDueColor =
+    !formData.tenantId
+      ? "border-slate-200 bg-slate-50 text-slate-400"
+      : balanceSummary.balance > 0.009
+      ? "border-red-200 bg-red-50 text-red-700"
+      : balanceSummary.balance < -0.009
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : "border-slate-200 bg-slate-50 text-slate-500";
+
+  const totalInvoiced = outstandingInvoices.reduce((s, i) => s + i.billedAmount, 0);
+  const totalPaid = outstandingInvoices.reduce((s, i) => s + i.paid, 0);
+  const totalOutstanding = outstandingInvoices.reduce((s, i) => s + i.outstanding, 0);
+
   return (
     <DashboardLayout>
       <div className="min-h-[calc(100vh-112px)] w-full overflow-x-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white px-2 py-2 sm:px-3 lg:px-4">
         <div className="w-full max-w-none">
           <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.08)]">
-            <div className="p-3 md:p-4">
+            <div className="p-4 md:p-5">
 
-            {formData.tenantId && (
-              <div className="mb-3 space-y-2">
-                <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-sm">
-                  <h3 className="text-[11px] font-bold text-slate-700 mb-1">Invoice Preview</h3>
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-[10px]">
-                    <p className="text-slate-500">
-                      {manualSelectionMode
-                        ? "Manual selection mode is on. Only selected open invoices will be allocated. Any remaining amount stays as prepayment."
-                        : "Only open invoices with an outstanding balance appear here. Fully paid invoices are hidden to prevent accidental duplicate allocations."}
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <label className="inline-flex items-center gap-2 font-semibold text-slate-600">
-                        <input
-                          type="checkbox"
-                          checked={manualSelectionMode}
-                          onChange={(e) => setManualSelectionMode(e.target.checked)}
-                        />
-                        Manual selection / prepayment mode
-                      </label>
-                      {priorityInvoiceKeys.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setPriorityInvoiceKeys([])}
-                          className="text-blue-700 font-semibold hover:underline"
-                        >
-                          Clear Priority
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {outstandingInvoices.length > 0 ? (
-                    <div className="max-h-[240px] overflow-auto rounded-lg border border-slate-200 bg-white">
-                      <table className="min-w-[860px] w-full border-collapse text-[11px]">
-                        <thead className="sticky top-0 z-10 bg-slate-100 text-[10px] uppercase tracking-[0.12em] text-slate-600 shadow-sm">
-                          <tr>
-                            <th className="w-10 border-b border-slate-200 px-2 py-1 text-left">Pick</th>
-                            <th className="border-b border-slate-200 px-2 py-1 text-left">Invoice</th>
-                            <th className="border-b border-slate-200 px-2 py-1 text-left">Period</th>
-                            <th className="border-b border-slate-200 px-2 py-1 text-left">Type</th>
-                            <th className="border-b border-slate-200 px-2 py-1 text-right">Invoice</th>
-                            <th className="border-b border-slate-200 px-2 py-1 text-right">Paid</th>
-                            <th className="border-b border-slate-200 px-2 py-1 text-right">Outstanding</th>
-                            <th className="border-b border-slate-200 px-2 py-1 text-left">Status</th>
-                            <th className="w-16 border-b border-slate-200 px-2 py-1 text-center">Priority</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {invoicePreviewSections.map((section) => (
-                            <React.Fragment key={section.key}>
-                              <tr className="bg-slate-50">
-                                <td colSpan={9} className="border-b border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                                  {section.title}
-                                </td>
-                              </tr>
-                              {section.rows.map((invoice, index) => {
-                                const priorityIndex = getPriorityIndex(invoice.invoiceKey);
-                                return (
-                                  <tr
-                                    key={`${section.key}-${invoice.invoiceKey}-${index}`}
-                                    onClick={() => togglePriorityInvoice(invoice.invoiceKey)}
-                                    className={`cursor-pointer border-b border-slate-100 transition hover:bg-slate-50 ${
-                                      priorityIndex ? "bg-[#0B3B2E]/5" : "bg-white"
-                                    }`}
-                                  >
-                                    <td className="px-2 py-1 align-middle">
-                                      <input
-                                        type="checkbox"
-                                        checked={Boolean(priorityIndex)}
-                                        onChange={() => togglePriorityInvoice(invoice.invoiceKey)}
-                                        onClick={(event) => event.stopPropagation()}
-                                        className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
-                                      />
-                                    </td>
-                                    <td className="max-w-[220px] truncate px-2 py-1 font-bold text-slate-900" title={invoice.invoiceLabel}>
-                                      {invoice.invoiceNumber || invoice.invoiceLabel || invoice.period}
-                                    </td>
-                                    <td className="whitespace-nowrap px-2 py-1 text-slate-600">{invoice.period}</td>
-                                    <td className="whitespace-nowrap px-2 py-1 text-slate-600">{invoice.chargeTypeLabel || getChargeTypeLabel(invoice.chargeType)}</td>
-                                    <td className="whitespace-nowrap px-2 py-1 text-right text-slate-700">Ksh {invoice.billedAmount.toLocaleString()}</td>
-                                    <td className="whitespace-nowrap px-2 py-1 text-right text-slate-700">Ksh {invoice.paid.toLocaleString()}</td>
-                                    <td className="whitespace-nowrap px-2 py-1 text-right font-black text-slate-900">Ksh {invoice.outstanding.toLocaleString()}</td>
-                                    <td className="whitespace-nowrap px-2 py-1">
-                                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                                        {invoice.status}
-                                      </span>
-                                    </td>
-                                    <td className="whitespace-nowrap px-2 py-1 text-center">
-                                      {priorityIndex ? (
-                                        <span className="rounded-full bg-[#0B3B2E] px-2 py-0.5 text-[10px] font-black text-white">#{priorityIndex}</span>
-                                      ) : (
-                                        <span className="text-[10px] text-slate-400">Auto</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </React.Fragment>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">No open invoices found for this tenant.</p>
-                  )}
-                </div>
-
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
-                  <h3 className="text-[11px] font-bold text-amber-800 mb-1">Receipt Allocation Preview</h3>
-                  {Number(formData.amount) > 0 ? (
-                    <div className="space-y-1 text-[11px] text-amber-900">
-                      {allocationPreview.lines.map((line, idx) =>
-                        line.apply > 0 ? (
-                          <div
-                            key={`${line.period}-${line.chargeType}-${idx}`}
-                            className="flex items-center justify-between bg-white border border-amber-100 rounded px-2 py-0.5"
-                          >
-                            <span>
-                              {line.period} ({line.chargeTypeLabel || line.chargeType})
-                            </span>
-                            <span>
-                              {line.invoiceId === PREPAYMENT_OPTION_KEY
-                                ? `Hold Ksh ${line.apply.toLocaleString()} as prepayment`
-                                : `Apply Ksh ${line.apply.toLocaleString()} | Remaining: Ksh ${line.afterOutstanding.toLocaleString()}`}
-                            </span>
-                          </div>
-                        ) : null
-                      )}
-
-                      {allocationPreview.lines.every((line) => line.apply === 0) && (
-                        <p className="text-xs">
-                          {manualSelectionMode
-                            ? "No selected invoice will receive this receipt yet. Save now to hold the amount as prepayment."
-                            : "Entered amount does not apply to any open invoice yet."}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-amber-800">Enter an amount to preview how this receipt clears open invoices.</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.8fr)_minmax(280px,0.7fr)]">
-              <div className={`${sectionCardClass} p-3 md:p-4`}>
-                <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
+              {/* ── COLLECTION FORM ── */}
+              <div className={`${sectionCardClass} p-4 mb-4`}>
+                <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
                   <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Receipt details</p>
-                    <h2 className="mt-0.5 text-base font-black text-slate-900">Collection information</h2>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Receipt Details</p>
+                    <h2 className="mt-0.5 text-sm font-black text-slate-900">Collection Information</h2>
                   </div>
-                  <div className="rounded-full bg-[#0B3B2E]/8 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[#0B3B2E]">Posting-safe entry</div>
+                  <span className="rounded-full border border-[#0B3B2E]/20 bg-[#0B3B2E]/8 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#0B3B2E]">
+                    Posting-Safe Entry
+                  </span>
                 </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <div>
-                <label className={labelClass}>Property *</label>
-                <select
-                  value={formData.propertyId}
-                  onChange={(e) => onPropertyChange(e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="">Select property</option>
-                  {activeProperties.map((property) => (
-                    <option key={property._id} value={property._id}>
-                      {property.propertyName || property.name || "Unnamed Property"}
-                    </option>
-                  ))}
-                </select>
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between gap-3">
-                  <label className={labelClass}>Tenant *</label>
-                  <label className="mt-1 inline-flex items-center gap-2 text-[11px] font-bold text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={includeTerminatedTenants}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setIncludeTerminatedTenants(checked);
-                        if (!checked && selectedTenant && isTerminatedTenant(selectedTenant)) {
-                          setFormData((prev) => ({ ...prev, tenantId: "" }));
-                        }
-                      }}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
-                      disabled={!formData.propertyId}
-                    />
-                    Include terminated
-                  </label>
-                </div>
-                <select
-                  value={formData.tenantId}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, tenantId: e.target.value }))}
-                  className={inputClass}
-                  disabled={!formData.propertyId}
-                >
-                  <option value="">{formData.propertyId ? "Select tenant" : "Select property first"}</option>
-                  {tenantOptions.map((tenant) => {
-                    const terminated = isTerminatedTenant(tenant);
-                    return (
-                      <option key={tenant._id} value={tenant._id}>
-                        {getTenantName(tenant)}{terminated ? " — Terminated" : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-                {selectedTenant && isTerminatedTenant(selectedTenant) ? (
-                  <p className="mt-1 text-xs font-semibold text-amber-700">
-                    Receipting a terminated tenant is allowed for arrears, recoveries, or late settlements only. New occupancy is not restored by this receipt.
-                  </p>
-                ) : null}
-              </div>
-
-              <div>
-                <label className={labelClass}>Amount *</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={formData.amount}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
-                  onWheel={preventWheelValueChange}
-                  className={`${inputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Reference Number</label>
-                <input
-                  type="text"
-                  value={formData.referenceNumber}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))}
-                  className={inputClass}
-                  placeholder="Bank ref / MPESA code"
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Payment Type *</label>
-                <select
-                  value={formData.paymentType}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, paymentType: e.target.value }))}
-                  className={inputClass}
-                >
-                  <option value="rent">Rent</option>
-                  <option value="deposit">Deposit</option>
-                  <option value="utility">Utility</option>
-                  <option value="late_fee">Late Fee</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className={labelClass}>Payment Method *</label>
-                <select
-                  value={formData.paymentMethod}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                  className={inputClass}
-                >
-                  <option value="mobile_money">Mobile Money</option>
-                  <option value="bank_transfer">Bank Transfer</option>
-                  <option value="cash">Cash</option>
-                  <option value="check">Check</option>
-                  <option value="credit_card">Credit Card</option>
-                </select>
-              </div>
-
-              <div>
-                <label className={labelClass}>
-                  {isDirectToLandlord ? "Cashbook" : "Cashbook *"}
-                </label>
-                {isDirectToLandlord ? (
-                  <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    Direct-to-landlord receipts do not hit MILIK-managed cashbooks.
-                  </div>
-                ) : (
-                  <>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {/* Property */}
+                  <div>
+                    <label className={labelClass}>Property *</label>
                     <select
-                      value={formData.cashbook}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, cashbook: e.target.value }))}
+                      value={formData.propertyId}
+                      onChange={(e) => onPropertyChange(e.target.value)}
                       className={inputClass}
                     >
-                      {cashbookOptions.map((option) => (
-                        <option key={option._id || option.name} value={option.name}>
-                          {option.code ? `${option.code} · ${option.name}` : option.name}
+                      <option value="">Select property</option>
+                      {activeProperties.map((property) => (
+                        <option key={property._id} value={property._id}>
+                          {property.propertyName || property.name || "Unnamed Property"}
                         </option>
                       ))}
                     </select>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      Select where this receipt is collected for posting to journals and ledger reports.
-                    </p>
-                  </>
-                )}
-              </div>
+                  </div>
 
-              <div>
-                <label className={labelClass}>Payment Date *</label>
-                <input
-                  type="date"
-                  value={formData.paymentDate}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, paymentDate: e.target.value }))}
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Due Date *</label>
-                <input
-                  type="date"
-                  value={formData.dueDate}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, dueDate: e.target.value }))}
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Banking Date</label>
-                <input
-                  type="date"
-                  value={formData.bankingDate}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, bankingDate: e.target.value }))}
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Record Date</label>
-                <input
-                  type="date"
-                  value={formData.recordDate}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, recordDate: e.target.value }))}
-                  className={inputClass}
-                />
-              </div>
-
-              <div className="md:col-span-2 xl:col-span-3">
-                <label className={labelClass}>Description</label>
-                <textarea
-                  rows={3}
-                  value={formData.description}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                  className={inputClass}
-                  placeholder="Optional notes"
-                />
-              </div>
-
-              <div className="md:col-span-2 xl:col-span-3 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="paidDirectToLandlord"
-                  checked={formData.paidDirectToLandlord}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      paidDirectToLandlord: e.target.checked,
-                      cashbook: e.target.checked ? "" : prev.cashbook,
-                    }))
-                  }
-                />
-                <label htmlFor="paidDirectToLandlord" className={labelClass}>
-                  Direct to landlord receipt (do not post to MILIK cashbook)
-                </label>
-              </div>
-
-              <div className="md:col-span-2 xl:col-span-3 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="isConfirmed"
-                  checked={formData.isConfirmed}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, isConfirmed: e.target.checked }))}
-                />
-                <label htmlFor="isConfirmed" className={labelClass}>
-                  Mark as confirmed
-                </label>
-              </div>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div className={`${sectionCardClass} p-3 md:p-4`}>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Posting controls</p>
-                  <h2 className="mt-0.5 text-base font-black text-slate-900">Receipt status and notes</h2>
-                  <p className="mt-1 text-xs text-slate-600">Use these controls only when you are ready for the receipt to participate in operational reporting and downstream posting actions.</p>
-                  <div className="mt-3 space-y-3">
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                      <p className="font-bold">Reference discipline</p>
-                      <p className="mt-1 text-amber-800">Use the bank reference, M-Pesa code, or teller reference exactly as received so duplicates remain easy to detect during reconciliation.</p>
+                  {/* Tenant */}
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className={labelClass}>Tenant *</label>
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 text-[10px] font-semibold text-slate-500">
+                        <input
+                          type="checkbox"
+                          checked={includeTerminatedTenants}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setIncludeTerminatedTenants(checked);
+                            if (!checked && selectedTenant && isTerminatedTenant(selectedTenant)) {
+                              setFormData((prev) => ({ ...prev, tenantId: "" }));
+                            }
+                          }}
+                          className="h-3 w-3 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                          disabled={!formData.propertyId}
+                        />
+                        Include terminated
+                      </label>
                     </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                      <p className="font-bold text-slate-900">Receipt amount wheel lock</p>
-                      <p className="mt-1">Mouse-wheel changes on the Amount field are disabled to prevent accidental edits while scrolling.</p>
+                    <select
+                      value={formData.tenantId}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, tenantId: e.target.value }))}
+                      className={inputClass}
+                      disabled={!formData.propertyId}
+                    >
+                      <option value="">{formData.propertyId ? "Select tenant" : "Select property first"}</option>
+                      {tenantOptions.map((tenant) => (
+                        <option key={tenant._id} value={tenant._id}>
+                          {getTenantName(tenant)}{isTerminatedTenant(tenant) ? " — Terminated" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedTenant && isTerminatedTenant(selectedTenant) && (
+                      <p className="mt-1 text-[10px] font-semibold text-amber-600">
+                        Arrears / recovery receipt only — occupancy is not restored.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Amount */}
+                  <div>
+                    <label className={labelClass}>Amount *</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={formData.amount}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
+                      onWheel={preventWheelValueChange}
+                      className={`${inputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                    />
+                  </div>
+
+                  {/* Amount Due — read-only */}
+                  <div>
+                    <label className={labelClass}>Amount Due</label>
+                    <div className={`mt-1 flex h-[38px] items-center rounded-lg border px-3 text-sm font-black ${amountDueColor}`}>
+                      {formData.tenantId
+                        ? balanceSummary.balance < -0.009
+                          ? `Ksh ${Math.abs(balanceSummary.balance).toLocaleString()} CR`
+                          : `Ksh ${balanceSummary.balance.toLocaleString()}`
+                        : <span className="text-[12px] font-normal">Select tenant</span>}
                     </div>
+                  </div>
+
+                  {/* Reference Number */}
+                  <div>
+                    <label className={labelClass}>Reference Number</label>
+                    <input
+                      type="text"
+                      value={formData.referenceNumber}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))}
+                      className={inputClass}
+                      placeholder="Bank ref / MPESA code"
+                    />
+                  </div>
+
+                  {/* Payment Type */}
+                  <div>
+                    <label className={labelClass}>Payment Type *</label>
+                    <select
+                      value={formData.paymentType}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, paymentType: e.target.value }))}
+                      className={inputClass}
+                    >
+                      <option value="rent">Rent</option>
+                      <option value="deposit">Deposit</option>
+                      <option value="utility">Utility</option>
+                      <option value="late_fee">Late Fee</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  {/* Payment Method */}
+                  <div>
+                    <label className={labelClass}>Payment Method *</label>
+                    <select
+                      value={formData.paymentMethod}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))}
+                      className={inputClass}
+                    >
+                      <option value="mobile_money">Mobile Money</option>
+                      <option value="bank_transfer">Bank Transfer</option>
+                      <option value="cash">Cash</option>
+                      <option value="check">Check</option>
+                      <option value="credit_card">Credit Card</option>
+                    </select>
+                  </div>
+
+                  {/* Cashbook */}
+                  <div>
+                    <label className={labelClass}>{isDirectToLandlord ? "Cashbook" : "Cashbook *"}</label>
+                    {isDirectToLandlord ? (
+                      <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        Direct-to-landlord — not posted to MILIK cashbooks.
+                      </div>
+                    ) : (
+                      <select
+                        value={formData.cashbook}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, cashbook: e.target.value }))}
+                        className={inputClass}
+                      >
+                        {cashbookOptions.map((option) => (
+                          <option key={option._id || option.name} value={option.name}>
+                            {option.code ? `${option.code} · ${option.name}` : option.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Payment Date */}
+                  <div>
+                    <label className={labelClass}>Payment Date *</label>
+                    <input
+                      type="date"
+                      value={formData.paymentDate}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, paymentDate: e.target.value }))}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  {/* Due Date */}
+                  <div>
+                    <label className={labelClass}>Due Date *</label>
+                    <input
+                      type="date"
+                      value={formData.dueDate}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, dueDate: e.target.value }))}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  {/* Banking Date */}
+                  <div>
+                    <label className={labelClass}>Banking Date</label>
+                    <input
+                      type="date"
+                      value={formData.bankingDate}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, bankingDate: e.target.value }))}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  {/* Record Date */}
+                  <div>
+                    <label className={labelClass}>Record Date</label>
+                    <input
+                      type="date"
+                      value={formData.recordDate}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, recordDate: e.target.value }))}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div className="col-span-2 md:col-span-4">
+                    <label className={labelClass}>Description</label>
+                    <textarea
+                      rows={2}
+                      value={formData.description}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+                      className={inputClass}
+                      placeholder="Optional notes"
+                    />
+                  </div>
+
+                  {/* Checkboxes */}
+                  <div className="col-span-2 md:col-span-4 flex flex-wrap items-center gap-6 border-t border-slate-100 pt-3">
+                    <label htmlFor="paidDirectToLandlord" className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">
+                      <input
+                        type="checkbox"
+                        id="paidDirectToLandlord"
+                        checked={formData.paidDirectToLandlord}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            paidDirectToLandlord: e.target.checked,
+                            cashbook: e.target.checked ? "" : prev.cashbook,
+                          }))
+                        }
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                      />
+                      Direct to Landlord Receipt (do not post to cashbook)
+                    </label>
+                    <label htmlFor="isConfirmed" className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">
+                      <input
+                        type="checkbox"
+                        id="isConfirmed"
+                        checked={formData.isConfirmed}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, isConfirmed: e.target.checked }))}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                      />
+                      Mark as Confirmed
+                    </label>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              <button
-                onClick={() => navigate(backToPath)}
-                className="rounded-xl border border-slate-300 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={!canSaveReceipt}
-                title={canSaveReceipt ? "Save receipt" : "You do not have permission to record receipts"}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white shadow-sm transition ${canSaveReceipt ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}
-              >
-                <FaSave /> Save Receipt
-              </button>
+              {/* ── INVOICE PREVIEW (bottom) ── */}
+              {formData.tenantId && (
+                <div className="mb-4 space-y-3">
+
+                  {/* Flat invoice ledger */}
+                  <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+                    {/* Table header bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0B3B2E] px-4 py-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">Invoice Preview</p>
+                        <p className="mt-0.5 text-[11px] text-white/75">
+                          {manualSelectionMode
+                            ? "Manual mode — only checked invoices will be allocated; remainder held as prepayment."
+                            : "Only open invoices shown. Fully paid invoices are hidden."}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-semibold text-white/80">
+                          <input
+                            type="checkbox"
+                            checked={manualSelectionMode}
+                            onChange={(e) => setManualSelectionMode(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-white/40 text-[#0B3B2E] focus:ring-white/30"
+                          />
+                          Manual selection / prepayment mode
+                        </label>
+                        {priorityInvoiceKeys.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setPriorityInvoiceKeys([])}
+                            className="text-[11px] font-semibold text-white/70 underline hover:text-white"
+                          >
+                            Clear Priority
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {outstandingInvoices.length > 0 ? (
+                      <div className="overflow-auto">
+                        <table className="w-full border-collapse text-xs">
+                          <thead className="sticky top-0 z-10 bg-slate-50">
+                            <tr>
+                              <th className="w-9 border-b border-slate-200 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500" />
+                              <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Invoice</th>
+                              <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Period</th>
+                              <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Type</th>
+                              <th className="border-b border-slate-200 px-3 py-2 text-right text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Invoiced</th>
+                              <th className="border-b border-slate-200 px-3 py-2 text-right text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Paid</th>
+                              <th className="border-b border-slate-200 px-3 py-2 text-right text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Outstanding</th>
+                              <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Status</th>
+                              <th className="w-16 border-b border-slate-200 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Priority</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {orderedOutstandingInvoices.map((invoice, index) => {
+                              const priorityIndex = getPriorityIndex(invoice.invoiceKey);
+                              const isSelected = Boolean(priorityIndex);
+                              return (
+                                <tr
+                                  key={`${invoice.invoiceKey}-${index}`}
+                                  onClick={() => togglePriorityInvoice(invoice.invoiceKey)}
+                                  className={`cursor-pointer border-b border-slate-100 transition-colors hover:bg-[#0B3B2E]/5 ${
+                                    isSelected ? "bg-[#0B3B2E]/5" : index % 2 === 0 ? "bg-white" : "bg-slate-50/40"
+                                  }`}
+                                >
+                                  <td className="px-3 py-1.5 align-middle">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => togglePriorityInvoice(invoice.invoiceKey)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                                    />
+                                  </td>
+                                  <td className="max-w-[180px] truncate px-3 py-1.5 font-semibold text-slate-800" title={invoice.invoiceLabel}>
+                                    {invoice.invoiceNumber || invoice.invoiceLabel || invoice.period}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-slate-500">{invoice.period}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5">
+                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+                                      {invoice.chargeTypeLabel || getChargeTypeLabel(invoice.chargeType)}
+                                    </span>
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-right text-slate-500">
+                                    Ksh {invoice.billedAmount.toLocaleString()}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-right text-slate-500">
+                                    Ksh {invoice.paid.toLocaleString()}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-bold text-slate-900">
+                                    Ksh {invoice.outstanding.toLocaleString()}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-1.5">
+                                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                                      invoice.status === "Open"
+                                        ? "border-amber-200 bg-amber-50 text-amber-700"
+                                        : invoice.status === "Partially Paid"
+                                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                                        : "border-slate-200 bg-slate-50 text-slate-500"
+                                    }`}>
+                                      {invoice.status}
+                                    </span>
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-center">
+                                    {priorityIndex ? (
+                                      <span className="rounded-full bg-[#0B3B2E] px-2 py-0.5 text-[10px] font-black text-white">
+                                        #{priorityIndex}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400">Auto</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t-2 border-slate-200 bg-slate-50">
+                              <td colSpan={4} className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                                {outstandingInvoices.length} open invoice{outstandingInvoices.length !== 1 ? "s" : ""}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-right text-xs font-bold text-slate-600">
+                                Ksh {totalInvoiced.toLocaleString()}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-right text-xs font-bold text-slate-600">
+                                Ksh {totalPaid.toLocaleString()}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-right text-xs font-black text-[#0B3B2E]">
+                                Ksh {totalOutstanding.toLocaleString()}
+                              </td>
+                              <td colSpan={2} />
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="px-4 py-8 text-center text-xs text-slate-400">
+                        No open invoices found for this tenant.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Receipt allocation preview */}
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Receipt Allocation Preview</p>
+                    {Number(formData.amount) > 0 ? (
+                      <div className="space-y-1">
+                        {allocationPreview.lines.map((line, idx) =>
+                          line.apply > 0 ? (
+                            <div
+                              key={`${line.period}-${line.chargeType}-${idx}`}
+                              className="flex items-center justify-between rounded-lg border border-amber-100 bg-white px-3 py-1.5 text-xs text-amber-900"
+                            >
+                              <span>{line.period} — {line.chargeTypeLabel || line.chargeType}</span>
+                              <span className="font-semibold">
+                                {line.invoiceId === PREPAYMENT_OPTION_KEY
+                                  ? `Hold Ksh ${line.apply.toLocaleString()} as prepayment`
+                                  : `Apply Ksh ${line.apply.toLocaleString()} · Remaining: Ksh ${line.afterOutstanding.toLocaleString()}`}
+                              </span>
+                            </div>
+                          ) : null
+                        )}
+                        {allocationPreview.lines.every((l) => l.apply === 0) && (
+                          <p className="text-xs text-amber-800">
+                            {manualSelectionMode
+                              ? "No selected invoice will receive this receipt yet. Save to hold as prepayment."
+                              : "Entered amount does not apply to any open invoice yet."}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-700">Enter an amount to preview how this receipt clears open invoices.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── FOOTER ── */}
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                <button
+                  onClick={() => navigate(backToPath)}
+                  className="rounded-xl border border-slate-300 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!canSaveReceipt}
+                  title={canSaveReceipt ? "Save receipt" : "You do not have permission to record receipts"}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white shadow-sm transition ${
+                    canSaveReceipt ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
+                  }`}
+                >
+                  <FaSave /> Save Receipt
+                </button>
+              </div>
+
             </div>
           </div>
         </div>
-      </div>
       </div>
     </DashboardLayout>
   );

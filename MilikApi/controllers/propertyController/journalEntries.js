@@ -486,7 +486,7 @@ export const createJournalEntry = async (req, res, next) => {
       reference: normalizedPayload.reference || "",
       narration: normalizedPayload.narration || "",
       includeInLandlordStatement: Boolean(normalizedIncludeInStatement),
-      status: req.body.status === "posted" ? "draft" : "draft",
+      status: "draft",
       createdBy: actorUserId,
       business: businessId,
     });
