@@ -292,26 +292,28 @@ function Home() {
     const hasUtilityQuery = params.has("demoAccess") || params.has("token");
     const canonicalUrl = `${PUBLIC_SITE_URL}/`;
 
-    document.title = "Milik Property Management System | Property, Billing, Statements and Reports";
+    document.title = "Milik | Property Management Software Kenya – Billing, Statements & Reports";
     setDocumentDescription(
-      "Milik helps property managers control properties, tenant billing, receipts, landlord statements, Trial Balance, Balance Sheet and Income Statement in one workspace."
+      "Milik is Kenya's property management software for automated tenant billing, receipts, landlord statements, Trial Balance, Balance Sheet and Income Statement. Start your free demo today."
     );
     setDocumentRobots(hasUtilityQuery ? "noindex,nofollow" : "index,follow");
     setCanonicalHref(canonicalUrl);
     setOpenGraphContent("og:type", "website");
     setOpenGraphContent("og:site_name", "Milik");
-    setOpenGraphContent("og:title", "Milik Property Management System");
+    setOpenGraphContent("og:locale", "en_KE");
+    setOpenGraphContent("og:title", "Milik | Property Management Software Kenya");
     setOpenGraphContent(
       "og:description",
-      "Control properties, collections, landlord statements and accounting reports in one workspace."
+      "Kenya's property management software for automated tenant billing, landlord statements and accounting reports — all in one workspace."
     );
     setOpenGraphContent("og:url", canonicalUrl);
     setOpenGraphContent("og:image", `${PUBLIC_SITE_URL}/logo.png`);
     setTwitterContent("twitter:card", "summary_large_image");
-    setTwitterContent("twitter:title", "Milik Property Management System");
+    setTwitterContent("twitter:site", "@milikproperty");
+    setTwitterContent("twitter:title", "Milik | Property Management Software Kenya");
     setTwitterContent(
       "twitter:description",
-      "Control properties, collections, landlord statements and accounting reports in one workspace."
+      "Kenya's property management software for billing, receipting, landlord statements and financial reporting."
     );
     setTwitterContent("twitter:image", `${PUBLIC_SITE_URL}/logo.png`);
   }, [location.search]);
@@ -528,20 +530,20 @@ function Home() {
 
             <div className="mt-4 flex flex-wrap gap-3">
               <a
-                href="tel:+254797281781"
+                href="tel:+254141455841"
                 className="inline-flex items-center gap-2 rounded-full border border-[#0B3B2E]/15 bg-white/90 px-5 py-3 text-sm font-bold text-[#0B3B2E] shadow-sm transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"
               >
                 <FaPhoneAlt />
-                Call 0797281781
+                Call 0141 455 841
               </a>
               <a
-                href="https://wa.me/254797281781?text=Hello%20Milik,%20I%20need%20help."
+                href="https://wa.me/254141455841?text=Hello%20Milik,%20I%20need%20help."
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 rounded-full border border-[#18a06f]/20 bg-[#18a06f]/10 px-5 py-3 text-sm font-bold text-[#0B3B2E] shadow-sm transition hover:border-[#18a06f] hover:bg-[#18a06f] hover:text-white"
               >
                 <FaWhatsapp className="text-base" />
-                WhatsApp 0797281781
+                WhatsApp 0141 455 841
               </a>
             </div>
 

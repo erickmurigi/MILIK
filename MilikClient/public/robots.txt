@@ -1,4 +1,23 @@
 User-agent: *
 Allow: /
+Allow: /trial-access
+
+# Block protected app routes to save crawl budget
+Disallow: /dashboard
+Disallow: /moduleDashboard
+Disallow: /properties
+Disallow: /tenants
+Disallow: /landlords
+Disallow: /financial
+Disallow: /reports
+Disallow: /system-setup
+Disallow: /carwash
+Disallow: /tools
+Disallow: /inspections
+Disallow: /maintenances
+Disallow: /units
+Disallow: /vacants
+Disallow: /lease
+Disallow: /companySetup
 
 Sitemap: https://milikproperty.com/sitemap.xml

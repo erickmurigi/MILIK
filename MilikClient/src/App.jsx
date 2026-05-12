@@ -12,6 +12,7 @@ import "./App.css";
 import { hasCompanyPermission } from "./utils/permissions";
 import { hasCompanyModule, isPropertyManagerCompany, isSelfManagingLandlordCompany } from "./utils/companyModules";
 
+import NotFound from "./pages/NotFound/NotFound";
 import Home from "./pages/Home/Home";
 import DemoAccessEntry from "./pages/Home/DemoAccessEntry";
 import Login from "./pages/Login/Login";
@@ -590,6 +591,7 @@ function App() {
         <Route path="/help/about" element={<ProtectedRoute><AboutMilik /></ProtectedRoute>} />
         <Route path="/meter-readings" element={<PermissionRoute resource="meterReadings" moduleKey="propertyManagement"><MeterReadings /></PermissionRoute>} />
         <Route path="/invoices/late-penalties" element={<PermissionRoute resource="latePenalties" moduleKey="propertyManagement"><LatePenalties /></PermissionRoute>} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );

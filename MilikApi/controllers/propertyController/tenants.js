@@ -165,13 +165,10 @@ const syncTenantAssignedUnitOccupancy = async ({
   const toVacate = Array.from(previous).filter((unitId) => !next.has(unitId));
   const toOccupy = Array.from(next).filter((unitId) => !previous.has(unitId));
 
-  for (const unitId of toVacate) {
-    await setUnitVacant(unitId, tenantId, effectiveDate);
-  }
-
-  for (const unitId of toOccupy) {
-    await setUnitOccupied(unitId, tenantId);
-  }
+  await Promise.all([
+    ...toVacate.map((unitId) => setUnitVacant(unitId, tenantId, effectiveDate)),
+    ...toOccupy.map((unitId) => setUnitOccupied(unitId, tenantId)),
+  ]);
 };
 
 
@@ -465,17 +462,21 @@ const generateNextTenantCode = async (businessId) => {
 
 export const updatePropertyUnitCounts = async (propertyId) => {
   try {
-    const occupiedCount = await Unit.countDocuments({
-      property: propertyId,
-      status: "occupied",
-    });
+    const [agg] = await Unit.aggregate([
+      { $match: { property: new mongoose.Types.ObjectId(String(propertyId)) } },
+      {
+        $group: {
+          _id: null,
+          totalCount: { $sum: 1 },
+          occupiedCount: { $sum: { $cond: [{ $eq: ["$status", "occupied"] }, 1, 0] } },
+          vacantCount: { $sum: { $cond: [{ $eq: ["$status", "vacant"] }, 1, 0] } },
+        },
+      },
+    ]);
 
-    const vacantCount = await Unit.countDocuments({
-      property: propertyId,
-      status: "vacant",
-    });
-
-    const totalCount = await Unit.countDocuments({ property: propertyId });
+    const totalCount = agg?.totalCount ?? 0;
+    const occupiedCount = agg?.occupiedCount ?? 0;
+    const vacantCount = agg?.vacantCount ?? 0;
 
     await Property.findByIdAndUpdate(propertyId, {
       totalUnits: totalCount,

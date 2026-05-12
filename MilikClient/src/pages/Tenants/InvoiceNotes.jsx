@@ -990,7 +990,16 @@ const InvoiceNotes = () => {
                                   <FaUndo size={12} />
                                 </button>
                               ) : (
-                                <span className="text-[11px] text-slate-400">—</span>
+                                <span
+                                  className="inline-flex cursor-not-allowed rounded p-1 text-slate-300"
+                                  title={
+                                    String(note?.status || "").toLowerCase() === "reversed"
+                                      ? "Already reversed"
+                                      : "Cannot reverse a cancelled note"
+                                  }
+                                >
+                                  <FaUndo size={12} />
+                                </span>
                               )}
                             </td>
                           </tr>
