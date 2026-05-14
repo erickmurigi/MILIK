@@ -8,6 +8,7 @@ import { createRentPayment, getTenantInvoices, getChartOfAccounts } from "../../
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
@@ -127,6 +128,7 @@ const AddReceipt = () => {
   const prefilledMsisdn = searchParams.get("msisdn") || "";
   const prefilledPayerName = searchParams.get("payerName") || "";
   const { currentCompany } = useSelector((state) => state.company || {});
+  const isCompanyLandlordMode = isSelfManagingLandlordCompany(currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
   const canSaveReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement");
   const rawProperties = useSelector((state) => state.property?.properties);
@@ -196,6 +198,16 @@ const AddReceipt = () => {
       includeTerminatedTenants: typeof updater === "function" ? updater(Boolean(prev.includeTerminatedTenants)) : Boolean(updater),
     }));
   };
+
+  // In self-managing landlord mode, always default to direct-to-landlord and auto-confirm.
+  useEffect(() => {
+    if (!isCompanyLandlordMode) return;
+    setFormData((prev) => ({
+      ...prev,
+      paidDirectToLandlord: true,
+      isConfirmed: true,
+    }));
+  }, [isCompanyLandlordMode]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -587,8 +599,8 @@ const AddReceipt = () => {
       paymentDate: formData.paymentDate,
       dueDate: formData.dueDate,
       referenceNumber: String(formData.referenceNumber || "").trim(),
-      bankingDate: formData.bankingDate || undefined,
-      recordDate: formData.recordDate || undefined,
+      bankingDate: isCompanyLandlordMode ? undefined : (formData.bankingDate || undefined),
+      recordDate: isCompanyLandlordMode ? undefined : (formData.recordDate || undefined),
       description: formData.description,
       isConfirmed: formData.isConfirmed,
       ledgerType: "receipts",
@@ -827,27 +839,31 @@ const AddReceipt = () => {
                     />
                   </div>
 
-                  {/* Banking Date */}
-                  <div>
-                    <label className={labelClass}>Banking Date</label>
-                    <input
-                      type="date"
-                      value={formData.bankingDate}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, bankingDate: e.target.value }))}
-                      className={inputClass}
-                    />
-                  </div>
+                  {/* Banking Date — hidden in self-managing landlord mode */}
+                  {!isCompanyLandlordMode && (
+                    <div>
+                      <label className={labelClass}>Banking Date</label>
+                      <input
+                        type="date"
+                        value={formData.bankingDate}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, bankingDate: e.target.value }))}
+                        className={inputClass}
+                      />
+                    </div>
+                  )}
 
-                  {/* Record Date */}
-                  <div>
-                    <label className={labelClass}>Record Date</label>
-                    <input
-                      type="date"
-                      value={formData.recordDate}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, recordDate: e.target.value }))}
-                      className={inputClass}
-                    />
-                  </div>
+                  {/* Record Date — hidden in self-managing landlord mode */}
+                  {!isCompanyLandlordMode && (
+                    <div>
+                      <label className={labelClass}>Record Date</label>
+                      <input
+                        type="date"
+                        value={formData.recordDate}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, recordDate: e.target.value }))}
+                        className={inputClass}
+                      />
+                    </div>
+                  )}
 
                   {/* Description */}
                   <div className="col-span-2 md:col-span-4">
@@ -863,22 +879,28 @@ const AddReceipt = () => {
 
                   {/* Checkboxes */}
                   <div className="col-span-2 md:col-span-4 flex flex-wrap items-center gap-6 border-t border-slate-100 pt-3">
-                    <label htmlFor="paidDirectToLandlord" className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">
-                      <input
-                        type="checkbox"
-                        id="paidDirectToLandlord"
-                        checked={formData.paidDirectToLandlord}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            paidDirectToLandlord: e.target.checked,
-                            cashbook: e.target.checked ? "" : prev.cashbook,
-                          }))
-                        }
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
-                      />
-                      Direct to Landlord Receipt (do not post to cashbook)
-                    </label>
+                    {isCompanyLandlordMode ? (
+                      <span className="rounded-full border border-[#0B3B2E]/20 bg-[#0B3B2E]/8 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#0B3B2E]">
+                        Landlord Mode — receipts recorded as direct to owner, not posted to cashbook
+                      </span>
+                    ) : (
+                      <label htmlFor="paidDirectToLandlord" className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">
+                        <input
+                          type="checkbox"
+                          id="paidDirectToLandlord"
+                          checked={formData.paidDirectToLandlord}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              paidDirectToLandlord: e.target.checked,
+                              cashbook: e.target.checked ? "" : prev.cashbook,
+                            }))
+                          }
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                        />
+                        Direct to Landlord Receipt (do not post to cashbook)
+                      </label>
+                    )}
                     <label htmlFor="isConfirmed" className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">
                       <input
                         type="checkbox"

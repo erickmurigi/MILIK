@@ -2640,6 +2640,34 @@ export const getTenantPaidBalanceReport = async (params = {}) => {
   const res = await adminRequests.get(`/financial-reports/tenant-paid-balance${query ? `?${query}` : ""}`);
   return res.data;
 };
+export const getMRITaxSummaryReport = async (params = {}) => {
+  const search = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") {
+      search.append(key, value);
+    }
+  });
+
+  const query = search.toString();
+  const res = await adminRequests.get(`/financial-reports/mri-tax-summary${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
+export const getPropertyIncomeSummaryReport = async (params = {}) => {
+  const search = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") {
+      search.append(key, value);
+    }
+  });
+
+  const query = search.toString();
+  const res = await adminRequests.get(`/financial-reports/property-income-summary${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
 // Communications
 export const getCommunicationTemplates = async ({ business, contextType }) => {
   const params = new URLSearchParams();

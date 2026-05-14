@@ -179,6 +179,11 @@ LandlordStatementSchema.index(
   { business: 1, property: 1, landlord: 1, periodStart: 1, periodEnd: 1, version: 1 },
   { unique: true }
 );
+// Covers approval duplicate check: { business, property, landlord, periodStart, periodEnd, status: "approved" }
+LandlordStatementSchema.index({ business: 1, property: 1, landlord: 1, status: 1, periodStart: 1, periodEnd: 1 });
+// Covers revision chain lookups in deleteDraft
+LandlordStatementSchema.index({ business: 1, supersededByStatementId: 1 });
+LandlordStatementSchema.index({ business: 1, supersedesStatementId: 1 });
 
 // Prevent modification of approved statements
 LandlordStatementSchema.pre("save", function (next) {

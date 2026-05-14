@@ -66,6 +66,8 @@ import ExpenseRequisition from "./pages/Financial/ExpenseRequisition";
 import ChartOfAccounts from "./pages/Financial/ChartOfAccounts";
 import LedgerAccountActivity from "./pages/Financial/LedgerAccountActivity";
 import RentalCollectionReport from "./pages/Reports/RentalCollectionReport";
+import PropertyIncomeSummaryReport from "./pages/Reports/PropertyIncomeSummaryReport";
+import MRITaxSummaryReport from "./pages/Reports/MRITaxSummaryReport";
 import RentalInvoiceVATReport from "./pages/Reports/RentalInvoiceVATReport";
 import RentalAgedAnalysisReport from "./pages/Reports/RentalAgedAnalysisReport";
 import PaidBalanceReport from "./pages/Reports/PaidBalanceReport";
@@ -578,6 +580,8 @@ function App() {
         <Route path="/reports/export" element={<ProtectedRoute><RentalCollectionReport /></ProtectedRoute>} />
         <Route path="/tools/import-export" element={<ProtectedRoute><Navigate to="/reports/export" replace /></ProtectedRoute>} />
         <Route path="/tools/backup" element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
+        <Route path="/reports/property-income-summary" element={<PermissionRoute resource="financialReports" moduleKey="accounts"><PropertyIncomeSummaryReport /></PermissionRoute>} />
+        <Route path="/reports/mri-tax-summary" element={<PermissionRoute resource="financialReports" moduleKey="accounts"><MRITaxSummaryReport /></PermissionRoute>} />
         <Route path="/reports/paid-balance" element={<ProtectedRoute><PaidBalanceReport /></ProtectedRoute>} />
         <Route path="/reports/aged-analysis" element={<ProtectedRoute><AgedAnalysisReport /></ProtectedRoute>} />
         <Route path="/reports/rental-aged-analysis" element={<ProtectedRoute><RentalAgedAnalysisReport /></ProtectedRoute>} />

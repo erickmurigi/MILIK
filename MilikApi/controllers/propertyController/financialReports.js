@@ -4,6 +4,9 @@ import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import Tenant from "../../models/Tenant.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import RentPayment from "../../models/RentPayment.js";
+import Property from "../../models/Property.js";
+import Unit from "../../models/Unit.js";
+import ExpenseProperty from "../../models/ExpenseProperty.js";
 import { computeTenantInvoiceSnapshotsBatch } from "./tenantInvoices.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import { computeAccountBalance, getNormalBalanceSide } from "../../services/accountingClassificationService.js";
@@ -1050,10 +1053,330 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
   }
 };
 
+export const getPropertyIncomeSummaryReport = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: "A valid business id is required." });
+    }
+
+    const startDate = normalizeDate(req.query.startDate || req.query.dateFrom || req.query.from);
+    const endDate = normalizeDate(req.query.endDate || req.query.dateTo || req.query.to, true);
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, error: "Valid start and end dates are required." });
+    }
+
+    // Resolve property scope filter
+    let propertyIds = null;
+    if (req.query.propertyId) {
+      const pid = toObjectId(req.query.propertyId);
+      if (pid) propertyIds = [pid];
+    } else if (req.query.landlordId) {
+      const lid = toObjectId(req.query.landlordId);
+      if (lid) {
+        const props = await Property.find({ business: businessId, "landlords.landlordId": lid })
+          .select("_id")
+          .lean();
+        propertyIds = props.map((p) => p._id);
+        if (!propertyIds.length) {
+          return res.status(200).json({
+            success: true,
+            filters: { startDate, endDate, propertyId: "", landlordId: req.query.landlordId },
+            summary: { totalInvoiced: 0, totalCollected: 0, totalExpenses: 0, netIncome: 0, collectionRate: null, propertyCount: 0 },
+            byProperty: [],
+            expensesByCategory: [],
+          });
+        }
+      }
+    }
+
+    const invoiceMatch = {
+      business: businessId,
+      category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE"] },
+      status: { $nin: ["cancelled", "reversed"] },
+      $or: [
+        { bookingDate: { $gte: startDate, $lte: endDate } },
+        {
+          $or: [{ bookingDate: { $exists: false } }, { bookingDate: null }],
+          invoiceDate: { $gte: startDate, $lte: endDate },
+        },
+      ],
+    };
+    if (propertyIds) invoiceMatch.property = { $in: propertyIds };
+
+    const receiptMatch = buildEffectiveReceiptQuery({ businessId, startDate, endDate, dateField: "paymentDate" });
+
+    const expenseMatch = { business: businessId, date: { $gte: startDate, $lte: endDate } };
+    if (propertyIds) expenseMatch.property = { $in: propertyIds };
+
+    const [invoicesByProperty, receiptsByProperty, expensesByPropertyAndCategory] = await Promise.all([
+      TenantInvoice.aggregate([
+        { $match: invoiceMatch },
+        {
+          $group: {
+            _id: "$property",
+            rentInvoiced: { $sum: { $cond: [{ $eq: ["$category", "RENT_CHARGE"] }, "$amount", 0] } },
+            utilitiesInvoiced: { $sum: { $cond: [{ $eq: ["$category", "UTILITY_CHARGE"] }, "$amount", 0] } },
+            totalInvoiced: { $sum: "$amount" },
+            invoiceCount: { $sum: 1 },
+          },
+        },
+      ]),
+      // RentPayment has no `property` field — resolve via unit lookup
+      RentPayment.aggregate([
+        { $match: receiptMatch },
+        { $lookup: { from: "units", localField: "unit", foreignField: "_id", as: "_unit" } },
+        { $addFields: { _propertyId: { $arrayElemAt: ["$_unit.property", 0] } } },
+        ...(propertyIds ? [{ $match: { _propertyId: { $in: propertyIds } } }] : []),
+        {
+          $group: {
+            _id: "$_propertyId",
+            totalCollected: { $sum: "$amount" },
+            paymentCount: { $sum: 1 },
+          },
+        },
+      ]),
+      ExpenseProperty.aggregate([
+        { $match: expenseMatch },
+        {
+          $group: {
+            _id: { property: "$property", category: "$category" },
+            total: { $sum: "$amount" },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+    // Collect all referenced property IDs, then fetch names in one query
+    const allPropertyIds = new Set();
+    invoicesByProperty.forEach((r) => r._id && allPropertyIds.add(String(r._id)));
+    receiptsByProperty.forEach((r) => r._id && allPropertyIds.add(String(r._id)));
+    expensesByPropertyAndCategory.forEach((r) => r._id?.property && allPropertyIds.add(String(r._id.property)));
+
+    const propertyDocs = allPropertyIds.size
+      ? await Property.find({ _id: { $in: Array.from(allPropertyIds) } }).select("_id propertyName name").lean()
+      : [];
+    const propertyNameMap = new Map(
+      propertyDocs.map((p) => [String(p._id), p.propertyName || p.name || "Unknown Property"])
+    );
+
+    const propertyMap = new Map();
+    const ensureRow = (pid) => {
+      const key = String(pid || "unknown");
+      if (!propertyMap.has(key)) {
+        propertyMap.set(key, {
+          propertyId: pid,
+          propertyName: propertyNameMap.get(key) || "Unknown Property",
+          rentInvoiced: 0,
+          utilitiesInvoiced: 0,
+          totalInvoiced: 0,
+          invoiceCount: 0,
+          totalCollected: 0,
+          paymentCount: 0,
+          expenses: {},
+          totalExpenses: 0,
+          netIncome: 0,
+          collectionRate: null,
+        });
+      }
+      return propertyMap.get(key);
+    };
+
+    for (const row of invoicesByProperty) {
+      const entry = ensureRow(row._id);
+      entry.rentInvoiced = round2(row.rentInvoiced);
+      entry.utilitiesInvoiced = round2(row.utilitiesInvoiced);
+      entry.totalInvoiced = round2(row.totalInvoiced);
+      entry.invoiceCount = row.invoiceCount;
+    }
+
+    for (const row of receiptsByProperty) {
+      const entry = ensureRow(row._id);
+      entry.totalCollected = round2(row.totalCollected);
+      entry.paymentCount = row.paymentCount;
+    }
+
+    const categoryTotalsMap = new Map();
+    for (const row of expensesByPropertyAndCategory) {
+      const { property: pid, category } = row._id;
+      const entry = ensureRow(pid);
+      entry.expenses[category] = round2((entry.expenses[category] || 0) + row.total);
+      entry.totalExpenses = round2(entry.totalExpenses + row.total);
+
+      const catEntry = categoryTotalsMap.get(category) || { category, total: 0, count: 0 };
+      catEntry.total = round2(catEntry.total + row.total);
+      catEntry.count += row.count;
+      categoryTotalsMap.set(category, catEntry);
+    }
+
+    let grandTotalInvoiced = 0;
+    let grandTotalCollected = 0;
+    let grandTotalExpenses = 0;
+
+    for (const entry of propertyMap.values()) {
+      entry.netIncome = round2(entry.totalCollected - entry.totalExpenses);
+      entry.collectionRate = entry.totalInvoiced > 0
+        ? round2((entry.totalCollected / entry.totalInvoiced) * 100)
+        : null;
+      grandTotalInvoiced += entry.totalInvoiced;
+      grandTotalCollected += entry.totalCollected;
+      grandTotalExpenses += entry.totalExpenses;
+    }
+
+    const byProperty = Array.from(propertyMap.values())
+      .sort((a, b) => (a.propertyName || "").localeCompare(b.propertyName || ""));
+
+    const expensesByCategory = Array.from(categoryTotalsMap.values())
+      .sort((a, b) => b.total - a.total);
+
+    return res.status(200).json({
+      success: true,
+      filters: {
+        startDate,
+        endDate,
+        propertyId: req.query.propertyId || "",
+        landlordId: req.query.landlordId || "",
+      },
+      summary: {
+        totalInvoiced: round2(grandTotalInvoiced),
+        totalCollected: round2(grandTotalCollected),
+        totalExpenses: round2(grandTotalExpenses),
+        netIncome: round2(grandTotalCollected - grandTotalExpenses),
+        collectionRate: grandTotalInvoiced > 0
+          ? round2((grandTotalCollected / grandTotalInvoiced) * 100)
+          : null,
+        propertyCount: propertyMap.size,
+      },
+      byProperty,
+      expensesByCategory,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getMRITaxSummaryReport = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: "A valid business id is required." });
+    }
+
+    const startDate = normalizeDate(req.query.startDate || req.query.dateFrom || req.query.from);
+    const endDate = normalizeDate(req.query.endDate || req.query.dateTo || req.query.to, true);
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, error: "Valid start and end dates are required." });
+    }
+
+    const MRI_RATE = 0.10;
+
+    let propertyIds = null;
+    if (req.query.propertyId) {
+      const pid = toObjectId(req.query.propertyId);
+      if (pid) propertyIds = [pid];
+    }
+
+    const receiptMatch = buildEffectiveReceiptQuery({ businessId, startDate, endDate, dateField: "paymentDate" });
+
+    const byPropertyMonth = await RentPayment.aggregate([
+      { $match: receiptMatch },
+      { $lookup: { from: "units", localField: "unit", foreignField: "_id", as: "_unit" } },
+      { $addFields: { _propertyId: { $arrayElemAt: ["$_unit.property", 0] } } },
+      ...(propertyIds ? [{ $match: { _propertyId: { $in: propertyIds } } }] : []),
+      {
+        $group: {
+          _id: {
+            property: "$_propertyId",
+            year: { $year: "$paymentDate" },
+            month: { $month: "$paymentDate" },
+          },
+          grossRent: { $sum: "$amount" },
+          receiptCount: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } },
+    ]);
+
+    const propertyIdSet = new Set(byPropertyMonth.map((r) => String(r._id.property)).filter(Boolean));
+    const propertyDocs = propertyIdSet.size
+      ? await Property.find({ _id: { $in: Array.from(propertyIdSet) } }).select("_id propertyName name").lean()
+      : [];
+    const propertyNameMap = new Map(propertyDocs.map((p) => [String(p._id), p.propertyName || p.name || "Unknown Property"]));
+
+    const propertyMap = new Map();
+    const monthlyTotalsMap = new Map();
+
+    const ensurePropertyEntry = (pid) => {
+      const key = String(pid || "unknown");
+      if (!propertyMap.has(key)) {
+        propertyMap.set(key, {
+          propertyId: pid,
+          propertyName: propertyNameMap.get(key) || "Unknown Property",
+          grossRent: 0,
+          mriTax: 0,
+          months: [],
+        });
+      }
+      return propertyMap.get(key);
+    };
+
+    for (const row of byPropertyMonth) {
+      const { property: pid, year, month } = row._id;
+      const entry = ensurePropertyEntry(pid);
+      const grossRent = round2(row.grossRent);
+      const mriTax = round2(grossRent * MRI_RATE);
+
+      entry.grossRent = round2(entry.grossRent + grossRent);
+      entry.mriTax = round2(entry.mriTax + mriTax);
+      entry.months.push({ year, month, grossRent, mriTax, receiptCount: row.receiptCount });
+
+      const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+      const monthEntry = monthlyTotalsMap.get(monthKey) || { year, month, monthKey, grossRent: 0, mriTax: 0 };
+      monthEntry.grossRent = round2(monthEntry.grossRent + grossRent);
+      monthEntry.mriTax = round2(monthEntry.mriTax + mriTax);
+      monthlyTotalsMap.set(monthKey, monthEntry);
+    }
+
+    let grandGrossRent = 0;
+    let grandMriTax = 0;
+    for (const entry of propertyMap.values()) {
+      grandGrossRent += entry.grossRent;
+      grandMriTax += entry.mriTax;
+    }
+
+    const byProperty = Array.from(propertyMap.values())
+      .sort((a, b) => (a.propertyName || "").localeCompare(b.propertyName || ""));
+    const byMonth = Array.from(monthlyTotalsMap.values())
+      .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+
+    return res.status(200).json({
+      success: true,
+      mriRate: MRI_RATE,
+      filters: {
+        startDate,
+        endDate,
+        propertyId: req.query.propertyId || "",
+      },
+      summary: {
+        grossRent: round2(grandGrossRent),
+        mriTax: round2(grandMriTax),
+        propertyCount: propertyMap.size,
+      },
+      byProperty,
+      byMonth,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   getTrialBalanceReport,
   getIncomeStatementReport,
   getBalanceSheetReport,
   getRentalCollectionReport,
   getTenantPaidBalanceReport,
+  getPropertyIncomeSummaryReport,
+  getMRITaxSummaryReport,
 };

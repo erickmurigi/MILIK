@@ -65,6 +65,8 @@ const MENU_PERMISSION_MAP = {
   "paid-balance": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "aged-analysis": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "commission-reports": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "property-income-summary": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "mri-tax-summary": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "trial-balance": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "income-statement": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "balance-sheet": { resource: "financialReports", action: "view", moduleKey: "accounts" },
@@ -424,6 +426,8 @@ const TopToolbar = ({
       "paid-balance": "/reports/paid-balance",
       "aged-analysis": "/reports/aged-analysis",
       "commission-reports": "/reports/commissions",
+      "property-income-summary": "/reports/property-income-summary",
+      "mri-tax-summary": "/reports/mri-tax-summary",
       "trial-balance": "/reports/trial-balance",
       "income-statement": "/reports/income-statement",
       "balance-sheet": "/reports/balance-sheet",
@@ -619,6 +623,8 @@ const TopToolbar = ({
         icon: FaChartBar,
         submenu: [
           { id: "rental-collection", label: "Rental Collection Report", icon: FaChartBar },
+          { id: "property-income-summary", label: "Property Income Summary", icon: FaChartLine },
+          { id: "mri-tax-summary", label: "MRI Tax Summary", icon: FaCalculator },
           { id: "paid-balance", label: "Paid & Balance Report", icon: FaChartLine },
           { id: "aged-analysis", label: "Aged Analysis", icon: FaChartPie },
           { type: "separator" },
@@ -655,7 +661,15 @@ const TopToolbar = ({
     ]
       .filter((item) => !landlordModeHiddenMainMenuIds.has(item.id))
       .map((item) => {
-        if (!isLandlordMode) return item;
+        if (!isLandlordMode) {
+          if (item.id === "reports") {
+            return {
+              ...item,
+              submenu: item.submenu.filter((subItem) => subItem.id !== "mri-tax-summary"),
+            };
+          }
+          return item;
+        }
 
         if (item.id === "properties") {
           return {

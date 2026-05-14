@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import LandlordStatement from "../models/LandlordStatement.js";
 import LandlordStatementLine from "../models/LandlordStatementLine.js";
+import LandlordStatementTenantBalance from "../models/LandlordStatementTenantBalance.js";
 import SequenceCounter from "../models/SequenceCounter.js";
 import { generateLandlordStatement } from "./landlordStatementService.js";
 
@@ -357,10 +358,6 @@ export const refreshDraftStatement = async (
     });
   }
 
-  if (lines.length > 0) {
-    await LandlordStatementLine.insertMany(lines);
-  }
-
   draft.openingBalance = statementData.openingBalance;
   draft.periodEnd = statementData.periodEnd;
   draft.periodNet = statementData.periodNet;
@@ -388,7 +385,11 @@ export const refreshDraftStatement = async (
     },
   };
 
-  await draft.save();
+  // insertMany and draft.save write to different collections — run in parallel
+  await Promise.all([
+    lines.length > 0 ? LandlordStatementLine.insertMany(lines) : Promise.resolve(),
+    draft.save(),
+  ]);
 
   return {
     statement: draft,
@@ -433,6 +434,58 @@ export const approveStatement = async (statementId, userId, approvalNotes = "") 
   }
   await statement.save();
 
+  // Persist per-tenant closing balance snapshots so the NEXT statement for this
+  // property/landlord can skip full-history scans and start from these values.
+  const workspaceRows = statement.metadata?.workspace?.rows;
+  const workspaceSummary = statement.metadata?.workspace?.summary;
+
+  const tenantSnapshots = Array.isArray(workspaceRows)
+    ? workspaceRows
+        .filter((row) => row && row.key)
+        .map((row) => ({
+          business: statement.business,
+          property: statement.property,
+          landlord: statement.landlord,
+          statement: statement._id,
+          periodEnd: statement.periodEnd,
+          tenant:
+            row.tenantId && mongoose.Types.ObjectId.isValid(String(row.tenantId))
+              ? new mongoose.Types.ObjectId(String(row.tenantId))
+              : null,
+          unit:
+            row.unitId && mongoose.Types.ObjectId.isValid(String(row.unitId))
+              ? new mongoose.Types.ObjectId(String(row.unitId))
+              : null,
+          tenantKey: String(row.key),
+          balanceCF: Number(row.balanceCF ?? row.closingBalance ?? 0),
+          version: statement.version,
+        }))
+    : [];
+
+  // Always snapshot deposit bucket closing balances (even at zero) so the next statement
+  // can restore the deposit memo opening balance without a full-history scan.
+  const depositSnapshots = ["__deposit:manager__", "__deposit:landlord__"].map((key) => ({
+    business: statement.business,
+    property: statement.property,
+    landlord: statement.landlord,
+    statement: statement._id,
+    periodEnd: statement.periodEnd,
+    tenant: null,
+    unit: null,
+    tenantKey: key,
+    balanceCF: Number(
+      key === "__deposit:manager__"
+        ? (workspaceSummary?.depositsHeldByManager ?? 0)
+        : (workspaceSummary?.depositsHeldByLandlord ?? 0)
+    ),
+    version: statement.version,
+  }));
+
+  const allSnapshots = [...tenantSnapshots, ...depositSnapshots];
+  if (allSnapshots.length > 0) {
+    await LandlordStatementTenantBalance.insertMany(allSnapshots, { ordered: false });
+  }
+
   // Lines are now frozen (immutable via pre-save hooks)
   const lines = await LandlordStatementLine.find({ statement: statementId }).sort({ lineNumber: 1 }).lean();
 
@@ -469,21 +522,21 @@ export const getStatementById = async (statementId, options = {}) => {
       .populate("sentBy", "surname otherNames email");
   }
 
-  const statement = await query.lean();
+  // Lines query only needs statementId — both can run in parallel
+  const [statement, lines] = await Promise.all([
+    query.lean(),
+    includeLines
+      ? LandlordStatementLine.find({ statement: statementId })
+          .populate("tenant", "name paymentMethod phone idNumber")
+          .populate("unit", "unitNumber name")
+          .sort({ lineNumber: 1 })
+          .lean()
+      : Promise.resolve([]),
+  ]);
+
   if (!statement) {
     throw new Error("Statement not found");
   }
-
-  if (!includeLines) {
-    return { statement, lines: [] };
-  }
-
-  // Always sort lines by lineNumber ASC for deterministic rendering
-  const lines = await LandlordStatementLine.find({ statement: statementId })
-    .populate("tenant", "name paymentMethod phone idNumber")
-    .populate("unit", "unitNumber name")
-    .sort({ lineNumber: 1 })
-    .lean();
 
   return {
     statement,

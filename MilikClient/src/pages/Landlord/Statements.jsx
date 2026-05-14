@@ -8,6 +8,7 @@ import {
   approveStatement,
   createDraftStatement,
   getLandlords,
+  getStatement,
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { adminRequests } from "../../utils/requestMethods";
@@ -1010,9 +1011,7 @@ const Statements = () => {
 
     setLoadingDraft(true);
     try {
-      // POST /statements/draft already returns the full statement with metadata.workspace —
-      // no second GET needed.
-      const nextStatement = await dispatch(
+      const created = await dispatch(
         createDraftStatement({
           propertyId: selectedPropertyId,
           landlordId: landlordId || undefined,
@@ -1026,6 +1025,9 @@ const Statements = () => {
       );
 
       if (controller.signal.aborted) return;
+
+      const full = await dispatch(getStatement(created._id));
+      const nextStatement = full?.statement || null;
 
       const nextPeriodStart = nextStatement?.periodStart ? toIsoDate(nextStatement.periodStart) : periodStart;
       const nextPeriodEnd = nextStatement?.periodEnd ? toIsoDate(nextStatement.periodEnd) : periodEnd;

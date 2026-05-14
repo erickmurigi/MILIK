@@ -10,6 +10,8 @@ import PaymentVoucher from "../models/PaymentVoucher.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import TenantInvoiceNote from "../models/TenantInvoiceNote.js";
 import ProcessedStatement from "../models/ProcessedStatement.js";
+import LandlordStatement from "../models/LandlordStatement.js";
+import LandlordStatementTenantBalance from "../models/LandlordStatementTenantBalance.js";
 import { buildCommissionTaxSnapshot, getCompanyTaxConfiguration } from "./taxCalculationService.js";
 
 const round2 = (value) =>
@@ -100,19 +102,21 @@ const normalizeCommissionRecognitionBasis = (value = "") => {
 };
 
 
-const buildInvoiceRecognitionDateQuery = ({ periodStart, periodEnd = null }) => {
-  const fallbackRange = periodEnd
-    ? { $gte: periodStart, $lte: periodEnd }
+const buildInvoiceRecognitionDateQuery = ({ periodStart, periodEnd = null, lowerBound = null }) => {
+  const beforePeriodRange = lowerBound
+    ? { $gte: lowerBound, $lt: periodStart }
     : { $lt: periodStart };
+
+  const inPeriodRange = periodEnd ? { $gte: periodStart, $lte: periodEnd } : null;
 
   return {
     $or: [
       periodEnd
-        ? { bookingDate: { $gte: periodStart, $lte: periodEnd } }
-        : { bookingDate: { $lt: periodStart } },
+        ? { bookingDate: inPeriodRange }
+        : { bookingDate: beforePeriodRange },
       {
         $or: [{ bookingDate: { $exists: false } }, { bookingDate: null }],
-        invoiceDate: fallbackRange,
+        invoiceDate: periodEnd ? inPeriodRange : beforePeriodRange,
       },
     ],
   };
@@ -1276,36 +1280,50 @@ export const generateLandlordStatement = async ({
     throw new Error("Landlord is not linked to the supplied property.");
   }
 
-  const units = await Unit.find({ property: propertyObjectId, business: businessObjectId })
-    .select("_id unitNumber name rent utilities status isVacant property")
-    .lean();
-
-  const unitIds = units.map((u) => u._id);
-
-  const tenants = await Tenant.find({
-    unit: { $in: unitIds },
+  // Phase 0.5: find the most recent approved statement for this property/landlord that ended
+  // before the current period.  If found, use its per-tenant balance snapshots as opening
+  // balances so Phase 1/2 queries only need to scan the gap since that statement, not all history.
+  const lastApproved = await LandlordStatement.findOne({
     business: businessObjectId,
-    status: { $nin: ["inactive", "moved_out", "evicted"] },
+    property: propertyObjectId,
+    landlord: landlordObjectId,
+    status: { $in: ["approved", "sent"] },
+    periodEnd: { $lt: periodStart },
   })
-    .select(
-      "_id name tenantCode rent status unit utilities paymentMethod balance moveInDate createdAt depositHeldBy"
-    )
+    .sort({ periodEnd: -1 })
+    .select("_id periodEnd")
     .lean();
 
+  const snapshotDate = lastApproved ? new Date(lastApproved.periodEnd) : null;
+
+  const tenantBalanceSnapshots = snapshotDate
+    ? await LandlordStatementTenantBalance.find({ statement: lastApproved._id })
+        .select("tenantKey balanceCF")
+        .lean()
+    : [];
+
+  const snapshotMap = new Map(
+    tenantBalanceSnapshots.map((s) => [String(s.tenantKey), s])
+  );
+
+  // Phase 1: fetch units in parallel with all property-scoped queries (none need unitIds yet)
   const [
+    units,
     invoicesBefore,
     invoicesInPeriod,
     notesForStatementWindow,
-    standardReceiptsForStatementWindow,
-    depositReceiptsForStatementWindow,
     expensesInPeriod,
     vouchersInPeriod,
     statementAdjustments,
   ] = await Promise.all([
+    Unit.find({ property: propertyObjectId, business: businessObjectId })
+      .select("_id unitNumber name rent utilities status isVacant property")
+      .lean(),
+
     TenantInvoice.find({
       property: propertyObjectId,
       business: businessObjectId,
-      ...buildInvoiceRecognitionDateQuery({ periodStart }),
+      ...buildInvoiceRecognitionDateQuery({ periodStart, lowerBound: snapshotDate }),
       status: { $nin: ["cancelled", "reversed"] },
     })
       .select(
@@ -1330,55 +1348,16 @@ export const generateLandlordStatement = async ({
       status: { $nin: ["cancelled", "reversed"] },
       postingStatus: { $nin: ["failed", "reversed"] },
       $or: [
-        { noteDate: { $lte: periodEnd } },
-        { createdAt: { $lte: periodEnd } },
+        snapshotDate
+          ? { noteDate: { $gte: snapshotDate, $lte: periodEnd } }
+          : { noteDate: { $lte: periodEnd } },
+        snapshotDate
+          ? { createdAt: { $gte: snapshotDate, $lte: periodEnd } }
+          : { createdAt: { $lte: periodEnd } },
       ],
     })
       .select(
         "_id tenant unit category amount description noteDate noteNumber noteType metadata sourceInvoice createdAt updatedAt"
-      )
-      .populate("sourceInvoice", "_id invoiceNumber category description metadata taxSnapshot depositHeldBy")
-      .lean(),
-
-    RentPayment.find({
-      business: businessObjectId,
-      unit: { $in: unitIds },
-      isConfirmed: true,
-      isCancelled: { $ne: true },
-      isReversed: { $ne: true },
-      reversalOf: null,
-      isCancellationEntry: { $ne: true },
-      paymentType: { $in: ["rent", "utility"] },
-      $or: [
-        { paymentDate: { $lte: periodEnd } },
-        { confirmedAt: { $lte: periodEnd } },
-        { recordDate: { $lte: periodEnd } },
-        { createdAt: { $lte: periodEnd } },
-      ],
-    })
-      .select(
-        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber breakdown utilities allocations allocationSummary metadata confirmedAt recordDate createdAt"
-      )
-      .lean(),
-
-    RentPayment.find({
-      business: businessObjectId,
-      unit: { $in: unitIds },
-      isConfirmed: true,
-      isCancelled: { $ne: true },
-      isReversed: { $ne: true },
-      reversalOf: null,
-      isCancellationEntry: { $ne: true },
-      paymentType: "deposit",
-      $or: [
-        { paymentDate: { $lte: periodEnd } },
-        { confirmedAt: { $lte: periodEnd } },
-        { recordDate: { $lte: periodEnd } },
-        { createdAt: { $lte: periodEnd } },
-      ],
-    })
-      .select(
-        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber allocations allocationSummary metadata depositHeldBy ledgerMode confirmedAt recordDate createdAt"
       )
       .lean(),
 
@@ -1395,10 +1374,16 @@ export const generateLandlordStatement = async ({
       business: businessObjectId,
       category: { $in: ["landlord_maintenance", "landlord_other"] },
       status: { $in: ["approved", "paid"] },
-      $or: [
-        { landlord: landlordObjectId },
-        { landlord: null },
-        { landlord: { $exists: false } },
+      $and: [
+        { $or: [{ landlord: landlordObjectId }, { landlord: null }, { landlord: { $exists: false } }] },
+        {
+          $or: [
+            { paidDate: { $gte: periodStart, $lte: periodEnd } },
+            { paidAt: { $gte: periodStart, $lte: periodEnd } },
+            { approvedAt: { $gte: periodStart, $lte: periodEnd } },
+            { createdAt: { $gte: periodStart, $lte: periodEnd } },
+          ],
+        },
       ],
     })
       .select("_id voucherNo category amount narration reference dueDate paidDate approvedAt paidAt createdAt expenseRecord landlord property status")
@@ -1425,11 +1410,108 @@ export const generateLandlordStatement = async ({
       .lean(),
   ]);
 
+  const unitIds = units.map((u) => u._id);
+
+  // Phase 2: tenant + payment queries that depend on unitIds
+  const [
+    tenants,
+    standardReceiptsForStatementWindow,
+    depositReceiptsForStatementWindow,
+  ] = await Promise.all([
+    Tenant.find({
+      unit: { $in: unitIds },
+      business: businessObjectId,
+      status: { $nin: ["inactive", "moved_out", "evicted"] },
+    })
+      .select(
+        "_id name tenantCode rent status unit utilities paymentMethod balance moveInDate createdAt depositHeldBy"
+      )
+      .lean(),
+
+    RentPayment.find({
+      business: businessObjectId,
+      unit: { $in: unitIds },
+      isConfirmed: true,
+      isCancelled: { $ne: true },
+      isReversed: { $ne: true },
+      reversalOf: null,
+      isCancellationEntry: { $ne: true },
+      paymentType: { $in: ["rent", "utility"] },
+      $or: [
+        snapshotDate ? { paymentDate: { $gte: snapshotDate, $lte: periodEnd } } : { paymentDate: { $lte: periodEnd } },
+        snapshotDate ? { confirmedAt: { $gte: snapshotDate, $lte: periodEnd } } : { confirmedAt: { $lte: periodEnd } },
+        snapshotDate ? { recordDate: { $gte: snapshotDate, $lte: periodEnd } } : { recordDate: { $lte: periodEnd } },
+        snapshotDate ? { createdAt: { $gte: snapshotDate, $lte: periodEnd } } : { createdAt: { $lte: periodEnd } },
+      ],
+    })
+      .select(
+        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber breakdown utilities allocations allocationSummary metadata confirmedAt recordDate createdAt"
+      )
+      .lean(),
+
+    RentPayment.find({
+      business: businessObjectId,
+      unit: { $in: unitIds },
+      isConfirmed: true,
+      isCancelled: { $ne: true },
+      isReversed: { $ne: true },
+      reversalOf: null,
+      isCancellationEntry: { $ne: true },
+      paymentType: "deposit",
+      $or: [
+        snapshotDate ? { paymentDate: { $gte: snapshotDate, $lte: periodEnd } } : { paymentDate: { $lte: periodEnd } },
+        snapshotDate ? { confirmedAt: { $gte: snapshotDate, $lte: periodEnd } } : { confirmedAt: { $lte: periodEnd } },
+        snapshotDate ? { recordDate: { $gte: snapshotDate, $lte: periodEnd } } : { recordDate: { $lte: periodEnd } },
+        snapshotDate ? { createdAt: { $gte: snapshotDate, $lte: periodEnd } } : { createdAt: { $lte: periodEnd } },
+      ],
+    })
+      .select(
+        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber allocations allocationSummary metadata depositHeldBy ledgerMode confirmedAt recordDate createdAt"
+      )
+      .lean(),
+  ]);
+
   const unitMap = new Map(units.map((u) => [String(u._id), u]));
   const tenantMap = new Map(tenants.map((t) => [String(t._id), t]));
   const invoiceStatementMap = new Map(
     [...invoicesBefore, ...invoicesInPeriod].map((invoice) => [String(invoice?._id || ""), invoice])
   );
+
+  // When a balance snapshot exists, invoicesBefore only covers the gap period.  Gap-period
+  // receipts may still allocate against pre-snapshot invoices.  Collect any missing invoice
+  // IDs referenced by gap receipts and fetch them in one bulk query to keep the map complete.
+  if (snapshotDate) {
+    const missingInvoiceIds = new Set();
+    for (const receipt of standardReceiptsForStatementWindow) {
+      const recognitionDate = getReceiptStatementDate(receipt);
+      const recognitionTime = recognitionDate ? new Date(recognitionDate).getTime() : NaN;
+      if (Number.isNaN(recognitionTime) || recognitionTime >= periodStart.getTime()) continue;
+      for (const alloc of Array.isArray(receipt.allocations) ? receipt.allocations : []) {
+        const invoiceId = String(alloc?.invoice || alloc?.invoiceId || "");
+        if (invoiceId && !invoiceStatementMap.has(invoiceId)) {
+          missingInvoiceIds.add(invoiceId);
+        }
+      }
+    }
+    if (missingInvoiceIds.size > 0) {
+      const missingInvoices = await TenantInvoice.find({
+        _id: { $in: Array.from(missingInvoiceIds).map((id) => oid(id)) },
+        business: businessObjectId,
+      })
+        .select("_id tenant unit category amount description invoiceDate bookingDate invoiceNumber landlord metadata depositHeldBy taxSnapshot")
+        .lean();
+      missingInvoices.forEach((inv) => invoiceStatementMap.set(String(inv._id), inv));
+    }
+  }
+
+  // Hydrate note.sourceInvoice in-memory from already-fetched invoices (avoids extra DB round-trip)
+  notesForStatementWindow.forEach((note) => {
+    const refId = note.sourceInvoice ? String(note.sourceInvoice) : "";
+    if (refId) {
+      note.sourceInvoice = invoiceStatementMap.get(refId) || null;
+    }
+  });
+
   const tenantsByUnit = new Map();
 
   tenants.forEach((tenant) => {
@@ -1493,6 +1575,7 @@ export const generateLandlordStatement = async ({
     const key = `${resolvedUnitId}:${String(tenant._id || resolvedTenantId || "vacant")}`;
 
     if (!rowsMap.has(key)) {
+      const tenantSnapshot = snapshotMap.get(key);
       rowsMap.set(key, {
         key,
         tenantId: String(tenant._id || resolvedTenantId || ""),
@@ -1501,7 +1584,7 @@ export const generateLandlordStatement = async ({
         accountNo: tenant.tenantCode || fallback.accountNo || "-",
         tenantName: tenant.name || fallback.tenantName || "VACANT",
         perMonth: Number(tenant.rent || unit.rent || fallback.perMonth || 0),
-        balanceBF: 0,
+        balanceBF: tenantSnapshot ? round2(tenantSnapshot.balanceCF) : 0,
         invoicedRent: 0,
         invoicedGarbage: 0,
         invoicedWater: 0,
@@ -1652,6 +1735,19 @@ export const generateLandlordStatement = async ({
     manager: createDepositMemoBucket("manager", "Deposits held by manager"),
     landlord: createDepositMemoBucket("landlord", "Deposits held by landlord"),
   };
+
+  // Restore deposit liability opening balances from snapshot so the bounded queries
+  // don't produce an incorrect opening balance in the deposit memo section.
+  const depositManagerSnapshot = snapshotMap.get("__deposit:manager__");
+  const depositLandlordSnapshot = snapshotMap.get("__deposit:landlord__");
+  if (depositManagerSnapshot) {
+    depositMemoBuckets.manager.openingBalance = round2(depositManagerSnapshot.balanceCF);
+    depositMemoBuckets.manager.closingBalance = round2(depositManagerSnapshot.balanceCF);
+  }
+  if (depositLandlordSnapshot) {
+    depositMemoBuckets.landlord.openingBalance = round2(depositLandlordSnapshot.balanceCF);
+    depositMemoBuckets.landlord.closingBalance = round2(depositLandlordSnapshot.balanceCF);
+  }
 
   const depositSettlementRows = [];
   const depositSettlementTotals = {

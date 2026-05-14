@@ -189,11 +189,10 @@ export const createDraft = async (req, res, next) => {
         periodEnd
       );
 
-      const lines = await LandlordStatementLine.find({ statement: existingDraft._id })
-        .sort({ lineNumber: 1 })
-        .lean();
-
-      const refreshedStatement = await LandlordStatement.findById(existingDraft._id).lean();
+      const [lines, refreshedStatement] = await Promise.all([
+        LandlordStatementLine.find({ statement: existingDraft._id }).sort({ lineNumber: 1 }).lean(),
+        LandlordStatement.findById(existingDraft._id).lean(),
+      ]);
 
       return res.status(200).json({
         success: true,
@@ -446,16 +445,17 @@ export const listStatementsForLandlord = async (req, res, next) => {
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    const statements = await LandlordStatement.find(filter)
-      .sort({ periodStart: -1, version: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .populate("property", "name propertyName address city")
-      .populate("landlord", "landlordName landlordType email phoneNumber")
-      .populate("approvedBy", "surname otherNames email")
-      .lean();
-
-    const total = await LandlordStatement.countDocuments(filter);
+    const [statements, total] = await Promise.all([
+      LandlordStatement.find(filter)
+        .sort({ periodStart: -1, version: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate("property", "name propertyName address city")
+        .populate("landlord", "landlordName landlordType email phoneNumber")
+        .populate("approvedBy", "surname otherNames email")
+        .lean(),
+      LandlordStatement.countDocuments(filter),
+    ]);
 
     res.status(200).json({
       success: true,
@@ -606,11 +606,10 @@ export const deleteDraft = async (req, res, next) => {
     }
 
     // Safeguard: Protect draft deletion in revision chains
-    // Check if this statement is referenced in any revision chain
-    const referencedAsSupersedes = await LandlordStatement.findOne({
-      business: businessId,
-      supersededByStatementId: statementId,
-    });
+    const [referencedAsSupersedes, referencedAsOriginal] = await Promise.all([
+      LandlordStatement.findOne({ business: businessId, supersededByStatementId: statementId }).lean(),
+      LandlordStatement.findOne({ business: businessId, supersedesStatementId: statementId }).lean(),
+    ]);
 
     if (referencedAsSupersedes) {
       return res.status(400).json({
@@ -622,11 +621,6 @@ export const deleteDraft = async (req, res, next) => {
         },
       });
     }
-
-    const referencedAsOriginal = await LandlordStatement.findOne({
-      business: businessId,
-      supersedesStatementId: statementId,
-    });
 
     if (referencedAsOriginal) {
       return res.status(400).json({
@@ -778,23 +772,44 @@ export const getStatementSummary = async (req, res, next) => {
       };
     }
 
-    const statements = await LandlordStatement.find(filter).lean();
+    const [aggResult, latestStatement] = await Promise.all([
+      LandlordStatement.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            draft: { $sum: { $cond: [{ $eq: ["$status", "draft"] }, 1, 0] } },
+            reviewed: { $sum: { $cond: [{ $eq: ["$status", "reviewed"] }, 1, 0] } },
+            approved: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, 1, 0] } },
+            sent: { $sum: { $cond: [{ $eq: ["$status", "sent"] }, 1, 0] } },
+            revised: { $sum: { $cond: [{ $eq: ["$status", "revised"] }, 1, 0] } },
+            totalOpeningBalance: { $sum: { $ifNull: ["$openingBalance", 0] } },
+            totalPeriodNet: { $sum: { $ifNull: ["$periodNet", 0] } },
+            totalClosingBalance: { $sum: { $ifNull: ["$closingBalance", 0] } },
+          },
+        },
+      ]),
+      LandlordStatement.findOne(filter)
+        .sort({ periodStart: -1 })
+        .select("_id statementNumber status periodStart periodEnd landlord property version")
+        .lean(),
+    ]);
 
+    const agg = aggResult[0] || {};
     const summary = {
-      total: statements.length,
+      total: agg.total || 0,
       byStatus: {
-        draft: statements.filter((s) => s.status === "draft").length,
-        reviewed: statements.filter((s) => s.status === "reviewed").length,
-        approved: statements.filter((s) => s.status === "approved").length,
-        sent: statements.filter((s) => s.status === "sent").length,
-        revised: statements.filter((s) => s.status === "revised").length,
+        draft: agg.draft || 0,
+        reviewed: agg.reviewed || 0,
+        approved: agg.approved || 0,
+        sent: agg.sent || 0,
+        revised: agg.revised || 0,
       },
-      totalOpeningBalance: statements.reduce((sum, s) => sum + (s.openingBalance || 0), 0),
-      totalPeriodNet: statements.reduce((sum, s) => sum + (s.periodNet || 0), 0),
-      totalClosingBalance: statements.reduce((sum, s) => sum + (s.closingBalance || 0), 0),
-      latestStatement: statements.sort((a, b) => 
-        new Date(b.periodStart).getTime() - new Date(a.periodStart).getTime()
-      )[0] || null,
+      totalOpeningBalance: agg.totalOpeningBalance || 0,
+      totalPeriodNet: agg.totalPeriodNet || 0,
+      totalClosingBalance: agg.totalClosingBalance || 0,
+      latestStatement: latestStatement || null,
     };
 
     res.status(200).json({

@@ -9,6 +9,8 @@ import dotenv from "dotenv";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
+import { RedisStore } from "rate-limit-redis";
+import getRedisClient from "./utils/redisClient.js";
 import mongoose from "mongoose";
 import dns from "node:dns";
 import jwt from "jsonwebtoken";
@@ -332,6 +334,15 @@ app.use(compression());
 app.use(helmet());
 app.use(morgan(isProduction ? "combined" : "common"));
 
+const buildStore = (prefix) => {
+  const redis = getRedisClient();
+  if (!redis) return undefined;
+  return new RedisStore({
+    sendCommand: (...args) => redis.call(...args),
+    prefix: `rl:${prefix}:`,
+  });
+};
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -341,6 +352,7 @@ const authLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  store: buildStore("auth"),
 });
 
 const trialLimiter = rateLimit({
@@ -352,6 +364,7 @@ const trialLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  store: buildStore("trial"),
 });
 
 const generalLimiter = rateLimit({
@@ -363,6 +376,7 @@ const generalLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  store: buildStore("general"),
 });
 
 // Dedicated limiter for company creation — tighter than the general limiter
@@ -376,6 +390,7 @@ const companyCreationLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  store: buildStore("company_create"),
 });
 
 app.use(generalLimiter);
