@@ -4,6 +4,7 @@ import { createError } from "../utils/error.js";
 import { hasModuleAccess, serializeCompanyForClient } from "../utils/companyModules.js";
 import { getAccessibleCompanyIds, hasCompanyActionPermission, isSystemAdminUser } from "../utils/permissionControl.js";
 import { extractAuthCookieToken } from "../utils/authCookie.js";
+import { isBlacklisted } from "../utils/tokenBlacklist.js";
 
 const getJWTSecret = () => {
   const secret = process.env.JWT_SECRET;
@@ -12,6 +13,8 @@ const getJWTSecret = () => {
   }
   return secret;
 };
+
+const JWT_VERIFY_OPTIONS = { issuer: "milik-api", audience: "milik-client" };
 
 export const normalizeCompanyId = (company) => {
   if (!company) return null;
@@ -118,7 +121,8 @@ export const tryAttachUserFromToken = (req, _res, next) => {
   if (!token) return next();
 
   try {
-    req.user = jwt.verify(token, getJWTSecret());
+    const decoded = jwt.verify(token, getJWTSecret(), JWT_VERIFY_OPTIONS);
+    if (!isBlacklisted(token)) req.user = decoded;
   } catch (_error) {
     // leave req.user unset; verifyUser will handle hard auth failures later
   }
@@ -132,8 +136,9 @@ export const verifyToken = (req, res, next) => {
     return next(createError(401, "You are not authenticated!"));
   }
 
-  jwt.verify(token, getJWTSecret(), (err, user) => {
+  jwt.verify(token, getJWTSecret(), JWT_VERIFY_OPTIONS, (err, user) => {
     if (err) return next(createError(403, "Token is not valid!"));
+    if (isBlacklisted(token)) return next(createError(401, "Session has been revoked. Please log in again."));
     req.user = user;
     next();
   });

@@ -42,12 +42,12 @@ export const createExpense = async (req, res, next) => {
     });
 
     const savedExpense = await newExpense.save();
+    await savedExpense.populate([
+      { path: "property", select: "name address landlord" },
+      { path: "unit", select: "unitNumber" },
+    ]);
 
-    const populatedExpense = await ExpenseProperty.findById(savedExpense._id)
-      .populate("property", "name address landlord")
-      .populate("unit", "unitNumber");
-
-    return res.status(201).json(populatedExpense);
+    return res.status(201).json(savedExpense);
   } catch (err) {
     next(err);
   }

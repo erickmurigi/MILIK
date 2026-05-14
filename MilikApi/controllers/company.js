@@ -11,6 +11,7 @@ import LandlordStatement from "../models/LandlordStatement.js";
 import CompanySettings from "../models/CompanySettings.js";
 import ChartOfAccount from "../models/ChartOfAccount.js";
 import { createError } from "../utils/error.js";
+import { escapeRegex } from "../utils/escapeRegex.js";
 import {
   buildEmailProfileStatus,
   buildMpesaPaybillStatus,
@@ -1194,7 +1195,8 @@ export const getAllCompanies = async (req, res, next) => {
       return next(createError(403, "Only Milik/System Admin can view all companies"));
     }
 
-    const { page = 1, limit = 10, search } = req.query;
+    const { page = 1, limit = 10, search: rawSearch } = req.query;
+    const search = escapeRegex(rawSearch);
     const includeDemoCompanies = shouldIncludeDemoCompanies(req);
 
     const query = includeDemoCompanies ? {} : buildLiveCompanyFilter();
@@ -1685,7 +1687,8 @@ export const deleteCompany = async (req, res, next) => {
 };
 export const getCompanyUsers = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, search } = req.query;
+    const { page = 1, limit = 10, search: rawSearch2 } = req.query;
+    const search = escapeRegex(rawSearch2);
 
     if (!canAccessCompanyId(req.user, req.params.id)) {
       return next(createError(403, "You can only view your company's users"));

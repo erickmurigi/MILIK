@@ -22,6 +22,7 @@ const JournalEntrySchema = new mongoose.Schema(
         "property_expense_accrual",
         "internal_account_transfer",
         "general_manual_journal",
+        "company_journal",
       ],
       required: true,
       default: "general_manual_journal",
@@ -30,7 +31,7 @@ const JournalEntrySchema = new mongoose.Schema(
     property: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Property",
-      required: true,
+      default: null,
       index: true,
     },
 

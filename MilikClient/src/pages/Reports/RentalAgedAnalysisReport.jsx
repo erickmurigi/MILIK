@@ -290,7 +290,7 @@ const RentalAgedAnalysisReport = () => {
         </div>
       </div>
 
-      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5 pb-10">
+      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
         <style>{`
           .milik-report-page select:focus, .milik-report-page input:focus { border-color: #f45b0b; box-shadow: 0 0 0 1px rgba(244, 91, 11, 0.45); outline: none; }
           .milik-report-page select option:checked { background: #f45b0b; color: #ffffff; }
@@ -374,7 +374,7 @@ const RentalAgedAnalysisReport = () => {
                 </tbody>
               </table>
             </div>
-            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-2 py-1.5">
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-2 py-1">
               <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
                 <div className="font-semibold">Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> tenant ageing rows</div>
                 <div className="flex items-center gap-2">

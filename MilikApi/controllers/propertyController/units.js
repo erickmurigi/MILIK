@@ -518,7 +518,7 @@ export const createUnit = async (req, res, next) => {
 // GET ALL UNITS
 export const getUnits = async (req, res, next) => {
   try {
-    const { property, status } = req.query;
+    const { property, status, page = 1, limit = 5000 } = req.query;
     const businessId = resolveBusinessId(req);
 
     if (!businessId) {
@@ -547,10 +547,18 @@ export const getUnits = async (req, res, next) => {
 
     if (status) filter.status = status;
 
-    const units = await Unit.find(filter)
-      .populate("property", "propertyName propertyCode address")
-      .populate("lastTenant", "name phone status")
-      .sort({ createdAt: -1 });
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 5000, 1), 5000);
+
+    const [units, total] = await Promise.all([
+      Unit.find(filter)
+        .populate("property", "propertyName propertyCode address")
+        .populate("lastTenant", "name phone status")
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum),
+      Unit.countDocuments(filter),
+    ]);
 
     const unitIds = units.map((unit) => unit._id);
     const occupyingTenants = unitIds.length
@@ -595,7 +603,13 @@ export const getUnits = async (req, res, next) => {
       })
     );
 
-    return res.status(200).json(unitsWithExtras);
+    return res.status(200).json({
+      success: true,
+      data: unitsWithExtras,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+    });
   } catch (err) {
     next(err);
   }

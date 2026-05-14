@@ -573,7 +573,7 @@ const Properties = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex flex-col h-full min-h-0 p-0 pb-10 bg-white overflow-hidden">
+      <div className="flex flex-col h-full min-h-0 p-0 bg-white overflow-hidden">
         {/* Filters Card */}
         <div className="flex-shrink-0 sticky top-0 z-30 bg-white pt-2 px-2">
           <div className={LISTING_UI.toolbarCard}>
@@ -1084,7 +1084,7 @@ const Properties = () => {
 
                 {/* Pagination footer (Landlords-style inside card) */}
                 <div className="flex-shrink-0 sticky bottom-0 z-20 border-t border-gray-200 bg-white">
-                  <div className="flex items-center justify-between px-3 py-2">
+                  <div className="flex items-center justify-between px-3 py-1">
                     <div className="text-xs text-gray-600">
                       <div className="flex items-center gap-4">
                         <span className="font-bold">

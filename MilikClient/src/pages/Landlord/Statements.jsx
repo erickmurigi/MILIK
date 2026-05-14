@@ -8,7 +8,6 @@ import {
   approveStatement,
   createDraftStatement,
   getLandlords,
-  getStatement,
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { adminRequests } from "../../utils/requestMethods";
@@ -399,6 +398,89 @@ const buildPreparedStatementColumnMap = (row = {}, statementColumns = []) => {
 const getPreparedStatementColumnValue = (row = {}, key = '', phase = 'invoiced') =>
   Number(row?.__statementColumnMap?.[key]?.[phase] || row?.statementColumns?.[key]?.[phase] || 0);
 
+const SearchableSelect = ({ value, onChange, options, placeholder = "Select..." }) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef(null);
+
+  const selected = options.find((o) => o.value === value) || null;
+  const filtered = query.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase()))
+    : options;
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const handleSelect = (opt) => {
+    onChange(opt.value);
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        onClick={() => { setOpen((prev) => !prev); setQuery(""); }}
+        className={`flex h-8 w-full cursor-pointer items-center justify-between rounded-md border px-2.5 shadow-sm transition-colors ${
+          open
+            ? "border-orange-500 bg-white ring-1 ring-orange-400"
+            : "border-orange-400 bg-orange-50 hover:border-orange-500"
+        }`}
+      >
+        {open ? (
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            placeholder={selected?.label || placeholder}
+            className="w-full bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:font-normal placeholder:text-slate-400"
+            autoFocus
+          />
+        ) : (
+          <span className={`truncate text-xs font-semibold ${selected ? "text-slate-800" : "text-slate-400"}`}>
+            {selected?.label || placeholder}
+          </span>
+        )}
+        <svg
+          className={`ml-1 h-3 w-3 flex-shrink-0 text-orange-500 transition-transform ${open ? "rotate-180" : ""}`}
+          viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8"
+        >
+          <path d="M1 1l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-0.5 max-h-56 overflow-y-auto rounded-md border border-orange-200 bg-white shadow-xl">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2.5 text-xs text-slate-400">No matches</div>
+          ) : (
+            filtered.map((opt) => (
+              <div
+                key={opt.value}
+                onMouseDown={(e) => { e.preventDefault(); handleSelect(opt); }}
+                className={`cursor-pointer px-3 py-2 text-xs transition-colors hover:bg-orange-50 ${
+                  opt.value === value ? "bg-orange-100 font-bold text-orange-700" : "text-slate-700"
+                }`}
+              >
+                {opt.label}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Statements = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -460,6 +542,8 @@ const Statements = () => {
   const lastAutoLoadedSelectionRef = useRef("");
   const inFlightSelectionRef = useRef("");
   const pendingReopenContextRef = useRef(null);
+  const draftAbortControllerRef = useRef(null);
+  const processedAbortControllerRef = useRef(null);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -572,33 +656,39 @@ const Statements = () => {
       return;
     }
 
-    let cancelled = false;
+    // Cancel any in-flight processed-context request before starting a new one
+    if (processedAbortControllerRef.current) {
+      processedAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    processedAbortControllerRef.current = controller;
+
     setLoadingProcessedContext(true);
     setProcessedContextLoaded(false);
 
     adminRequests
       .get(`/processed-statements/business/${currentCompany._id}`, {
+        signal: controller.signal,
         params: {
           property: selectedPropertyId,
           ...(landlordId ? { landlord: landlordId } : {}),
         },
       })
       .then((response) => {
-        if (cancelled) return;
         setProcessedStatements(Array.isArray(response?.data?.statements) ? response.data.statements : []);
       })
-      .catch(() => {
-        if (cancelled) return;
+      .catch((err) => {
+        if (err?.name === "CanceledError" || err?.name === "AbortError") return;
         setProcessedStatements([]);
       })
       .finally(() => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setLoadingProcessedContext(false);
         setProcessedContextLoaded(true);
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [currentCompany?._id, selectedPropertyId, landlordId]);
 
@@ -666,6 +756,8 @@ const Statements = () => {
   const expenseRows = workspace?.expenseRows || workspace?.deductionRows || [];
   const additionRows = workspace?.additionRows || [];
   const directToLandlordRows = workspace?.directToLandlordRows || [];
+  const advanceRecoveryRows = workspace?.advanceRecoveryRows || [];
+  const earlyPayoutRows = workspace?.earlyPayoutRows || [];
   const settlement = useMemo(() => getStatementSettlement(summary), [summary]);
   const basisCollectionsLabel = summary?.basisCollectionsLabel || "Collections";
   const basisCollectionsAmount = Number(
@@ -854,7 +946,9 @@ const Statements = () => {
     directToLandlordRows.length > 0 ||
     depositSettlementRows.length > 0 ||
     depositMemoRows.length > 0 ||
-    broughtForwardCreditApplicationRows.length > 0;
+    broughtForwardCreditApplicationRows.length > 0 ||
+    advanceRecoveryRows.length > 0 ||
+    earlyPayoutRows.length > 0;
   const hasInvoiceVatColumn = useMemo(
     () =>
       Number(summary?.totalInvoiceVatInvoiced || 0) > 0 ||
@@ -907,9 +1001,18 @@ const Statements = () => {
       return;
     }
 
+    // Cancel any previous in-flight draft generation
+    if (draftAbortControllerRef.current) {
+      draftAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    draftAbortControllerRef.current = controller;
+
     setLoadingDraft(true);
     try {
-      const created = await dispatch(
+      // POST /statements/draft already returns the full statement with metadata.workspace —
+      // no second GET needed.
+      const nextStatement = await dispatch(
         createDraftStatement({
           propertyId: selectedPropertyId,
           landlordId: landlordId || undefined,
@@ -918,10 +1021,12 @@ const Statements = () => {
           statementType,
           notes: `${statementType} statement workspace`,
           refresh: options.refresh !== false,
+          _signal: controller.signal,
         })
       );
-      const full = await dispatch(getStatement(created._id));
-      const nextStatement = full?.statement || null;
+
+      if (controller.signal.aborted) return;
+
       const nextPeriodStart = nextStatement?.periodStart ? toIsoDate(nextStatement.periodStart) : periodStart;
       const nextPeriodEnd = nextStatement?.periodEnd ? toIsoDate(nextStatement.periodEnd) : periodEnd;
       const nextSelectionKey = buildStatementSelectionKey({
@@ -945,11 +1050,13 @@ const Statements = () => {
       pendingReopenContextRef.current = null;
       setDraftStatement(nextStatement);
     } catch (error) {
+      if (error?.name === "CanceledError" || error?.name === "AbortError") return;
       lastAutoLoadedSelectionRef.current = requestedSelectionKey;
       pendingReopenContextRef.current = null;
       toast.error(error?.response?.data?.message || "Failed to load landlord statement workspace");
       setDraftStatement(null);
     } finally {
+      if (controller.signal.aborted) return;
       if (inFlightSelectionRef.current === requestedSelectionKey) {
         inFlightSelectionRef.current = "";
       }
@@ -1107,27 +1214,32 @@ const Statements = () => {
     document.body.appendChild(frame);
   };
 
-  const handleDownload = async () => {
+  const handleOpenPdf = async () => {
     if (!canExportStatement) {
-      toast.warning("You do not have permission to download landlord statements");
+      toast.warning("You do not have permission to view landlord statements");
       return;
     }
     if (!draftStatement?._id) return;
+    setLoadingPdfPreview(true);
     try {
       const response = await adminRequests.get(`/statements/${draftStatement._id}/pdf`, {
         responseType: "blob",
       });
       const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${getPropertyLabel(selectedProperty)}-${workspace?.periodLabel || "statement"}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      const tab = window.open(url, "_blank");
+      // Revoke the object URL after the tab has loaded it
+      if (tab) {
+        tab.addEventListener("load", () => window.URL.revokeObjectURL(url), { once: true });
+        setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+      } else {
+        window.URL.revokeObjectURL(url);
+        toast.warning("Pop-up blocked. Please allow pop-ups for this site to open PDFs in a new tab.");
+      }
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to download statement PDF");
+      toast.error(error?.response?.data?.message || "Failed to open statement PDF");
+    } finally {
+      setLoadingPdfPreview(false);
     }
   };
 
@@ -1191,84 +1303,73 @@ const Statements = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden gap-2">
-          <div className="sticky top-0 z-30 flex-shrink-0 rounded-lg border border-slate-200 bg-white/95 shadow-sm backdrop-blur">
-
-            <div className="grid grid-cols-1 gap-2 px-2 py-2 md:grid-cols-2 xl:grid-cols-7">
+      <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden bg-slate-50 p-2">
+          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+            <div className="h-1 rounded-t-lg bg-[#0B3B2E]" />
+            <div className="grid grid-cols-1 gap-2 px-3 py-2 md:grid-cols-2 xl:grid-cols-7">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Statement Type</label>
-                <select
+                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Statement Type</label>
+                <SearchableSelect
                   value={statementType}
-                  onChange={(e) => setStatementType(e.target.value)}
-                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
-                >
-                  <option value="provisional">Provisional</option>
-                  <option value="final">Final</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Property</label>
-                <select
-                  value={selectedPropertyId}
-                  onChange={(e) => setSelectedPropertyId(e.target.value)}
-                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
-                >
-                  <option value="">Select property</option>
-                  {properties.map((property) => (
-                    <option key={property._id} value={property._id}>
-                      {getPropertyLabel(property)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Month</label>
-                <select
-                  value={month}
-                  onChange={(e) => setMonth(e.target.value)}
-                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
-                >
-                  {monthOptions.map((label, index) => (
-                    <option key={label} value={String(index + 1)}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Year</label>
-                <input
-                  type="number"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
+                  onChange={setStatementType}
+                  options={[
+                    { value: "provisional", label: "Provisional" },
+                    { value: "final", label: "Final" },
+                  ]}
+                  placeholder="Select type"
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Period Start</label>
+                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Property</label>
+                <SearchableSelect
+                  value={selectedPropertyId}
+                  onChange={setSelectedPropertyId}
+                  options={properties.map((p) => ({ value: p._id, label: getPropertyLabel(p) }))}
+                  placeholder="Select property"
+                />
+              </div>
+
+              <div>
+                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Month</label>
+                <SearchableSelect
+                  value={month}
+                  onChange={setMonth}
+                  options={monthOptions.map((label, index) => ({ value: String(index + 1), label }))}
+                  placeholder="Select month"
+                />
+              </div>
+
+              <div>
+                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Year</label>
+                <input
+                  type="number"
+                  value={year}
+                  onChange={(e) => setYear(e.target.value)}
+                  className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                />
+              </div>
+
+              <div>
+                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Period Start</label>
                 <input
                   type="date"
                   value={periodStart}
                   max={todayIso}
                   onChange={(e) => setPeriodStart(e.target.value)}
-                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
+                  className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Period End</label>
+                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Period End</label>
                 <input
                   type="date"
                   value={periodEnd}
                   min={periodStart || undefined}
                   max={todayIso}
                   onChange={(e) => setPeriodEnd(e.target.value)}
-                  className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#FF8C00] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
+                  className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
                 />
               </div>
 
@@ -1277,23 +1378,23 @@ const Statements = () => {
                   type="button"
                   onClick={() => loadDraftWorkspace({ refresh: true })}
                   disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <FaSyncAlt className={loadingDraft ? "animate-spin" : ""} />
-                  {loadingDraft ? "Loading..." : loadingProcessedContext ? "Checking period..." : "Generate / Refresh"}
+                  {loadingDraft ? "Loading..." : loadingProcessedContext ? "Checking..." : "Generate / Refresh"}
                 </button>
               </div>
             </div>
-            <div className="border-t border-slate-200 px-2 py-2">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2">
+            <div className="border-t border-slate-200 px-3">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <div className="flex items-center">
                   <button
                     type="button"
                     onClick={() => setActiveTab("workspace")}
-                    className={`rounded-md px-3 py-1.5 text-xs font-bold ${
+                    className={`border-b-2 px-4 py-2.5 text-xs font-bold transition-colors ${
                       activeTab === "workspace"
-                        ? "bg-slate-900 text-white"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                        ? "border-[#0B3B2E] text-[#0B3B2E]"
+                        : "border-transparent text-slate-500 hover:text-slate-700"
                     }`}
                   >
                     Workspace
@@ -1301,24 +1402,24 @@ const Statements = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab("summary")}
-                    className={`rounded-md px-3 py-1.5 text-xs font-bold ${
+                    className={`border-b-2 px-4 py-2.5 text-xs font-bold transition-colors ${
                       activeTab === "summary"
-                        ? "bg-slate-900 text-white"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                        ? "border-[#0B3B2E] text-[#0B3B2E]"
+                        : "border-transparent text-slate-500 hover:text-slate-700"
                     }`}
                   >
                     Summary
                   </button>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5 py-1.5">
                   <button
                     type="button"
                     onClick={handleRegenerateDraft}
                     disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                   >
-                    <FaSyncAlt />
+                    <FaSyncAlt size={10} />
                     Regenerate Draft
                   </button>
 
@@ -1326,9 +1427,9 @@ const Statements = () => {
                     type="button"
                     onClick={handleApprove}
                     disabled={!canApproveStatement || !draftStatement?._id}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+                    className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-2.5 text-[11px] font-bold text-white hover:bg-[#0a3228] disabled:opacity-50"
                   >
-                    <FaCheckCircle />
+                    <FaCheckCircle size={10} />
                     Approve
                   </button>
 
@@ -1336,29 +1437,29 @@ const Statements = () => {
                     type="button"
                     onClick={handlePrint}
                     disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                   >
-                    <FaPrint className={loadingPdfPreview ? "animate-pulse" : ""} />
+                    <FaPrint size={10} className={loadingPdfPreview ? "animate-pulse" : ""} />
                     {loadingPdfPreview ? "Printing..." : "Print"}
                   </button>
 
                   <button
                     type="button"
-                    onClick={handleDownload}
-                    disabled={!canExportStatement || !draftStatement?._id}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    onClick={handleOpenPdf}
+                    disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
+                    className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                   >
-                    <FaDownload />
-                    PDF
+                    <FaDownload size={10} className={loadingPdfPreview ? "animate-pulse" : ""} />
+                    {loadingPdfPreview ? "Loading..." : "PDF"}
                   </button>
 
                   <button
                     type="button"
                     onClick={handleProcessStatement}
                     disabled={!canApproveStatement || !draftStatement?._id || processing || !hasValidPeriodSelection}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[11px] font-bold text-white hover:bg-slate-800 disabled:opacity-60"
+                    className="inline-flex h-7 items-center gap-1.5 rounded bg-slate-800 px-2.5 text-[11px] font-bold text-white hover:bg-slate-900 disabled:opacity-50"
                   >
-                    <FaFileAlt />
+                    <FaFileAlt size={10} />
                     {processing ? "Processing..." : "Process Statement"}
                   </button>
                 </div>
@@ -1367,66 +1468,95 @@ const Statements = () => {
           </div>
 
           {!selectedPropertyId ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-sm text-slate-500 shadow-sm">
-              Select a property to load the landlord statement workspace.
+            <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[#0B3B2E]/10">
+                <FaFileAlt className="text-[#0B3B2E]" size={18} />
+              </div>
+              <p className="text-sm font-semibold text-slate-700">Select a Property</p>
+              <p className="mt-1 text-xs text-slate-400">Choose a property above to load the landlord statement workspace.</p>
             </div>
           ) : !draftStatement ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-sm text-slate-500 shadow-sm">
-              {loadingDraft ? "Loading statement workspace..." : "No draft statement loaded for this selection."}
+            <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[#0B3B2E]/10">
+                <FaSyncAlt className={`text-[#0B3B2E] ${loadingDraft ? "animate-spin" : ""}`} size={18} />
+              </div>
+              <p className="text-sm font-semibold text-slate-700">{loadingDraft ? "Loading Statement..." : "No Statement Loaded"}</p>
+              <p className="mt-1 text-xs text-slate-400">{loadingDraft ? "Building workspace from ledger data..." : "Click Generate / Refresh to load the statement for this period."}</p>
             </div>
           ) : (
             <>
               {activeTab === "summary" ? (
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="border-b border-slate-200 px-6 py-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <div className="border-b border-[#0a3228] bg-[#0B3B2E] px-5 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-lg font-semibold text-slate-900">Statement Summary</h3>
-                        <p className="mt-1 text-sm text-slate-500">
-                          This preview now uses the same stored statement summary as the PDF output.
-                        </p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-green-200/60">Landlord Statement · Summary</p>
+                        <h3 className="mt-0.5 text-sm font-bold text-white">
+                          {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Summary"}
+                          {landlord ? <span className="ml-2 text-xs font-normal text-green-100/60">· {landlord.name || landlord.fullName || ""}</span> : null}
+                        </h3>
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Statement Period</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900">{statementPeriodLabel}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="rounded border border-white/20 bg-white/10 px-3 py-1.5 text-right">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-green-200/60">Period</p>
+                          <p className="text-xs font-bold text-white">{statementPeriodLabel}</p>
+                        </div>
+                        <div className="rounded border border-white/20 bg-white/10 px-3 py-1.5 text-right">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-green-200/60">Type</p>
+                          <p className="text-xs font-bold capitalize text-white">{statementType}</p>
+                        </div>
+                        {draftStatement?.status && (
+                          <span className={`rounded border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                            draftStatement.status === "approved"
+                              ? "border-emerald-300/40 bg-emerald-500/25 text-emerald-100"
+                              : "border-amber-300/40 bg-amber-500/25 text-amber-100"
+                          }`}>
+                            {draftStatement.status}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 px-6 py-5 md:grid-cols-2 xl:grid-cols-5">
-                    <div className="rounded-xl bg-slate-50 p-4">
-                      <p className="text-sm text-slate-500">Opening Balance</p>
-                      <p className="mt-2 text-lg font-semibold text-slate-900">{currency(summary.openingBalance)}</p>
+                  <div className="flex-shrink-0 grid grid-cols-2 gap-px bg-slate-100 md:grid-cols-3 xl:grid-cols-5">
+                    <div className="bg-white px-4 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Opening Balance</p>
+                      <p className="mt-1 text-sm font-bold text-slate-900">{currency(summary.openingBalance)}</p>
                     </div>
-                    <div className="rounded-xl bg-slate-50 p-4">
-                      <p className="text-sm text-slate-500">Closing Balance</p>
-                      <p className="mt-2 text-lg font-semibold text-slate-900">{currency(summary.closingBalance)}</p>
+                    <div className="bg-white px-4 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Closing Balance</p>
+                      <p className="mt-1 text-sm font-bold text-slate-900">{currency(summary.closingBalance)}</p>
                     </div>
-                    <div className="rounded-xl bg-slate-50 p-4">
-                      <p className="text-sm text-slate-500">Occupied Units</p>
-                      <p className="mt-2 text-lg font-semibold text-slate-900">{Number(summary.occupiedUnits || 0)}</p>
+                    <div className="bg-white px-4 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Occupied Units</p>
+                      <p className="mt-1 text-sm font-bold text-slate-900">{Number(summary.occupiedUnits || 0)}</p>
                     </div>
-                    <div className="rounded-xl bg-amber-50 p-4">
-                      <p className="text-sm text-amber-700">Unapplied Tenant Credits</p>
-                      <p className="mt-2 text-lg font-semibold text-amber-800">{currency(summary.unappliedPayments || 0)}</p>
+                    <div className="bg-amber-50 px-4 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600">Unapplied Credits</p>
+                      <p className="mt-1 text-sm font-bold text-amber-800">{currency(summary.unappliedPayments || 0)}</p>
                     </div>
-                    <div className={`rounded-xl p-4 ${settlement.isNegative ? "bg-red-50" : "bg-slate-900 text-white"}`}>
-                      <p className={`text-sm ${settlement.isNegative ? "text-red-600" : "text-slate-200"}`}>{settlement.label}</p>
-                      <p className={`mt-2 text-lg font-semibold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</p>
+                    <div className={`px-4 py-3 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wide ${settlement.isNegative ? "text-red-500" : "text-green-200/70"}`}>{settlement.label}</p>
+                      <p className={`mt-1 text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</p>
                     </div>
                   </div>
+
+                  <div className="flex-1 min-h-0 overflow-y-auto">
                   {Number(summary.unappliedPayments || 0) > 0 && (
-                    <div className="px-6 pb-2">
+                    <div className="px-6 pb-2 pt-3">
                       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                         Unapplied tenant credits are being carried separately from allocated rent and utility receipts. They reduce the tenant net position but do not count as paid in the landlord statement until they are allocated to actual bills.
                       </div>
                     </div>
                   )}
 
-                  <div className="px-6 pb-6">
-                    <div className="overflow-hidden rounded-2xl border border-slate-200">
-                      <table className="min-w-full divide-y divide-slate-200 text-sm">
-                        <tbody className="divide-y divide-slate-200 bg-white">
+                  <div className="px-5 pb-5 pt-4">
+                    <div className="overflow-hidden rounded-lg border border-slate-200">
+                      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Settlement Breakdown</p>
+                      </div>
+                      <table className="min-w-full divide-y divide-slate-100 text-sm">
+                        <tbody className="divide-y divide-slate-100 bg-white">
                           <tr>
                             <td className="px-4 py-3 font-semibold text-slate-700">Opening landlord settlement B/F</td>
                             <td className={`px-4 py-3 text-right font-medium ${openingLandlordSettlementBalance < 0 ? "text-red-700" : "text-slate-900"}`}>
@@ -1471,33 +1601,62 @@ const Statements = () => {
                             <td className="px-4 py-3 font-semibold text-slate-700">Direct to landlord collections</td>
                             <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(directToLandlordAmount)}</td>
                           </tr>
-                          <tr className={settlement.isNegative ? "bg-red-50" : "bg-slate-900 text-white"}>
-                            <td className={`px-4 py-4 text-base font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{settlement.label}</td>
-                            <td className={`px-4 py-4 text-right text-base font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</td>
+                          {Number(summary?.totalEarlyPayouts || 0) > 0 && (
+                            <tr>
+                              <td className="px-4 py-3 font-semibold text-slate-700">Early payout already paid to landlord</td>
+                              <td className="px-4 py-3 text-right font-medium text-amber-700">({currency(Number(summary?.totalEarlyPayouts || 0))})</td>
+                            </tr>
+                          )}
+                          {Number(summary?.totalAdvanceRecoveries || 0) > 0 && (
+                            <tr>
+                              <td className="px-4 py-3 font-semibold text-slate-700">Advance recovery deduction</td>
+                              <td className="px-4 py-3 text-right font-medium text-red-700">({currency(Number(summary?.totalAdvanceRecoveries || 0))})</td>
+                            </tr>
+                          )}
+                          <tr className={settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}>
+                            <td className={`px-4 py-3.5 text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{settlement.label}</td>
+                            <td className={`px-4 py-3.5 text-right text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</td>
                           </tr>
                         </tbody>
                       </table>
                     </div>
                   </div>
+                  </div>{/* end scroll wrapper */}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="border-b border-slate-200 px-6 py-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <h3 className="text-lg font-semibold text-slate-900">Statement Workspace Preview</h3>
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Statement Period</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900">{statementPeriodLabel}</p>
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-2 border-b border-[#0a3228] bg-[#0B3B2E] px-5 py-2.5">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-green-200/60">Workspace Preview</p>
+                      <h3 className="mt-0.5 text-sm font-bold text-white">
+                        {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Workspace"}
+                        {landlord ? <span className="ml-2 text-xs font-normal text-green-100/60">· {landlord.name || landlord.fullName || ""}</span> : null}
+                      </h3>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="rounded border border-white/20 bg-white/10 px-3 py-1 text-right">
+                        <p className="text-[10px] font-bold text-white">{statementPeriodLabel}</p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setCollapseAdditionalUnitRows(!collapseAdditionalUnitRows)}
+                        className={`rounded border px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                          collapseAdditionalUnitRows
+                            ? "border-green-300/50 bg-green-600/40 text-white"
+                            : "border-white/20 bg-white/10 text-green-100 hover:bg-white/20"
+                        }`}
+                      >
+                        {collapseAdditionalUnitRows ? "Collapse: ON" : "Collapse Multi-Unit"}
+                      </button>
                     </div>
                   </div>
 
-                  <div className="overflow-auto rounded-b-2xl">
+                  <div className="flex-1 min-h-0 overflow-auto">
                     <table className="min-w-[1400px] w-full divide-y divide-slate-200 text-sm whitespace-nowrap">
-                      <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                      <thead className="sticky top-0 z-20 bg-[#0B3B2E] text-white">
                         <tr>
-                          <th className="sticky left-0 z-20 bg-[#0B3B2E] px-4 py-3 text-left font-semibold text-white">Unit</th>
-                          <th className="sticky left-[120px] z-20 bg-[#0B3B2E] px-4 py-3 text-left font-semibold text-white">Tenant</th>
+                          <th className="sticky left-0 z-30 bg-[#0B3B2E] px-4 py-3 text-left font-semibold text-white">Unit</th>
+                          <th className="sticky left-[120px] z-30 bg-[#0B3B2E] px-4 py-3 text-left font-semibold text-white">Tenant</th>
                           <th className="px-4 py-3 text-right font-semibold text-white">Balance B/F</th>
                           <th className="px-4 py-3 text-right font-semibold text-white">Rent Invoiced</th>
                           {hasInvoiceVatColumn && (
@@ -1531,13 +1690,13 @@ const Statements = () => {
                         ) : (
                           statementDisplayRows.map((row, index) => (
                             <tr key={`${row.unitId || row.unitNumber || "row"}-${index}`}>
-                              <td className="sticky left-0 z-10 bg-white px-4 py-3 text-slate-700">
+                              <td className="sticky left-0 z-10 bg-white px-4 py-3 text-slate-700 shadow-[1px_0_0_0_#e2e8f0]">
                                 <div className="font-medium text-slate-900">{row.displayUnitLabel || row.unit || row.unitNumber || "-"}</div>
                                 {Array.isArray(row.allUnitLabels) && row.allUnitLabels.length > 1 ? (
                                   <div className="text-[11px] text-slate-500">{row.allUnitLabels.join(", ")}</div>
                                 ) : null}
                               </td>
-                              <td className="sticky left-[120px] z-10 bg-white px-4 py-3 text-slate-700">
+                              <td className="sticky left-[120px] z-10 bg-white px-4 py-3 text-slate-700 shadow-[1px_0_0_0_#e2e8f0]">
                                 <div className="font-medium text-slate-900">{row.tenantName || "-"}</div>
                                 {Number(row.multiUnitCount || 1) > 1 ? (
                                   <div className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
@@ -1593,13 +1752,12 @@ const Statements = () => {
                         ) : null}
                       </tbody>
                     </table>
-                  </div>
 
                   {hasWorkspaceDetailSections && (
-                    <div className="space-y-6 border-t border-slate-200 px-6 py-5">
+                    <div className="space-y-5 border-t border-slate-200 px-5 py-4">
                       {depositSettlementRows.length > 0 && (
                         <div>
-                          <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                          <h4 className="mb-3 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
                             Deposit Remittance
                           </h4>
                           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1654,7 +1812,7 @@ const Statements = () => {
 
                       {broughtForwardCreditApplicationRows.length > 0 && (
                         <div>
-                          <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                          <h4 className="mb-3 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
                             Brought Forward Credits Applied
                           </h4>
                           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1716,7 +1874,7 @@ const Statements = () => {
 
                       {depositMemoRows.length > 0 && (
                         <div>
-                          <h4 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
                             Deposit Memorandum
                           </h4>
                           <p className="mb-3 text-xs text-slate-500">
@@ -1758,14 +1916,14 @@ const Statements = () => {
 
                       {nonDepositExpenseRows.length > 0 && (
                         <div>
-                          <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
                             Deductions / Expenses
                           </h4>
-                          <div className="space-y-2">
+                          <div className="overflow-hidden rounded-lg border border-slate-200">
                             {nonDepositExpenseRows.map((item, index) => (
-                              <div key={`expense-${index}`} className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
-                                <span className="text-slate-700">{item.description || item.name || "Expense"}</span>
-                                <span className="font-medium text-slate-900">{currency(item.amount)}</span>
+                              <div key={`expense-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2 last:border-0 odd:bg-white even:bg-slate-50/60">
+                                <span className="text-xs text-slate-700">{item.description || item.name || "Expense"}</span>
+                                <span className="text-xs font-semibold text-slate-900">{currency(item.amount)}</span>
                               </div>
                             ))}
                           </div>
@@ -1774,32 +1932,80 @@ const Statements = () => {
 
                       {nonDepositAdditionRows.length > 0 && (
                         <div>
-                          <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
                             Additions
                           </h4>
-                          <div className="space-y-2">
+                          <div className="overflow-hidden rounded-lg border border-slate-200">
                             {nonDepositAdditionRows.map((item, index) => (
-                              <div key={`addition-${index}`} className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
-                                <span className="text-slate-700">{item.description || item.name || "Addition"}</span>
-                                <span className="font-medium text-slate-900">{currency(item.amount)}</span>
+                              <div key={`addition-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2 last:border-0 odd:bg-white even:bg-slate-50/60">
+                                <span className="text-xs text-slate-700">{item.description || item.name || "Addition"}</span>
+                                <span className="text-xs font-semibold text-emerald-700">{currency(item.amount)}</span>
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
 
+                      {earlyPayoutRows.length > 0 && (
+                        <div>
+                          <h4 className="mb-2 border-l-2 border-amber-500 pl-2 text-xs font-bold uppercase tracking-wide text-amber-700">
+                            Early Payouts to Landlord
+                          </h4>
+                          <p className="mb-2 text-xs text-slate-500">Advances already paid to the landlord against future remittances. Deducted from the settlement.</p>
+                          <div className="overflow-hidden rounded-lg border border-amber-200">
+                            {earlyPayoutRows.map((item, index) => (
+                              <div key={`early-payout-${index}`} className="flex items-center justify-between border-b border-amber-100 px-4 py-2 last:border-0 odd:bg-white even:bg-amber-50/40">
+                                <div>
+                                  <span className="text-xs text-slate-700">{item.description || "Early payout"}</span>
+                                  {item.date && <span className="ml-2 text-[10px] text-slate-400">{new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>}
+                                </div>
+                                <span className="text-xs font-semibold text-amber-700">({currency(item.amount)})</span>
+                              </div>
+                            ))}
+                            <div className="flex items-center justify-between border-t border-amber-200 bg-amber-50 px-4 py-2">
+                              <span className="text-xs font-bold text-amber-800">Total early payouts</span>
+                              <span className="text-xs font-bold text-amber-800">({currency(earlyPayoutRows.reduce((s, r) => s + Number(r.amount || 0), 0))})</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {advanceRecoveryRows.length > 0 && (
+                        <div>
+                          <h4 className="mb-2 border-l-2 border-red-500 pl-2 text-xs font-bold uppercase tracking-wide text-red-700">
+                            Advance Recoveries
+                          </h4>
+                          <p className="mb-2 text-xs text-slate-500">Landlord advances being recovered through this statement period.</p>
+                          <div className="overflow-hidden rounded-lg border border-red-200">
+                            {advanceRecoveryRows.map((item, index) => (
+                              <div key={`advance-recovery-${index}`} className="flex items-center justify-between border-b border-red-100 px-4 py-2 last:border-0 odd:bg-white even:bg-red-50/40">
+                                <div>
+                                  <span className="text-xs text-slate-700">{item.description || "Advance recovery"}</span>
+                                  {item.date && <span className="ml-2 text-[10px] text-slate-400">{new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>}
+                                </div>
+                                <span className="text-xs font-semibold text-red-700">({currency(item.amount)})</span>
+                              </div>
+                            ))}
+                            <div className="flex items-center justify-between border-t border-red-200 bg-red-50 px-4 py-2">
+                              <span className="text-xs font-bold text-red-800">Total advance recoveries</span>
+                              <span className="text-xs font-bold text-red-800">({currency(advanceRecoveryRows.reduce((s, r) => s + Number(r.amount || 0), 0))})</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {directToLandlordRows.length > 0 && (
                         <div>
-                          <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
                             Direct to Landlord Receipts
                           </h4>
-                          <div className="space-y-2">
+                          <div className="overflow-hidden rounded-lg border border-slate-200">
                             {directToLandlordRows.map((item, index) => (
-                              <div key={`direct-${index}`} className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
-                                <span className="text-slate-700">
+                              <div key={`direct-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2 last:border-0 odd:bg-white even:bg-slate-50/60">
+                                <span className="text-xs text-slate-700">
                                   {item.description || item.referenceNumber || item.receiptNumber || "Direct receipt"}
                                 </span>
-                                <span className="font-medium text-slate-900">{currency(item.amount)}</span>
+                                <span className="text-xs font-semibold text-slate-900">{currency(item.amount)}</span>
                               </div>
                             ))}
                           </div>
@@ -1807,36 +2013,33 @@ const Statements = () => {
                       )}
                     </div>
                   )}
+                  </div>{/* end scroll area */}
 
-                  <div className="border-t border-slate-200 px-6 py-5">
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      <div className="rounded-xl bg-slate-50 p-4">
-                        <p className="text-sm text-slate-500">Rent Paid</p>
-                        <p className="mt-2 text-lg font-semibold text-slate-900">{currency(totals.rentPaid)}</p>
-                      </div>
-                      <div className="rounded-xl bg-slate-50 p-4">
-                        <p className="text-sm text-slate-500">Utilities Paid</p>
-                        <p className="mt-2 text-lg font-semibold text-slate-900">{currency(totals.utilityPaid)}</p>
-                        {hasInvoiceVatColumn ? (
-                          <p className="mt-1 text-xs text-slate-500">Invoice VAT received: {currency(totalInvoiceVatReceived)}</p>
-                        ) : null}
-                      </div>
-                      <div className="rounded-xl bg-slate-50 p-4">
-                        <p className="text-sm text-slate-500">Expenses</p>
-                        <p className="mt-2 text-lg font-semibold text-slate-900">{currency(totals.expenses)}</p>
-                      </div>
-                      <div className={`rounded-xl p-4 ${settlement.isNegative ? "bg-red-50" : "bg-slate-900 text-white"}`}>
-                        <p className={`text-sm ${settlement.isNegative ? "text-red-600" : "text-slate-200"}`}>{settlement.label}</p>
-                        <p className={`mt-2 text-lg font-semibold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</p>
-                      </div>
+                  <div className="flex-shrink-0 grid grid-cols-2 gap-px border-t border-slate-200 bg-slate-100 md:grid-cols-4">
+                    <div className="bg-white px-4 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Rent Paid</p>
+                      <p className="mt-1 text-sm font-bold text-slate-900">{currency(totals.rentPaid)}</p>
+                    </div>
+                    <div className="bg-white px-4 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Utilities Paid</p>
+                      <p className="mt-1 text-sm font-bold text-slate-900">{currency(totals.utilityPaid)}</p>
+                      {hasInvoiceVatColumn ? (
+                        <p className="mt-0.5 text-[10px] text-slate-400">VAT: {currency(totalInvoiceVatReceived)}</p>
+                      ) : null}
+                    </div>
+                    <div className="bg-white px-4 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Expenses</p>
+                      <p className="mt-1 text-sm font-bold text-slate-900">{currency(totals.expenses)}</p>
+                    </div>
+                    <div className={`px-4 py-3 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wide ${settlement.isNegative ? "text-red-500" : "text-green-200/70"}`}>{settlement.label}</p>
+                      <p className={`mt-1 text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</p>
                     </div>
                   </div>
                 </div>
               )}
             </>
           )}
-        </div>
-
       </div>
     </DashboardLayout>
   );

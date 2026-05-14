@@ -1659,8 +1659,8 @@ const visibleReceiptIds = useMemo(
   }, []);
 
   return (
-    <DashboardLayout>
-      <div className="h-[calc(100dvh-152px)] max-h-[calc(100dvh-152px)] overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="sticky top-0 z-30 mb-2 shrink-0 rounded-lg border border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
             <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
@@ -2038,7 +2038,7 @@ const visibleReceiptIds = useMemo(
                 </tbody>
               </table>
             </div>
-            <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
+            <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-700">
               <p>
                 <span className="font-semibold">Showing:</span> {filteredReceipts.length === 0 ? 0 : startIndex + 1}
                 {" - "}

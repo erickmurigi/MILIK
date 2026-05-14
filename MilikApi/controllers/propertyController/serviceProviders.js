@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { escapeRegex } from "../../utils/escapeRegex.js";
 import ServiceProvider from "../../models/ServiceProvider.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
@@ -61,7 +62,7 @@ export const getServiceProviders = async (req, res, next) => {
     const filter = { business: businessId };
     if (req.query?.active === "true") filter.isActive = true;
     if (req.query?.active === "false") filter.isActive = false;
-    const searchTerm = String(req.query?.search || "").trim();
+    const searchTerm = escapeRegex(String(req.query?.search || "").trim());
     const nameFilter = String(req.query?.name || "").trim();
     const categoryFilter = String(req.query?.category || "").trim();
 

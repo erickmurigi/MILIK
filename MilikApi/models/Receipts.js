@@ -32,5 +32,10 @@ const ReceiptSchema = new mongoose.Schema(
 
 ReceiptSchema.index({ business: 1, receiptNumber: 1 }, { unique: true, sparse: true });
 ReceiptSchema.index({ business: 1, referenceNumber: 1 }, { sparse: true });
+ReceiptSchema.index({ business: 1, tenant: 1, receiptDate: -1 });
+ReceiptSchema.index({ business: 1, unit: 1, receiptDate: -1 });
+ReceiptSchema.index({ business: 1, isConfirmed: 1, receiptDate: -1 });
+ReceiptSchema.index({ business: 1, property: 1, receiptDate: -1 });
+ReceiptSchema.index({ business: 1, paymentType: 1, receiptDate: -1 });
 
 export default mongoose.model("Receipt", ReceiptSchema);

@@ -7,6 +7,7 @@ import RentPayment from "../../models/RentPayment.js";
 import { computeTenantInvoiceSnapshotsBatch } from "./tenantInvoices.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import { computeAccountBalance, getNormalBalanceSide } from "../../services/accountingClassificationService.js";
+import { escapeRegex } from "../../utils/escapeRegex.js";
 
 const toObjectId = (value) => {
   const raw = typeof value === "object" && value?._id ? value._id : value;
@@ -125,7 +126,6 @@ const isManagerExpenseAccount = (account = {}) => {
 const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, endDate = null }) => {
   const match = {
     business: businessId,
-    accountId: { $ne: null },
     status: { $in: REPORT_LEDGER_STATUSES },
   };
 
@@ -136,22 +136,47 @@ const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, e
     if (asOfDate) match.transactionDate.$lte = asOfDate;
   }
 
-  const entries = await FinancialLedgerEntry.find(match)
-    .select("accountId debit credit amount direction")
-    .lean();
+  // Aggregate in MongoDB — avoids transferring every entry document to Node.js.
+  // Mirrors the getEntryAmount + debit/credit fallback logic for legacy entries
+  // that stored amount+direction instead of explicit debit/credit fields.
+  const debitExpr = {
+    $cond: [
+      { $gt: ["$debit", 0] },
+      "$debit",
+      {
+        $cond: [
+          { $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] },
+          { $ifNull: ["$amount", 0] },
+          0,
+        ],
+      },
+    ],
+  };
+  const creditExpr = {
+    $cond: [
+      { $gt: ["$credit", 0] },
+      "$credit",
+      {
+        $cond: [
+          { $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] },
+          { $ifNull: ["$amount", 0] },
+          0,
+        ],
+      },
+    ],
+  };
+
+  const results = await FinancialLedgerEntry.aggregate([
+    { $match: match },
+    { $group: { _id: "$accountId", debit: { $sum: debitExpr }, credit: { $sum: creditExpr } } },
+  ]);
 
   const map = new Map();
-  for (const entry of entries) {
-    const key = String(entry.accountId);
-    const current = map.get(key) || { debit: 0, credit: 0 };
-    const amount = getEntryAmount(entry);
-    const debit = Number(entry.debit || 0) || (String(entry.direction).toLowerCase() === "debit" ? amount : 0);
-    const credit = Number(entry.credit || 0) || (String(entry.direction).toLowerCase() === "credit" ? amount : 0);
-    current.debit += debit;
-    current.credit += credit;
-    map.set(key, current);
+  for (const row of results) {
+    if (row._id != null) {
+      map.set(String(row._id), { debit: row.debit || 0, credit: row.credit || 0 });
+    }
   }
-
   return map;
 };
 
@@ -263,17 +288,12 @@ export const getTrialBalanceReport = async (req, res, next) => {
       return res.status(400).json({ success: false, error: "Invalid as-of date supplied." });
     }
 
-    await ensureSystemChartOfAccounts(businessId);
-
-    const accounts = await ChartOfAccount.find({
-      business: businessId,
-      isPosting: { $ne: false },
-      isHeader: { $ne: true },
-    })
-      .sort({ code: 1 })
-      .lean();
-
-    const ledgerMap = await buildLedgerMap({ businessId, asOfDate });
+    const [accounts, ledgerMap] = await Promise.all([
+      ChartOfAccount.find({ business: businessId, isPosting: { $ne: false }, isHeader: { $ne: true } })
+        .sort({ code: 1 })
+        .lean(),
+      buildLedgerMap({ businessId, asOfDate }),
+    ]);
 
     const rows = accounts
       .map((account) => {
@@ -341,18 +361,17 @@ export const getIncomeStatementReport = async (req, res, next) => {
       return res.status(400).json({ success: false, error: "Start date cannot be after end date." });
     }
 
-    await ensureSystemChartOfAccounts(businessId);
-
-    const accounts = await ChartOfAccount.find({
-      business: businessId,
-      isPosting: { $ne: false },
-      isHeader: { $ne: true },
-      type: { $in: ["income", "expense"] },
-    })
-      .sort({ code: 1 })
-      .lean();
-
-    const ledgerMap = await buildLedgerMap({ businessId, startDate, endDate });
+    const [accounts, ledgerMap] = await Promise.all([
+      ChartOfAccount.find({
+        business: businessId,
+        isPosting: { $ne: false },
+        isHeader: { $ne: true },
+        type: { $in: ["income", "expense"] },
+      })
+        .sort({ code: 1 })
+        .lean(),
+      buildLedgerMap({ businessId, startDate, endDate }),
+    ]);
 
     const incomeRows = [];
     const expenseRows = [];
@@ -436,18 +455,17 @@ export const getBalanceSheetReport = async (req, res, next) => {
       return res.status(400).json({ success: false, error: "Invalid as-of date supplied." });
     }
 
-    await ensureSystemChartOfAccounts(businessId);
-
-    const accounts = await ChartOfAccount.find({
-      business: businessId,
-      isPosting: { $ne: false },
-      isHeader: { $ne: true },
-      type: { $in: ["asset", "liability", "equity", "income", "expense"] },
-    })
-      .sort({ code: 1 })
-      .lean();
-
-    const ledgerMap = await buildLedgerMap({ businessId, asOfDate });
+    const [accounts, ledgerMap] = await Promise.all([
+      ChartOfAccount.find({
+        business: businessId,
+        isPosting: { $ne: false },
+        isHeader: { $ne: true },
+        type: { $in: ["asset", "liability", "equity", "income", "expense"] },
+      })
+        .sort({ code: 1 })
+        .lean(),
+      buildLedgerMap({ businessId, asOfDate }),
+    ]);
 
     const assetRows = [];
     const liabilityRows = [];
@@ -693,23 +711,49 @@ export const getRentalCollectionReport = async (req, res, next) => {
     if (req.query.tenantId) paymentQuery.tenant = toObjectId(req.query.tenantId);
     if (req.query.unitId) paymentQuery.unit = toObjectId(req.query.unitId);
     if (req.query.paymentMethod) paymentQuery.paymentMethod = req.query.paymentMethod;
+    // Push property filter to DB — RentPayment has a direct property field
+    if (req.query.propertyId) paymentQuery.property = toObjectId(req.query.propertyId);
+    if (req.query.cashbook) paymentQuery.cashbook = { $regex: escapeRegex(req.query.cashbook), $options: "i" };
 
-    const receipts = await RentPayment.find(paymentQuery)
-      .populate("tenant", "name tenantName")
-      .populate({
-        path: "unit",
-        select: "unitNumber name property",
-        populate: { path: "property", select: "propertyName name landlords" },
-      })
-      .sort({ paymentDate: -1, createdAt: -1 })
-      .lean();
+    const invoiceQuery = {
+      business: businessId,
+      category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"] },
+      status: { $nin: ["cancelled", "reversed"] },
+      $or: [
+        { bookingDate: { $gte: startDate, $lte: endDate } },
+        {
+          $or: [{ bookingDate: { $exists: false } }, { bookingDate: null }],
+          invoiceDate: { $gte: startDate, $lte: endDate },
+        },
+      ],
+    };
+    if (req.query.propertyId) invoiceQuery.property = toObjectId(req.query.propertyId);
+    if (req.query.tenantId) invoiceQuery.tenant = toObjectId(req.query.tenantId);
+    if (req.query.unitId) invoiceQuery.unit = toObjectId(req.query.unitId);
+    if (req.query.landlordId) invoiceQuery.landlord = toObjectId(req.query.landlordId);
+
+    // Run payment fetch and invoice aggregate in parallel — they are independent queries.
+    const [receipts, periodInvoiced] = await Promise.all([
+      RentPayment.find(paymentQuery)
+        .populate("tenant", "name tenantName")
+        .populate({
+          path: "unit",
+          select: "unitNumber name property",
+          populate: { path: "property", select: "propertyName name landlords" },
+        })
+        .sort({ paymentDate: -1, createdAt: -1 })
+        .lean(),
+      TenantInvoice.aggregate([
+        { $match: invoiceQuery },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+    ]);
 
     const filteredRows = receipts
       .map(buildReceiptRow)
       .filter((row) => {
-        if (req.query.propertyId && String(row.propertyId) !== String(req.query.propertyId)) return false;
+        // landlordId cannot be pushed to DB (derived from property.landlords array)
         if (req.query.landlordId && String(row.landlordId) !== String(req.query.landlordId)) return false;
-        if (req.query.cashbook && !matchesText(row.cashbook, req.query.cashbook)) return false;
         return true;
       });
 
@@ -770,28 +814,6 @@ export const getRentalCollectionReport = async (req, res, next) => {
       propertySummaryMap.set(key, bucket);
     });
 
-    const invoiceQuery = {
-      business: businessId,
-      category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"] },
-      status: { $nin: ["cancelled", "reversed"] },
-      $or: [
-        { bookingDate: { $gte: startDate, $lte: endDate } },
-        {
-          $or: [{ bookingDate: { $exists: false } }, { bookingDate: null }],
-          invoiceDate: { $gte: startDate, $lte: endDate },
-        },
-      ],
-    };
-    if (req.query.propertyId) invoiceQuery.property = toObjectId(req.query.propertyId);
-    if (req.query.tenantId) invoiceQuery.tenant = toObjectId(req.query.tenantId);
-    if (req.query.unitId) invoiceQuery.unit = toObjectId(req.query.unitId);
-    if (req.query.landlordId) invoiceQuery.landlord = toObjectId(req.query.landlordId);
-
-    const periodInvoiced = await TenantInvoice.aggregate([
-      { $match: invoiceQuery },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]);
-
     summary.totalCollected = round2(summary.totalCollected);
     summary.allocatedAmount = round2(summary.allocatedAmount);
     summary.unappliedAmount = round2(summary.unappliedAmount);
@@ -803,6 +825,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
     summary.propertyCount = propertySet.size;
     summary.tenantCount = tenantSet.size;
     summary.periodInvoiced = round2(periodInvoiced?.[0]?.total || 0);
+
     summary.collectionRate = summary.periodInvoiced > 0 ? round2((summary.totalCollected / summary.periodInvoiced) * 100) : null;
 
     const byProperty = Array.from(propertySummaryMap.values())

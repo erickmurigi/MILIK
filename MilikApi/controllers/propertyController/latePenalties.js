@@ -763,18 +763,25 @@ export const processLatePenalties = async (req, res) => {
       items: [],
     });
 
+    // Batch duplicate check — one query instead of one per row.
+    const sourceIds = rowsToProcess.map((r) => String(r.sourceInvoiceId));
+    const existingPenalties = await TenantInvoice.find({
+      business: businessId,
+      category: "LATE_PENALTY_CHARGE",
+      status: { $nin: ["cancelled", "reversed"] },
+      "metadata.penaltyRuleId": String(rule._id),
+      "metadata.penaltySourceInvoiceId": { $in: sourceIds },
+      "metadata.penaltyPeriodKey": periodKey,
+    })
+      .select("_id invoiceNumber metadata.penaltySourceInvoiceId")
+      .lean();
+    const duplicateMap = new Map(
+      existingPenalties.map((inv) => [String(inv.metadata?.penaltySourceInvoiceId || ""), inv])
+    );
+
     const results = [];
     for (const row of rowsToProcess) {
-      const duplicate = await TenantInvoice.findOne({
-        business: businessId,
-        category: "LATE_PENALTY_CHARGE",
-        status: { $nin: ["cancelled", "reversed"] },
-        "metadata.penaltyRuleId": String(rule._id),
-        "metadata.penaltySourceInvoiceId": String(row.sourceInvoiceId),
-        "metadata.penaltyPeriodKey": periodKey,
-      })
-        .select("_id invoiceNumber")
-        .lean();
+      const duplicate = duplicateMap.get(String(row.sourceInvoiceId));
 
       if (duplicate?._id) {
         results.push({ ...row, status: "duplicate", reason: `Duplicate already exists (${duplicate.invoiceNumber})`, penaltyInvoiceId: String(duplicate._id), invoiced: true });
@@ -879,10 +886,43 @@ export const getLatePenaltyBatches = async (req, res) => {
       .sort({ runDate: -1, createdAt: -1 })
       .lean();
 
-    const hydratedRows = [];
-    for (const row of rows) {
-      hydratedRows.push(await hydrateBatchDeleteReadiness(businessId, row));
-    }
+    // Batch-check invoice statuses across all batches — one query instead of one per batch
+    const allLinkedInvoiceIds = [
+      ...new Set(
+        rows.flatMap((row) =>
+          (Array.isArray(row.items) ? row.items : [])
+            .map((item) => item?.penaltyInvoice?._id || item?.penaltyInvoice || null)
+            .filter((id) => isValidObjectId(id))
+            .map(String)
+        )
+      ),
+    ];
+    const allLinkedInvoices = allLinkedInvoiceIds.length
+      ? await TenantInvoice.find({ business: businessId, _id: { $in: allLinkedInvoiceIds } })
+          .select("_id invoiceNumber status")
+          .lean()
+      : [];
+    const invoiceStatusMap = new Map(allLinkedInvoices.map((inv) => [String(inv._id), inv]));
+
+    const hydratedRows = rows.map((row) => {
+      const deleteBlockers = [];
+      for (const item of (Array.isArray(row.items) ? row.items : [])) {
+        const penaltyInvoiceId = item?.penaltyInvoice?._id || item?.penaltyInvoice || null;
+        if (!isValidObjectId(penaltyInvoiceId)) continue;
+        const invoice = invoiceStatusMap.get(String(penaltyInvoiceId));
+        if (!invoice) continue;
+        const normalizedStatus = String(invoice?.status || "").toLowerCase();
+        if (ACTIVE_PENALTY_INVOICE_STATUSES.has(normalizedStatus)) {
+          deleteBlockers.push({
+            itemId: String(item?._id || ""),
+            invoiceId: String(invoice._id),
+            invoiceNumber: invoice.invoiceNumber || "Penalty invoice",
+            status: normalizedStatus,
+          });
+        }
+      }
+      return { ...row, canDeleteBatch: deleteBlockers.length === 0, deleteBlockers };
+    });
 
     return res.status(200).json({ batches: hydratedRows });
   } catch (error) {
@@ -958,12 +998,47 @@ export const reverseLatePenalty = async (req, res) => {
       fallbackUserId: req.user?.id || req.user?._id,
     });
 
+    // Pre-load all matching batches and penalty invoices in two queries
+    const validItemIds = requestedItemIds.filter(isValidObjectId);
+    const batchDocs = validItemIds.length
+      ? await LatePenaltyBatch.find({ business: businessId, "items._id": { $in: validItemIds } })
+      : [];
+    const batchByItemId = new Map();
+    for (const batchDoc of batchDocs) {
+      for (const it of (batchDoc.items || [])) {
+        batchByItemId.set(String(it._id), { batch: batchDoc, item: it });
+      }
+    }
+    const preloadedInvoiceIds = [
+      ...new Set(
+        batchDocs
+          .flatMap((b) => b.items || [])
+          .filter((it) => validItemIds.includes(String(it._id)))
+          .map((it) => it?.penaltyInvoice?._id || it?.penaltyInvoice || null)
+          .filter(isValidObjectId)
+          .map(String)
+      ),
+    ];
+    const preloadedInvoices = preloadedInvoiceIds.length
+      ? await TenantInvoice.find({ business: businessId, _id: { $in: preloadedInvoiceIds } })
+      : [];
+    const invoiceByIdMap = new Map(preloadedInvoices.map((inv) => [String(inv._id), inv]));
+
     const results = [];
     const touchedAccountIds = new Set();
 
     for (const itemId of requestedItemIds) {
       try {
-        const { batch, item } = await findBatchAndItemOrThrow({ businessId, itemId });
+        if (!isValidObjectId(itemId)) {
+          results.push({ itemId: String(itemId), status: "failed", message: "Invalid late penalty item ID." });
+          continue;
+        }
+        const found = batchByItemId.get(String(itemId));
+        if (!found) {
+          results.push({ itemId: String(itemId), status: "failed", message: "Late penalty item not found." });
+          continue;
+        }
+        const { batch, item } = found;
 
         if (item?.isDeleted || String(item?.status || "").toLowerCase() === "deleted") {
           results.push({ itemId: String(item._id), status: "failed", message: "Deleted penalties cannot be reversed." });
@@ -975,7 +1050,10 @@ export const reverseLatePenalty = async (req, res) => {
           continue;
         }
 
-        const penaltyInvoice = await findPenaltyInvoice({ businessId, item });
+        const penaltyInvoiceId = item?.penaltyInvoice?._id || item?.penaltyInvoice || null;
+        const penaltyInvoice = (penaltyInvoiceId && isValidObjectId(penaltyInvoiceId))
+          ? (invoiceByIdMap.get(String(penaltyInvoiceId)) || await findPenaltyInvoice({ businessId, item }))
+          : null;
 
         if (penaltyInvoice) {
           const originalEntries = await getOriginalPenaltyLedgerEntries(penaltyInvoice);

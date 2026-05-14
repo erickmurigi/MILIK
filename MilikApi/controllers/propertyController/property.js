@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { escapeRegex } from "../../utils/escapeRegex.js";
 import Property from "../../models/Property.js";
 import Unit from "../../models/Unit.js";
 import Tenant from "../../models/Tenant.js";
@@ -114,21 +115,13 @@ const normalizeOptionalString = (value = "") =>
 const normalizeOptionalEmail = (value = "") => normalizeOptionalString(value).toLowerCase();
 
 const generateLandlordCode = async (companyId) => {
-  let code;
-  let exists = true;
-  let counter = 1;
-
-  while (exists) {
-    code = `LL${String(counter).padStart(3, "0")}`;
-    exists = await Landlord.findOne({ company: companyId, landlordCode: code }).lean();
-    counter += 1;
-
-    if (counter > 10000) {
-      throw new Error("Unable to generate unique landlord code for the company owner.");
-    }
-  }
-
-  return code;
+  const result = await Landlord.aggregate([
+    { $match: { company: new mongoose.Types.ObjectId(String(companyId)), landlordCode: { $regex: /^LL\d+$/ } } },
+    { $addFields: { codeNum: { $toInt: { $substr: ["$landlordCode", 2, -1] } } } },
+    { $group: { _id: null, maxNum: { $max: "$codeNum" } } },
+  ]);
+  const next = (result[0]?.maxNum ?? 0) + 1;
+  return `LL${String(next).padStart(3, "0")}`;
 };
 
 const getPropertyCompanyContext = async (businessId) => {
@@ -792,16 +785,23 @@ export const getProperties = async (req, res, next) => {
     const {
       page = 1,
       limit = 10,
-      search,
+      search: rawSearch,
       status,
-      zone,
-      category,
-      code,
-      name,
-      lrNumber,
+      zone: rawZone,
+      category: rawCategory,
+      code: rawCode,
+      name: rawName,
+      lrNumber: rawLrNumber,
       landlord,
-      location,
+      location: rawLocation,
     } = req.query;
+    const search = escapeRegex(rawSearch);
+    const location = escapeRegex(rawLocation);
+    const zone = escapeRegex(rawZone);
+    const category = escapeRegex(rawCategory);
+    const code = escapeRegex(rawCode);
+    const name = escapeRegex(rawName);
+    const lrNumber = escapeRegex(rawLrNumber);
 
     const businessId =
       req.user.isSystemAdmin && req.query.business
@@ -1463,7 +1463,7 @@ export const bulkImportProperties = async (req, res, next) => {
       .map((p) => String(p.landlordName || "").trim())
       .filter(Boolean);
     const landlordDocs = landlordLookupValues.length
-      ? await Landlord.find({ company: businessId }).select("_id landlordName landlordCode email phoneNumber")
+      ? await Landlord.find({ company: businessId }).select("_id landlordName landlordCode email phoneNumber status")
       : [];
     const landlordMap = new Map();
     landlordDocs.forEach((landlord) => {
@@ -1479,6 +1479,12 @@ export const bulkImportProperties = async (req, res, next) => {
 
     const seenCodesInBatch = new Set();
     const seenLRInBatch = new Set();
+
+    // For self-managing companies every property gets the same company-owner landlord — resolve once
+    let cachedSelfManagingAssignment = null;
+    if (isSelfManagingLandlordCompany(company)) {
+      cachedSelfManagingAssignment = await buildModeAwarePropertyAssignment({ company, businessId, req, requestedLandlords: [] });
+    }
 
     for (const property of normalizedProperties) {
       results.totalProcessed++;
@@ -1543,12 +1549,19 @@ export const bulkImportProperties = async (req, res, next) => {
               isPrimary: true,
             }]
           : [];
-        const modeAwareAssignment = await buildModeAwarePropertyAssignment({
-          company,
-          businessId,
-          req,
-          requestedLandlords,
-        });
+        let modeAwareAssignment;
+        if (isSelfManagingLandlordCompany(company)) {
+          modeAwareAssignment = cachedSelfManagingAssignment;
+        } else {
+          // Landlord already fetched and verified to belong to this business.
+          // Check archived status inline — avoids a per-property Landlord.find round-trip.
+          if (landlordDoc && String(landlordDoc.status || "").trim().toLowerCase() === "archived") {
+            throw new Error("Archived landlords cannot be linked to a property. Restore the landlord first.");
+          }
+          modeAwareAssignment = {
+            landlords: requestedLandlords.filter((l) => l.landlordId && mongoose.Types.ObjectId.isValid(String(l.landlordId))),
+          };
+        }
         const lettingMode = isLettingMode(property.letManage);
         const resolvedTenantsPaysTo = lettingMode
           ? "landlord"

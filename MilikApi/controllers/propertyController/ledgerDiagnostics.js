@@ -35,31 +35,40 @@ export const checkInvoiceLedgerEntries = async (req, res) => {
       .populate("unit", "unitNumber property")
       .lean();
 
-    const diagnostics = await Promise.all(
-      invoices.map(async (invoice) => {
-        const ledgerEntries = await FinancialLedgerEntry.find({
+    const invoiceIds = invoices.map((i) => String(i._id));
+    const allLedgerEntries = invoiceIds.length
+      ? await FinancialLedgerEntry.find({
           business: businessId,
           sourceTransactionType: "invoice",
-          sourceTransactionId: String(invoice._id),
+          sourceTransactionId: { $in: invoiceIds },
           status: { $ne: "void" },
-        }).lean();
+        }).lean()
+      : [];
 
-        return {
-          invoiceId: invoice._id,
-          invoiceNumber: invoice.invoiceNumber,
-          tenant: invoice.tenant?.name || "Unknown",
-          unit: invoice.unit?.unitNumber || "Unknown",
-          amount: invoice.amount,
-          category: invoice.category,
-          invoiceDate: invoice.invoiceDate,
-          dueDate: invoice.dueDate,
-          status: invoice.status,
-          ledgerCount: ledgerEntries.length,
-          hasLedgerEntry: ledgerEntries.length > 0,
-          ledgerEntries,
-        };
-      })
-    );
+    const ledgerByInvoiceId = new Map();
+    for (const entry of allLedgerEntries) {
+      const key = String(entry.sourceTransactionId);
+      if (!ledgerByInvoiceId.has(key)) ledgerByInvoiceId.set(key, []);
+      ledgerByInvoiceId.get(key).push(entry);
+    }
+
+    const diagnostics = invoices.map((invoice) => {
+      const ledgerEntries = ledgerByInvoiceId.get(String(invoice._id)) || [];
+      return {
+        invoiceId: invoice._id,
+        invoiceNumber: invoice.invoiceNumber,
+        tenant: invoice.tenant?.name || "Unknown",
+        unit: invoice.unit?.unitNumber || "Unknown",
+        amount: invoice.amount,
+        category: invoice.category,
+        invoiceDate: invoice.invoiceDate,
+        dueDate: invoice.dueDate,
+        status: invoice.status,
+        ledgerCount: ledgerEntries.length,
+        hasLedgerEntry: ledgerEntries.length > 0,
+        ledgerEntries,
+      };
+    });
 
     return res.status(200).json({
       diagnostics,
@@ -126,22 +135,36 @@ export const repostInvoicesToLedger = async (req, res) => {
     const errors = [];
     const touchedAccountIds = new Set();
 
-    for (const invoice of invoices) {
-      const existingLedgerEntries = await FinancialLedgerEntry.find({
-        business: businessId,
-        sourceTransactionType: "invoice",
-        sourceTransactionId: String(invoice._id),
-        status: { $ne: "void" },
-      }).lean();
+    // Batch-fetch all existing entries and resolve receivable account once.
+    const invoiceIds = invoices.map((i) => String(i._id));
+    const existingEntriesAll = invoiceIds.length
+      ? await FinancialLedgerEntry.find({
+          business: businessId,
+          sourceTransactionType: "invoice",
+          sourceTransactionId: { $in: invoiceIds },
+          status: { $ne: "void" },
+        }).lean()
+      : [];
 
-      if (existingLedgerEntries.length > 0) {
-        skipped += 1;
-        existingLedgerEntries.forEach((entry) => entry.accountId && touchedAccountIds.add(String(entry.accountId)));
-        continue;
-      }
+    const existingEntriesByInvoiceId = new Map();
+    for (const entry of existingEntriesAll) {
+      const key = String(entry.sourceTransactionId);
+      if (!existingEntriesByInvoiceId.has(key)) existingEntriesByInvoiceId.set(key, []);
+      existingEntriesByInvoiceId.get(key).push(entry);
+    }
 
+    const needsPosting = invoices.filter((inv) => !existingEntriesByInvoiceId.has(String(inv._id)));
+    for (const entry of existingEntriesAll) {
+      entry.accountId && touchedAccountIds.add(String(entry.accountId));
+    }
+    skipped = invoices.length - needsPosting.length;
+
+    const receivableAccount = needsPosting.length
+      ? await resolveTenantReceivableAccount(businessId)
+      : null;
+
+    for (const invoice of needsPosting) {
       try {
-        const receivableAccount = await resolveTenantReceivableAccount(invoice.business);
         const txDate = invoice.invoiceDate ? new Date(invoice.invoiceDate) : new Date();
         const monthStart = new Date(txDate.getFullYear(), txDate.getMonth(), 1, 0, 0, 0, 0);
         const monthEnd = new Date(txDate.getFullYear(), txDate.getMonth() + 1, 0, 23, 59, 59, 999);

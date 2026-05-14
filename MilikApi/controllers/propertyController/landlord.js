@@ -1,7 +1,11 @@
 import mongoose from "mongoose";
+import { escapeRegex } from "../../utils/escapeRegex.js";
 import Landlord from "../../models/Landlord.js";
 import Property from "../../models/Property.js";
-import { getLandlordBalance } from "../../services/propertyAccountingService.js";
+import { resolveLandlordRemittancePayableAccount } from "../../services/propertyAccountingService.js";
+import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import ProcessedStatement from "../../models/ProcessedStatement.js";
+import LandlordPayment from "../../models/LandlordPayment.js";
 import Unit from "../../models/Unit.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
@@ -15,21 +19,13 @@ const resolveCompanyId = (req) => {
 
 // Generate unique landlord code within a company
 const generateLandlordCode = async (companyId) => {
-  let code;
-  let exists = true;
-  let counter = 1;
-
-  while (exists) {
-    code = `LL${String(counter).padStart(3, "0")}`;
-    exists = await Landlord.findOne({ company: companyId, landlordCode: code }).lean();
-    counter++;
-
-    if (counter > 10000) {
-      throw new Error("Unable to generate unique landlord code");
-    }
-  }
-
-  return code;
+  const result = await Landlord.aggregate([
+    { $match: { company: new mongoose.Types.ObjectId(String(companyId)), landlordCode: { $regex: /^LL\d+$/ } } },
+    { $addFields: { codeNum: { $toInt: { $substr: ["$landlordCode", 2, -1] } } } },
+    { $group: { _id: null, maxNum: { $max: "$codeNum" } } },
+  ]);
+  const next = (result[0]?.maxNum ?? 0) + 1;
+  return `LL${String(next).padStart(3, "0")}`;
 };
 
 const normalizeString = (value) => (typeof value === "string" ? value.trim() : value);
@@ -298,7 +294,8 @@ export const createLandlord = async (req, res, next) => {
 // Get all landlords
 export const getLandlords = async (req, res, next) => {
   try {
-    const { search, status } = req.query;
+    const { search: rawSearch, status, page = 1, limit = 5000 } = req.query;
+    const search = escapeRegex(rawSearch);
     const companyId = resolveCompanyId(req);
 
     const query = {};
@@ -315,48 +312,131 @@ export const getLandlords = async (req, res, next) => {
       ];
     }
 
-    const landlords = await Landlord.find(query)
-      .populate("company", "companyName")
-      .sort({ createdAt: -1 });
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 5000, 1), 5000);
 
-    const landlordsWithCounts = await Promise.all(
-      landlords.map(async (landlord) => {
-        const propertyMatch = buildLandlordPropertyMatch(landlord);
+    const [landlords, total] = await Promise.all([
+      Landlord.find(query)
+        .populate("company", "companyName")
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum),
+      Landlord.countDocuments(query),
+    ]);
 
-        const activeProperties = await Property.countDocuments({
-          ...propertyMatch,
-          status: { $ne: "archived" },
-        });
+    if (!landlords.length) {
+      return res.status(200).json({ success: true, data: [], total, page: pageNum, pages: Math.ceil(total / limitNum) });
+    }
 
-        const archivedProperties = await Property.countDocuments({
-          ...propertyMatch,
-          status: "archived",
-        });
-
-        let balance = 0;
-        try {
-          balance = await getLandlordBalance(landlord._id, landlord.company?._id || landlord.company);
-        } catch (balanceErr) {
-          console.warn("Unable to calculate landlord balance", landlord._id, balanceErr?.message);
-        }
-
-        return {
-          ...landlord.toObject(),
-          activeProperties,
-          archivedProperties,
-          balance,
-        };
-      })
+    const businessId = new mongoose.Types.ObjectId(
+      String(companyId || landlords[0]?.company?._id || landlords[0]?.company)
     );
+    const landlordIds = landlords.map((l) => l._id);
 
-    res.status(200).json({
+    // Batch-fetch properties and resolve payable account in parallel
+    const [allProperties, payableAccount] = await Promise.all([
+      Property.find({ business: businessId }).select("landlords status").lean(),
+      resolveLandlordRemittancePayableAccount(businessId).catch(() => null),
+    ]);
+
+    // Build in-memory property count maps
+    const landlordById = new Map(landlords.map((l) => [String(l._id), l]));
+    const landlordByName = new Map(
+      landlords.flatMap((l) => (l.landlordName ? [[l.landlordName, l]] : []))
+    );
+    const activeCounts = new Map();
+    const archivedCounts = new Map();
+
+    for (const prop of allProperties) {
+      const seen = new Set();
+      for (const entry of prop.landlords || []) {
+        let matched = entry.landlordId ? landlordById.get(String(entry.landlordId)) : null;
+        if (!matched && entry.name) matched = landlordByName.get(entry.name);
+        if (!matched) continue;
+        const lid = String(matched._id);
+        if (seen.has(lid)) continue;
+        seen.add(lid);
+        const map = prop.status === "archived" ? archivedCounts : activeCounts;
+        map.set(lid, (map.get(lid) || 0) + 1);
+      }
+    }
+
+    // Batch balance aggregations — 3 parallel queries covering all landlords at once
+    const baseMatch = { business: businessId, landlord: { $in: landlordIds } };
+    const [ledgerRows, statementRows, paymentRows] = await Promise.all([
+      payableAccount
+        ? FinancialLedgerEntry.aggregate([
+            {
+              $match: {
+                ...baseMatch,
+                accountId: payableAccount._id,
+                status: { $ne: "reversed" },
+                $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
+              },
+            },
+            {
+              $group: {
+                _id: "$landlord",
+                debit: { $sum: "$debit" },
+                credit: { $sum: "$credit" },
+                count: { $sum: 1 },
+              },
+            },
+          ])
+        : Promise.resolve([]),
+      ProcessedStatement.aggregate([
+        {
+          $match: {
+            ...baseMatch,
+            status: { $ne: "reversed" },
+            isNegativeStatement: { $ne: true },
+          },
+        },
+        { $group: { _id: "$landlord", payable: { $sum: "$netAmountDue" } } },
+      ]),
+      LandlordPayment.aggregate([
+        { $match: { ...baseMatch, status: { $ne: "reversed" } } },
+        { $group: { _id: "$landlord", paid: { $sum: "$amount" } } },
+      ]),
+    ]);
+
+    const ledgerByLandlord = new Map(ledgerRows.map((r) => [String(r._id), r]));
+    const statementByLandlord = new Map(statementRows.map((r) => [String(r._id), r]));
+    const paymentByLandlord = new Map(paymentRows.map((r) => [String(r._id), r]));
+
+    const landlordsWithCounts = landlords.map((landlord) => {
+      const lid = String(landlord._id);
+      const activeProperties = activeCounts.get(lid) || 0;
+      const archivedProperties = archivedCounts.get(lid) || 0;
+
+      let balance = 0;
+      const ledgerRow = ledgerByLandlord.get(lid);
+      if (ledgerRow?.count > 0) {
+        balance = Math.max(Number(ledgerRow.credit || 0) - Number(ledgerRow.debit || 0), 0);
+      } else {
+        const statPayable = Number(statementByLandlord.get(lid)?.payable || 0);
+        const paid = Number(paymentByLandlord.get(lid)?.paid || 0);
+        balance = Math.max(statPayable - paid, 0);
+      }
+
+      return {
+        ...landlord.toObject(),
+        activeProperties,
+        archivedProperties,
+        balance,
+      };
+    });
+
+    return res.status(200).json({
       success: true,
       data: landlordsWithCounts,
-      count: landlordsWithCounts.length,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
     });
   } catch (err) {
     console.error("Get landlords error:", err);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: err.message || "Error fetching landlords",
       error: err,

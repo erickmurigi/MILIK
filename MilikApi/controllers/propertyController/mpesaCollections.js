@@ -329,7 +329,7 @@ const syncCollectionMatches = async (collection) => {
   return populateCollectionQuery(MpesaCollection.findById(collection._id)).lean();
 };
 
-const upsertCollection = async ({ businessId, config = {}, source = "manual_batch", importBatchId = null, payload = {}, importedBy = null, responseMode = "" }) => {
+const upsertCollection = async ({ businessId, config = {}, source = "manual_batch", importBatchId = null, payload = {}, importedBy = null, responseMode = "", skipPopulate = false }) => {
   const transactionCode = normalizeUpper(payload.transactionCode || "");
   const amount = round2(payload.amount || 0);
   const transactionDate = payload.transactionDate instanceof Date && !Number.isNaN(payload.transactionDate.getTime())
@@ -398,15 +398,20 @@ const upsertCollection = async ({ businessId, config = {}, source = "manual_batc
     },
   };
 
-  let stored;
+  let storedId;
   if (existing) {
     await MpesaCollection.findByIdAndUpdate(existing._id, { $set: update });
-    stored = await populateCollectionQuery(MpesaCollection.findById(existing._id)).lean();
+    storedId = existing._id;
   } else {
     const created = await MpesaCollection.create(update);
-    stored = await populateCollectionQuery(MpesaCollection.findById(created._id)).lean();
+    storedId = created._id;
   }
 
+  if (skipPopulate) {
+    return { storedId, wasDuplicate: Boolean(existing) };
+  }
+
+  const stored = await populateCollectionQuery(MpesaCollection.findById(storedId)).lean();
   return { stored, wasDuplicate: Boolean(existing) };
 };
 
@@ -442,12 +447,113 @@ export const listMpesaCollections = async (req, res) => {
       MpesaCollection.find(filters).sort({ transactionDate: -1, createdAt: -1 }).limit(300)
     ).lean();
 
-    const hydrated = [];
+    // ── Batch sync ────────────────────────────────────────────────────────────
+    // 1. Rows already captured with both references populated → skip all DB I/O.
+    // 2. Rows with known tenant/receipt IDs → batch-fetch in two queries.
+    // 3. Rows with no references → still need individual search queries.
+    // 4. Collect updates → single bulkWrite instead of N findByIdAndUpdate.
+    // 5. Return merged result without a per-row populate round-trip.
+
+    const captured = [];
+    const needsSync = [];
     for (const row of rows) {
-      hydrated.push(await syncCollectionMatches(row));
+      if (
+        String(row.matchingStatus || "") === "captured" &&
+        row.tenant?._id &&
+        row.matchedReceipt?._id
+      ) {
+        captured.push(row);
+      } else {
+        needsSync.push(row);
+      }
     }
 
-    res.status(200).json({ success: true, data: hydrated });
+    // Batch-fetch tenants and receipts for rows that already have references.
+    const knownTenantIds = [...new Set(
+      needsSync.filter((r) => r.tenant?._id || r.tenant).map((r) => String(r.tenant?._id || r.tenant))
+    )];
+    const knownReceiptIds = [...new Set(
+      needsSync.filter((r) => r.matchedReceipt?._id || r.matchedReceipt).map((r) => String(r.matchedReceipt?._id || r.matchedReceipt))
+    )];
+
+    const [batchedTenants, batchedReceipts] = await Promise.all([
+      knownTenantIds.length
+        ? Tenant.find({ _id: { $in: knownTenantIds } })
+            .select("name tenantCode phone unit business")
+            .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName" } })
+            .lean()
+        : [],
+      knownReceiptIds.length
+        ? RentPayment.find({ _id: { $in: knownReceiptIds } })
+            .select("receiptNumber referenceNumber amount paymentDate isConfirmed postingStatus tenant")
+            .lean()
+        : [],
+    ]);
+    const tenantById = new Map(batchedTenants.map((t) => [String(t._id), t]));
+    const receiptById = new Map(batchedReceipts.map((r) => [String(r._id), r]));
+
+    // Process each row that needs sync, using pre-fetched data where possible.
+    const bulkOps = [];
+    const syncedRows = await Promise.all(
+      needsSync.map(async (row) => {
+        const existingTenantId = String(row.tenant?._id || row.tenant || "");
+        const existingReceiptId = String(row.matchedReceipt?._id || row.matchedReceipt || "");
+
+        const [tenant, matchedReceipt] = await Promise.all([
+          existingTenantId && tenantById.has(existingTenantId)
+            ? tenantById.get(existingTenantId)
+            : findTenantMatch({ businessId, accountReference: row.accountReference, msisdn: row.msisdn }),
+          existingReceiptId && receiptById.has(existingReceiptId)
+            ? receiptById.get(existingReceiptId)
+            : findReceiptMatch({ businessId, transactionCode: row.transactionCode, amount: row.amount }),
+        ]);
+
+        const tenantId = tenant?._id ? String(tenant._id) : "";
+        const matchedReceiptId = matchedReceipt?._id ? String(matchedReceipt._id) : "";
+        const nextStatus = deriveMatchingStatus({ tenant, matchedReceipt });
+
+        const currentTenantId = String(row.tenant?._id || row.tenant || "");
+        const currentReceiptId = String(row.matchedReceipt?._id || row.matchedReceipt || "");
+
+        if (
+          tenantId !== currentTenantId ||
+          matchedReceiptId !== currentReceiptId ||
+          String(row.matchingStatus || "") !== nextStatus
+        ) {
+          bulkOps.push({
+            updateOne: {
+              filter: { _id: row._id },
+              update: {
+                $set: {
+                  tenant: tenant?._id || null,
+                  matchedReceipt: matchedReceipt?._id || null,
+                  matchingStatus: nextStatus,
+                },
+              },
+            },
+          });
+        }
+
+        return {
+          ...row,
+          tenant: tenant || null,
+          matchedReceipt: matchedReceipt || null,
+          matchingStatus: nextStatus,
+        };
+      })
+    );
+
+    if (bulkOps.length > 0) {
+      await MpesaCollection.bulkWrite(bulkOps, { ordered: false });
+    }
+
+    // Preserve original sort order.
+    const idOrder = new Map(rows.map((r, i) => [String(r._id), i]));
+    const allRows = [...captured, ...syncedRows].sort(
+      (a, b) => (idOrder.get(String(a._id)) ?? 0) - (idOrder.get(String(b._id)) ?? 0)
+    );
+
+    res.status(200).json({ success: true, data: allRows });
   } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to load M-Pesa collections" });
   }
@@ -474,18 +580,31 @@ export const importMpesaBatch = async (req, res) => {
     }
 
     const importBatchId = new mongoose.Types.ObjectId();
-    const importedRows = [];
+    const rawResults = [];
     for (const row of lines) {
-      const { stored, wasDuplicate } = await upsertCollection({
+      const result = await upsertCollection({
         businessId: String(company._id),
         config,
         source: "manual_batch",
         importBatchId,
         payload: row,
         importedBy: req.user?._id || null,
+        skipPopulate: true,
       });
-      importedRows.push({ ...stored, wasDuplicate });
+      rawResults.push(result);
     }
+
+    // Batch-populate all upserted records in one query instead of N individual findById+populate.
+    const allIds = rawResults.map((r) => r.storedId).filter(Boolean);
+    const populatedDocs = allIds.length
+      ? await populateCollectionQuery(MpesaCollection.find({ _id: { $in: allIds } })).lean()
+      : [];
+    const docById = new Map(populatedDocs.map((d) => [String(d._id), d]));
+
+    const importedRows = rawResults.map((r) => ({
+      ...(docById.get(String(r.storedId)) || {}),
+      wasDuplicate: r.wasDuplicate,
+    }));
 
     const duplicates = importedRows.filter((item) => item?.wasDuplicate === true).length;
     res.status(200).json({

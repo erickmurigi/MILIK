@@ -283,8 +283,13 @@ export const createLandlordReceipt = async (req, res, next) => {
       updatedBy: actorUserId,
     });
 
-    const populated = await populateQuery(LandlordReceipt.findById(created._id));
-    return res.status(200).json({ success: true, data: populated });
+    await created.populate([
+      { path: "landlord", select: "landlordName landlordCode email phoneNumber" },
+      { path: "property", select: "propertyName propertyCode landlords" },
+      { path: "createdBy", select: "surname otherNames email" },
+      { path: "updatedBy", select: "surname otherNames email" },
+    ]);
+    return res.status(200).json({ success: true, data: created });
   } catch (error) {
     next(error);
   }
@@ -392,8 +397,13 @@ export const updateLandlordReceipt = async (req, res, next) => {
     }
 
     await existing.save();
-    const populated = await populateQuery(LandlordReceipt.findById(existing._id));
-    return res.status(200).json({ success: true, data: populated });
+    await existing.populate([
+      { path: "landlord", select: "landlordName landlordCode email phoneNumber" },
+      { path: "property", select: "propertyName propertyCode landlords" },
+      { path: "createdBy", select: "surname otherNames email" },
+      { path: "updatedBy", select: "surname otherNames email" },
+    ]);
+    return res.status(200).json({ success: true, data: existing });
   } catch (error) {
     next(error);
   }

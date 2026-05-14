@@ -3,10 +3,12 @@ import Company from "../models/Company.js";
 import { createError } from "../utils/error.js";
 import { normalizeCompanyModules, normalizeCompanyOperatingMode, serializeCompanyForClient } from "../utils/companyModules.js";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 import { buildTemporaryPassword, normalizeBoolean } from "../utils/onboardingAccess.js";
 import { sendUserOnboardingEmail } from "../utils/onboardingMailer.js";
-import { attachAuthCookie, clearAuthCookie } from "../utils/authCookie.js";
+import { attachAuthCookie, clearAuthCookie, extractAuthCookieToken } from "../utils/authCookie.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
+import { addToBlacklist } from "../utils/tokenBlacklist.js";
 
 const getJWTSecret = () => {
   const secret = process.env.JWT_SECRET;
@@ -15,6 +17,14 @@ const getJWTSecret = () => {
   }
   return secret;
 };
+
+const JWT_ISSUER = "milik-api";
+const JWT_AUDIENCE = "milik-client";
+const JWT_OPTIONS = { expiresIn: "1d", issuer: JWT_ISSUER, audience: JWT_AUDIENCE };
+
+// Pre-computed dummy hash — used to pad response timing when a login email is not found,
+// preventing user enumeration via timing attacks.
+const DUMMY_HASH = "$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
 const getAdminCredentials = () => ({
   email: process.env.MILIK_ADMIN_EMAIL?.toLowerCase(),
@@ -98,7 +108,7 @@ const createAuthToken = (user) => {
       mustChangePassword: !!user.mustChangePassword,
     },
     getJWTSecret(),
-    { expiresIn: "7d" }
+    JWT_OPTIONS
   );
 };
 
@@ -293,18 +303,25 @@ export const registerUser = async (req, res, next) => {
     const shouldSendOnboardingEmail = normalizeBoolean(req.body.sendOnboardingEmail, autoGeneratePassword);
 
     const newUser = new User({
-      ...req.body,
       email: normalizedEmail,
       password: resolvedPassword,
-      surname,
-      otherNames,
-      phoneNumber,
+      surname: String(surname || '').trim(),
+      otherNames: String(otherNames || '').trim(),
+      phoneNumber: String(phoneNumber || '').trim(),
+      idNumber: idNumber ? String(idNumber).trim() : undefined,
       company: primaryCompany,
       primaryCompany,
       accessibleCompanies: companyIdsToCheck,
       companyAssignments,
       profile: profile || 'Agent',
-      idNumber,
+      // Allow module/permission config from request but not privilege-escalation fields
+      moduleAccess: req.body.moduleAccess && typeof req.body.moduleAccess === 'object' ? req.body.moduleAccess : {},
+      permissions: req.body.permissions && typeof req.body.permissions === 'object' ? req.body.permissions : {},
+      rights: Array.isArray(req.body.rights) ? req.body.rights.map(String) : [],
+      // adminAccess only grantable by superAdmin; setupAccess by any admin
+      adminAccess: req.user?.superAdminAccess ? normalizeBoolean(req.body.adminAccess, false) : false,
+      setupAccess: (req.user?.superAdminAccess || req.user?.adminAccess) ? normalizeBoolean(req.body.setupAccess, false) : false,
+      companySetupAccess: (req.user?.superAdminAccess || req.user?.adminAccess) ? normalizeBoolean(req.body.companySetupAccess, false) : false,
       isActive: true,
       locked: false,
       mustChangePassword,
@@ -388,7 +405,7 @@ export const loginUser = async (req, res, next) => {
           company: null,
         },
         getJWTSecret(),
-        { expiresIn: "7d" }
+        JWT_OPTIONS
       );
 
       attachAuthCookie(res, token);
@@ -405,6 +422,8 @@ export const loginUser = async (req, res, next) => {
     const user = await User.findOne({ email: normalizedEmail });
 
     if (!user || user.isSystemAuditUser) {
+      // Pad response time to prevent user enumeration via timing attacks
+      await bcrypt.compare(password, DUMMY_HASH);
       return next(createError(401, "Invalid email or password"));
     }
     if (!user.isActive) {
@@ -548,6 +567,21 @@ export const getCurrentUser = async (req, res, next) => {
 
 export const logoutUser = async (req, res) => {
   try {
+    const rawToken =
+      (req.cookies ? extractAuthCookieToken(req.cookies) : null) ||
+      (req.headers?.authorization?.startsWith("Bearer ")
+        ? req.headers.authorization.slice(7)
+        : null);
+
+    if (rawToken) {
+      try {
+        const decoded = jwt.decode(rawToken);
+        if (decoded?.exp) addToBlacklist(rawToken, decoded.exp * 1000);
+      } catch (_) {
+        // ignore decode errors — token is cleared regardless
+      }
+    }
+
     clearAuthCookie(res);
 
     res.status(200).json({
@@ -665,7 +699,7 @@ export const switchCompany = async (req, res, next) => {
           company: targetCompany._id,
         },
         getJWTSecret(),
-        { expiresIn: "7d" }
+        JWT_OPTIONS
       );
 
       attachAuthCookie(res, token);

@@ -771,24 +771,84 @@ const Vacants = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0 pb-10">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
         <div className="sticky top-0 z-30 flex-shrink-0 bg-gray-50 px-2 pt-2">
-          <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
+          <div className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 shadow-sm">
+            {/* Row 1: Action buttons */}
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+              <button
+                onClick={applySearch}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-bold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
+                title="Search using the selected filters"
+              >
+                <FaSearch className="text-[10px]" /> Search
+              </button>
+              <button
+                onClick={resetFilters}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                title="Reset filters"
+              >
+                <FaRedoAlt className="text-[10px]" /> Reset
+              </button>
+              <button
+                onClick={allExpanded ? collapseAll : expandAll}
+                disabled={!currentRows.length}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-bold text-white shadow-sm ${
+                  currentRows.length
+                    ? allExpanded ? "bg-orange-600 hover:bg-orange-700" : `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
+                    : "cursor-not-allowed bg-gray-400"
+                }`}
+              >
+                {allExpanded ? <FaCompressAlt className="text-[10px]" /> : <FaExpandAlt className="text-[10px]" />}
+                {allExpanded ? "Collapse All" : "Expand All"}
+              </button>
+              <div className="h-4 w-px bg-gray-300 mx-0.5" />
+              <button
+                onClick={() => navigate("/tenant/new")}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                title="Open tenant take-on"
+              >
+                <FaUserPlus className="text-[10px]" /> Add Tenant
+              </button>
+              <button
+                onClick={() => navigate("/units/new")}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                title="Add new unit"
+              >
+                <FaPlus className="text-[10px]" /> Add Unit
+              </button>
+              <div className="h-4 w-px bg-gray-300 mx-0.5" />
+              <button
+                onClick={handlePrint}
+                className="flex items-center gap-1 rounded-md bg-slate-700 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm hover:bg-slate-800"
+                title="Print availability list"
+              >
+                <FaPrint className="text-[10px]" /> Print List
+              </button>
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1 text-[10px] font-bold shadow-sm hover:bg-gray-50"
+                title="Export current availability list"
+              >
+                <FaFileExport className="text-[10px]" /> Export
+              </button>
+            </div>
+
+            {/* Row 2: Filter dropdowns + text search */}
+            <div className="flex flex-wrap items-center gap-1.5">
               <select
                 value={draftFilters.property}
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, property: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-[11px] text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-[#DDEFE1] px-2.5 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               >
                 {uniqueProperties.map((property) => (
                   <option key={property.value} value={property.value}>{property.label}</option>
                 ))}
               </select>
-
               <select
                 value={draftFilters.status}
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-[11px] text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-[#DDEFE1] px-2.5 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               >
                 <option value="any">All Statuses</option>
                 <option value="occupied">Occupied</option>
@@ -798,116 +858,41 @@ const Vacants = () => {
                 <option value="under_maintenance">Under Maintenance</option>
                 <option value="off_market">Off Market</option>
               </select>
-
               <select
                 value={draftFilters.unitType}
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, unitType: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-[11px] text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-[#DDEFE1] px-2.5 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               >
                 <option value="any">Unit Type</option>
                 {unitTypeOptions.map((type) => (
                   <option key={type} value={type}>{formatUnitTypeLabel(type)}</option>
                 ))}
               </select>
-
               <select
                 value={draftFilters.window}
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, window: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-[11px] text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-[#DDEFE1] px-2.5 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               >
                 <option value="all">Availability Window</option>
                 <option value="now">Available Now</option>
                 <option value="next7">Available in 7 Days</option>
                 <option value="next30">Available in 30 Days</option>
               </select>
-
-              <button
-                onClick={applySearch}
-                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                title="Search using the selected filters"
-              >
-                <FaSearch className="text-[11px]" />
-                Search
-              </button>
-
-              <button
-                onClick={resetFilters}
-                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                title="Reset filters"
-              >
-                <FaRedoAlt className="text-[11px]" />
-                Reset
-              </button>
-
-              <button
-                onClick={allExpanded ? collapseAll : expandAll}
-                disabled={!currentRows.length}
-                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white shadow-sm ${
-                  currentRows.length
-                    ? allExpanded
-                      ? "bg-orange-600 hover:bg-orange-700"
-                      : `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
-                    : "cursor-not-allowed bg-gray-400"
-                }`}
-              >
-                {allExpanded ? <FaCompressAlt className="text-[11px]" /> : <FaExpandAlt className="text-[11px]" />}
-                {allExpanded ? "Collapse All" : "Expand All"}
-              </button>
-
-              <button
-                onClick={() => navigate("/tenant/new")}
-                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                title="Open tenant take-on"
-              >
-                <FaUserPlus className="text-[11px]" />
-                Add Tenant
-              </button>
-
-              <button
-                onClick={() => navigate("/units/new")}
-                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                title="Add new unit"
-              >
-                <FaPlus className="text-[11px]" />
-                Add Unit
-              </button>
-
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-1 rounded-md bg-slate-700 px-2 py-1 text-[10px] text-white shadow-sm transition-colors hover:bg-slate-800"
-                title="Print availability list"
-              >
-                <FaPrint className="text-[11px]" />
-                Print List
-              </button>
-
-              <button
-                onClick={handleExport}
-                className="flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-[10px] shadow-sm transition-colors hover:bg-gray-50"
-                title="Export current availability list"
-              >
-                <FaFileExport className="text-[11px]" />
-                Export
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <div className="h-4 w-px bg-gray-300 mx-0.5" />
               <input
                 value={draftFilters.search}
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))}
                 onKeyDown={handleFilterEnter}
                 placeholder="Search unit, property or code"
-                className="rounded border border-gray-300 bg-white px-3 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-white px-2.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <input
                 value={draftFilters.tenant}
                 onChange={(event) => setDraftFilters((prev) => ({ ...prev, tenant: event.target.value }))}
                 onKeyDown={handleFilterEnter}
                 placeholder="Tenant name"
-                className="rounded border border-gray-300 bg-white px-3 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-gray-300 bg-white px-2.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
-              <div className="hidden md:block" />
-              <div className="hidden md:block" />
             </div>
           </div>
         </div>
@@ -1213,7 +1198,7 @@ const Vacants = () => {
             </div>
 
             <div className="sticky bottom-0 z-20 flex-shrink-0 border-t border-gray-200 bg-white shadow-sm">
-              <div className="flex items-center justify-between px-3 py-2">
+              <div className="flex items-center justify-between px-3 py-1">
                 <div className="text-[11px] text-gray-600">
                   <div className="flex items-center gap-4">
                     <span className="font-bold">
@@ -1226,7 +1211,7 @@ const Vacants = () => {
                   <button
                     onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                     disabled={safeCurrentPage === 1}
-                    className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-[11px] font-bold transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex items-center gap-1 rounded border border-gray-300 px-2.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <FaChevronLeft size={10} />
                     Previous
@@ -1240,7 +1225,7 @@ const Vacants = () => {
                           <button
                             key={page}
                             onClick={() => setCurrentPage(page)}
-                            className={`min-w-[32px] rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors ${
+                            className={`min-w-[24px] rounded border px-2 py-0.5 text-[11px] font-bold transition-colors ${
                               safeCurrentPage === page
                                 ? "border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]"
                                 : "border-gray-300 hover:bg-gray-50"
@@ -1260,7 +1245,7 @@ const Vacants = () => {
                   <button
                     onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                     disabled={safeCurrentPage === totalPages}
-                    className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-[11px] font-bold transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex items-center gap-1 rounded border border-gray-300 px-2.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Next
                     <FaChevronRight size={10} />

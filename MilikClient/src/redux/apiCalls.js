@@ -956,7 +956,7 @@ export const getUnits = async (dispatch, business, property = null, status = nul
     if (status) url += `&status=${status}`;
     
     const res = await adminRequests.get(url);
-    dispatch(getUnitsSuccess(res.data));
+    dispatch(getUnitsSuccess(extractList(res.data)));
   } catch (err) {
     dispatch(getUnitsFailure());
   }
@@ -2177,13 +2177,16 @@ export const getStatement = (statementId) => async (dispatch) => {
 export const createDraftStatement = (payload) => async (dispatch, getState) => {
   dispatch(createDraftStart());
   try {
+    const { _signal, ...rest } = payload || {};
     const resolvedPayload = {
-      ...payload,
-      businessId: payload?.businessId || resolveCompanyId(payload, getState),
-      landlordId: payload?.landlordId || resolveLandlordIdFromProperty(payload?.propertyId, getState),
+      ...rest,
+      businessId: rest?.businessId || resolveCompanyId(rest, getState),
+      landlordId: rest?.landlordId || resolveLandlordIdFromProperty(rest?.propertyId, getState),
     };
 
-    const res = await adminRequests.post("/statements/draft", resolvedPayload);
+    const res = await adminRequests.post("/statements/draft", resolvedPayload, {
+      ...(_signal ? { signal: _signal } : {}),
+    });
     const statement = res.data?.data?.statement;
     dispatch(createDraftSuccess(statement));
     return statement;

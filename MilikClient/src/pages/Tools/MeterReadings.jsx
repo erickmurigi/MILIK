@@ -947,38 +947,22 @@ const MeterReadings = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-3">
-        <div className="mx-auto flex w-full max-w-[96%] min-h-0 flex-1 flex-col gap-3">
-          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Meter Readings</h1>
-                <p className="mt-1 text-sm text-slate-600">
-                  Capture utility usage, bill draft readings into invoices, and safely delete billed readings with proper ledger reversal through the linked invoice flow.
-                </p>
-              </div>
-              <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
-                {currentCompany?.companyName || currentCompany?.name || "No company selected"}
-              </div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col gap-2">
+          <div className="flex-shrink-0 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
+            <span className="text-xs font-black uppercase tracking-[0.1em] text-slate-800">Meter Readings</span>
+            <div className="h-3.5 w-px bg-slate-300" />
+            <div className="flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+              <span className="opacity-70">Readings</span> <span className="font-black text-blue-900">{filteredReadings.length}</span>
             </div>
-
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
-              <div className="rounded border border-blue-200 bg-blue-50 p-2.5">
-                <p className="text-[11px] font-semibold text-blue-600">Total Readings</p>
-                <p className="text-xl font-bold leading-tight text-blue-900">{filteredReadings.length}</p>
-              </div>
-              <div className="rounded border border-orange-200 bg-orange-50 p-2.5">
-                <p className="text-[11px] font-semibold text-orange-600">Draft Amount</p>
-                <p className="text-xl font-bold leading-tight text-orange-900">
-                  KES {draftAmount.toLocaleString()}
-                </p>
-              </div>
-              <div className="rounded border border-green-200 bg-green-50 p-2.5">
-                <p className="text-[11px] font-semibold text-green-600">Billed Amount</p>
-                <p className="text-xl font-bold leading-tight text-green-900">
-                  KES {billedAmount.toLocaleString()}
-                </p>
-              </div>
+            <div className="flex items-center gap-1 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+              <span className="opacity-70">Draft</span> <span className="font-black text-orange-900">KES {draftAmount.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center gap-1 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+              <span className="opacity-70">Billed</span> <span className="font-black text-green-900">KES {billedAmount.toLocaleString()}</span>
+            </div>
+            <div className="ml-auto rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+              {currentCompany?.companyName || currentCompany?.name || "No company selected"}
             </div>
           </div>
 
@@ -1660,7 +1644,7 @@ const MeterReadings = () => {
               </p>
             </div>
 
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-700">
               <p>
                 <span className="font-semibold">Per page:</span> {ITEMS_PER_PAGE}
               </p>

@@ -173,6 +173,7 @@ const LandlordStatementSchema = new mongoose.Schema(
 LandlordStatementSchema.index({ business: 1, property: 1, landlord: 1, periodStart: 1 });
 LandlordStatementSchema.index({ business: 1, statementNumber: 1, version: 1 }, { unique: true });
 LandlordStatementSchema.index({ business: 1, landlord: 1, status: 1, periodStart: -1 });
+LandlordStatementSchema.index({ business: 1, property: 1, landlord: 1, status: 1 });
 // Unique index to prevent duplicate statements for same period/version
 LandlordStatementSchema.index(
   { business: 1, property: 1, landlord: 1, periodStart: 1, periodEnd: 1, version: 1 },

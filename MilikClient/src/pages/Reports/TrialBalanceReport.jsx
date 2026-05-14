@@ -469,39 +469,24 @@ const TrialBalanceReport = () => {
             </div>
           </div>
 
-          <div className="grid flex-shrink-0 grid-cols-2 gap-2 md:grid-cols-4">
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-1">Total Debits</div>
-              <div className="text-sm font-black tracking-tight text-gray-900">
-                KES {formatMoney(report.totals?.debit)}
-              </div>
+          <div className="grid flex-shrink-0 grid-cols-2 gap-1.5 md:grid-cols-4">
+            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
+              <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Total Debits</div>
+              <div className="text-xs font-black tracking-tight text-gray-900">KES {formatMoney(report.totals?.debit)}</div>
             </div>
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-1">Total Credits</div>
-              <div className="text-sm font-black tracking-tight text-gray-900">
-                KES {formatMoney(report.totals?.credit)}
-              </div>
+            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
+              <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Total Credits</div>
+              <div className="text-xs font-black tracking-tight text-gray-900">KES {formatMoney(report.totals?.credit)}</div>
             </div>
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-1">Difference</div>
-              <div
-                className="text-sm font-black tracking-tight"
-                style={{
-                  color:
-                    Math.abs(Number(report.totals?.difference || 0)) < 0.005
-                      ? MILIK_GREEN
-                      : MILIK_RED,
-                }}
-              >
+            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
+              <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Difference</div>
+              <div className="text-xs font-black tracking-tight" style={{ color: Math.abs(Number(report.totals?.difference || 0)) < 0.005 ? MILIK_GREEN : MILIK_RED }}>
                 KES {formatMoney(report.totals?.difference)}
               </div>
             </div>
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-1">Status</div>
-              <div
-                className="text-sm font-black tracking-tight"
-                style={{ color: report.totals?.balanced ? MILIK_GREEN : MILIK_RED }}
-              >
+            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
+              <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Status</div>
+              <div className="text-xs font-black tracking-tight" style={{ color: report.totals?.balanced ? MILIK_GREEN : MILIK_RED }}>
                 {report.totals?.balanced ? "Balanced" : "Out of Balance"}
               </div>
             </div>

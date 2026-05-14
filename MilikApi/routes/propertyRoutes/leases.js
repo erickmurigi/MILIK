@@ -27,17 +27,17 @@ router.get("/find/expiring", verifyUser, getExpiringLeases)
 // Get single lease
 router.get("/:id", verifyUser, getLease)
 
+// Sign lease (must be before /:id to avoid being intercepted)
+router.put("/sign/:id", verifyUser, signLease)
+
+// Renew lease (must be before /:id to avoid being intercepted)
+router.put("/renew/:id", verifyUser, renewLease)
+
 // Update lease
 router.put("/:id", verifyUser, updateLease)
 
 // Delete lease
 router.delete("/:id", verifyUser, deleteLease)
-
-// Sign lease
-router.put("/sign/:id", verifyUser, signLease)
-
-// Renew lease
-router.put("/renew/:id", verifyUser, renewLease)
 
 // Generate PDF document
 router.post("/:id/generate-document", verifyUser, generateLeaseDocument)

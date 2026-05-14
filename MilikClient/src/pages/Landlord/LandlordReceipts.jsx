@@ -426,7 +426,7 @@ const LandlordReceipts = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="no-print flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
-        <div className="mx-auto flex h-full w-full max-w-[96%] min-h-0 flex-1 flex-col gap-2">
+        <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
           <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">Receipts: {stats.count}</span>
@@ -561,21 +561,15 @@ const LandlordReceipts = () => {
               </table>
             </div>
 
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
-              <p>
-                <span className="font-semibold">Showing:</span> {filteredReceipts.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1}
-                {" - "}
-                {Math.min(currentPage * ITEMS_PER_PAGE, filteredReceipts.length)} of {filteredReceipts.length} landlord receipt(s)
-              </p>
-              <p><span className="font-semibold">Per page:</span> {ITEMS_PER_PAGE}</p>
-            </div>
-
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
-              <p><span className="font-semibold">Page:</span> {currentPage} of {totalPages}</p>
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-700">
+              <div className="font-semibold">
+                Showing <span className="font-bold text-slate-900">{filteredReceipts.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1}</span>–<span className="font-bold text-slate-900">{Math.min(currentPage * ITEMS_PER_PAGE, filteredReceipts.length)}</span> of <span className="font-bold text-slate-900">{filteredReceipts.length}</span> landlord receipt(s)
+              </div>
               <div className="flex items-center gap-2">
-                <button type="button" disabled={currentPage <= 1} onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 font-semibold text-slate-700">Page {currentPage} of {totalPages}</span>
-                <button type="button" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                <span className="font-semibold text-slate-500">Per page: {ITEMS_PER_PAGE}</span>
+                <button type="button" disabled={currentPage <= 1} onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} className="rounded-md border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                <span className="font-semibold text-slate-700">Page {currentPage} of {totalPages}</span>
+                <button type="button" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} className="rounded-md border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
               </div>
             </div>
           </div>

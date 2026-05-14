@@ -12,8 +12,7 @@ import { verifyUser } from "../verifyToken.js";
 
 const router = express.Router();
 
-const getEntryAmount = (entry = {}) =>
-  Number(entry.amount || 0) || Math.max(Number(entry.debit || 0), Number(entry.credit || 0), 0);
+// ── Account classifiers (unchanged logic) ────────────────────────────────────
 
 const isManagerIncomeAccount = (account = {}) => {
   const code = String(account.code || "").trim();
@@ -25,9 +24,7 @@ const isManagerIncomeAccount = (account = {}) => {
     name.includes("commission income") ||
     name.includes("late fee") ||
     name.includes("penalty")
-  ) {
-    return true;
-  }
+  ) return true;
   if (subGroup === "other income" && !name.includes("property income")) return true;
   return false;
 };
@@ -43,22 +40,50 @@ const isManagerExpenseAccount = (account = {}) => {
     name.includes("bank charges") ||
     name.includes("legal") ||
     name.includes("compliance")
-  ) {
-    return true;
-  }
+  ) return true;
   return false;
 };
 
-const sumLedgerForAccounts = (entries = [], accountMap = new Map(), predicate = () => false) =>
-  entries.reduce((sum, entry) => {
-    const account = accountMap.get(String(entry.accountId || ""));
-    if (!account || !predicate(account)) return sum;
-    const amount = getEntryAmount(entry);
-    const direction = String(entry.direction || "").toLowerCase();
-    if (account.type === "income") return sum + (direction === "credit" ? amount : -amount);
-    if (account.type === "expense") return sum + (direction === "debit" ? amount : -amount);
-    return sum;
-  }, 0);
+// ── Aggregation expression helpers ───────────────────────────────────────────
+
+// Replicates: Number(entry.amount || 0) || Math.max(debit, credit, 0)
+const amountExpr = {
+  $cond: {
+    if: { $gt: [{ $ifNull: ["$amount", 0] }, 0] },
+    then: { $toDouble: { $ifNull: ["$amount", 0] } },
+    else: {
+      $max: [
+        { $toDouble: { $ifNull: ["$debit", 0] } },
+        { $toDouble: { $ifNull: ["$credit", 0] } },
+        0,
+      ],
+    },
+  },
+};
+
+// income: credit entry adds, debit entry subtracts
+const incomeContribExpr = {
+  $sum: {
+    $cond: {
+      if: { $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] },
+      then: amountExpr,
+      else: { $multiply: [-1, amountExpr] },
+    },
+  },
+};
+
+// expense: debit entry adds, credit entry subtracts
+const expenseContribExpr = {
+  $sum: {
+    $cond: {
+      if: { $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] },
+      then: amountExpr,
+      else: { $multiply: [-1, amountExpr] },
+    },
+  },
+};
+
+// ── Route ─────────────────────────────────────────────────────────────────────
 
 router.get("/summary", verifyUser, async (req, res) => {
   try {
@@ -77,6 +102,7 @@ router.get("/summary", verifyUser, async (req, res) => {
       receiptNumber: { $type: "string", $ne: "" },
     };
 
+    // ── Phase 1: counts + chart accounts (all parallel) ──────────────────────
     const [
       totalUnits,
       occupiedUnits,
@@ -89,8 +115,6 @@ router.get("/summary", verifyUser, async (req, res) => {
       totalMonthlyRentDueAgg,
       totalDepositsAgg,
       chartAccounts,
-      allLedgerEntries,
-      monthLedgerEntries,
     ] = await Promise.all([
       Unit.countDocuments({ business }),
       Unit.countDocuments({
@@ -114,30 +138,68 @@ router.get("/summary", verifyUser, async (req, res) => {
       ChartOfAccount.find({ business, isPosting: { $ne: false }, isHeader: { $ne: true } })
         .select("_id code name type subGroup")
         .lean(),
-      FinancialLedgerEntry.find({
-        business,
-        accountId: { $ne: null },
-        status: { $nin: ["draft", "void", "reversed"] },
-      })
-        .select("accountId amount debit credit direction")
-        .lean(),
-      FinancialLedgerEntry.find({
-        business,
-        accountId: { $ne: null },
-        status: { $nin: ["draft", "void", "reversed"] },
-        transactionDate: { $gte: monthStart },
-      })
-        .select("accountId amount debit credit direction")
-        .lean(),
     ]);
 
+    // ── Phase 2: targeted ledger aggregations using known account IDs ─────────
+    // Classify accounts in JS (small list — no DB round trip needed).
+    // Then query MongoDB with $in so it uses the (business, accountId, status) index
+    // and aggregates server-side — zero ledger documents transferred to Node.
+    const incomeAccountIds = chartAccounts
+      .filter(isManagerIncomeAccount)
+      .map((a) => a._id);
+
+    const expenseAccountIds = chartAccounts
+      .filter(isManagerExpenseAccount)
+      .map((a) => a._id);
+
+    const ledgerBaseMatch = {
+      business,
+      status: { $nin: ["draft", "void", "reversed"] },
+    };
+
+    const [totalRevenueAgg, monthRevenueAgg, monthExpenseAgg] = await Promise.all([
+      // All-time manager revenue
+      incomeAccountIds.length
+        ? FinancialLedgerEntry.aggregate([
+            { $match: { ...ledgerBaseMatch, accountId: { $in: incomeAccountIds } } },
+            { $group: { _id: null, total: incomeContribExpr } },
+          ])
+        : Promise.resolve([]),
+
+      // Current-month manager revenue
+      incomeAccountIds.length
+        ? FinancialLedgerEntry.aggregate([
+            {
+              $match: {
+                ...ledgerBaseMatch,
+                accountId: { $in: incomeAccountIds },
+                transactionDate: { $gte: monthStart },
+              },
+            },
+            { $group: { _id: null, total: incomeContribExpr } },
+          ])
+        : Promise.resolve([]),
+
+      // Current-month manager expenses
+      expenseAccountIds.length
+        ? FinancialLedgerEntry.aggregate([
+            {
+              $match: {
+                ...ledgerBaseMatch,
+                accountId: { $in: expenseAccountIds },
+                transactionDate: { $gte: monthStart },
+              },
+            },
+            { $group: { _id: null, total: expenseContribExpr } },
+          ])
+        : Promise.resolve([]),
+    ]);
+
+    const totalRevenue = Number(totalRevenueAgg[0]?.total || 0);
+    const monthlyRevenue = Number(monthRevenueAgg[0]?.total || 0);
+    const currentMonthExpenses = Number(monthExpenseAgg[0]?.total || 0);
+
     const vacantUnits = Math.max(totalUnits - occupiedUnits, 0);
-    const accountMap = new Map(chartAccounts.map((account) => [String(account._id), account]));
-
-    const totalRevenue = sumLedgerForAccounts(allLedgerEntries, accountMap, isManagerIncomeAccount);
-    const monthlyRevenue = sumLedgerForAccounts(monthLedgerEntries, accountMap, isManagerIncomeAccount);
-    const currentMonthExpenses = sumLedgerForAccounts(monthLedgerEntries, accountMap, isManagerExpenseAccount);
-
     const totalMonthlyRentDue = Number(totalMonthlyRentDueAgg?.[0]?.total || 0);
     const totalDeposits = Number(totalDepositsAgg?.[0]?.total || 0);
     const occupancyRate = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;

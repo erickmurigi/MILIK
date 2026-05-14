@@ -36,7 +36,7 @@ export const createMaintenance = async (req, res, next) => {
 
 // Get all maintenance requests
 export const getMaintenances = async (req, res, next) => {
-  const { status, priority, unit, tenant } = req.query;
+  const { status, priority, unit, tenant, page = 1, limit = 5000 } = req.query;
   try {
     const business = resolveBusinessId(req);
     const filter = { business };
@@ -45,11 +45,26 @@ export const getMaintenances = async (req, res, next) => {
     if (unit) filter.unit = unit;
     if (tenant) filter.tenant = tenant;
 
-    const maintenances = await Maintenance.find(filter)
-      .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName name address" } })
-      .populate("tenant", "name phone")
-      .sort({ priority: -1, createdAt: -1 });
-    res.status(200).json(maintenances);
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 5000, 1), 5000);
+
+    const [maintenances, total] = await Promise.all([
+      Maintenance.find(filter)
+        .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName name address" } })
+        .populate("tenant", "name phone")
+        .sort({ priority: -1, createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum),
+      Maintenance.countDocuments(filter),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: maintenances,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+    });
   } catch (err) {
     next(err);
   }

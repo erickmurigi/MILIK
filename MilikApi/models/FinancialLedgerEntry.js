@@ -242,6 +242,9 @@ FinancialLedgerEntrySchema.index({
 FinancialLedgerEntrySchema.index({ business: 1, transactionDate: -1 });
 FinancialLedgerEntrySchema.index({ business: 1, accountId: 1, status: 1 });
 FinancialLedgerEntrySchema.index({ business: 1, tenant: 1, transactionDate: -1 });
+FinancialLedgerEntrySchema.index({ business: 1, property: 1, status: 1, transactionDate: -1 });
+// Optimized for report aggregations: $match on business+status+date, $group on accountId
+FinancialLedgerEntrySchema.index({ business: 1, status: 1, transactionDate: 1, accountId: 1 });
 
 FinancialLedgerEntrySchema.pre("findOneAndUpdate", function blockImmutableUpdate(next) {
   return next(new Error("FinancialLedgerEntry is immutable. Use reversal entries instead of updates."));

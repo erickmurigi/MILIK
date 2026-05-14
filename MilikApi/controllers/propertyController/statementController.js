@@ -165,7 +165,7 @@ export const createDraft = async (req, res, next) => {
         : periodEndStart && periodEndEnd
         ? { periodEnd: { $gte: periodEndStart, $lte: periodEndEnd } }
         : {}),
-    }).sort({ createdAt: -1, _id: -1 });
+    }).sort({ createdAt: -1, _id: -1 }).limit(10).lean();
 
     const existingDraft = existingDrafts[0] || null;
 

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { escapeRegex } from "../../utils/escapeRegex.js";
 import MeterReading from "../../models/MeterReading.js";
 import Property from "../../models/Property.js";
 import Unit from "../../models/Unit.js";
@@ -448,15 +449,27 @@ export const getMeterReadings = async (req, res, next) => {
     }
     if (req.query.billingPeriod) query.billingPeriod = toPeriodKey(req.query.billingPeriod);
     if (req.query.utilityType) {
-      query.utilityType = { $regex: `^${String(req.query.utilityType).trim()}$`, $options: "i" };
+      query.utilityType = { $regex: `^${escapeRegex(String(req.query.utilityType).trim())}$`, $options: "i" };
     }
 
-    const readings = await populateReadingQuery(MeterReading.find(query)).sort({
-      readingDate: -1,
-      createdAt: -1,
-    });
+    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 5000, 1), 5000);
 
-    return res.status(200).json(readings);
+    const [readings, total] = await Promise.all([
+      populateReadingQuery(MeterReading.find(query))
+        .sort({ readingDate: -1, createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum),
+      MeterReading.countDocuments(query),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: readings,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+    });
   } catch (err) {
     next(err);
   }

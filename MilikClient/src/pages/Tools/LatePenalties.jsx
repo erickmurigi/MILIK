@@ -675,9 +675,9 @@ const LatePenalties = () => {
     !!preview?.rows?.length && preview.rows.every((row) => row.skippedReason || selectedRows[row.sourceInvoiceId]);
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-white p-2 md:p-3">
-        <div className="mx-auto space-y-3" style={{ maxWidth: "100%" }}>
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white p-2 md:p-3">
+        <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col gap-2">
           <div className={`${pageShellClass} flex-shrink-0`}>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/95 px-2 py-2 shadow-sm backdrop-blur">
               <div className="flex flex-wrap items-center gap-2">
@@ -903,7 +903,7 @@ const LatePenalties = () => {
                   </table>
                 </div>
 
-                <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-1 text-xs text-slate-700">
                   <p>
                     <span className="font-semibold">Showing:</span> {filteredProcessedPenaltyRows.length === 0 ? 0 : processedPenaltyStartIndex + 1}
                     {" - "}
@@ -1037,7 +1037,7 @@ const LatePenalties = () => {
                   </table>
                 </div>
 
-                <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-1 text-xs text-slate-700">
                   <p>
                     <span className="font-semibold">Showing:</span> {filteredBatches.length === 0 ? 0 : processedBatchStartIndex + 1}
                     {" - "}

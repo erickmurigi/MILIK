@@ -809,7 +809,7 @@ const Landlords = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2 pb-10">
+      <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         {/* Filters Row */}
         <div className="sticky top-0 z-30 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm">
           <div className="space-y-2">
@@ -1252,8 +1252,8 @@ const Landlords = () => {
             </div>
 
             {/* Footer (STICKY bottom inside the card) */}
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
-              <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-1 text-xs text-slate-700">
+              <div className="flex w-full flex-wrap items-center justify-between gap-2">
                 <div className="text-xs text-gray-600">
                   <div className="flex items-center gap-4">
                     <span className="font-bold">
@@ -1276,7 +1276,7 @@ const Landlords = () => {
                   <button
                     onClick={() => goToPage(safeCurrentPage - 1)}
                     disabled={safeCurrentPage === 1}
-                    className="px-3 py-2.5 text-xs border border-gray-300 rounded-lg flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
+                    className="px-2.5 py-0.5 text-xs border border-gray-300 rounded flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
                   >
                     <FaChevronLeft size={10} />
                     Previous
@@ -1294,7 +1294,7 @@ const Landlords = () => {
                           <button
                             key={page}
                             onClick={() => goToPage(page)}
-                            className={`px-3 py-2.5 min-w-[32px] text-xs rounded-lg border transition-colors font-bold ${
+                            className={`px-2 py-0.5 min-w-[24px] text-xs rounded border transition-colors font-bold ${
                               safeCurrentPage === page
                                 ? "bg-[#0B3B2E] text-white border-[#0B3B2E] hover:bg-[#0A3127]"
                                 : "border-gray-300 hover:bg-gray-50"
@@ -1318,7 +1318,7 @@ const Landlords = () => {
                   <button
                     onClick={() => goToPage(safeCurrentPage + 1)}
                     disabled={safeCurrentPage === totalPages}
-                    className="px-3 py-2.5 text-xs border border-gray-300 rounded-lg flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
+                    className="px-2.5 py-0.5 text-xs border border-gray-300 rounded flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
                   >
                     Next
                     <FaChevronRight size={10} />

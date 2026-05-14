@@ -507,7 +507,7 @@ const PaymentVouchers = () => {
               { label: "Draft", value: stats.draft, sub: "Awaiting action", cls: "bg-amber-50 text-amber-800 border border-amber-200" },
               { label: "Approved", value: filtered.filter((v) => v.status === "approved").length, sub: "Pending settlement", cls: "bg-blue-50 text-blue-800 border border-blue-200" },
             ].map((card) => (
-              <div key={card.label} className={`rounded-lg px-3 py-2 shadow-sm ${card.cls}`}>
+              <div key={card.label} className={`rounded-lg px-3 py-1.5 shadow-sm ${card.cls}`}>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider opacity-75">{card.label}</span>
                   <span className="text-sm font-black">{card.value}</span>
@@ -629,7 +629,7 @@ const PaymentVouchers = () => {
                 </tbody>
               </table>
             </div>
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-600">
               <div className="font-semibold">
                 Showing <span className="font-bold text-slate-900">{filtered.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filtered.length)}</span> of <span className="font-bold text-slate-900">{filtered.length}</span> voucher(s)
               </div>

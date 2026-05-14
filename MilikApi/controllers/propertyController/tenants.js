@@ -1861,6 +1861,14 @@ export const bulkImportTenants = async (req, res, next) => {
       existingTenants.map((t) => String(t.tenantCode || "").toLowerCase()).filter(Boolean)
     );
 
+    // Pre-compute max tenant code once — avoids one aggregation per tenant row
+    const maxCodeResult = await Tenant.aggregate([
+      { $match: { business: new mongoose.Types.ObjectId(String(businessId)), tenantCode: { $regex: /^TT\d+$/ } } },
+      { $project: { num: { $toInt: { $substr: ["$tenantCode", 2, -1] } } } },
+      { $group: { _id: null, maxNum: { $max: "$num" } } },
+    ]);
+    let nextTenantCodeNum = (maxCodeResult[0]?.maxNum ?? 0) + 1;
+
     const successful = [];
     const failed = [];
 
@@ -1938,10 +1946,16 @@ export const bulkImportTenants = async (req, res, next) => {
         const importedTenantOccupiesUnits = shouldTenantOccupyUnits(importedTenantStatus);
 
         if (importedTenantOccupiesUnits) {
-          await ensureUnitsAvailableForTenant({
-            businessId,
-            unitDocs: requestedUnitDocs,
-          });
+          // In-memory check: unitMap tracks occupancy from initial fetch + within-batch updates
+          const unavailableUnit = requestedUnitDocs.find((u) => u.status !== "vacant" || u.isVacant === false);
+          if (unavailableUnit) {
+            failed.push({
+              tenantName: record.tenantName,
+              error: `Unit ${unavailableUnit.unitNumber || unavailableUnit._id} is not available`,
+              row: rowIndex,
+            });
+            continue;
+          }
         }
 
         const normalizedIdNumberKey = String(normalizedIdNumber || "").trim().toLowerCase();
@@ -1998,7 +2012,7 @@ export const bulkImportTenants = async (req, res, next) => {
 
         let tenantCode = normalizeString(record.tenantCode);
         if (!tenantCode) {
-          tenantCode = await generateNextTenantCode(businessId);
+          tenantCode = `TT${String(nextTenantCodeNum++).padStart(4, "0")}`;
         } else if (existingCodes.has(tenantCode.toLowerCase())) {
           failed.push({
             tenantName: record.tenantName,
@@ -2072,9 +2086,8 @@ export const bulkImportTenants = async (req, res, next) => {
           effectiveDate: moveInDate,
         });
 
-        const populatedTenant = await populateTenantQuery(Tenant.findById(savedTenant._id));
         const leaseRecord = await syncTenantLeaseRecord({
-          tenantDoc: populatedTenant,
+          tenantDoc: savedTenant,
           unitDoc: primaryUnitDoc,
           action: "upsert",
         });

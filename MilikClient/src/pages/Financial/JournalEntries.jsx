@@ -55,6 +55,11 @@ const JOURNAL_TYPES = [
     label: "Property Expense / Landlord Deduction",
     description: "Use only when you need a manual landlord-facing property deduction. Debit Landlord Remittance Payable and credit the balancing account.",
   },
+  {
+    value: "company_journal",
+    label: "Company Journal (Internal)",
+    description: "Internal company-level journal with no property or owner context. Use for head-office cost allocation, inter-department reclassifications, or company-wide adjustments. Never appears on any landlord statement.",
+  },
 ];
 
 const STATUS_STYLES = {
@@ -300,18 +305,23 @@ const JournalEntries = () => {
     [form.journalType, isLandlordWorkspace]
   );
 
+  const isCompanyJournal = form.journalType === "company_journal";
   const isLandlordJournal =
     form.journalType === "landlord_credit_adjustment" ||
     form.journalType === "landlord_debit_adjustment";
   const isInternalTransferJournal = form.journalType === "internal_account_transfer";
   const isForcedLandlordStatementJournal =
-    form.journalType === "landlord_credit_adjustment" ||
-    form.journalType === "landlord_debit_adjustment" ||
-    form.journalType === "property_expense_accrual";
-  const debitTouchesLandlordPayable = isLandlordPayableAccountRecord(selectedDebitAccountRecord);
-  const creditTouchesLandlordPayable = isLandlordPayableAccountRecord(selectedCreditAccountRecord);
-  const statementVisibilityLocked = isInternalTransferJournal || isForcedLandlordStatementJournal;
+    !isCompanyJournal &&
+    (form.journalType === "landlord_credit_adjustment" ||
+      form.journalType === "landlord_debit_adjustment" ||
+      form.journalType === "property_expense_accrual");
+  const debitTouchesLandlordPayable = !isCompanyJournal && isLandlordPayableAccountRecord(selectedDebitAccountRecord);
+  const creditTouchesLandlordPayable = !isCompanyJournal && isLandlordPayableAccountRecord(selectedCreditAccountRecord);
+  const statementVisibilityLocked = isCompanyJournal || isInternalTransferJournal || isForcedLandlordStatementJournal;
   const journalStructureHint = useMemo(() => {
+    if (form.journalType === "company_journal") {
+      return "Company journals are internal-only. No property or owner context is attached. These entries never appear on any landlord statement and do not affect Landlord Remittance Payable.";
+    }
     if (form.journalType === "landlord_credit_adjustment") {
       return "Credit Landlord Remittance Payable and debit the balancing account. This creates one clean landlord statement addition.";
     }
@@ -334,6 +344,17 @@ const JournalEntries = () => {
   ]);
 
   const applyJournalTypeDefaults = (journalType) => {
+    if (journalType === "company_journal") {
+      setForm((prev) => ({
+        ...prev,
+        journalType,
+        property: "",
+        landlord: "",
+        includeInLandlordStatement: false,
+      }));
+      return;
+    }
+
     const landlordStatementJournal =
       journalType === "landlord_credit_adjustment" ||
       journalType === "landlord_debit_adjustment" ||
@@ -426,12 +447,12 @@ const JournalEntries = () => {
       return;
     }
 
-    if (!form.property) {
+    if (!isCompanyJournal && !form.property) {
       toast.warning("Property is required");
       return;
     }
 
-    if (isLandlordJournal && !isLandlordWorkspace && !form.landlord) {
+    if (!isCompanyJournal && isLandlordJournal && !isLandlordWorkspace && !form.landlord) {
       toast.warning("Landlord is required for landlord journal types");
       return;
     }
@@ -489,14 +510,22 @@ const JournalEntries = () => {
       company: currentCompany._id,
       date: form.date,
       journalType: form.journalType,
-      property: form.property,
-      landlord: isInternalTransferJournal ? undefined : (isLandlordWorkspace ? derivedLandlordIdFromProperty || form.landlord || undefined : form.landlord || undefined),
+      ...(isCompanyJournal
+        ? {}
+        : {
+            property: form.property,
+            landlord: isInternalTransferJournal
+              ? undefined
+              : isLandlordWorkspace
+              ? derivedLandlordIdFromProperty || form.landlord || undefined
+              : form.landlord || undefined,
+          }),
       debitAccount: form.debitAccount,
       creditAccount: form.creditAccount,
       amount: Number(form.amount),
       reference: form.reference,
       narration: form.narration,
-      includeInLandlordStatement: isInternalTransferJournal
+      includeInLandlordStatement: isCompanyJournal || isInternalTransferJournal
         ? false
         : isForcedLandlordStatementJournal
         ? true
@@ -832,30 +861,37 @@ const JournalEntries = () => {
                     />
                   </label>
 
-                  <label className="block">
-                    <span className="text-xs font-bold text-slate-700">Property</span>
-                    <select
-                      value={form.property}
-                      onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                    >
-                      <option value="">Select property</option>
-                      {propertyOptions.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {isInternalTransferJournal
-                        ? "Property stays required because posted ledger entries in the current architecture are property-scoped. The linked owner context is derived automatically during posting."
-                        : isLandlordWorkspace
-                        ? "Select the property context this owner-side journal belongs to. The linked owner is derived from the property automatically."
-                        : "Select the property context this journal belongs to."}
-                    </p>
-                  </label>
+                  {isCompanyJournal ? (
+                    <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-xs text-blue-900 md:col-span-1">
+                      <p className="font-black uppercase tracking-[0.16em] text-blue-700">No Property Required</p>
+                      <p className="mt-1 leading-6">Company journals are not linked to any property or owner. They post directly to the company general ledger.</p>
+                    </div>
+                  ) : (
+                    <label className="block">
+                      <span className="text-xs font-bold text-slate-700">Property</span>
+                      <select
+                        value={form.property}
+                        onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))}
+                        className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                      >
+                        <option value="">Select property</option>
+                        {propertyOptions.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {isInternalTransferJournal
+                          ? "Property stays required because posted ledger entries in the current architecture are property-scoped. The linked owner context is derived automatically during posting."
+                          : isLandlordWorkspace
+                          ? "Select the property context this owner-side journal belongs to. The linked owner is derived from the property automatically."
+                          : "Select the property context this journal belongs to."}
+                      </p>
+                    </label>
+                  )}
 
-                  {isInternalTransferJournal ? (
+                  {isCompanyJournal ? null : isInternalTransferJournal ? (
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 md:col-span-2">
                       {isLandlordWorkspace
                         ? "Owner selection is not needed for internal ledger transfers. MILIK derives the owner automatically from the selected property's accounting context when the balanced ledger entries are posted."
@@ -974,7 +1010,9 @@ const JournalEntries = () => {
                   <span>
                     {isLandlordWorkspace ? "Include in owner adjustment metadata" : "Include in landlord statement metadata"}
                     <span className="mt-1 block text-xs text-slate-500">
-                      {isInternalTransferJournal
+                      {isCompanyJournal
+                        ? "Always off for company journals — they are never linked to any owner statement."
+                        : isInternalTransferJournal
                         ? "Disabled for internal ledger transfers because those remain same-company movements only."
                         : isForcedLandlordStatementJournal
                         ? "Locked on for landlord-facing journal types because they are designed to create one clean landlord addition or deduction."
@@ -986,9 +1024,11 @@ const JournalEntries = () => {
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
                   <p className="font-black">Control note</p>
                   <p className="mt-1 leading-6">{journalStructureHint}</p>
-                  <p className="mt-2 text-xs font-semibold text-amber-800">
-                    Current selection: debit {debitTouchesLandlordPayable ? "touches" : "does not touch"} Landlord Remittance Payable · credit {creditTouchesLandlordPayable ? "touches" : "does not touch"} Landlord Remittance Payable.
-                  </p>
+                  {!isCompanyJournal && (
+                    <p className="mt-2 text-xs font-semibold text-amber-800">
+                      Current selection: debit {debitTouchesLandlordPayable ? "touches" : "does not touch"} Landlord Remittance Payable · credit {creditTouchesLandlordPayable ? "touches" : "does not touch"} Landlord Remittance Payable.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

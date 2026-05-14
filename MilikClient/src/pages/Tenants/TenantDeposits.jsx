@@ -730,8 +730,8 @@ const TenantDeposits = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="h-[calc(100dvh-152px)] max-h-[calc(100dvh-152px)] overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
-        <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
+      <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-none flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-gray-50/95 p-2 shadow-sm backdrop-blur">
               <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -1029,7 +1029,7 @@ const TenantDeposits = () => {
               </table>
             </div>
 
-            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
+            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700">
               <p>
                 <span className="font-semibold">Showing:</span> {totalFilteredCount === 0 ? 0 : startIndex + 1}
                 {" - "}

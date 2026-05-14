@@ -216,6 +216,7 @@ TenantSchema.index({ business: 1, tenantCode: 1 }, { unique: true, sparse: true 
 TenantSchema.index({ business: 1, idNumber: 1 }, { unique: true });
 TenantSchema.index({ business: 1, phone: 1 });
 TenantSchema.index({ unit: 1 });
+TenantSchema.index({ business: 1, unit: 1, status: 1 });
 TenantSchema.index({ additionalUnits: 1 });
 TenantSchema.index({ moveInDate: -1 });
 

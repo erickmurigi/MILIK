@@ -196,11 +196,12 @@ export const reverseLandlordPayment = async (req, res, next) => {
     if (payment.status === "reversed") return next(createError(400, "This landlord payment is already reversed."));
 
     const actorUserId = await resolveAuditActorUserId({ req, businessId, fallbackErrorMessage: "No valid company user could be resolved for reversing landlord payment." });
-    const reversalIds = [];
-    for (const entryId of payment.ledgerEntries || []) {
-      const result = await postReversal({ entryId, userId: actorUserId, reason: req.body.reason || "Landlord payment reversed" });
-      if (result?.reversalEntry?._id) reversalIds.push(result.reversalEntry._id);
-    }
+    const reversalResults = await Promise.all(
+      (payment.ledgerEntries || []).map((entryId) =>
+        postReversal({ entryId, userId: actorUserId, reason: req.body.reason || "Landlord payment reversed" })
+      )
+    );
+    const reversalIds = reversalResults.map((r) => r?.reversalEntry?._id).filter(Boolean);
 
     payment.status = "reversed";
     payment.reversedAt = new Date();

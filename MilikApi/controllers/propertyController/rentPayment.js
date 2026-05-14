@@ -300,35 +300,13 @@ const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100
 
 const generateReceiptNumber = async (businessId) => {
   const prefix = "REC";
-
-  const lastPayment = await RentPayment.findOne(
-    {
-      business: businessId,
-      receiptNumber: { $regex: `^${prefix}\\d+$` },
-    },
-    { receiptNumber: 1 },
-    { sort: { receiptNumber: -1, createdAt: -1 } }
-  ).lean();
-
-  let sequence = 1;
-  if (lastPayment?.receiptNumber) {
-    const numericPart = parseInt(lastPayment.receiptNumber.replace(prefix, ""), 10) || 0;
-    sequence = numericPart + 1;
-  }
-
-  while (true) {
-    const candidate = `${prefix}${String(sequence).padStart(5, "0")}`;
-    const exists = await RentPayment.exists({
-      business: businessId,
-      receiptNumber: candidate,
-    });
-
-    if (!exists) {
-      return candidate;
-    }
-
-    sequence += 1;
-  }
+  const result = await RentPayment.aggregate([
+    { $match: { business: new mongoose.Types.ObjectId(String(businessId)), receiptNumber: { $regex: /^REC\d+$/ } } },
+    { $project: { num: { $toInt: { $substr: ["$receiptNumber", 3, -1] } } } },
+    { $group: { _id: null, maxNum: { $max: "$num" } } },
+  ]);
+  const next = (result[0]?.maxNum ?? 0) + 1;
+  return `${prefix}${String(next).padStart(5, "0")}`;
 };
 
 const getStatementPeriodFromPayment = (payment) => {

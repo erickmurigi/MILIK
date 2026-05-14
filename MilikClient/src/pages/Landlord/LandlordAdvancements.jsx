@@ -756,7 +756,7 @@ const LandlordAdvancements = () => {
             </table>
           </div>
           {!loading && rows.length > 0 && (
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
               <div className="font-semibold">
                 Showing <span className="font-bold text-slate-900">{rows.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of <span className="font-bold text-slate-900">{rows.length}</span> advancement record(s)
               </div>

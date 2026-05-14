@@ -60,6 +60,8 @@ import carWashExpenseRoutes from "./modules/carwash/routes/expenses.js";
 import carWashStaffRoutes from "./modules/carwash/routes/staff.js";
 import carWashReportRoutes from "./modules/carwash/routes/reports.js";
 import carWashCommissionRoutes from "./modules/carwash/routes/commissions.js";
+import mongoSanitize from "mongo-sanitize";
+import hpp from "hpp";
 import { blockDemoWrites } from "./utils/demoAccess.js";
 import {
   canAccessCompanyId,
@@ -228,6 +230,13 @@ function getJWTSecret() {
 
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: JSON_BODY_LIMIT }));
+app.use(hpp());
+app.use((req, _res, next) => {
+  req.body = mongoSanitize(req.body);
+  req.params = mongoSanitize(req.params);
+  req.query = mongoSanitize(req.query);
+  next();
+});
 app.use(blockDemoWrites);
 
 app.use(
@@ -589,3 +598,12 @@ async function startServer() {
 }
 
 startServer();
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Promise Rejection at:", promise, "reason:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+  process.exit(1);
+});

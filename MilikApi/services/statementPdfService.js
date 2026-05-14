@@ -1,13 +1,13 @@
-import puppeteer from "puppeteer";
+import { createPage, resetBrowser } from "./browserService.js";
 import LandlordStatement from "../models/LandlordStatement.js";
 import LandlordStatementLine from "../models/LandlordStatementLine.js";
 
-let globalBrowser = null;
-let browserInitializing = false;
 const pdfBufferCache = new Map();
 const pdfRenderPromises = new Map();
 const MAX_PDF_CACHE_ENTRIES = 24;
 const MAX_CONCURRENT_PDF_RENDERS = 3;
+const QUEUE_TIMEOUT_MS = 120_000;
+const RENDER_TIMEOUT_MS = 90_000;
 let activePdfRenderCount = 0;
 const pdfRenderWaitQueue = [];
 
@@ -260,13 +260,37 @@ const getCachedPdfBuffer = (cacheKey) => {
   return Buffer.from(cached);
 };
 
+const withTimeout = (promise, ms, message) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(message)), ms)
+    ),
+  ]);
+
 const acquirePdfRenderSlot = async () => {
   if (activePdfRenderCount < MAX_CONCURRENT_PDF_RENDERS) {
     activePdfRenderCount += 1;
     return;
   }
 
-  await new Promise((resolve) => pdfRenderWaitQueue.push(resolve));
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      const idx = pdfRenderWaitQueue.indexOf(doResolve);
+      if (idx !== -1) pdfRenderWaitQueue.splice(idx, 1);
+      reject(new Error("PDF render queue timeout — server is busy, please retry shortly"));
+    }, QUEUE_TIMEOUT_MS);
+    const doResolve = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    pdfRenderWaitQueue.push(doResolve);
+  });
   activePdfRenderCount += 1;
 };
 
@@ -274,74 +298,6 @@ const releasePdfRenderSlot = () => {
   activePdfRenderCount = Math.max(0, activePdfRenderCount - 1);
   const next = pdfRenderWaitQueue.shift();
   if (next) next();
-};
-
-const resetBrowser = async () => {
-  if (globalBrowser) {
-    try {
-      await globalBrowser.close();
-    } catch {
-      // ignore
-    }
-  }
-  globalBrowser = null;
-  browserInitializing = false;
-};
-
-const isBrowserUsable = (browser) => {
-  if (!browser) return false;
-  if (typeof browser.isConnected === "function") return browser.isConnected();
-  return true;
-};
-
-async function getBrowser() {
-  if (isBrowserUsable(globalBrowser)) return globalBrowser;
-
-  if (browserInitializing) {
-    while (browserInitializing) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    if (isBrowserUsable(globalBrowser)) return globalBrowser;
-  }
-
-  browserInitializing = true;
-  try {
-    globalBrowser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-    });
-
-    if (typeof globalBrowser.on === "function") {
-      globalBrowser.on("disconnected", () => {
-        globalBrowser = null;
-        browserInitializing = false;
-      });
-    }
-
-    return globalBrowser;
-  } finally {
-    browserInitializing = false;
-  }
-}
-
-const createPdfPage = async () => {
-  let browser = await getBrowser();
-
-  try {
-    const page = await browser.newPage();
-    await page.setCacheEnabled(false);
-    page.on("error", () => {});
-    page.on("pageerror", () => {});
-    return page;
-  } catch {
-    await resetBrowser();
-    browser = await getBrowser();
-    const page = await browser.newPage();
-    await page.setCacheEnabled(false);
-    page.on("error", () => {});
-    page.on("pageerror", () => {});
-    return page;
-  }
 };
 
 const buildRowsFromLines = (lines = []) => {
@@ -454,6 +410,8 @@ const sanitizePrintableSections = ({
   additionRows = [],
   expenseRows = [],
   directToLandlordRows = [],
+  advanceRecoveryRows = [],
+  earlyPayoutRows = [],
 }) => ({
   additionRows: additionRows
     .map(normalizePrintableRow)
@@ -462,6 +420,12 @@ const sanitizePrintableSections = ({
     .map(normalizePrintableRow)
     .filter((row) => row.amount > 0),
   directToLandlordRows: directToLandlordRows
+    .map(normalizePrintableRow)
+    .filter((row) => row.amount > 0),
+  advanceRecoveryRows: advanceRecoveryRows
+    .map(normalizePrintableRow)
+    .filter((row) => row.amount > 0),
+  earlyPayoutRows: earlyPayoutRows
     .map(normalizePrintableRow)
     .filter((row) => row.amount > 0),
 });
@@ -615,13 +579,23 @@ export const generateStatementPdf = async (statementId, businessId) => {
     const rawDirectToLandlordRows = Array.isArray(workspace.directToLandlordRows)
       ? workspace.directToLandlordRows
       : [];
+    const rawAdvanceRecoveryRows = Array.isArray(workspace.advanceRecoveryRows)
+      ? workspace.advanceRecoveryRows
+      : [];
+    const rawEarlyPayoutRows = Array.isArray(workspace.earlyPayoutRows)
+      ? workspace.earlyPayoutRows
+      : [];
 
-    const { additionRows, expenseRows, directToLandlordRows } =
+    const { additionRows, expenseRows, directToLandlordRows, advanceRecoveryRows, earlyPayoutRows } =
       sanitizePrintableSections({
         additionRows: rawAdditionRows,
         expenseRows: rawExpenseRows,
         directToLandlordRows: rawDirectToLandlordRows,
+        advanceRecoveryRows: rawAdvanceRecoveryRows,
+        earlyPayoutRows: rawEarlyPayoutRows,
       });
+    const totalEarlyPayouts = earlyPayoutRows.reduce((s, r) => s + r.amount, 0);
+    const totalAdvanceRecoveries = advanceRecoveryRows.reduce((s, r) => s + r.amount, 0);
 
     const summary = workspace.summary || {};
     const depositMemo = workspace.depositMemo || {};
@@ -917,6 +891,22 @@ export const generateStatementPdf = async (statementId, businessId) => {
                 </tfoot>
               </table>
 
+              ${earlyPayoutRows.length > 0 ? `
+                <div class="section-title" style="color:#92400e;border-color:#92400e;">Early Payouts to Landlord</div>
+                <table class="simple-table">
+                  <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr></thead>
+                  <tbody>${renderSimpleRows(earlyPayoutRows, "No early payouts in this period")}</tbody>
+                  <tfoot><tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(totalEarlyPayouts)}</td></tr></tfoot>
+                </table>` : ""}
+
+              ${advanceRecoveryRows.length > 0 ? `
+                <div class="section-title" style="color:#991b1b;border-color:#991b1b;">Advance Recoveries</div>
+                <table class="simple-table">
+                  <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr></thead>
+                  <tbody>${renderSimpleRows(advanceRecoveryRows, "No advance recoveries in this period")}</tbody>
+                  <tfoot><tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(totalAdvanceRecoveries)}</td></tr></tfoot>
+                </table>` : ""}
+
               ${depositMemoRows.length > 0 ? `
                 <div class="section-title">Deposit Memorandum</div>
                 <table class="simple-table">
@@ -960,6 +950,8 @@ export const generateStatementPdf = async (statementId, businessId) => {
                   <tr><td class="label">Commission</td><td class="num">${formatCurrency(commissionAmount)}</td></tr>
                   ${commissionTaxAmount > 0 ? `<tr><td class="label">VAT on commission</td><td class="num">${formatCurrency(commissionTaxAmount)}</td></tr>` : ""}
                   <tr><td class="label">Direct to landlord collections (memo)</td><td class="num">${formatCurrency(directToLandlordAmount)}</td></tr>
+                  ${totalEarlyPayouts > 0 ? `<tr><td class="label">Early payout already paid to landlord</td><td class="num negative">(${formatCurrency(totalEarlyPayouts)})</td></tr>` : ""}
+                  ${totalAdvanceRecoveries > 0 ? `<tr><td class="label">Advance recovery deduction</td><td class="num negative">(${formatCurrency(totalAdvanceRecoveries)})</td></tr>` : ""}
                   <tr class="final-row"><td class="label">${esc(settlement.label)}</td><td class="num ${settlement.isNegative ? "negative" : ""}">${formatCurrency(settlement.amount)}</td></tr>
                 </tbody>
               </table>
@@ -972,26 +964,31 @@ export const generateStatementPdf = async (statementId, businessId) => {
     </html>`;
 
     await acquirePdfRenderSlot();
+    let page = null;
     try {
-      const page = await createPdfPage();
+      page = await createPage();
 
       await page.setViewport({
         width: 1600,
         height: 1000,
         deviceScaleFactor: 1,
       });
-      page.setDefaultNavigationTimeout(0);
-      page.setDefaultTimeout(0);
+      page.setDefaultNavigationTimeout(30_000);
+      page.setDefaultTimeout(30_000);
 
       await page.setContent(html, { waitUntil: "domcontentloaded" });
 
-      const pdfBuffer = await page.pdf({
-        format: "A4",
-        landscape: true,
-        printBackground: true,
-        preferCSSPageSize: true,
-        margin: { top: "8mm", right: "6mm", bottom: "8mm", left: "6mm" },
-      });
+      const pdfBuffer = await withTimeout(
+        page.pdf({
+          format: "A4",
+          landscape: true,
+          printBackground: true,
+          preferCSSPageSize: true,
+          margin: { top: "8mm", right: "6mm", bottom: "8mm", left: "6mm" },
+        }),
+        RENDER_TIMEOUT_MS,
+        "Statement PDF render timed out"
+      );
 
       try {
         await page.close();

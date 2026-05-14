@@ -69,7 +69,7 @@ export const unitSlice = createSlice({
     },
     getUnitsSuccess: (state, action) => {
       state.isFetching = false;
-      state.units = Array.isArray(action.payload) ? action.payload : [];
+      state.units = Array.isArray(action.payload) ? action.payload : (action.payload?.data ?? []);
     },
     getUnitsFailure: (state) => {
       state.isFetching = false;
@@ -191,7 +191,7 @@ export const unitSlice = createSlice({
       })
       .addCase(getUnits.fulfilled, (state, action) => {
         state.isFetching = false;
-        state.units = Array.isArray(action.payload) ? action.payload : [];
+        state.units = Array.isArray(action.payload) ? action.payload : (action.payload?.data ?? []);
       })
       .addCase(getUnits.rejected, (state) => {
         state.isFetching = false;

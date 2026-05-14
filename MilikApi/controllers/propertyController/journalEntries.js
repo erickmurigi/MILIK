@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { escapeRegex } from "../../utils/escapeRegex.js";
 import JournalEntry from "../../models/JournalEntry.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
@@ -19,6 +20,7 @@ const LANDLORD_FACING_JOURNAL_TYPES = new Set([
   "landlord_debit_adjustment",
   "property_expense_accrual",
 ]);
+const COMPANY_ONLY_JOURNAL_TYPES = new Set(["company_journal"]);
 const isLandlordFacingJournalType = (value) =>
   LANDLORD_FACING_JOURNAL_TYPES.has(String(value || "").trim().toLowerCase());
 
@@ -118,7 +120,10 @@ const ensurePostingAccount = async ({ businessId, accountId, label }) => {
 };
 
 const validateJournalPayload = async ({ businessId, payload = {} }) => {
-  if (!payload.property || !isValidObjectId(payload.property)) {
+  const journalType = String(payload?.journalType || "general_manual_journal").trim().toLowerCase();
+  const isCompanyJournal = COMPANY_ONLY_JOURNAL_TYPES.has(journalType);
+
+  if (!isCompanyJournal && (!payload.property || !isValidObjectId(payload.property))) {
     throw new Error("Property is required.");
   }
 
@@ -139,7 +144,22 @@ const validateJournalPayload = async ({ businessId, payload = {} }) => {
     throw new Error("Amount must be greater than zero.");
   }
 
-  const journalType = String(payload?.journalType || "general_manual_journal").trim().toLowerCase();
+  // Company journals never touch landlord payable or appear on any landlord statement
+  if (isCompanyJournal) {
+    const [debitAccount, creditAccount] = await Promise.all([
+      ensurePostingAccount({ businessId, accountId: payload.debitAccount, label: "Debit" }),
+      ensurePostingAccount({ businessId, accountId: payload.creditAccount, label: "Credit" }),
+    ]);
+    return {
+      debitAccount,
+      creditAccount,
+      amount,
+      resolvedLandlordId: null,
+      landlordPayableAccount: null,
+      normalizedIncludeInStatement: false,
+    };
+  }
+
   const normalizedIncludeInStatement =
     journalType === "internal_account_transfer"
       ? false
@@ -157,16 +177,8 @@ const validateJournalPayload = async ({ businessId, payload = {} }) => {
   });
 
   const [debitAccount, creditAccount] = await Promise.all([
-    ensurePostingAccount({
-      businessId,
-      accountId: payload.debitAccount,
-      label: "Debit",
-    }),
-    ensurePostingAccount({
-      businessId,
-      accountId: payload.creditAccount,
-      label: "Credit",
-    }),
+    ensurePostingAccount({ businessId, accountId: payload.debitAccount, label: "Debit" }),
+    ensurePostingAccount({ businessId, accountId: payload.creditAccount, label: "Credit" }),
   ]);
 
   const landlordPayableAccount = await resolveLandlordRemittancePayableAccount(businessId).catch(() => null);
@@ -271,6 +283,14 @@ const normalizeJournalPayload = (payload = {}) => {
 
 const resolveStatementPostingConfig = ({ journal = {}, landlordPayableAccountId = null }) => {
   const journalType = String(journal?.journalType || "").trim().toLowerCase();
+
+  if (COMPANY_ONLY_JOURNAL_TYPES.has(journalType)) {
+    return {
+      debitLeg: { includeInLandlordStatement: false },
+      creditLeg: { includeInLandlordStatement: false },
+    };
+  }
+
   const debitTouchesLandlordPayable = landlordPayableAccountId
     ? sameId(journal?.debitAccount?._id || journal?.debitAccount, landlordPayableAccountId)
     : false;
@@ -365,11 +385,14 @@ const postJournalToLedger = async ({ journal, actorUserId }) => {
     return existingEntries;
   }
 
-  const accountingContext = await resolvePropertyAccountingContext({
-    propertyId: journal.property,
-    landlordId: journal.landlord || null,
-    businessId: journal.business,
-  });
+  const isCompanyJournal = COMPANY_ONLY_JOURNAL_TYPES.has(String(journal.journalType || "")) || !journal.property;
+  const accountingContext = isCompanyJournal
+    ? { businessId: String(journal.business), propertyId: null, landlordId: null }
+    : await resolvePropertyAccountingContext({
+        propertyId: journal.property,
+        landlordId: journal.landlord || null,
+        businessId: journal.business,
+      });
 
   const amount = Math.abs(Number(journal.amount || 0));
   const date = normalizeDate(journal.date || new Date());
@@ -507,7 +530,7 @@ export const getJournalEntries = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "User must have a company context" });
     }
 
-    const { status, journalType, property, landlord, search } = req.query;
+    const { status, journalType, property, landlord, search, page = 1, limit = 5000 } = req.query;
     const filter = { business };
 
     if (status && status !== "all") filter.status = status;
@@ -516,7 +539,7 @@ export const getJournalEntries = async (req, res, next) => {
     if (landlord && landlord !== "all") filter.landlord = landlord;
 
     if (search) {
-      const term = String(search).trim();
+      const term = escapeRegex(String(search).trim());
       filter.$or = [
         { journalNo: { $regex: term, $options: "i" } },
         { reference: { $regex: term, $options: "i" } },
@@ -524,11 +547,26 @@ export const getJournalEntries = async (req, res, next) => {
       ];
     }
 
-    const rows = await populateJournalQuery(
-      JournalEntry.find(filter).sort({ date: -1, createdAt: -1 })
-    );
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 5000, 1), 5000);
 
-    return res.status(200).json(rows);
+    const [rows, total] = await Promise.all([
+      populateJournalQuery(
+        JournalEntry.find(filter)
+          .sort({ date: -1, createdAt: -1 })
+          .skip((pageNum - 1) * limitNum)
+          .limit(limitNum)
+      ),
+      JournalEntry.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: rows,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+    });
   } catch (err) {
     next(err);
   }

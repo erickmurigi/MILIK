@@ -188,6 +188,8 @@ TenantInvoiceSchema.index({ business: 1, tenant: 1, status: 1 });
 TenantInvoiceSchema.index({ business: 1, tenant: 1, status: 1, invoiceDate: -1 });
 TenantInvoiceSchema.index({ business: 1, category: 1, status: 1, dueDate: 1, invoiceDate: 1 });
 TenantInvoiceSchema.index({ business: 1, category: 1, status: 1, dueDate: 1, tenant: 1 });
+TenantInvoiceSchema.index({ business: 1, unit: 1, status: 1 });
+TenantInvoiceSchema.index({ business: 1, status: 1, dueDate: 1 });
 
 TenantInvoiceSchema.index({
   business: 1,

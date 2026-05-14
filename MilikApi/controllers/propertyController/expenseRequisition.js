@@ -300,8 +300,15 @@ export const createExpenseRequisition = async (req, res, next) => {
       submittedAt: requestedStatus === "submitted" ? new Date() : null,
     });
 
-    const populated = await populateQuery(ExpenseRequisition.findById(doc._id));
-    return res.status(201).json(await populated);
+    await doc.populate([
+      { path: "property", select: "propertyName propertyCode name" },
+      { path: "unit", select: "unitNumber name" },
+      { path: "landlord", select: "landlordName firstName lastName" },
+      { path: "serviceProvider", select: "name providerCode phone email category" },
+      { path: "requestedBy", select: "username email firstName lastName" },
+      { path: "submittedBy", select: "username email firstName lastName" },
+    ]);
+    return res.status(201).json(doc);
   } catch (error) {
     next(error);
   }

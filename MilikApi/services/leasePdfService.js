@@ -1,10 +1,10 @@
-import puppeteer from "puppeteer";
+import { createPage, resetBrowser } from "./browserService.js";
 
-let browser = null;
-let browserInitializing = false;
 let activeRenders = 0;
 const MAX_CONCURRENT = 2;
 const waitQueue = [];
+const QUEUE_TIMEOUT_MS = 120_000;
+const RENDER_TIMEOUT_MS = 60_000;
 
 const esc = (v = "") =>
   String(v || "").replace(/[&<>"']/g, (c) =>
@@ -18,32 +18,33 @@ const fmt = (v) =>
 
 const fmtDate = (v) => (v ? new Date(v).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" }) : "—");
 
-const isBrowserUsable = (b) => b && (typeof b.isConnected !== "function" || b.isConnected());
-
-async function getBrowser() {
-  if (isBrowserUsable(browser)) return browser;
-  if (browserInitializing) {
-    while (browserInitializing) await new Promise((r) => setTimeout(r, 80));
-    if (isBrowserUsable(browser)) return browser;
-  }
-  browserInitializing = true;
-  try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-    });
-    if (typeof browser.on === "function") {
-      browser.on("disconnected", () => { browser = null; browserInitializing = false; });
-    }
-    return browser;
-  } finally {
-    browserInitializing = false;
-  }
-}
+const withTimeout = (promise, ms, message) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(message)), ms)
+    ),
+  ]);
 
 async function acquireSlot() {
   if (activeRenders < MAX_CONCURRENT) { activeRenders++; return; }
-  await new Promise((r) => waitQueue.push(r));
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      const idx = waitQueue.indexOf(doResolve);
+      if (idx !== -1) waitQueue.splice(idx, 1);
+      reject(new Error("PDF render queue timeout — server is busy, please retry shortly"));
+    }, QUEUE_TIMEOUT_MS);
+    const doResolve = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    waitQueue.push(doResolve);
+  });
   activeRenders++;
 }
 
@@ -51,12 +52,6 @@ function releaseSlot() {
   activeRenders = Math.max(0, activeRenders - 1);
   const next = waitQueue.shift();
   if (next) next();
-}
-
-async function resetBrowser() {
-  try { if (browser) await browser.close(); } catch { /* ignore */ }
-  browser = null;
-  browserInitializing = false;
 }
 
 const buildAddress = (business = {}) =>
@@ -359,33 +354,25 @@ export const generateLeasePdf = async (lease) => {
   await acquireSlot();
   let page = null;
   try {
-    let b = await getBrowser();
-
-    try {
-      page = await b.newPage();
-    } catch {
-      await resetBrowser();
-      b = await getBrowser();
-      page = await b.newPage();
-    }
-
-    await page.setCacheEnabled(false);
-    page.on("error", () => {});
-    page.on("pageerror", () => {});
+    page = await createPage();
 
     await page.setViewport({ width: 1240, height: 1754, deviceScaleFactor: 1 });
-    page.setDefaultNavigationTimeout(0);
-    page.setDefaultTimeout(0);
+    page.setDefaultNavigationTimeout(30_000);
+    page.setDefaultTimeout(30_000);
 
     await page.setContent(html, { waitUntil: "domcontentloaded" });
 
-    const pdfBuffer = await page.pdf({
-      format: "A4",
-      landscape: false,
-      printBackground: true,
-      preferCSSPageSize: true,
-      margin: { top: "15mm", right: "14mm", bottom: "15mm", left: "14mm" },
-    });
+    const pdfBuffer = await withTimeout(
+      page.pdf({
+        format: "A4",
+        landscape: false,
+        printBackground: true,
+        preferCSSPageSize: true,
+        margin: { top: "15mm", right: "14mm", bottom: "15mm", left: "14mm" },
+      }),
+      RENDER_TIMEOUT_MS,
+      "Lease PDF render timed out"
+    );
 
     return Buffer.from(pdfBuffer);
   } catch (error) {

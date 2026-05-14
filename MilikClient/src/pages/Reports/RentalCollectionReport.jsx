@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { getLandlords, getRentalCollectionReport } from '../../redux/apiCalls';
@@ -34,6 +34,8 @@ const RentalCollectionReport = () => {
     || 'Milik';
 
   const [loading, setLoading] = useState(false);
+  const [filtersChanged, setFiltersChanged] = useState(false);
+  const filtersInitialized = useRef(false);
   const [filters, setFilters] = useState({
     startDate: toDateInputValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
     endDate: toDateInputValue(new Date()),
@@ -57,6 +59,7 @@ const RentalCollectionReport = () => {
   const loadReport = async () => {
     if (!businessId) return;
     setLoading(true);
+    setFiltersChanged(false);
     try {
       const data = await getRentalCollectionReport({ business: businessId, ...filters });
       setReport({
@@ -71,9 +74,16 @@ const RentalCollectionReport = () => {
     }
   };
 
+  // Auto-load only when the active company changes
   useEffect(() => {
-    loadReport();
-  }, [businessId, filters.startDate, filters.endDate, filters.propertyId, filters.tenantId, filters.unitId, filters.landlordId, filters.paymentMethod, filters.cashbook]);
+    if (businessId) loadReport();
+  }, [businessId]);
+
+  // Track filter changes so the Refresh button shows a stale indicator
+  useEffect(() => {
+    if (!filtersInitialized.current) { filtersInitialized.current = true; return; }
+    setFiltersChanged(true);
+  }, [filters.startDate, filters.endDate, filters.propertyId, filters.tenantId, filters.unitId, filters.landlordId, filters.paymentMethod, filters.cashbook]);
 
   const units = useMemo(() => {
     return tenants
@@ -356,7 +366,7 @@ const RentalCollectionReport = () => {
           .milik-report-page select option:hover { background: #f45b0b; color: #ffffff; }
         `}</style>
 
-        <div className="mx-auto flex w-full max-w-[98%] min-h-0 flex-1 flex-col">
+        <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
             <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
@@ -392,7 +402,7 @@ const RentalCollectionReport = () => {
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
                 <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
                 <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
-                <button onClick={loadReport} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
+                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-orange-400 bg-orange-50 text-orange-700 hover:bg-orange-100' : 'border border-slate-300 bg-white text-slate-700 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
               </div>
             </div>
 

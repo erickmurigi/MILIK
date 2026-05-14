@@ -8,6 +8,7 @@ import { buildTemporaryPassword, normalizeBoolean } from '../utils/onboardingAcc
 import { sendUserOnboardingEmail } from '../utils/onboardingMailer.js';
 import { sanitizePermissionMap } from '../utils/accessMatrix.js';
 import { logAuditEvent } from '../utils/auditLogger.js';
+import { escapeRegex } from '../utils/escapeRegex.js';
 
 const router = express.Router();
 
@@ -174,7 +175,8 @@ const ensureSharedCompanyAccess = async (requestUser, targetUser) => {
 
 router.get('/', verifyUser, async (req, res) => {
   try {
-    const { companyId, page = 1, limit = 10, search, status = 'all', moduleKey = '' } = req.query;
+    const { companyId, page = 1, limit = 10, search: rawSearch, status = 'all', moduleKey = '' } = req.query;
+    const search = escapeRegex(rawSearch);
     const safePage = Math.max(Number(page) || 1, 1);
     const safeLimit = Math.max(Number(limit) || 10, 1);
 
