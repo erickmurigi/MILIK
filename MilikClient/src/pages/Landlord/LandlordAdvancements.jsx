@@ -21,6 +21,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useConfirm } from "../../context/ConfirmContext";
 import {
   cancelLandlordAdvancementRecovery,
   createLandlordAdvancement,
@@ -187,6 +188,7 @@ const RecoveryHistoryRow = ({ item, onCancel }) => (
 );
 
 const LandlordAdvancements = () => {
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
@@ -449,7 +451,7 @@ const LandlordAdvancements = () => {
 
   const handleDelete = async (row) => {
     if (!canWrite) { toast.warning("You don't have permission to delete landlord advancements"); return; }
-    if (!window.confirm(`Delete ${row.referenceNo || "this landlord advance"}?`)) return;
+    if (!await confirm({ title: "Delete Advance", message: `Delete ${row.referenceNo || "this landlord advance"}?`, confirmText: "Delete", isDangerous: true })) return;
     await submitAction(async () => {
       try {
         await deleteLandlordAdvancement(row._id, { business: currentCompany?._id, company: currentCompany?._id });
@@ -500,7 +502,7 @@ const LandlordAdvancements = () => {
   };
 
   const handleCancelRecovery = async (row, recoveryId) => {
-    if (!window.confirm("Cancel this processed recovery?")) return;
+    if (!await confirm({ title: "Cancel Recovery", message: "Cancel this processed recovery? This action cannot be undone.", confirmText: "Cancel Recovery", isDangerous: true })) return;
     await submitAction(async () => {
       try {
         await cancelLandlordAdvancementRecovery(row._id, recoveryId, {

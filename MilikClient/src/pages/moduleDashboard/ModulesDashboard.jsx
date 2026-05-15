@@ -14,6 +14,7 @@ import {
   FaHome,
   FaLock,
   FaCar,
+  FaBuilding,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getCompanyOperatingModeLabel, hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
@@ -64,13 +65,14 @@ const moduleRegistry = [
     tint: "milik-icon-cyan",
   },
   {
-    id: "hr",
-    moduleKey: "hr",
-    title: "Human Resource",
-    subtitle: "People and staffing operations",
-    description: "Manage staffing, people administration and HR workflows once the workspace is enabled.",
-    status: "coming",
-    icon: <FaUsers />,
+    id: "propertySale",
+    moduleKey: "propertySale",
+    title: "Property Sales",
+    subtitle: "Land & property sale management",
+    description: "Manage listings, buyers, offers, deals, payment schedules, and agent commissions end-to-end.",
+    status: "active",
+    route: "/sale/dashboard",
+    icon: <FaBuilding />,
     tint: "milik-icon-teal",
   },
   {

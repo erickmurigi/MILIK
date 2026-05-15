@@ -22,6 +22,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useConfirm } from "../../context/ConfirmContext";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits } from "../../redux/unitRedux";
@@ -135,6 +136,7 @@ const buildInitialForm = () => ({
 });
 
 const TenantAgreements = () => {
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -501,7 +503,7 @@ const TenantAgreements = () => {
   };
 
   const handleTerminate = async (row) => {
-    const confirmed = window.confirm(`Terminate agreement ${row.agreementNumber}?`);
+    const confirmed = await confirm({ title: "Terminate Agreement", message: `Terminate agreement ${row.agreementNumber}? This action cannot be undone.`, confirmText: "Terminate", isDangerous: true });
     if (!confirmed) return;
 
     try {
@@ -537,7 +539,7 @@ const TenantAgreements = () => {
   };
 
   const handleDelete = async (row) => {
-    const confirmed = window.confirm(`Delete agreement ${row.agreementNumber}?`);
+    const confirmed = await confirm({ title: "Delete Agreement", message: `Delete agreement ${row.agreementNumber}?`, confirmText: "Delete", isDangerous: true });
     if (!confirmed) return;
 
     try {

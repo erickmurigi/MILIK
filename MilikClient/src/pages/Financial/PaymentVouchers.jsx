@@ -19,6 +19,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
+import { useConfirm } from "../../context/ConfirmContext";
 import {
   createPaymentVoucher,
   deletePaymentVoucher,
@@ -69,6 +70,7 @@ const blankForm = {
 };
 
 const PaymentVouchers = () => {
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -343,7 +345,7 @@ const PaymentVouchers = () => {
   };
 
   const removeVoucher = async (voucher) => {
-    if (!window.confirm(`Delete voucher ${voucher?.voucherNo || ""}?`)) return;
+    if (!await confirm({ title: "Delete Voucher", message: `Delete voucher ${voucher?.voucherNo || ""}?`, confirmText: "Delete", isDangerous: true })) return;
     setRowActionKey(`${voucher._id}:delete`);
     try {
       await deletePaymentVoucher(voucher._id, { business: currentCompany?._id, company: currentCompany?._id });
@@ -484,7 +486,7 @@ const PaymentVouchers = () => {
 
   const bulkDeleteSelected = async () => {
     if (selectedRows.length === 0) return toast.info("Select vouchers first");
-    if (!window.confirm(`Delete ${selectedRows.length} selected vouchers?`)) return;
+    if (!await confirm({ title: "Delete Vouchers", message: `Delete ${selectedRows.length} selected vouchers?`, confirmText: "Delete", isDangerous: true })) return;
     for (const voucher of selectedRows) {
       // eslint-disable-next-line no-await-in-loop
       await deletePaymentVoucher(voucher._id, { business: currentCompany?._id, company: currentCompany?._id }).catch(() => null);

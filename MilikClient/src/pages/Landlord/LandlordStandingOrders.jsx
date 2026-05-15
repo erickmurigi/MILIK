@@ -17,6 +17,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useConfirm } from "../../context/ConfirmContext";
 import {
   createLandlordStandingOrder,
   deleteLandlordStandingOrder,
@@ -147,6 +148,7 @@ const validateForm = (form) => {
 };
 
 const LandlordStandingOrders = () => {
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
@@ -481,7 +483,7 @@ const LandlordStandingOrders = () => {
       return;
     }
 
-    if (!window.confirm(`Run the next eligible period for ${runnableRows.length} selected standing order(s)?`)) {
+    if (!await confirm({ title: "Run Standing Orders", message: `Run the next eligible period for ${runnableRows.length} selected standing order(s)?`, confirmText: "Run" })) {
       return;
     }
 
@@ -541,7 +543,7 @@ const LandlordStandingOrders = () => {
     }
 
     const label = period.periodLabel || period.periodKey || "selected period";
-    if (!window.confirm(`Reverse ${label} for ${row.standingOrderNo || row.referenceNo}?`)) {
+    if (!await confirm({ title: "Reverse Standing Order", message: `Reverse ${label} for ${row.standingOrderNo || row.referenceNo}?`, confirmText: "Reverse" })) {
       return;
     }
 
@@ -563,7 +565,7 @@ const LandlordStandingOrders = () => {
 
   const handleDelete = async (row) => {
     if (!canWrite) { toast.warning("You don't have permission to delete standing orders"); return; }
-    if (!window.confirm(`Delete standing order ${row.standingOrderNo || row.referenceNo}?`)) return;
+    if (!await confirm({ title: "Delete Standing Order", message: `Delete standing order ${row.standingOrderNo || row.referenceNo}?`, confirmText: "Delete", isDangerous: true })) return;
     try {
       await deleteLandlordStandingOrder(row._id, { business: currentCompany?._id, company: currentCompany?._id });
       setRows((prev) => prev.filter((item) => item._id !== row._id));

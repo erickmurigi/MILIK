@@ -18,6 +18,7 @@ import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const ITEMS_PER_PAGE = 25;
 
@@ -116,6 +117,7 @@ const scoreColor = (score) => {
 const csvEscape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
 const Inspections = () => {
+  const confirm = useConfirm();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const isDemoUser = Boolean(currentUser?.isDemoUser);
@@ -325,7 +327,7 @@ const Inspections = () => {
   const handleDelete = async (item) => {
     if (isDemoUser) { toast.info("Demo mode is read-only."); return; }
     if (!canDelete) { toast.warning("You do not have permission to delete inspections."); return; }
-    if (!window.confirm(`Delete inspection "${item?.inspectionNumber || "this inspection"}"?`)) return;
+    if (!await confirm({ title: "Delete Inspection", message: `Delete inspection "${item?.inspectionNumber || "this inspection"}"?`, confirmText: "Delete", isDangerous: true })) return;
     try {
       await adminRequests.delete(`/inspections/${item._id}`);
       toast.success("Inspection deleted");

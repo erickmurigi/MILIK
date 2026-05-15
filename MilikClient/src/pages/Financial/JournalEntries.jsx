@@ -28,6 +28,7 @@ import {
 } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const JOURNAL_TYPES = [
   {
@@ -93,6 +94,7 @@ const buildInitialForm = () => ({
 });
 
 const JournalEntries = () => {
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
@@ -584,7 +586,7 @@ const JournalEntries = () => {
       toast.warning("You do not have permission to reverse journals");
       return;
     }
-    const ok = window.confirm(`Reverse journal ${journal.journalNo}?`);
+    const ok = await confirm({ title: "Reverse Journal", message: `Reverse journal ${journal.journalNo}? A reversing entry will be created.`, confirmText: "Reverse" });
     if (!ok) return;
 
     setRowActionKey(`${journal._id}:reverse`);
@@ -608,7 +610,7 @@ const JournalEntries = () => {
       toast.warning("You do not have permission to delete journals");
       return;
     }
-    const ok = window.confirm(`Delete draft journal ${journal.journalNo}?`);
+    const ok = await confirm({ title: "Delete Journal", message: `Delete draft journal ${journal.journalNo}?`, confirmText: "Delete", isDangerous: true });
     if (!ok) return;
 
     setRowActionKey(`${journal._id}:delete`);

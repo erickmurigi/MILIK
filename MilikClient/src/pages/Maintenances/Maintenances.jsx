@@ -18,6 +18,7 @@ import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const ITEMS_PER_PAGE = 25;
 
@@ -107,6 +108,7 @@ const PRIORITY_BADGE = {
 const csvEscape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
 const Maintenances = () => {
+  const confirm = useConfirm();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const isDemoUser = Boolean(currentUser?.isDemoUser);
@@ -325,7 +327,7 @@ const Maintenances = () => {
   const handleDelete = async (item) => {
     if (isDemoUser) { toast.info("Demo mode is read-only."); return; }
     if (!canDelete) { toast.warning("You do not have permission to delete maintenance requests."); return; }
-    if (!window.confirm(`Delete "${item?.title || "this request"}"?`)) return;
+    if (!await confirm({ title: "Delete Maintenance Request", message: `Delete "${item?.title || "this request"}"?`, confirmText: "Delete", isDangerous: true })) return;
     try {
       await adminRequests.delete(`/maintenances/${item._id}`);
       toast.success("Deleted");

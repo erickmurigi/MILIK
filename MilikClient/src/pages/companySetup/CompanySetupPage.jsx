@@ -36,6 +36,7 @@ import {
 import { getChartOfAccounts, getCompany, getSmsLogs, updateCompany } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { COMPANY_OPERATING_MODES, MODULE_LABELS, normalizeCompanyModules, normalizeCompanyOperatingMode } from "../../utils/companyModules";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const PAYMENT_DRAFT_ID = "__new_mpesa_paybill__";
 const EMAIL_DRAFT_ID = "__new_email_profile__";
@@ -795,7 +796,7 @@ const normalizeSmsEditor = (config = {}) => {
 };
 
 export default function CompanySetupPage() {
-
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { currentCompany } = useSelector((state) => state.company || {});
@@ -1316,7 +1317,7 @@ export default function CompanySetupPage() {
   };
 
   const handleDeletePaymentConfig = async (config) => {
-    if (!window.confirm(`Delete ${config.name}? This only removes the saved Paybill configuration.`)) {
+    if (!await confirm({ title: "Delete Paybill Config", message: `Delete ${config.name}? This only removes the saved Paybill configuration.`, confirmText: "Delete", isDangerous: true })) {
       return;
     }
 
@@ -1536,7 +1537,7 @@ export default function CompanySetupPage() {
   };
 
   const handleDeleteEmailProfile = async (profile) => {
-    if (!window.confirm(`Delete ${profile.name}? This only removes the saved email profile.`)) {
+    if (!await confirm({ title: "Delete Email Profile", message: `Delete ${profile.name}? This only removes the saved email profile.`, confirmText: "Delete", isDangerous: true })) {
       return;
     }
 
@@ -1744,7 +1745,7 @@ export default function CompanySetupPage() {
   };
 
   const handleDeleteSmsProfile = async (profile) => {
-    if (!window.confirm(`Delete ${profile.name}? This only removes the saved SMS configuration.`)) {
+    if (!await confirm({ title: "Delete SMS Config", message: `Delete ${profile.name}? This only removes the saved SMS configuration.`, confirmText: "Delete", isDangerous: true })) {
       return;
     }
 
@@ -1902,7 +1903,7 @@ export default function CompanySetupPage() {
   };
 
   const handleResetSmsTemplates = async () => {
-    if (!window.confirm("Reset SMS templates back to the MILIK defaults for this company?")) {
+    if (!await confirm({ title: "Reset SMS Templates", message: "Reset SMS templates back to the MILIK defaults for this company? Your custom templates will be replaced.", confirmText: "Reset" })) {
       return;
     }
 

@@ -17,6 +17,7 @@ import {
   FaTrash,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useConfirm } from "../../context/ConfirmContext";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
@@ -170,6 +171,7 @@ const fallbackDepositType = {
 };
 
 const TenantDeposits = () => {
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
@@ -630,7 +632,7 @@ const TenantDeposits = () => {
   const handleDeleteSelected = async () => {
     if (!canDeleteInvoice || selectedInvoices.length === 0) return;
     const selectedRows = depositRows.filter((row) => selectedInvoices.includes(row.key));
-    const confirmed = window.confirm(`Delete ${selectedRows.length} selected deposit invoice(s)?`);
+    const confirmed = await confirm({ title: "Delete Deposit Invoices", message: `Delete ${selectedRows.length} selected deposit invoice(s)?`, confirmText: "Delete", isDangerous: true });
     if (!confirmed) return;
 
     setDeleting(true);
@@ -653,7 +655,7 @@ const TenantDeposits = () => {
 
   const handleDeleteSingle = async (row) => {
     if (!canDeleteInvoice || !row?.invoiceId) return;
-    const confirmed = window.confirm(`Delete deposit invoice ${row.id}?`);
+    const confirmed = await confirm({ title: "Delete Deposit Invoice", message: `Delete deposit invoice ${row.id}?`, confirmText: "Delete", isDangerous: true });
     if (!confirmed) return;
 
     setDeleting(true);

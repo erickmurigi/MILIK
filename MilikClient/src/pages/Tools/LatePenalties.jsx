@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm } from "../../context/ConfirmContext";
 import {
   FaBolt,
   FaCalendarAlt,
@@ -122,6 +123,7 @@ const batchDeleteSummary = (batch) => {
 };
 
 const LatePenalties = () => {
+  const confirm = useConfirm();
   const { currentCompany } = useSelector((state) => state.company || {});
   const businessId = currentCompany?._id || "";
 
@@ -589,9 +591,12 @@ const LatePenalties = () => {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Delete late penalty batch "${batch.batchName || batch._id}"? This will remove the batch record because all linked penalty invoices have already been cleared.`
-    );
+    const confirmed = await confirm({
+      title: "Delete Penalty Batch",
+      message: `Delete late penalty batch "${batch.batchName || batch._id}"? This will remove the batch record because all linked penalty invoices have already been cleared.`,
+      confirmText: "Delete",
+      isDangerous: true,
+    });
     if (!confirmed) return;
 
     try {
@@ -644,11 +649,14 @@ const LatePenalties = () => {
       return;
     }
 
-    const confirmed = window.confirm(
-      itemIds.length === 1
+    const confirmed = await confirm({
+      title: "Delete Late Penalties",
+      message: itemIds.length === 1
         ? "Delete the selected late penalty? This only works when no journal entry exists."
-        : `Delete ${itemIds.length} selected late penalties? This only works when no journal entry exists.`
-    );
+        : `Delete ${itemIds.length} selected late penalties? This only works when no journal entry exists.`,
+      confirmText: "Delete",
+      isDangerous: true,
+    });
     if (!confirmed) return;
 
     try {

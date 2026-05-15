@@ -5,6 +5,7 @@ import { getProperties, updateProperty } from '../../redux/propertyRedux';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { FaEdit, FaTrash, FaPlus, FaCheck, FaTimes, FaSearch, FaArrowLeft, FaRedoAlt } from 'react-icons/fa';
+import { useConfirm } from '../../context/ConfirmContext';
 
 const MILIK_GREEN = "#0B3B2E";
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
@@ -13,6 +14,7 @@ const MILIK_ORANGE = "#FF8C00";
 const ITEMS_PER_PAGE = 50;
 
 const CommissionsList = () => {
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentUser = useSelector((state) => state.auth?.currentUser);
@@ -122,7 +124,7 @@ const CommissionsList = () => {
   };
 
   const handleDelete = async (propertyId) => {
-    if (!window.confirm('Remove commission settings for this property?')) return;
+    if (!await confirm({ title: "Remove Commission Settings", message: "Remove commission settings for this property?", confirmText: "Remove", isDangerous: true })) return;
 
     try {
       await dispatch(updateProperty({ 

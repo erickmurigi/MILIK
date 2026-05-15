@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney } from "../../services/carWashApi";
 import { hasCompanyPermission } from "../../utils/permissions";
 import CarWashShell from "./CarWashShell";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const PAGE_SIZE = 30;
 const defaultFilters = { search: "", type: "" };
@@ -64,6 +65,7 @@ const groupForType = (type = "") => {
 };
 
 const CarWashChartOfAccounts = () => {
+  const confirm = useConfirm();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const [accounts, setAccounts] = useState([]);
@@ -230,7 +232,7 @@ const CarWashChartOfAccounts = () => {
       toast.warning("You do not have permission to delete chart accounts.");
       return;
     }
-    const confirmed = window.confirm(`Delete ${selectedAccounts.length} selected Car Wash account(s)?`);
+    const confirmed = await confirm({ title: "Delete Accounts", message: `Delete ${selectedAccounts.length} selected Car Wash account(s)?`, confirmText: "Delete", isDangerous: true });
     if (!confirmed) return;
 
     setSaving(true);

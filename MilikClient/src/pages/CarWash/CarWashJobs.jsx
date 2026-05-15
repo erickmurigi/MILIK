@@ -4,6 +4,7 @@ import { FaChevronDown, FaChevronRight, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSe
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const emptyJobForm = {
   customerName: "",
@@ -92,6 +93,7 @@ const EmptyRow = ({ colSpan, text }) => (
 );
 
 const CarWashJobs = () => {
+  const confirm = useConfirm();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const [jobs, setJobs] = useState([]);
   const [services, setServices] = useState([]);
@@ -263,7 +265,7 @@ const CarWashJobs = () => {
 
   const deleteSelectedJobs = async () => {
     if (!selectedIds.length) return;
-    const confirmed = window.confirm("Delete selected unpaid Car Wash jobs? Jobs with payments cannot be deleted.");
+    const confirmed = await confirm({ title: "Delete Car Wash Jobs", message: "Delete selected unpaid Car Wash jobs? Jobs with payments cannot be deleted.", confirmText: "Delete", isDangerous: true });
     if (!confirmed) return;
     try {
       const result = await carWashApi.deleteJobs(selectedIds);

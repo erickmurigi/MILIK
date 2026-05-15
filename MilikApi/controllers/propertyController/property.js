@@ -1130,6 +1130,19 @@ export const updateProperty = async (req, res, next) => {
         }));
     }
 
+    if (Array.isArray(req.body.utilityRates)) {
+      req.body.utilityRates = req.body.utilityRates
+        .filter((rate) => rate?.utilityType?.trim())
+        .map((rate) => ({
+          utilityType: rate.utilityType.trim(),
+          unitCost: Math.max(0, parseFloat(rate.unitCost) || 0),
+          billingCycle: ["monthly", "quarterly", "annually", "per_use"].includes(rate.billingCycle)
+            ? rate.billingCycle
+            : "monthly",
+          isActive: rate.isActive !== false,
+        }));
+    }
+
     Object.keys(req.body).forEach((key) => {
       if (
         key !== "drawerBank" &&

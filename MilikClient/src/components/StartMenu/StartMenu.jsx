@@ -80,11 +80,12 @@ const moduleRegistry = [
     status: "coming",
   },
   {
-    id: "hr",
-    moduleKey: "hr",
-    label: "Human Resource",
-    icon: <FaUsers />,
-    status: "coming",
+    id: "propertySale",
+    moduleKey: "propertySale",
+    label: "Property Sales",
+    icon: <FaBuilding />,
+    to: "/sale/dashboard",
+    status: "active",
   },
   {
     id: "pos",

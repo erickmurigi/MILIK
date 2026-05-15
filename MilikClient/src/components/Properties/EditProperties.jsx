@@ -23,6 +23,7 @@ import {
 } from "react-icons/fa";
 import { getPropertyById, updateProperty } from "../../redux/propertyRedux";
 import { getLandlords } from "../../redux/apiCalls";
+import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
 import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
@@ -270,6 +271,7 @@ const EditProperty = () => {
       mpesaNarration: "",
       standingCharges: [],
       securityDeposits: [],
+      utilityRates: [],
       smsExemptions: {
         all: false,
         invoice: false,
@@ -302,6 +304,8 @@ const EditProperty = () => {
   const [formData, setFormData] = useState(initialFormData);
   const [fieldErrors, setFieldErrors] = useState({});
   const [generalError, setGeneralError] = useState("");
+  const [utilityTypeOptions, setUtilityTypeOptions] = useState([]);
+  const [utilityTypeOptionsLoading, setUtilityTypeOptionsLoading] = useState(false);
   const [openAddLandlordModal, setOpenAddLandlordModal] = useState(false);
   const [newLandlord, setNewLandlord] = useState({
     fullName: "",
@@ -318,6 +322,7 @@ const EditProperty = () => {
     { id: "general", label: "General Info", icon: <FaHome /> },
     { id: "space", label: "Space/Units", icon: <FaWarehouse /> },
     { id: "accounting", label: "Accounting", icon: <FaCalculator /> },
+    { id: "utilityRates", label: "Meter Reading Rates", icon: <FaCog /> },
   ];
 
   const propertyTypes = [
@@ -415,6 +420,7 @@ const EditProperty = () => {
           : "",
         standingCharges: currentProperty.standingCharges || [],
         securityDeposits: currentProperty.securityDeposits || [],
+        utilityRates: currentProperty.utilityRates || [],
         smsExemptions: currentProperty.smsExemptions || initialFormData.smsExemptions,
         emailExemptions: currentProperty.emailExemptions || initialFormData.emailExemptions,
         lettingFeeMode: currentProperty.lettingFeeMode || "percentage",
@@ -539,6 +545,23 @@ const EditProperty = () => {
   const removeSecurityDeposit = (index) => {
     const updatedDeposits = formData.securityDeposits.filter((_, i) => i !== index);
     setFormData((prev) => ({ ...prev, securityDeposits: updatedDeposits }));
+  };
+
+  const addUtilityRate = () => {
+    setFormData((prev) => ({
+      ...prev,
+      utilityRates: [
+        ...prev.utilityRates,
+        { utilityType: "", unitCost: 0, billingCycle: "monthly", isActive: true },
+      ],
+    }));
+  };
+
+  const removeUtilityRate = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      utilityRates: prev.utilityRates.filter((_, i) => i !== index),
+    }));
   };
 
   const handleSelectLandlord = (landlordId, landlordObj) => {
@@ -771,6 +794,26 @@ const EditProperty = () => {
       dispatch(getLandlords({ company: currentCompany._id }));
     }
   }, [currentCompany, dispatch, isSelfManagingLandlordMode]);
+
+  useEffect(() => {
+    if (activeTab !== "utilityRates" || !currentCompany?._id) return;
+    let cancelled = false;
+    setUtilityTypeOptionsLoading(true);
+    adminRequests
+      .get(`/company-settings/${currentCompany._id}`)
+      .then((res) => {
+        if (!cancelled) {
+          setUtilityTypeOptions(
+            (Array.isArray(res?.data?.utilityTypes) ? res.data.utilityTypes : []).filter(
+              (u) => u?.isActive !== false
+            )
+          );
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setUtilityTypeOptionsLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, currentCompany?._id]);
 
   useEffect(() => {
     if (!draftStorageKey || !draftRestoredRef.current) return;
@@ -1690,6 +1733,133 @@ const EditProperty = () => {
     </div>
   );
 
+  const renderUtilityRates = () => (
+    <div className="space-y-6">
+      <div className={`${sectionCard} p-4`}>
+        <div className="flex justify-between items-center mb-3">
+          <div>
+            <h3 className={sectionHeader}>METER READING RATES</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Set the charge per unit for each utility at this property. These rates override company defaults and apply when billing meter readings.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={addUtilityRate}
+            className={`h-9 px-3 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md flex items-center gap-2 ${MILIK_ORANGE_BG_HOVER} transition-colors flex-shrink-0`}
+          >
+            <FaPlus /> Add Rate
+          </button>
+        </div>
+
+        {formData.utilityRates.length === 0 ? (
+          <div className="py-8 text-center border border-dashed border-slate-200 rounded-lg">
+            <FaCog className="text-3xl mx-auto mb-2 text-slate-300" />
+            <p className="text-sm font-semibold text-slate-500">No utility rates configured</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Add rates here to override company-level defaults for this property.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {formData.utilityRates.map((rate, index) => (
+              <div
+                key={index}
+                className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end p-3 border border-slate-200 rounded-lg bg-slate-50/40"
+              >
+                <div>
+                  <MilikSelect
+                    label="Utility Type"
+                    placeholder={utilityTypeOptionsLoading ? "Loading..." : "Select Utility"}
+                    items={utilityTypeOptions}
+                    value={rate.utilityType}
+                    onChange={(val, item) => {
+                      const updated = [...formData.utilityRates];
+                      updated[index] = {
+                        ...updated[index],
+                        utilityType: val,
+                        unitCost: item?.unitCost ?? updated[index].unitCost,
+                        billingCycle: item?.billingCycle ?? updated[index].billingCycle,
+                      };
+                      setFormData((p) => ({ ...p, utilityRates: updated }));
+                    }}
+                    getLabel={(x) => x.name}
+                    getValue={(x) => x.name}
+                    disabled={utilityTypeOptionsLoading}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Unit Cost (KES)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={rate.unitCost}
+                    onChange={(e) => {
+                      const updated = [...formData.utilityRates];
+                      updated[index] = { ...updated[index], unitCost: e.target.value };
+                      setFormData((p) => ({ ...p, utilityRates: updated }));
+                    }}
+                    className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div>
+                  <MilikSelect
+                    label="Billing Cycle"
+                    placeholder="Select Cycle"
+                    items={["monthly", "quarterly", "annually", "per_use"]}
+                    value={rate.billingCycle}
+                    onChange={(val) => {
+                      const updated = [...formData.utilityRates];
+                      updated[index] = { ...updated[index], billingCycle: val };
+                      setFormData((p) => ({ ...p, utilityRates: updated }));
+                    }}
+                    getLabel={(x) => x.charAt(0).toUpperCase() + x.slice(1).replace("_", " ")}
+                    getValue={(x) => x}
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={rate.isActive}
+                      onChange={(e) => {
+                        const updated = [...formData.utilityRates];
+                        updated[index] = { ...updated[index], isActive: e.target.checked };
+                        setFormData((p) => ({ ...p, utilityRates: updated }));
+                      }}
+                    />
+                    Active
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeUtilityRate(index)}
+                    className="h-9 w-9 flex items-center justify-center rounded-md bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+                    title="Remove"
+                  >
+                    <FaTrash />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+          <p className="text-xs text-blue-700 font-semibold mb-1">Rate Resolution Priority</p>
+          <ol className="text-xs text-blue-600 space-y-0.5 list-decimal list-inside">
+            <li>Rate entered directly on the meter reading</li>
+            <li>Per-unit rate (configured on each unit)</li>
+            <li>Property rate (configured here)</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderContent = () => {
     switch (activeTab) {
       case "general":
@@ -1698,6 +1868,8 @@ const EditProperty = () => {
         return renderSpaceUnits();
       case "accounting":
         return renderAccountingBilling();
+      case "utilityRates":
+        return renderUtilityRates();
       case "banking":
         return renderBanking();
       case "notes":
@@ -1861,7 +2033,7 @@ const EditProperty = () => {
               </button>
             )}
 
-            {!isLastTab ? (
+            {!isLastTab && (
               <button
                 type="button"
                 onClick={handleNextTab}
@@ -1870,8 +2042,9 @@ const EditProperty = () => {
               >
                 Next
               </button>
-            ) : (
-              <button
+            )}
+
+            <button
                 type="submit"
                 form="edit-property-form"
                 disabled={loading}
@@ -1889,7 +2062,6 @@ const EditProperty = () => {
                   </>
                 )}
               </button>
-            )}
           </div>
         </div>
       </div>

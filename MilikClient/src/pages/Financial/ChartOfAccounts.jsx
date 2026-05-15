@@ -18,6 +18,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getChartOfAccounts } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const ACCOUNT_GROUPS = [
   {
@@ -148,6 +149,7 @@ const formatMoney = (value) => {
 };
 
 const ChartOfAccounts = () => {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
@@ -436,7 +438,7 @@ const ChartOfAccounts = () => {
     }
     if (!canDeleteCOA) { toast.warning("You do not have permission to delete chart of accounts entries."); return; }
     const names = selectedAccounts.map((a) => `${a.code} ${a.name}`).join(", ");
-    const confirmed = window.confirm(`Delete selected account(s)?\n\n${names}`);
+    const confirmed = await confirm({ title: "Delete Accounts", message: `Delete the following account(s)? ${names}`, confirmText: "Delete", isDangerous: true });
     if (!confirmed) return;
 
     setSaving(true);

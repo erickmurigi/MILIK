@@ -19,6 +19,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getLandlords, getChartOfAccounts, getLandlordReceipts, createLandlordReceipt, updateLandlordReceipt, postLandlordReceipt, reverseLandlordReceipt, deleteLandlordReceipt } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -125,6 +126,7 @@ const getPropertyLinkedLandlord = (property, landlords = []) => {
 };
 
 const LandlordReceipts = () => {
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const { currentCompany } = useSelector((state) => state.company || {});
   const currentUser = useSelector((state) => state.auth?.currentUser);
@@ -353,7 +355,7 @@ const LandlordReceipts = () => {
   const handleDelete = async (receipt) => {
     if (!canCreate) { toast.warning("You don't have permission to delete landlord receipts"); return; }
     if (!receipt?._id) return;
-    const ok = window.confirm(`Delete draft receipt ${receipt.receiptNumber || ""}?`);
+    const ok = await confirm({ title: "Delete Receipt", message: `Delete draft receipt ${receipt.receiptNumber || ""}?`, confirmText: "Delete", isDangerous: true });
     if (!ok) return;
     try {
       await deleteLandlordReceipt(receipt._id, { business: currentCompany?._id });

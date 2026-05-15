@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useConfirm } from "../../context/ConfirmContext";
 import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import {
@@ -359,6 +360,7 @@ const Modal = ({ open, title, subtitle, children, onClose, footer }) => {
 };
 
 const CompanySettings = () => {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentCompany } = useSelector((state) => state.company || {});
@@ -594,9 +596,11 @@ const CompanySettings = () => {
     const endpoint = TAB_CONFIG[tabKey]?.endpoint;
     if (!endpoint) return;
 
-    const confirmed = window.confirm(
-      `Archive ${item?.name || "this setting"}? It will stay in history but stop being available for future use.`
-    );
+    const confirmed = await confirm({
+      title: "Archive Setting",
+      message: `Archive ${item?.name || "this setting"}? It will stay in history but stop being available for future use.`,
+      confirmText: "Archive",
+    });
     if (!confirmed) return;
 
     try {

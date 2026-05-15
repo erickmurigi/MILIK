@@ -55,6 +55,20 @@ const securityDepositSchema = new mongoose.Schema(
   { _id: true }
 );
 
+const propertyUtilityRateSchema = new mongoose.Schema(
+  {
+    utilityType: { type: String, required: true, trim: true },
+    unitCost: { type: Number, default: 0, min: 0 },
+    billingCycle: {
+      type: String,
+      enum: ["monthly", "quarterly", "annually", "per_use"],
+      default: "monthly",
+    },
+    isActive: { type: Boolean, default: true },
+  },
+  { _id: true }
+);
+
 const smsExemptionsSchema = new mongoose.Schema(
   {
     all: { type: Boolean, default: false },
@@ -235,6 +249,11 @@ const PropertySchema = new mongoose.Schema(
 
     securityDeposits: {
       type: [securityDepositSchema],
+      default: [],
+    },
+
+    utilityRates: {
+      type: [propertyUtilityRateSchema],
       default: [],
     },
 

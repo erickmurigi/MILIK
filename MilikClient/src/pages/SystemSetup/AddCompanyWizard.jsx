@@ -62,10 +62,10 @@ const MODULE_OPTIONS = [
     core: false,
   },
   {
-    key: "hr",
-    label: "Human Resource",
-    description: "Staff records, payroll and leave management.",
-    icon: FaUsers,
+    key: "propertySale",
+    label: "Property Sales",
+    description: "Land and property listings, buyers, deals, payments and agent commissions.",
+    icon: FaBuilding,
     core: false,
   },
   {

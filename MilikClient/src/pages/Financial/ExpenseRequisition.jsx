@@ -17,6 +17,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useConfirm } from "../../context/ConfirmContext";
 import {
   createExpenseRequisition,
   deleteExpenseRequisition,
@@ -56,6 +57,7 @@ const statusPill = {
 };
 
 const ExpenseRequisition = () => {
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
@@ -261,7 +263,7 @@ const ExpenseRequisition = () => {
 
   const handleDelete = async (row) => {
     if (!canDelete) { toast.warning("You don't have permission to delete expense requisitions"); return; }
-    if (!window.confirm(`Delete requisition ${row.requisitionNo}?`)) return;
+    if (!await confirm({ title: "Delete Requisition", message: `Delete requisition ${row.requisitionNo}?`, confirmText: "Delete", isDangerous: true })) return;
     try {
       const response = await deleteExpenseRequisition(row._id, {
         business: currentCompany?._id,
@@ -321,7 +323,7 @@ const ExpenseRequisition = () => {
       toast.info("Select requisitions first");
       return;
     }
-    if (!window.confirm(`Delete ${selectedIds.length} selected requisitions?`)) return;
+    if (!await confirm({ title: "Delete Requisitions", message: `Delete ${selectedIds.length} selected requisitions?`, confirmText: "Delete", isDangerous: true })) return;
     for (const id of selectedIds) {
       const row = rows.find((item) => item._id === id);
       if (!row) continue;

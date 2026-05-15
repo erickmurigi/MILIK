@@ -10,6 +10,7 @@ import {
   updateServiceProvider,
 } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const blankForm = {
   name: "",
@@ -41,6 +42,7 @@ const CATEGORY_OPTIONS = [
 ];
 
 const ServiceProviders = () => {
+  const confirm = useConfirm();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const [rows, setRows] = useState([]);
@@ -204,7 +206,7 @@ const ServiceProviders = () => {
 
   const handleDelete = async (row) => {
     if (!canDelete) { toast.warning("You don't have permission to delete service providers"); return; }
-    if (!window.confirm(`Delete service provider ${row.name}?`)) return;
+    if (!await confirm({ title: "Delete Service Provider", message: `Delete service provider ${row.name}?`, confirmText: "Delete", isDangerous: true })) return;
     try {
       await deleteServiceProvider(row._id, {
         business: currentCompany?._id,

@@ -94,6 +94,17 @@ import CarWashChartOfAccounts from "./pages/CarWash/CarWashChartOfAccounts";
 import CarWashStaff from "./pages/CarWash/CarWashStaff";
 import CarWashReports from "./pages/CarWash/CarWashReports";
 import CarWashCommissions from "./pages/CarWash/CarWashCommissions";
+import PropertySaleDashboard from "./pages/PropertySale/PropertySaleDashboard";
+import SaleListings from "./pages/PropertySale/SaleListings";
+import SaleBuyers from "./pages/PropertySale/SaleBuyers";
+import SaleAgents from "./pages/PropertySale/SaleAgents";
+import SaleOffers from "./pages/PropertySale/SaleOffers";
+import SaleDeals from "./pages/PropertySale/SaleDeals";
+import SalePayments from "./pages/PropertySale/SalePayments";
+import SaleCommissions from "./pages/PropertySale/SaleCommissions";
+import SaleReports from "./pages/PropertySale/SaleReports";
+import SaleMonthlyDetail from "./pages/PropertySale/SaleMonthlyDetail";
+import { ConfirmProvider } from "./context/ConfirmContext";
 
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
 const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
@@ -482,6 +493,7 @@ function App() {
 
 
   return (
+    <ConfirmProvider>
     <BrowserRouter>
       <AppDocumentTitleGuard />
       <Routes>
@@ -505,6 +517,16 @@ function App() {
         <Route path="/carwash/staff" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-staff" moduleKey="carwash"><CarWashStaff /></PermissionRoute></CompanyModuleRoute>} />
         <Route path="/carwash/reports" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashReports /></PermissionRoute></CompanyModuleRoute>} />
         <Route path="/carwash/commissions" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissions /></PermissionRoute></CompanyModuleRoute>} />
+        <Route path="/sale/dashboard" element={<CompanyModuleRoute moduleKey="propertySale"><PropertySaleDashboard /></CompanyModuleRoute>} />
+        <Route path="/sale/listings" element={<CompanyModuleRoute moduleKey="propertySale"><SaleListings /></CompanyModuleRoute>} />
+        <Route path="/sale/buyers" element={<CompanyModuleRoute moduleKey="propertySale"><SaleBuyers /></CompanyModuleRoute>} />
+        <Route path="/sale/agents" element={<CompanyModuleRoute moduleKey="propertySale"><SaleAgents /></CompanyModuleRoute>} />
+        <Route path="/sale/offers" element={<CompanyModuleRoute moduleKey="propertySale"><SaleOffers /></CompanyModuleRoute>} />
+        <Route path="/sale/deals" element={<CompanyModuleRoute moduleKey="propertySale"><SaleDeals /></CompanyModuleRoute>} />
+        <Route path="/sale/payments" element={<CompanyModuleRoute moduleKey="propertySale"><SalePayments /></CompanyModuleRoute>} />
+        <Route path="/sale/commissions" element={<CompanyModuleRoute moduleKey="propertySale"><SaleCommissions /></CompanyModuleRoute>} />
+        <Route path="/sale/reports" element={<CompanyModuleRoute moduleKey="propertySale"><SaleReports /></CompanyModuleRoute>} />
+        <Route path="/sale/reports/monthly/:year/:month" element={<CompanyModuleRoute moduleKey="propertySale"><SaleMonthlyDetail /></CompanyModuleRoute>} />
         <Route path="/system-setup" element={<SuperAdminRoute><Navigate to="/system-setup/overview" replace /></SuperAdminRoute>} />
         <Route path="/system-setup/overview" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
         <Route path="/system-setup/companies" element={<SuperAdminRoute><SystemSetupPage /></SuperAdminRoute>} />
@@ -598,6 +620,7 @@ function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
+    </ConfirmProvider>
   );
 }
 

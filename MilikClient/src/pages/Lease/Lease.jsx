@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { FaEdit, FaPlus, FaRedoAlt, FaSave, FaSearch, FaTrash, FaTimes } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { updateCompany } from "../../redux/apiCalls";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -55,6 +56,7 @@ const sanitizeUnitTypes = (value = []) => {
 };
 
 const UnitTypesPage = () => {
+  const confirm = useConfirm();
   const dispatch = useDispatch();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const isSavingCompany = useSelector((state) => state.company?.isFetching);
@@ -146,7 +148,7 @@ const UnitTypesPage = () => {
       return;
     }
 
-    const confirmed = window.confirm(`Remove ${formatUnitTypeLabel(value)} from this company?`);
+    const confirmed = await confirm({ title: "Remove Unit Type", message: `Remove ${formatUnitTypeLabel(value)} from this company?`, confirmText: "Remove", isDangerous: true });
     if (!confirmed) return;
 
     const nextTypes = unitTypes.filter((item) => item !== value);
@@ -157,7 +159,7 @@ const UnitTypesPage = () => {
   };
 
   const handleRestoreDefaults = async () => {
-    const confirmed = window.confirm("Restore the default MILIK unit types for this company?");
+    const confirmed = await confirm({ title: "Restore Defaults", message: "Restore the default MILIK unit types for this company? Your current types will be replaced.", confirmText: "Restore" });
     if (!confirmed) return;
     const saved = await persistTypes([...DEFAULT_UNIT_TYPES], "Default unit types restored.");
     if (saved) resetForm();

@@ -99,7 +99,7 @@ const findActiveTenantForUnit = async ({ businessId, unitId }) => {
   if (!businessId || !unitId) return null;
 
   return Tenant.findOne({
-    business: scopedBusinessId,
+    business: businessId,
     unit: unitId,
     status: { $in: ACTIVE_TENANT_STATUSES },
   })
@@ -124,8 +124,16 @@ const resolveUtilityRate = async ({ businessId, unitDoc, utilityType, providedRa
     return Number(unitUtility.unitCharge || 0);
   }
 
+  const propertyDoc = await Property.findById(unitDoc?.property).select("utilityRates").lean();
+  const propertyRate = (propertyDoc?.utilityRates || []).find(
+    (r) => String(r?.utilityType || "").trim().toLowerCase() === normalizedUtility && r?.isActive !== false
+  );
+  if (propertyRate && Number.isFinite(Number(propertyRate.unitCost))) {
+    return Number(propertyRate.unitCost || 0);
+  }
+
   const utilityDoc = await Utility.findOne({
-    business: scopedBusinessId,
+    business: businessId,
     name: { $regex: `^${String(utilityType || "").trim()}$`, $options: "i" },
     isActive: true,
   })

@@ -24,6 +24,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { adminRequests } from "../../utils/requestMethods";
+import { useConfirm } from "../../context/ConfirmContext";
 import {
   billMeterReading,
   createMeterReading,
@@ -246,6 +247,7 @@ const buildRegisterPrintHtml = ({ company, companyName, rows, totalAmount, filte
 };
 
 const MeterReadings = () => {
+  const confirm = useConfirm();
   const { currentCompany } = useSelector((state) => state.company || {});
   const businessId = currentCompany?._id || "";
   const currentUser = useSelector((state) => state.auth?.currentUser);
@@ -452,21 +454,27 @@ const MeterReadings = () => {
   );
 
   useEffect(() => {
-    if (!selectedUnit || !form.utilityType) return;
+    if (!form.property || !form.utilityType) return;
+    if (form.rate !== "" && form.rate !== null) return;
 
-    const matchingUtility = (selectedUnit.utilities || []).find(
-      (item) =>
-        String(item.utility || "").trim().toLowerCase() ===
-        String(form.utilityType || "").trim().toLowerCase()
+    const normalizedUtility = String(form.utilityType || "").trim().toLowerCase();
+
+    const matchingUnitUtility = (selectedUnit?.utilities || []).find(
+      (item) => String(item.utility || "").trim().toLowerCase() === normalizedUtility
     );
-
-    if (matchingUtility && (form.rate === "" || form.rate === null)) {
-      setForm((prev) => ({
-        ...prev,
-        rate: String(Number(matchingUtility.unitCharge || 0)),
-      }));
+    if (matchingUnitUtility && Number.isFinite(Number(matchingUnitUtility.unitCharge))) {
+      setForm((prev) => ({ ...prev, rate: String(Number(matchingUnitUtility.unitCharge || 0)) }));
+      return;
     }
-  }, [selectedUnit, form.utilityType]);
+
+    const selectedProperty = properties.find((p) => String(p._id) === String(form.property));
+    const propertyRate = (selectedProperty?.utilityRates || []).find(
+      (r) => String(r?.utilityType || "").trim().toLowerCase() === normalizedUtility && r?.isActive !== false
+    );
+    if (propertyRate && Number.isFinite(Number(propertyRate.unitCost))) {
+      setForm((prev) => ({ ...prev, rate: String(Number(propertyRate.unitCost || 0)) }));
+    }
+  }, [selectedUnit, form.utilityType, form.property, properties]);
 
   useEffect(() => {
     setSelectedReadingIds((prev) => prev.filter((id) => readings.some((reading) => reading._id === id)));
@@ -696,7 +704,8 @@ const MeterReadings = () => {
       ? `Delete meter reading for ${reading?.unit?.unitNumber || "this unit"}? This will also reverse the linked invoice ledger entries.`
       : `Delete meter reading for ${reading?.unit?.unitNumber || "this unit"}?`;
 
-    if (!window.confirm(confirmMessage)) return;
+    const ok = await confirm({ title: "Delete Meter Reading", message: confirmMessage, confirmText: "Delete", isDangerous: true });
+    if (!ok) return;
 
     setRowActionKey(`delete-${reading._id}`);
     try {
@@ -721,7 +730,7 @@ const MeterReadings = () => {
 
   const handleVoidSingle = async (reading) => {
     if (!canDeleteReading) return;
-    if (!window.confirm("Void this meter reading?")) return;
+    if (!await confirm({ title: "Void Meter Reading", message: "Void this meter reading? This action cannot be undone.", confirmText: "Void", isDangerous: true })) return;
 
     setRowActionKey(`void-${reading._id}`);
     try {
@@ -748,7 +757,7 @@ const MeterReadings = () => {
 
   const handleBillSingle = async (reading) => {
     if (!canProcessReading) return;
-    if (!window.confirm("Convert this meter reading into a tenant utility invoice?")) return;
+    if (!await confirm({ title: "Generate Utility Invoice", message: "Convert this meter reading into a tenant utility invoice?", confirmText: "Generate Invoice" })) return;
 
     setRowActionKey(`bill-${reading._id}`);
     try {
@@ -811,15 +820,11 @@ const MeterReadings = () => {
       return;
     }
 
-    if (
-      !window.confirm(
-        `Bill ${selectedDraftRows.length} selected meter reading${
-          selectedDraftRows.length > 1 ? "s" : ""
-        } into utility invoices?`
-      )
-    ) {
-      return;
-    }
+    if (!await confirm({
+      title: "Bill Selected Readings",
+      message: `Generate utility invoices for ${selectedDraftRows.length} selected meter reading${selectedDraftRows.length > 1 ? "s" : ""}?`,
+      confirmText: "Bill All",
+    })) return;
 
     setBulkBilling(true);
     try {
@@ -866,7 +871,7 @@ const MeterReadings = () => {
       ? `Delete ${selectedDeletableRows.length} selected meter reading(s)? ${billedCount} billed reading(s) will also reverse linked invoice ledger entries.`
       : `Delete ${selectedDeletableRows.length} selected meter reading(s)?`;
 
-    if (!window.confirm(confirmMessage)) return;
+    if (!await confirm({ title: "Delete Meter Readings", message: confirmMessage, confirmText: "Delete", isDangerous: true })) return;
 
     setBulkDeleting(true);
     try {
@@ -1091,16 +1096,11 @@ const MeterReadings = () => {
                         <input
                           type="text"
                           inputMode="decimal"
-                          value={form.previousReading}
+                          value={form.previousReading === "" ? (inferredPreviousReading > 0 ? String(inferredPreviousReading) : "") : form.previousReading}
                           onChange={(e) => handleFormChange("previousReading", e.target.value)}
                           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                          placeholder={`Auto from last saved reading (${formatNumber(inferredPreviousReading)})`}
+                          placeholder="0"
                         />
-                        {form.previousReading === "" && (
-                          <p className="text-[11px] font-medium text-slate-500">
-                            Using {formatNumber(inferredPreviousReading)} from the latest saved reading for this unit and utility.
-                          </p>
-                        )}
                       </label>
 
                       <label className="space-y-1 text-sm font-medium text-slate-700">
