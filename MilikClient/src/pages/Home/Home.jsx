@@ -835,6 +835,8 @@ function Home() {
             <span>Professional demo workspace</span>
             <span>Read-only Demo preview</span>
             <span>Built for confidence</span>
+            <a href="mailto:miliksystem@gmail.com" className="text-white/65 hover:text-white transition">Contact Us</a>
+            <Link to="/login" className="text-white/65 hover:text-white transition">Sign In</Link>
           </div>
         </div>
       </footer>

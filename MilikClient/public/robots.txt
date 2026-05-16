@@ -1,10 +1,14 @@
 User-agent: *
 Allow: /
-Allow: /trial-access
 
-# Block protected app routes to save crawl budget
+# Redirects — block to prevent "Page with redirect" errors in Search Console
+Disallow: /home
+Disallow: /trial-access
+
+# Protected app routes — block to save crawl budget
 Disallow: /dashboard
 Disallow: /moduleDashboard
+Disallow: /login
 Disallow: /properties
 Disallow: /tenants
 Disallow: /landlords
@@ -12,6 +16,7 @@ Disallow: /financial
 Disallow: /reports
 Disallow: /system-setup
 Disallow: /carwash
+Disallow: /sale
 Disallow: /tools
 Disallow: /inspections
 Disallow: /maintenances
@@ -19,5 +24,11 @@ Disallow: /units
 Disallow: /vacants
 Disallow: /lease
 Disallow: /companySetup
+Disallow: /settings
+Disallow: /company-setup
+Disallow: /help
+Disallow: /invoices
+Disallow: /receipts
+Disallow: /agreements
 
 Sitemap: https://milikproperty.com/sitemap.xml
