@@ -130,9 +130,10 @@ const BASE_CSS = `
 
 // ─── Petty Cash Voucher ───────────────────────────────────────────────────────
 
-export const printPettyCashVoucher = ({ disbursement, account, company }) => {
+export const printPettyCashVoucher = ({ disbursement, account, company, user }) => {
   if (!disbursement) return null;
   const c = co(company);
+  const preparedByName = [user?.otherNames, user?.surname].filter(Boolean).join(' ') || user?.email || 'Milik Admin';
   const isVoid = disbursement.status === "void";
   const coInfo = [c.phone, c.email, c.address].filter(Boolean).join(" • ");
 
@@ -244,10 +245,8 @@ export const printPettyCashVoucher = ({ disbursement, account, company }) => {
       <div class="sig-table three">
         <div class="sig-block">
           <div class="sig-title">Prepared By</div>
-          <div class="sig-line"></div>
-          <div class="sig-sub">Signature</div>
-          <div class="sig-line"></div>
-          <div class="sig-sub">Name &amp; Date</div>
+          <div class="sig-line" style="display:flex;align-items:flex-end;padding-bottom:3px;"><span style="font-size:11px;font-weight:700;color:#0f172a;">${escapeHtml(preparedByName)}</span></div>
+          <div class="sig-sub">Signature &amp; Date</div>
         </div>
         <div class="sig-block">
           <div class="sig-title">Approved By</div>
@@ -279,9 +278,10 @@ export const printPettyCashVoucher = ({ disbursement, account, company }) => {
 
 // ─── Replenishment / Imprest Reimbursement Form ───────────────────────────────
 
-export const printReplenishmentSummary = ({ replenishment, disbursements = [], account, company }) => {
+export const printReplenishmentSummary = ({ replenishment, disbursements = [], account, company, user }) => {
   if (!replenishment) return null;
   const c = co(company);
+  const requestedByName = [user?.otherNames, user?.surname].filter(Boolean).join(' ') || user?.email || 'Milik Admin';
   const coInfo = [c.phone, c.email, c.address].filter(Boolean).join(" • ");
 
   const activeDisbursements = [...disbursements]
@@ -443,10 +443,8 @@ export const printReplenishmentSummary = ({ replenishment, disbursements = [], a
       <div class="sig-table four">
         <div class="sig-block">
           <div class="sig-title">Requested By</div>
-          <div class="sig-line"></div>
-          <div class="sig-sub">Signature</div>
-          <div class="sig-line"></div>
-          <div class="sig-sub">Name &amp; Date</div>
+          <div class="sig-line" style="display:flex;align-items:flex-end;padding-bottom:3px;"><span style="font-size:11px;font-weight:700;color:#0f172a;">${escapeHtml(requestedByName)}</span></div>
+          <div class="sig-sub">Signature &amp; Date</div>
         </div>
         <div class="sig-block">
           <div class="sig-title">Verified By</div>

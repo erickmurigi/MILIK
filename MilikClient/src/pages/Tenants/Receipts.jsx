@@ -1097,6 +1097,8 @@ const visibleReceiptIds = useMemo(
           </div>
         `;
 
+    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin';
+
     const printWindow = window.open("", "_blank", "width=980,height=760");
     if (!printWindow) return;
 
@@ -1225,9 +1227,10 @@ const visibleReceiptIds = useMemo(
 
               <div style="margin-top:28px; display:grid; grid-template-columns:repeat(3,1fr); gap:20px; padding-top:20px; border-top:1px solid #e2e8f0;">
                 <div style="text-align:center;">
-                  <div style="height:40px; border-bottom:1px solid #334155; margin-bottom:8px;"></div>
+                  <div style="height:40px; border-bottom:1px solid #334155; margin-bottom:8px; display:flex; align-items:flex-end; justify-content:center; padding-bottom:4px;">
+                    <span style="font-size:11px; font-weight:700; color:#0f172a;">${escapeHtml(preparedByName)}</span>
+                  </div>
                   <div style="font-size:11px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.12em;">Prepared By</div>
-                  <div style="font-size:10px; color:#94a3b8; margin-top:3px;">Name &amp; Signature</div>
                 </div>
                 <div style="text-align:center;">
                   <div style="height:40px; border-bottom:1px solid #334155; margin-bottom:8px;"></div>

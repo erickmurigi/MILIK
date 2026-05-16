@@ -385,6 +385,8 @@ const PaymentVouchers = () => {
         <div class="field-val${mono ? " mono" : ""}">${esc(value || "—")}</div>
       </div>`;
 
+    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin';
+
     const win = window.open("", "_blank", "width=900,height=720");
     if (!win) return;
     win.document.write(`<!DOCTYPE html>
@@ -461,8 +463,8 @@ const PaymentVouchers = () => {
     <div class="sig-grid">
       <div>
         <div class="sig-title">Prepared By</div>
-        <div class="sig-line"></div><div class="sig-sub">Signature</div>
-        <div class="sig-line"></div><div class="sig-sub">Name &amp; Date</div>
+        <div class="sig-line" style="display:flex;align-items:flex-end;padding-bottom:3px;"><span style="font-size:11px;font-weight:700;color:#0f172a;">${esc(preparedByName)}</span></div>
+        <div class="sig-sub">Signature &amp; Date</div>
       </div>
       <div>
         <div class="sig-title">Approved By</div>

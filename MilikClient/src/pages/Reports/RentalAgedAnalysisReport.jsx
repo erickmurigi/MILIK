@@ -244,7 +244,7 @@ const RentalAgedAnalysisReport = () => {
               <div><strong>Property:</strong> {filters.propertyId === "all" ? "All properties" : properties.find((property) => String(property._id) === String(filters.propertyId))?.propertyName || "Selected property"}</div>
               <div><strong>Category:</strong> {filters.category === "all" ? "All charges" : filters.category}</div>
               <div><strong>Generated:</strong> {printGeneratedAt}</div>
-              <div><strong>Prepared by:</strong> {currentUser?.username || currentUser?.email || "System user"}</div>
+              <div><strong>Prepared by:</strong> {[currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin'}</div>
             </div>
           </div>
           <div className="report-print-grid">

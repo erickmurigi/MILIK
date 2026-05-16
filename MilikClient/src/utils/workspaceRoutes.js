@@ -71,6 +71,10 @@ const SYSTEM_ADMIN_ROUTE_MATCHERS = [
 ];
 
 export const getWorkspaceFromRoute = (pathname = '') => {
+  if (pathname === '/moduleDashboard' || pathname.startsWith('/moduleDashboard/')) {
+    return null;
+  }
+
   if (pathname === '/carwash' || pathname.startsWith('/carwash/')) {
     return WORKSPACE_IDS.CARWASH;
   }

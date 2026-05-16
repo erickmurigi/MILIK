@@ -677,7 +677,7 @@ const PettyCash = () => {
                         <td className="px-4 py-2.5 text-center">
                           <div className="flex items-center justify-center gap-2">
                             <button
-                              onClick={() => printPettyCashVoucher({ disbursement: row, account: selectedAccount, company: currentCompany })}
+                              onClick={() => printPettyCashVoucher({ disbursement: row, account: selectedAccount, company: currentCompany, user: currentUser })}
                               className="rounded px-2 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-100"
                               title="Print voucher"
                             >
@@ -757,7 +757,7 @@ const PettyCash = () => {
                         <td className="px-4 py-2.5">
                           <div className="flex items-center justify-center gap-2">
                             <button
-                              onClick={() => printReplenishmentSummary({ replenishment: row, disbursements, account: selectedAccount, company: currentCompany })}
+                              onClick={() => printReplenishmentSummary({ replenishment: row, disbursements, account: selectedAccount, company: currentCompany, user: currentUser })}
                               className="rounded px-2 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-100"
                               title="Print reimbursement form"
                             >

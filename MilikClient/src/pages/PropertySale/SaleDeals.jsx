@@ -23,6 +23,7 @@ const blankForm = {
 const SaleDeals = () => {
   const confirm = useConfirm();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
+  const currentUser = useSelector((s) => s.auth?.currentUser);
   const [deals, setDeals] = useState([]);
   const [listings, setListings] = useState([]);
   const [buyers, setBuyers] = useState([]);
@@ -174,6 +175,8 @@ const SaleDeals = () => {
     const printedOn = new Date().toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"});
     const field = (label, value) => `<div class="field"><div class="fl">${esc(label)}</div><div class="fv">${esc(value||"—")}</div></div>`;
 
+    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin';
+
     const win = window.open("","_blank","width=900,height=760");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
@@ -198,7 +201,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font
 .fl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:2px}
 .fv{font-size:11px;font-weight:600;color:#1e293b}
 .sig-section{border-top:2px solid #027333;padding-top:18px;margin-top:24px}
-.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px}
+.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px}
 .sig-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#027333;margin-bottom:14px}
 .sig-line{border-bottom:1.5px solid #94a3b8;height:28px;margin-bottom:4px}
 .sig-sub{font-size:9px;color:#94a3b8;margin-bottom:10px}
@@ -251,6 +254,7 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
 
 <div class="sig-section">
   <div class="sig-grid">
+    <div><div class="sig-title">Prepared By</div><div class="sig-line" style="display:flex;align-items:flex-end;padding-bottom:3px;"><span style="font-size:11px;font-weight:700;color:#0f172a;">${esc(preparedByName)}</span></div><div class="sig-sub">Signature &amp; Date</div></div>
     <div><div class="sig-title">Buyer</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div><div class="sig-line"></div><div class="sig-sub">Full Name</div></div>
     <div><div class="sig-title">Sales Agent</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div><div class="sig-line"></div><div class="sig-sub">Full Name</div></div>
     <div><div class="sig-title">Authorized Officer</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div><div class="sig-line"></div><div class="sig-sub">Name &amp; Stamp</div></div>

@@ -2064,6 +2064,8 @@ const visibleInvoiceKeys = useMemo(
       )
       .join("\n");
 
+    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin';
+
     return `<!doctype html>
 <html>
 <head>
@@ -2199,9 +2201,10 @@ const visibleInvoiceKeys = useMemo(
 
     <div style="margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:20px;">
       <div style="text-align:center;">
-        <div style="height:38px; border-bottom:1px solid #334155; margin-bottom:8px;"></div>
+        <div style="height:38px; border-bottom:1px solid #334155; margin-bottom:8px; display:flex; align-items:flex-end; justify-content:center; padding-bottom:4px;">
+          <span style="font-size:11px; font-weight:700; color:#0f172a;">${escapeHtml(preparedByName)}</span>
+        </div>
         <div style="font-size:11px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.12em;">Prepared By</div>
-        <div style="font-size:10px; color:#94a3b8; margin-top:3px;">Name &amp; Signature</div>
       </div>
       <div style="text-align:center;">
         <div style="height:38px; border-bottom:1px solid #334155; margin-bottom:8px;"></div>
@@ -4207,291 +4210,239 @@ const createInvoiceForTenant = async (
           />
           <div className="absolute inset-y-0 right-0 flex w-full justify-end">
             <div
-              className="relative flex h-full w-full max-w-[760px] flex-col border-l border-slate-200 bg-white shadow-2xl"
-              onClick={(event) => event.stopPropagation()}
+              className="relative flex h-full w-full max-w-[700px] flex-col bg-white shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
             >
-              <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#114D3C] to-[#0B3B2E] px-5 py-4 text-white">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-white">
-                        <FaReceipt size={16} />
-                      </span>
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-100">
-                          Invoice Details
-                        </p>
-                        <h3 className="truncate text-lg font-bold">
-                          {activeInvoice.id}
-                        </h3>
-                      </div>
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${getInvoiceStatusBadgeClasses(
-                          activeInvoice.status
-                        )} bg-white/95`}
-                      >
+              {/* ── HEADER ── */}
+              <div className="shrink-0 bg-[#0B3B2E] px-6 py-5 text-white">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9px] font-black uppercase tracking-[0.35em] text-emerald-300/80">Rental Invoice</p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
+                      <h2 className="font-mono text-[22px] font-black leading-none tracking-tight">{activeInvoice.id}</h2>
+                      <span className={`inline-flex shrink-0 rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${getInvoiceStatusBadgeClasses(activeInvoice.status)} bg-white/90`}>
                         {activeInvoice.status}
                       </span>
                     </div>
-                    <p className="mt-3 text-sm font-semibold text-white/95">
+                    <p className="mt-1.5 text-[11px] font-semibold text-emerald-100/90">
                       {activeInvoice.invoiceDescription || activeInvoice.period}
                     </p>
-                    <p className="mt-1 text-xs text-emerald-100">
-                      {activeInvoice.tenantName} · {activeInvoice.propertyName} · {activeInvoice.unitName}
-                    </p>
                   </div>
-
                   <button
                     type="button"
                     onClick={closeInvoiceDetail}
-                    className="rounded-xl border border-white/15 bg-white/10 p-2 text-white transition hover:bg-white/20"
+                    className="shrink-0 rounded border border-white/20 bg-white/10 p-1.5 text-white hover:bg-white/20"
                     title="Close"
                   >
-                    <FaTimes size={14} />
+                    <FaTimes size={13} />
                   </button>
                 </div>
+
+                {/* Meta strip */}
+                <div className="mt-4 grid grid-cols-3 divide-x divide-white/10 rounded border border-white/10 bg-white/5 text-[11px]">
+                  <div className="px-3 py-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">Tenant</p>
+                    <p className="mt-0.5 truncate font-semibold text-white">{activeInvoice.tenantName}</p>
+                  </div>
+                  <div className="px-3 py-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">Unit</p>
+                    <p className="mt-0.5 truncate font-semibold text-white">{activeInvoice.propertyName} · {activeInvoice.unitName}</p>
+                  </div>
+                  <div className="px-3 py-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">Period</p>
+                    <p className="mt-0.5 font-semibold text-white">{activeInvoice.period || "—"}</p>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3">
-                <button
-                  type="button"
-                  onClick={() => handlePrintInvoice(activeInvoice)}
-                  disabled={!canExportInvoice}
-                  className="inline-flex items-center gap-2 rounded-lg border border-purple-200 bg-white px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FaPrint size={12} />
-                  Print
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownloadInvoice(activeInvoice)}
-                  disabled={!canExportInvoice}
-                  className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-white px-3 py-2 text-xs font-semibold text-green-700 transition hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FaDownload size={12} />
-                  Download
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleViewTenantStatement(activeInvoice.tenantId)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-50"
-                >
-                  <FaArrowRight size={12} />
-                  Tenant Statement
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteSingle(activeInvoice)}
-                  disabled={!canDeleteActiveInvoice}
-                  className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  title={
-                    canDeleteActiveInvoice
-                      ? "Delete invoice"
-                      : canDeleteInvoice
-                      ? "Paid invoices cannot be deleted from this screen"
-                      : "You do not have permission to delete invoices"
-                  }
-                >
-                  <FaTrash size={12} />
-                  Delete
-                </button>
-              </div>
-
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-slate-50 px-5 py-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-600">
-                      Gross Amount
-                    </p>
-                    <p className="mt-2 text-xl font-bold text-slate-900">
+              {/* ── FINANCIAL SUMMARY ── */}
+              <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-4">
+                <div className="flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Invoice Total</p>
+                    <p className="mt-1 font-mono text-[28px] font-black leading-none tracking-tight text-slate-900">
                       {formatCurrency(activeInvoiceGrossAmount)}
                     </p>
-                    <p className="mt-1 text-[11px] text-slate-500">Booked invoice total</p>
                   </div>
-
-                  <div className="rounded-2xl border border-green-200 bg-white p-4 shadow-sm">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-green-600">
-                      Applied
-                    </p>
-                    <p className="mt-2 text-xl font-bold text-slate-900">
-                      {formatCurrency(activeInvoice?.appliedAmount || 0)}
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      Settlement progress {activeInvoiceSettlementPercentage.toFixed(0)}%
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-orange-200 bg-white p-4 shadow-sm">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-orange-600">
-                      Outstanding
-                    </p>
-                    <p className="mt-2 text-xl font-bold text-slate-900">
-                      {formatCurrency(activeInvoice?.outstandingAmount || 0)}
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">Remaining to settle</p>
-                  </div>
-
-                  <div className="rounded-2xl border border-rose-200 bg-white p-4 shadow-sm">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-600">
-                      Due Pressure
-                    </p>
-                    <p className="mt-2 text-xl font-bold text-slate-900">
-                      {activeInvoiceDaysOverdue > 0 ? `${activeInvoiceDaysOverdue} day(s)` : "On time"}
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      Based on due date and open balance
-                    </p>
+                  <div className="flex shrink-0 items-stretch divide-x divide-slate-200 rounded border border-slate-200 text-center text-[11px]">
+                    <div className="px-4 py-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Paid</p>
+                      <p className="mt-1 font-mono font-black text-slate-900">{formatCurrency(activeInvoice?.appliedAmount || 0)}</p>
+                    </div>
+                    <div className="px-4 py-2">
+                      <p className={`text-[9px] font-black uppercase tracking-widest ${activeInvoice?.outstandingAmount > 0 ? "text-rose-600" : "text-slate-400"}`}>
+                        Outstanding
+                      </p>
+                      <p className={`mt-1 font-mono font-black ${activeInvoice?.outstandingAmount > 0 ? "text-rose-700" : "text-slate-400"}`}>
+                        {formatCurrency(activeInvoice?.outstandingAmount || 0)}
+                      </p>
+                    </div>
+                    <div className="px-4 py-2">
+                      <p className={`text-[9px] font-black uppercase tracking-widest ${activeInvoiceDaysOverdue > 0 ? "text-rose-600" : "text-slate-400"}`}>
+                        {activeInvoiceDaysOverdue > 0 ? "Overdue" : "Status"}
+                      </p>
+                      <p className={`mt-1 font-mono font-black ${activeInvoiceDaysOverdue > 0 ? "text-rose-700" : "text-emerald-600"}`}>
+                        {activeInvoiceDaysOverdue > 0 ? `${activeInvoiceDaysOverdue}d` : "Current"}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900">Settlement Progress</h4>
-                      <p className="text-xs text-slate-500">
-                        Quick visual on how much of this invoice has already been cleared.
-                      </p>
-                    </div>
-                    <span className="text-xs font-semibold text-slate-600">
-                      {activeInvoiceSettlementPercentage.toFixed(0)}%
-                    </span>
+                {/* Settlement bar */}
+                <div className="mt-4">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Payment Progress</p>
+                    <p className="text-[9px] font-black text-slate-600">{activeInvoiceSettlementPercentage.toFixed(0)}% settled</p>
                   </div>
-                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                     <div
-                      className="h-full rounded-full bg-[#0B3B2E] transition-all"
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        activeInvoiceSettlementPercentage >= 100 ? "bg-emerald-500" :
+                        activeInvoiceSettlementPercentage > 0 ? "bg-amber-400" : "bg-slate-200"
+                      }`}
                       style={{ width: `${activeInvoiceSettlementPercentage}%` }}
                     />
                   </div>
                 </div>
+              </div>
 
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr,0.85fr]">
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="mb-3 flex items-center gap-2">
-                        <FaMoneyBillWave className="text-slate-500" size={14} />
-                        <h4 className="text-sm font-bold text-slate-900">Amount Breakdown</h4>
-                      </div>
-                      <div className="space-y-2">
-                        {activeInvoiceBreakdown.map((item, index) => (
-                          <div
-                            key={`${item.label}-${index}`}
-                            className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2"
-                          >
-                            <p className="text-xs font-semibold text-slate-700">{item.label}</p>
-                            <p className="text-xs font-bold text-slate-900">{formatCurrency(item.amount)}</p>
-                          </div>
-                        ))}
-                      </div>
+              {/* ── ACTION BAR ── */}
+              <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-6 py-2.5">
+                <button type="button" onClick={() => handlePrintInvoice(activeInvoice)} disabled={!canExportInvoice}
+                  className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">
+                  <FaPrint size={10} /> Print
+                </button>
+                <button type="button" onClick={() => handleDownloadInvoice(activeInvoice)} disabled={!canExportInvoice}
+                  className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">
+                  <FaDownload size={10} /> Download
+                </button>
+                <button type="button" onClick={() => handleViewTenantStatement(activeInvoice.tenantId)}
+                  className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50">
+                  <FaArrowRight size={10} /> Tenant Statement
+                </button>
+                <button type="button" onClick={() => handleDeleteSingle(activeInvoice)} disabled={!canDeleteActiveInvoice}
+                  className="ml-auto inline-flex items-center gap-1.5 rounded border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-bold text-rose-600 transition hover:bg-rose-50 disabled:opacity-40"
+                  title={canDeleteActiveInvoice ? "Delete invoice" : canDeleteInvoice ? "Paid invoices cannot be deleted" : "No delete permission"}>
+                  <FaTrash size={10} /> Delete
+                </button>
+              </div>
 
-                      <div className="mt-4 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-                        <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                          <p className="font-semibold uppercase tracking-wide text-slate-400">Net</p>
-                          <p className="mt-1 font-bold text-slate-900">{formatCurrency(activeInvoiceNetAmount)}</p>
-                        </div>
-                        <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                          <p className="font-semibold uppercase tracking-wide text-slate-400">Tax</p>
-                          <p className="mt-1 font-bold text-slate-900">{formatCurrency(activeInvoiceTaxAmount)}</p>
-                        </div>
-                        <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                          <p className="font-semibold uppercase tracking-wide text-slate-400">Gross</p>
-                          <p className="mt-1 font-bold text-slate-900">{formatCurrency(activeInvoiceGrossAmount)}</p>
-                        </div>
-                      </div>
-                    </div>
+              {/* ── BODY ── */}
+              <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-slate-100">
 
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="mb-3 flex items-center gap-2">
-                        <FaFileInvoice className="text-slate-500" size={14} />
-                        <h4 className="text-sm font-bold text-slate-900">Journal Preview</h4>
-                      </div>
-                      <div className="overflow-hidden rounded-xl border border-slate-200">
-                        <table className="w-full text-xs">
-                          <thead className="bg-slate-100 text-slate-700">
-                            <tr>
-                              <th className="px-3 py-2 text-left font-semibold">Account</th>
-                              <th className="px-3 py-2 text-right font-semibold">Debit</th>
-                              <th className="px-3 py-2 text-right font-semibold">Credit</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {activeInvoiceJournalLines.map((line, index) => (
-                              <tr key={`${line.accountCode}-${index}`} className="border-t border-slate-200">
-                                <td className="px-3 py-2">
-                                  <p className="font-semibold text-slate-900">
-                                    {line.accountCode} · {line.accountName}
-                                  </p>
-                                  <p className="mt-0.5 text-[11px] text-slate-500">{line.narration}</p>
-                                </td>
-                                <td className="px-3 py-2 text-right font-semibold text-slate-900">
-                                  {line.debit ? formatCurrency(line.debit) : "-"}
-                                </td>
-                                <td className="px-3 py-2 text-right font-semibold text-slate-900">
-                                  {line.credit ? formatCurrency(line.credit) : "-"}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                {/* Charge Breakdown */}
+                <div className="bg-white">
+                  <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-6 py-2">
+                    <FaMoneyBillWave size={10} className="text-slate-400" />
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Charge Breakdown</span>
                   </div>
-
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="mb-3 flex items-center gap-2">
-                        <FaReceipt className="text-slate-500" size={14} />
-                        <h4 className="text-sm font-bold text-slate-900">Receipt Applications</h4>
-                      </div>
-                      {activeInvoiceReceiptApplications.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-xs text-slate-600">
-                          No receipt has been applied to this invoice yet.
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {activeInvoiceReceiptApplications.map((row) => (
-                            <div
-                              key={row.key}
-                              className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="text-xs font-bold text-slate-900">{row.receiptNumber}</p>
-                                  <p className="mt-1 text-[11px] text-slate-500">
-                                    {row.receiptDate ? formatDateDisplay(row.receiptDate) : "-"} · {String(row.paymentType || "receipt").replace(/_/g, " ")}
-                                  </p>
-                                  <p className="mt-1 text-[11px] text-slate-600">{row.chargeLabel}</p>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-xs font-bold text-green-700">{formatCurrency(row.appliedAmount)}</p>
-                                  <p className="mt-1 text-[11px] text-slate-500">
-                                    Bal after {formatCurrency(row.afterOutstanding)}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Description</th>
+                        <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Amount (KES)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeInvoiceBreakdown.map((item, i) => (
+                        <tr key={`${item.label}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
+                          <td className="px-6 py-2.5 text-slate-700">{item.label}</td>
+                          <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-900">{formatCurrency(item.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-slate-200 bg-slate-50/80">
+                        <td className="px-6 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Net Amount</td>
+                        <td className="px-6 py-2 text-right font-mono font-bold text-slate-700">{formatCurrency(activeInvoiceNetAmount)}</td>
+                      </tr>
+                      {activeInvoiceTaxAmount > 0 && (
+                        <tr className="bg-slate-50/80">
+                          <td className="px-6 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400">VAT / Tax</td>
+                          <td className="px-6 py-2 text-right font-mono font-bold text-slate-700">{formatCurrency(activeInvoiceTaxAmount)}</td>
+                        </tr>
                       )}
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <h4 className="text-sm font-bold text-slate-900">Action Notes</h4>
-                      <ul className="mt-3 space-y-2 text-xs text-slate-700">
-                        <li className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                          Use <span className="font-semibold">Tenant Statement</span> to review this invoice together with receipts, allocations, and downstream balance movement.
-                        </li>
-                        <li className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                          Use <span className="font-semibold">Print</span> or <span className="font-semibold">Download</span> when you need the invoice in a shareable or auditable format.
-                        </li>
-                        <li className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                          {canDeleteActiveInvoice
-                            ? "Delete remains available because this invoice is not settled from this screen."
-                            : "Delete is blocked here when the invoice is already paid or partially paid, or when you do not have permission."}
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
+                      <tr className="border-t-2 border-[#0B3B2E]/20 bg-[#0B3B2E]/5">
+                        <td className="px-6 py-3 text-[11px] font-black uppercase tracking-wider text-[#0B3B2E]">Total Payable</td>
+                        <td className="px-6 py-3 text-right font-mono text-sm font-black text-[#0B3B2E]">{formatCurrency(activeInvoiceGrossAmount)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
+
+                {/* Journal Entries */}
+                <div className="bg-white">
+                  <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-6 py-2">
+                    <FaFileInvoice size={10} className="text-slate-400" />
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Journal Entries</span>
+                  </div>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-slate-900 text-white">
+                        <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest">Account</th>
+                        <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest">Debit</th>
+                        <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest">Credit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeInvoiceJournalLines.map((line, i) => (
+                        <tr key={`${line.accountCode}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
+                          <td className="px-6 py-2.5">
+                            <p className="font-mono font-bold text-slate-800">{line.accountCode} · {line.accountName}</p>
+                            <p className="mt-0.5 text-[10px] text-slate-400">{line.narration}</p>
+                          </td>
+                          <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-700">
+                            {line.debit ? formatCurrency(line.debit) : <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-700">
+                            {line.credit ? formatCurrency(line.credit) : <span className="text-slate-300">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Payment Applications */}
+                <div className="bg-white">
+                  <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-2">
+                    <div className="flex items-center gap-2">
+                      <FaReceipt size={10} className="text-slate-400" />
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Payment Applications</span>
+                    </div>
+                    <span className="text-[9px] font-bold text-slate-400">{activeInvoiceReceiptApplications.length} receipt(s)</span>
+                  </div>
+                  {activeInvoiceReceiptApplications.length === 0 ? (
+                    <div className="px-6 py-8 text-center text-[11px] text-slate-400">
+                      No payments have been applied to this invoice yet.
+                    </div>
+                  ) : (
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50">
+                          <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Receipt</th>
+                          <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Date</th>
+                          <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Applied</th>
+                          <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Bal. After</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeInvoiceReceiptApplications.map((row) => (
+                          <tr key={row.key} className="border-b border-slate-50 hover:bg-slate-50/60">
+                            <td className="px-6 py-2.5">
+                              <p className="font-mono font-bold text-slate-900">{row.receiptNumber}</p>
+                              <p className="text-[10px] capitalize text-slate-400">{String(row.paymentType || "receipt").replace(/_/g, " ")}</p>
+                            </td>
+                            <td className="px-6 py-2.5 text-slate-500">{row.receiptDate ? formatDateDisplay(row.receiptDate) : "—"}</td>
+                            <td className="px-6 py-2.5 text-right font-mono font-bold text-emerald-700">{formatCurrency(row.appliedAmount)}</td>
+                            <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-500">{formatCurrency(row.afterOutstanding)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
               </div>
             </div>
           </div>

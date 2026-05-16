@@ -86,16 +86,40 @@ const steps = [
 
 const faqs = [
   {
+    question: "What is Milik property management software?",
+    answer: "Milik is a cloud-based property management system built for Kenya. It automates tenant billing, M-PESA rent collection, landlord statements and financial reporting — Trial Balance, Income Statement and Balance Sheet — all in one workspace.",
+  },
+  {
+    question: "Does Milik support M-PESA for rent collection?",
+    answer: "Yes. Milik integrates with M-PESA Paybill numbers so tenants can pay rent directly. Collections are automatically matched to invoices and receipts are generated instantly, keeping tenant balances accurate without manual entry.",
+  },
+  {
+    question: "How much does property management software cost in Kenya?",
+    answer: "Milik starts at KES 3,500 per month for up to 60 units. The Growth plan is KES 7,500/month for 61–250 units and Portfolio Plus is KES 9,000/month for 251–800 units. Enterprise custom pricing is available for 800+ units.",
+  },
+  {
+    question: "Can I manage multiple properties and landlords in Milik?",
+    answer: "Yes. Milik supports unlimited properties and landlords in a single workspace. You can manage bedsitters, apartments, commercial units and mixed-use portfolios with per-landlord statements and remittances generated automatically.",
+  },
+  {
+    question: "What financial reports does Milik generate?",
+    answer: "Milik generates Trial Balance, Income Statement, Balance Sheet, landlord remittance statements, rental collection reports, aged receivables analysis, paid balance reports and MRI tax summaries — all from the system's accounting core.",
+  },
+  {
+    question: "Does Milik work for bedsitters, apartments and commercial properties?",
+    answer: "Yes. Milik handles bedsitters, single-rooms, apartments, commercial units, gated communities and mixed-use properties. It supports multiple unit types, utility billing (water, electricity) and variable charge structures per tenant.",
+  },
+  {
     question: "Does the demo include accounting reports?",
-    answer: "Yes. The demo showcases Chart of Accounts, Trial Balance and Income Statement so prospects can see the financial backbone clearly.",
+    answer: "Yes. The demo showcases Chart of Accounts, Trial Balance and Income Statement so prospects can see the financial backbone clearly before subscribing.",
   },
   {
-    question: "Can prospects enter their own records during the trial?",
-    answer: "No. The first version is read-only so visitors can explore safely without altering the shared demo workspace.",
+    question: "Can I enter my own records during the Milik trial?",
+    answer: "The demo is read-only so visitors can explore safely without altering the shared demo workspace. Once you subscribe, your own live workspace is provisioned with full access.",
   },
   {
-    question: "How long does the demo last?",
-    answer: "Demo access lasts for 3 days from the moment the workspace is activated.",
+    question: "How long does the Milik demo last?",
+    answer: "Demo access lasts for 3 days from the moment the workspace is activated. You can contact Milik to extend the demo or move directly to a paid subscription.",
   },
 ];
 

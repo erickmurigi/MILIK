@@ -241,7 +241,7 @@ const PaidBalanceReport = () => {
             <div className="report-print-meta">
               <div><strong>As At:</strong> {formatDate(filters.asOfDate)}</div>
               <div><strong>Generated:</strong> {printGeneratedAt}</div>
-              <div><strong>Prepared by:</strong> {currentUser?.username || currentUser?.email || 'System user'}</div>
+              <div><strong>Prepared by:</strong> {[currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin'}</div>
             </div>
           </div>
 
