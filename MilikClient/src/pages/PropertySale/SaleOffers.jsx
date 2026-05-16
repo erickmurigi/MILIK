@@ -6,6 +6,7 @@ import PropertySaleShell from "./PropertySaleShell";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
+import useDebounce from "../../hooks/useDebounce";
 
 const STATUS_BADGE = {
   pending: "bg-amber-100 text-amber-700 border-amber-200",
@@ -32,6 +33,7 @@ const SaleOffers = () => {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 400);
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -51,7 +53,7 @@ const SaleOffers = () => {
       const res = await saleApi.listOffers({
         business: biz, limit: LIMIT, page,
         ...(statusFilter && { status: statusFilter }),
-        ...(search && { search }),
+        ...(debouncedSearch && { search: debouncedSearch }),
       });
       const items = Array.isArray(res) ? res : (res?.offers ?? []);
       setOffers(items);
@@ -61,7 +63,7 @@ const SaleOffers = () => {
     } finally {
       setLoading(false);
     }
-  }, [biz, page, statusFilter, search]);
+  }, [biz, page, statusFilter, debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
 

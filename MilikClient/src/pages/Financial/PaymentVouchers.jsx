@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import useDebounce from "../../hooks/useDebounce";
 import {
   FaCheck,
   FaEdit,
@@ -106,6 +107,7 @@ const PaymentVouchers = () => {
     form: blankForm,
   });
   const filters = voucherDraft.filters || { search: "", category: "all", status: "all", propertyId: "all" };
+  const debouncedSearch = useDebounce(filters.search, 400);
   const setFilters = (value) => setVoucherDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
   const [vouchers, setVouchers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -196,7 +198,7 @@ const PaymentVouchers = () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
-      const rows = await getPaymentVouchers({ ...filters, business: currentCompany._id, company: currentCompany._id });
+      const rows = await getPaymentVouchers({ ...filters, search: debouncedSearch, business: currentCompany._id, company: currentCompany._id });
       setVouchers((Array.isArray(rows) ? rows : []).map(normalizeVoucher));
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load payment vouchers");
@@ -207,7 +209,7 @@ const PaymentVouchers = () => {
 
   useEffect(() => {
     loadVouchers();
-  }, [currentCompany?._id, filters.search, filters.category, filters.status, filters.propertyId]);
+  }, [currentCompany?._id, debouncedSearch, filters.category, filters.status, filters.propertyId]);
 
   const filtered = useMemo(() => vouchers, [vouchers]);
 
@@ -228,7 +230,7 @@ const PaymentVouchers = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.search, filters.category, filters.status, filters.propertyId, filtered.length]);
+  }, [debouncedSearch, filters.category, filters.status, filters.propertyId, filtered.length]);
 
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);

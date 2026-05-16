@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import useDebounce from "../../hooks/useDebounce";
 import {
   FaCheck,
   FaEdit,
@@ -73,6 +74,7 @@ const ExpenseRequisition = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState({ search: "", status: "all", propertyId: "all" });
+  const debouncedSearch = useDebounce(filters.search, 400);
   const [form, setForm] = useState(blankForm);
 
   const canCreate  = hasCompanyPermission(currentUser, currentCompany, "expenses", "create", "accounts");
@@ -107,7 +109,7 @@ const ExpenseRequisition = () => {
     setLoading(true);
     try {
       const [reqs, serviceProviders] = await Promise.all([
-        getExpenseRequisitions({ business: currentCompany._id, company: currentCompany._id, ...filters }),
+        getExpenseRequisitions({ business: currentCompany._id, company: currentCompany._id, ...filters, search: debouncedSearch }),
         getServiceProviders({ business: currentCompany._id, company: currentCompany._id }),
       ]);
       setRows(Array.isArray(reqs) ? reqs : []);
@@ -121,7 +123,7 @@ const ExpenseRequisition = () => {
 
   useEffect(() => {
     loadRows();
-  }, [currentCompany?._id, filters.search, filters.status]);
+  }, [currentCompany?._id, debouncedSearch, filters.status]);
 
   const filteredRows = useMemo(
     () =>
@@ -144,7 +146,7 @@ const ExpenseRequisition = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.search, filters.status, filters.propertyId, filteredRows.length]);
+  }, [debouncedSearch, filters.status, filters.propertyId, filteredRows.length]);
 
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);

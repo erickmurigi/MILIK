@@ -6,6 +6,7 @@ import PropertySaleShell from "./PropertySaleShell";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
+import useDebounce from "../../hooks/useDebounce";
 
 const STATUS_BADGE = {
   paid: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -54,6 +55,7 @@ const SalePayments = () => {
   const [methodFilter, setMethodFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 400);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalCollected, setTotalCollected] = useState(0);
@@ -73,7 +75,7 @@ const SalePayments = () => {
         ...(typeFilter && { paymentType: typeFilter }),
         ...(methodFilter && { paymentMethod: methodFilter }),
         ...(statusFilter && { status: statusFilter }),
-        ...(search && { search }),
+        ...(debouncedSearch && { search: debouncedSearch }),
       };
       const res = await saleApi.listPayments(params);
       const items = Array.isArray(res) ? res : (res?.payments ?? []);
@@ -85,7 +87,7 @@ const SalePayments = () => {
     } finally {
       setLoading(false);
     }
-  }, [biz, page, dealFilter, typeFilter, methodFilter, statusFilter, search]);
+  }, [biz, page, dealFilter, typeFilter, methodFilter, statusFilter, debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
 

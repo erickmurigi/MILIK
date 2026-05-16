@@ -1,5 +1,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import useDebounce from "../../hooks/useDebounce";
 import {
   FaCheck,
   FaChevronDown,
@@ -218,6 +219,7 @@ const LandlordAdvancements = () => {
     landlordId: "all",
     advanceType: "all",
   });
+  const debouncedSearch = useDebounce(filters.search, 400);
   const [form, setForm] = useState(blankForm);
 
   const canWrite = hasCompanyPermission(currentUser, currentCompany, "landlordAdvancements", "create", "accounts");
@@ -271,7 +273,7 @@ const LandlordAdvancements = () => {
         company: currentCompany._id,
         status: filters.status,
         landlordId: filters.landlordId,
-        search: filters.search,
+        search: debouncedSearch,
       });
       const baseRows = Array.isArray(data) ? data : [];
       const filteredByType =
@@ -288,7 +290,7 @@ const LandlordAdvancements = () => {
 
   useEffect(() => {
     loadRows();
-  }, [currentCompany?._id, filters.search, filters.status, filters.landlordId, filters.advanceType]);
+  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.advanceType]);
 
   useEffect(() => {
     if (!showModal) return;
@@ -323,7 +325,7 @@ const LandlordAdvancements = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.search, filters.status, filters.landlordId, filters.advanceType, rows.length]);
+  }, [debouncedSearch, filters.status, filters.landlordId, filters.advanceType, rows.length]);
 
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);

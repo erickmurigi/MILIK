@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import useDebounce from "../../hooks/useDebounce";
 import {
   FaCalendarAlt,
   FaCheck,
@@ -169,6 +170,7 @@ const LandlordStandingOrders = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [filters, setFilters] = useState({ search: "", status: "all", landlordId: "all", propertyId: "all" });
+  const debouncedSearch = useDebounce(filters.search, 400);
   const [form, setForm] = useState(blankForm);
 
   const canWrite = hasCompanyPermission(currentUser, currentCompany, "standingOrders", "create", "accounts");
@@ -230,6 +232,7 @@ const LandlordStandingOrders = () => {
         business: currentCompany._id,
         company: currentCompany._id,
         ...filters,
+        search: debouncedSearch,
       });
       setRows(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -241,7 +244,7 @@ const LandlordStandingOrders = () => {
 
   useEffect(() => {
     loadRows();
-  }, [currentCompany?._id, filters.search, filters.status, filters.landlordId, filters.propertyId]);
+  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.propertyId]);
 
   useEffect(() => {
     setSelectedIds((prev) =>
@@ -279,7 +282,7 @@ const LandlordStandingOrders = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.search, filters.status, filters.landlordId, filters.propertyId, rows.length]);
+  }, [debouncedSearch, filters.status, filters.landlordId, filters.propertyId, rows.length]);
 
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);

@@ -50,7 +50,7 @@ const SaleDeals = () => {
     setLoading(true);
     try {
       const [rows, listingRows, buyerRows, agentRows] = await Promise.all([
-        saleApi.listDeals({ business: biz, status: statusFilter }),
+        saleApi.listDeals({ business: biz, status: statusFilter, limit: 1000 }),
         saleApi.listListings({ business: biz }),
         saleApi.listBuyers({ business: biz }),
         saleApi.listAgents({ business: biz, status: "active" }),

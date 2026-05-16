@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
+import useDebounce from "../../hooks/useDebounce";
 
 const ITEMS_PER_PAGE = 50;
 
@@ -23,6 +24,7 @@ const SaleAgents = () => {
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(blankForm);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 400);
   const [page, setPage] = useState(1);
 
   const biz = currentCompany?._id;
@@ -31,13 +33,13 @@ const SaleAgents = () => {
     if (!biz) return;
     setLoading(true);
     try {
-      const rows = await saleApi.listAgents({ business: biz, search });
+      const rows = await saleApi.listAgents({ business: biz, search: debouncedSearch, limit: 200 });
       setAgents(Array.isArray(rows) ? rows : []);
     } catch { toast.error("Failed to load agents"); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [biz, search]);
+  useEffect(() => { load(); }, [biz, debouncedSearch]);
 
   const totalPages = Math.max(1, Math.ceil(agents.length / ITEMS_PER_PAGE));
   const safePage = Math.min(page, totalPages);

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import useDebounce from "../../hooks/useDebounce";
 import {
   FaBookOpen,
   FaCheck,
@@ -138,6 +139,7 @@ const JournalEntries = () => {
   const [saving, setSaving] = useState(false);
 
   const filters = journalDraft.filters || { search: "", status: "all", journalType: "all", propertyId: "all" };
+  const debouncedSearch = useDebounce(filters.search, 400);
   const setFilters = (value) => setJournalDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
 
   const form = journalDraft.form || buildInitialForm();
@@ -182,6 +184,7 @@ const JournalEntries = () => {
         business: currentCompany._id,
         company: currentCompany._id,
         ...filters,
+        search: debouncedSearch,
       });
       setJournals(Array.isArray(rows) ? rows : []);
     } catch (error) {
@@ -193,7 +196,7 @@ const JournalEntries = () => {
 
   useEffect(() => {
     loadJournals();
-  }, [currentCompany?._id, filters.search, filters.status, filters.journalType, filters.propertyId]);
+  }, [currentCompany?._id, debouncedSearch, filters.status, filters.journalType, filters.propertyId]);
 
   const totals = useMemo(() => {
     return journals.reduce(
@@ -218,7 +221,7 @@ const JournalEntries = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.search, filters.status, filters.journalType, filters.propertyId]);
+  }, [debouncedSearch, filters.status, filters.journalType, filters.propertyId]);
 
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);

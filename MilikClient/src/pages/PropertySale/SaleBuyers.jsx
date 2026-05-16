@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
+import useDebounce from "../../hooks/useDebounce";
 
 const SOURCES = ["walk_in", "referral", "online", "agent", "other"];
 const KYC_STATUSES = ["pending", "verified", "rejected"];
@@ -31,6 +32,7 @@ const SaleBuyers = () => {
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(blankForm);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 400);
   const [kycFilter, setKycFilter] = useState("");
   const [page, setPage] = useState(1);
 
@@ -40,13 +42,13 @@ const SaleBuyers = () => {
     if (!biz) return;
     setLoading(true);
     try {
-      const rows = await saleApi.listBuyers({ business: biz, search, kycStatus: kycFilter });
+      const rows = await saleApi.listBuyers({ business: biz, search: debouncedSearch, kycStatus: kycFilter, limit: 500 });
       setBuyers(Array.isArray(rows) ? rows : []);
     } catch { toast.error("Failed to load buyers"); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [biz, search, kycFilter]);
+  useEffect(() => { load(); }, [biz, debouncedSearch, kycFilter]);
 
   const totalPages = Math.max(1, Math.ceil(buyers.length / ITEMS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
@@ -141,6 +143,12 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
     setTimeout(()=>{win.focus();win.print();},400);
   };
 
+  const kpiStats = useMemo(() => ({
+    verified: buyers.filter((b) => b.kycStatus === "verified").length,
+    pending: buyers.filter((b) => b.kycStatus === "pending").length,
+    rejected: buyers.filter((b) => b.kycStatus === "rejected").length,
+  }), [buyers]);
+
   const f = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
   const inputCls = "mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20";
 
@@ -155,9 +163,9 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
             { label: "Total Buyers", value: buyers.length, cls: "bg-slate-900 text-white" },
-            { label: "Verified KYC", value: buyers.filter((b) => b.kycStatus === "verified").length, cls: "bg-emerald-50 border border-emerald-200 text-emerald-900" },
-            { label: "Pending KYC", value: buyers.filter((b) => b.kycStatus === "pending").length, cls: "bg-amber-50 border border-amber-200 text-amber-900" },
-            { label: "KYC Rejected", value: buyers.filter((b) => b.kycStatus === "rejected").length, cls: "bg-rose-50 border border-rose-200 text-rose-900" },
+            { label: "Verified KYC", value: kpiStats.verified, cls: "bg-emerald-50 border border-emerald-200 text-emerald-900" },
+            { label: "Pending KYC", value: kpiStats.pending, cls: "bg-amber-50 border border-amber-200 text-amber-900" },
+            { label: "KYC Rejected", value: kpiStats.rejected, cls: "bg-rose-50 border border-rose-200 text-rose-900" },
           ].map((c) => (
             <div key={c.label} className={`rounded-lg px-3 py-2 ${c.cls}`}>
               <div className="text-[10px] font-black uppercase tracking-wider opacity-70">{c.label}</div>

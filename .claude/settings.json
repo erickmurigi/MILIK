@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs grep -l \"^import.*Employee\\\\|^const.*Employee.*=.*Schema\\\\|^const Employee\")"
+      "Bash(xargs grep -l \"^import.*Employee\\\\|^const.*Employee.*=.*Schema\\\\|^const Employee\")",
+      "Bash(npx vite *)"
     ]
   }
 }

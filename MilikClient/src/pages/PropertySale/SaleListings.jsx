@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import { saleApi, fmtKES, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
+import useDebounce from "../../hooks/useDebounce";
 import AmountInput from "./AmountInput";
 
 const PROPERTY_TYPES = ["plot", "house", "apartment", "commercial", "land", "other"];
@@ -38,6 +39,7 @@ const SaleListings = () => {
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(blankForm);
   const [filters, setFilters] = useState({ search: "", status: "", propertyType: "" });
+  const debouncedSearch = useDebounce(filters.search, 400);
   const [selectedIds, setSelectedIds] = useState([]);
   const [page, setPage] = useState(1);
 
@@ -48,7 +50,7 @@ const SaleListings = () => {
     setLoading(true);
     try {
       const [rows, agentRows] = await Promise.all([
-        saleApi.listListings({ business: biz, ...filters }),
+        saleApi.listListings({ business: biz, ...filters, search: debouncedSearch, limit: 500 }),
         saleApi.listAgents({ business: biz, status: "active" }),
       ]);
       setListings(Array.isArray(rows) ? rows : []);
@@ -60,7 +62,7 @@ const SaleListings = () => {
     }
   };
 
-  useEffect(() => { load(); }, [biz, filters.search, filters.status, filters.propertyType]);
+  useEffect(() => { load(); }, [biz, debouncedSearch, filters.status, filters.propertyType]);
 
   const filtered = useMemo(() => listings, [listings]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
