@@ -532,4 +532,44 @@ router.patch('/:id/toggle-lock', verifyUser, async (req, res) => {
   }
 });
 
+router.post('/:id/reset-password', verifyUser, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user || user.isSystemAuditUser) return res.status(404).json({ message: 'User not found' });
+    if (user.superAdminAccess || user.isSystemAdmin) {
+      return res.status(403).json({ message: 'System admin passwords cannot be reset from here.' });
+    }
+
+    const shared = await ensureSharedCompanyAccess(req.user, user);
+    if (!shared) return res.status(403).json({ message: 'You do not have access to this user' });
+
+    const company = await Company.findById(user.primaryCompany || user.company).select(COMPANY_SELECT).lean();
+    const tempPassword = buildTemporaryPassword(user.email);
+    user.password = tempPassword; // pre-save hook hashes this
+    user.mustChangePassword = true;
+    user.passwordProvisioningMethod = 'emailed_temp_password';
+    user.onboardingEmailSentAt = new Date();
+    await user.save();
+
+    await sendUserOnboardingEmail({ user, company, temporaryPassword: tempPassword });
+
+    await logAuditEvent({
+      req,
+      company: user.primaryCompany || user.company,
+      action: 'users.reset_password',
+      category: 'users',
+      severity: 'critical',
+      targetType: 'User',
+      targetId: user._id,
+      targetName: `${user.surname || ''} ${user.otherNames || ''}`.trim() || user.email,
+      message: `Reset password for user ${`${user.surname || ''} ${user.otherNames || ''}`.trim() || user.email}`,
+      metadata: { email: user.email },
+    });
+
+    res.json({ message: 'Password reset and sent to ' + user.email });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 export default router;

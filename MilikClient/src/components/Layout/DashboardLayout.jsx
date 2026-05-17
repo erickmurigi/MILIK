@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Toaster } from "react-hot-toast";
-import { ToastContainer } from "react-toastify";
+import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
@@ -14,7 +14,7 @@ import {
   FaUser, FaUsers, FaAddressCard, FaTag, FaClipboard,
   FaHandshake, FaChartLine, FaChartPie, FaFileAlt, FaBalanceScale,
   FaToolbox, FaDatabase, FaWrench, FaHeadset, FaInfoCircle, FaList,
-  FaBuilding, FaKey, FaUserSlash, FaRedoAlt, FaCar
+  FaBuilding, FaKey, FaUserSlash, FaRedoAlt, FaCar, FaUserPlus, FaUserCheck
 } from "react-icons/fa";
 import "./dashboard.css";
 import TabManager from "../../components/Layout/TabManager";
@@ -337,6 +337,7 @@ const TopToolbar = ({
   const isCompanySetupWorkspace = currentWorkspace === WORKSPACE_IDS.COMPANY_SETUP;
   const isCarWashWorkspace = currentWorkspace === WORKSPACE_IDS.CARWASH;
   const isPropertySaleWorkspace = currentWorkspace === WORKSPACE_IDS.PROPERTY_SALE;
+  const isHumanResourceWorkspace = currentWorkspace === WORKSPACE_IDS.HUMAN_RESOURCE;
 
   const routeConfig = useMemo(() => {
     if (isSystemAdminWorkspace) {
@@ -397,6 +398,41 @@ const TopToolbar = ({
         documentation: "/help/documentation",
         support: "/help/support",
         about: "/help/about",
+      };
+    }
+
+    if (isHumanResourceWorkspace) {
+      return {
+        // Employees — Phase 1 (live)
+        "hr-dashboard":             "/hr/dashboard",
+        "hr-employees":             "/hr/employees",
+        "hr-add-employee":          "/hr/employees/new",
+        // Leave — Phase 2 (live)
+        "hr-leave-applications":    "/hr/leave",
+        "hr-leave-approvals":       "/hr/leave",
+        "hr-leave-types":           "/hr/leave/types",
+        "hr-leave-balances":        "/hr/leave/balances",
+        // Payroll — Phase 3 (live)
+        "hr-run-payroll":           "/hr/payroll",
+        "hr-payroll-history":       "/hr/payroll",
+        "hr-payslips":              "/hr/payroll",
+        "hr-statutory":             "/hr/statutory",
+        // Reports — Phase 4 (live)
+        "hr-report-headcount":      "/hr/reports/headcount",
+        "hr-report-p9":             "/hr/reports/p9",
+        "hr-report-payroll":        "/hr/reports/payroll",
+        "hr-report-leave":          "/hr/reports/leave",
+        // Appraisals — Phase 5 (coming soon)
+        "hr-appraisal-cycles":      "coming-soon:Appraisal Cycles",
+        "hr-appraisals":            "coming-soon:Employee Appraisals",
+        "hr-kpis":                  "coming-soon:KPI Library",
+        // Setup — Phase 1 + 2 (live)
+        "hr-setup":                 "/hr/setup",
+        "hr-setup-leave-types":     "/hr/leave/types",
+        // Help
+        documentation: "/help/documentation",
+        support:       "/help/support",
+        about:         "/help/about",
       };
     }
 
@@ -481,7 +517,7 @@ const TopToolbar = ({
       support: "/help/support",
       about: "/help/about",
     };
-  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const mainMenuItems = useMemo(() => {
     if (isSystemAdminWorkspace) {
@@ -569,6 +605,87 @@ const TopToolbar = ({
       ];
 
       return filterMenuByPermissions(saleItems, currentUser, activeCompanyContext);
+    }
+
+    if (isHumanResourceWorkspace) {
+      return [
+        {
+          id: "hr-people",
+          label: "Employees",
+          icon: FaUsers,
+          submenu: [
+            { id: "hr-dashboard",    label: "HR Dashboard",  icon: FaChartBar },
+            { id: "hr-employees",    label: "All Employees", icon: FaUsers },
+            { id: "hr-add-employee", label: "Add Employee",  icon: FaUserPlus },
+          ],
+        },
+        {
+          id: "hr-leave",
+          label: "Leave",
+          icon: FaCalendarAlt,
+          submenu: [
+            { id: "hr-leave-applications", label: "Leave Applications", icon: FaFileAlt },
+            { id: "hr-leave-approvals",    label: "Leave Approvals",    icon: FaUserCheck },
+            { type: "separator" },
+            { id: "hr-leave-types",        label: "Leave Types",        icon: FaTag },
+            { id: "hr-leave-balances",     label: "Leave Balances",     icon: FaChartBar },
+          ],
+        },
+        {
+          id: "hr-payroll",
+          label: "Payroll",
+          icon: FaMoneyBillWave,
+          submenu: [
+            { id: "hr-run-payroll",     label: "Run Payroll",           icon: FaMoneyBillWave },
+            { id: "hr-payroll-history", label: "Payroll History",       icon: FaBook },
+            { id: "hr-payslips",        label: "Payslips",              icon: FaFileAlt },
+            { type: "separator" },
+            { id: "hr-statutory",       label: "Statutory Deductions",  icon: FaCalculator },
+          ],
+        },
+        {
+          id: "hr-reports",
+          label: "Reports",
+          icon: FaChartBar,
+          submenu: [
+            { id: "hr-report-headcount", label: "Headcount Report",  icon: FaUsers },
+            { id: "hr-report-payroll",   label: "Payroll Summary",   icon: FaMoneyBillWave },
+            { id: "hr-report-leave",     label: "Leave Summary",     icon: FaCalendarAlt },
+            { type: "separator" },
+            { id: "hr-report-p9",        label: "P9 Form (Annual)",  icon: FaFileAlt },
+          ],
+        },
+        {
+          id: "hr-appraisals",
+          label: "Appraisals",
+          icon: FaChartLine,
+          submenu: [
+            { id: "hr-appraisal-cycles", label: "Appraisal Cycles",     icon: FaCalendarAlt },
+            { id: "hr-appraisals",       label: "Employee Appraisals",  icon: FaClipboard },
+            { type: "separator" },
+            { id: "hr-kpis",             label: "KPI Library",          icon: FaTag },
+          ],
+        },
+        {
+          id: "hr-config",
+          label: "Setup",
+          icon: FaCog,
+          submenu: [
+            { id: "hr-setup",            label: "Departments & Designations", icon: FaBuilding },
+            { id: "hr-setup-leave-types", label: "Leave Types",               icon: FaTag },
+          ],
+        },
+        {
+          id: "help",
+          label: "Help",
+          icon: FaInfoCircle,
+          submenu: [
+            { id: "documentation", label: "Documentation", icon: FaBook },
+            { id: "support",       label: "Support",       icon: FaHeadset },
+            { id: "about",         label: "About",         icon: FaInfoCircle },
+          ],
+        },
+      ];
     }
 
     if (isCarWashWorkspace) {
@@ -789,10 +906,10 @@ const TopToolbar = ({
       });
 
     return filterMenuByPermissions(items, currentUser, activeCompanyContext);
-  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const nestedSubmenus = useMemo(() => {
-    if (isSystemAdminWorkspace || isCompanySetupWorkspace || isCarWashWorkspace || isPropertySaleWorkspace) {
+    if (isSystemAdminWorkspace || isCompanySetupWorkspace || isCarWashWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace) {
       return {};
     }
 
@@ -862,16 +979,23 @@ const TopToolbar = ({
     });
 
     return submenus;
-  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const handleMenuItemClick = (menuId) => {
     const route = routeConfig[menuId];
-    if (route) {
-      navigate(route);
+    if (!route) return;
+    if (route.startsWith("coming-soon:")) {
+      const feature = route.replace("coming-soon:", "");
+      toast.info(`${feature} is coming soon.`, { autoClose: 2500 });
       setActiveMenu(null);
       clearHoverCloseTimer();
       setHoveredFinancialItem(null);
+      return;
     }
+    navigate(route);
+    setActiveMenu(null);
+    clearHoverCloseTimer();
+    setHoveredFinancialItem(null);
   };
 
   const menuColorMap = {
@@ -892,6 +1016,12 @@ const TopToolbar = ({
     "sale-operations": { color: "#027333", label: "Operations", icon: FaHandshake },
     "sale-clients": { color: "#027333", label: "Clients & Agents", icon: FaUsers },
     "sale-finance": { color: "#027333", label: "Finance & Reports", icon: FaMoneyBillWave },
+    "hr-people":      { color: "#0B3B2E", label: "Employees",  icon: FaUsers },
+    "hr-leave":       { color: "#0891b2", label: "Leave",       icon: FaCalendarAlt },
+    "hr-payroll":     { color: "#7c3aed", label: "Payroll",     icon: FaMoneyBillWave },
+    "hr-reports":     { color: "#059669", label: "Reports",     icon: FaChartBar },
+    "hr-appraisals":  { color: "#b45309", label: "Appraisals",  icon: FaChartLine },
+    "hr-config":      { color: "#FF8C00", label: "Setup",       icon: FaCog },
   };
 
   const ProfessionalDropdown = ({ menuId, items }) => {
@@ -1178,7 +1308,33 @@ const TopToolbar = ({
 
         <div className="flex-1" />
 
-        {!isCarWashWorkspace && !isPropertySaleWorkspace && (
+        {isHumanResourceWorkspace && (
+        <div className="flex items-center space-x-1 px-1.5 py-0 text-[11px]">
+          <button
+            onClick={() => navigate("/hr/employees/new")}
+            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            title="Add Employee"
+          >
+            + Employee
+          </button>
+          <div className={`h-5 w-px ${darkMode ? "bg-gray-600" : "bg-gray-300"} mx-1`} />
+          <button
+            onClick={() => window.location.reload()}
+            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            title="Refresh"
+          >
+            <FaRedoAlt aria-hidden="true" />
+          </button>
+          <button
+            onClick={() => navigate("/hr/setup")}
+            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            title="HR Setup"
+          >
+            <FaCog aria-hidden="true" />
+          </button>
+        </div>
+        )}
+        {!isCarWashWorkspace && !isPropertySaleWorkspace && !isHumanResourceWorkspace && (
         <div className="flex items-center space-x-1 px-1.5 py-0 text-[11px]">
           <button
             onClick={() => navigate("/tenant/new")}

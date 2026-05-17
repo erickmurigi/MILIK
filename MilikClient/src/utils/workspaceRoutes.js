@@ -2,6 +2,7 @@ export const WORKSPACE_IDS = {
   PROPERTY: 'property-management',
   CARWASH: 'carwash',
   PROPERTY_SALE: 'property-sale',
+  HUMAN_RESOURCE: 'human-resource',
   SYSTEM_ADMIN: 'system-admin',
   COMPANY_SETUP: 'company-setup',
 };
@@ -37,6 +38,17 @@ export const WORKSPACE_CONFIG = {
       id: 'sale-dashboard',
       title: 'Dashboard',
       route: '/sale/dashboard',
+      closable: false,
+    },
+  },
+  [WORKSPACE_IDS.HUMAN_RESOURCE]: {
+    id: WORKSPACE_IDS.HUMAN_RESOURCE,
+    label: 'Human Resource',
+    defaultRoute: '/hr/dashboard',
+    defaultTab: {
+      id: 'hr-dashboard',
+      title: 'Dashboard',
+      route: '/hr/dashboard',
       closable: false,
     },
   },
@@ -81,6 +93,10 @@ export const getWorkspaceFromRoute = (pathname = '') => {
 
   if (pathname === '/sale' || pathname.startsWith('/sale/')) {
     return WORKSPACE_IDS.PROPERTY_SALE;
+  }
+
+  if (pathname === '/hr' || pathname.startsWith('/hr/')) {
+    return WORKSPACE_IDS.HUMAN_RESOURCE;
   }
 
   if (SYSTEM_ADMIN_ROUTE_MATCHERS.some((matches) => matches(pathname))) {

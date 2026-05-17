@@ -296,268 +296,265 @@ export default function AddUserPage() {
   };
 
   return (
-    <DashboardLayout>
-      <div className="mx-auto max-w-5xl px-4 py-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <button onClick={() => navigate('/system-setup/users')} className="mb-1 inline-flex items-center gap-1.5 text-xs font-bold text-[#0B3B2E] hover:underline"><FaArrowLeft /> Back to users</button>
-            <h1 className="text-base font-bold text-slate-900">{isEditing ? 'Update User Access' : 'New User'}</h1>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-orange-600">Milik Admin</div>
-            <div className="text-xs font-semibold text-slate-700">{isSystemAdmin ? 'Multi-company assignment enabled' : 'Single company access only'}</div>
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
+
+        {/* ── Sticky header ─────────────────────────────────────────── */}
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-4 py-2 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button onClick={() => navigate('/system-setup/users')} className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0B3B2E] hover:underline"><FaArrowLeft /> Back</button>
+              <div className="h-4 w-px bg-slate-300" />
+              <h1 className="text-sm font-black text-slate-900">{isEditing ? 'Update User Access' : 'New User'}</h1>
+            </div>
+            <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-500">{isSystemAdmin ? 'Multi-company enabled' : 'Single company'}</span>
           </div>
         </div>
 
         {isLoading ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500">Loading user setup...</div>
+          <div className="flex flex-1 items-center justify-center text-sm text-slate-500">Loading user setup...</div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="rounded-3xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-slate-700">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Access delivery</p>
-                  <p className="mt-1 font-semibold">Onboarded users sign in through the MILIK app URL after company setup is complete.</p>
-                </div>
-                <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm font-extrabold text-emerald-800">
-                  App URL: /login
-                </div>
-              </div>
-            </div>
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
 
-            <div className="grid gap-5 lg:grid-cols-[1.1fr,0.9fr]">
-              <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center gap-2 text-slate-900"><FaUserPlus className="text-emerald-700" /><h2 className="text-lg font-black">User details</h2></div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {[
-                    ['surname', 'Surname *'],
-                    ['otherNames', 'Other names *'],
-                    ['idNumber', 'ID / Passport *'],
-                    ['phoneNumber', 'Phone number *'],
-                    ['email', 'Email *'],
-                    ['postalAddress', 'Postal address'],
-                  ].map(([field, label]) => (
-                    <label key={field} className="text-sm font-semibold text-slate-700">
-                      <span className="mb-1 block">{label}</span>
-                      <input value={form[field]} onChange={(e) => updateForm(field, e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500" />
-                    </label>
-                  ))}
-                  <label className="text-sm font-semibold text-slate-700">
-                    <span className="mb-1 block">Gender</span>
-                    <select value={form.gender} onChange={(e) => updateForm('gender', e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500">
-                      <option value="">Select gender</option>
-                      <option>Male</option>
-                      <option>Female</option>
-                      <option>Other</option>
-                    </select>
-                  </label>
-                  <label className="text-sm font-semibold text-slate-700">
-                    <span className="mb-1 block">Profile *</span>
-                    <select value={form.profile} onChange={(e) => updateForm('profile', e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500">
-                      {PROFILE_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
-                    </select>
-                  </label>
-                  <label className="text-sm font-semibold text-slate-700">
-                    <span className="mb-1 block">Password {isEditing ? '(optional)' : '*'}</span>
-                    <input type="password" value={form.password} onChange={(e) => updateForm('password', e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500" />
-                  </label>
-                  <label className="text-sm font-semibold text-slate-700">
-                    <span className="mb-1 block">Confirm password</span>
-                    <input type="password" value={form.confirmPassword} onChange={(e) => updateForm('confirmPassword', e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500" />
-                  </label>
-                </div>
+            {/* ── Scrollable content ────────────────────────────────── */}
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <div className="grid gap-3 lg:grid-cols-[1.1fr,0.9fr]">
 
-                <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  {[
-                    ['userControl', 'User control'],
-                    ['adminAccess', 'Company admin access'],
-                    ['setupAccess', 'Operational settings access'],
-                    ['companySetupAccess', 'Company setup access'],
-                  ].map(([field, label]) => (
-                    <label key={field} className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700">
-                      <input type="checkbox" checked={Boolean(form[field])} onChange={(e) => updateForm(field, e.target.checked)} /> {label}
-                    </label>
-                  ))}
-                  {isSystemAdmin && (
-                    <label className="flex items-center gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-slate-700">
-                      <input type="checkbox" checked={Boolean(form.superAdminAccess)} onChange={(e) => updateForm('superAdminAccess', e.target.checked)} /> Milik admin / super admin access
-                    </label>
-                  )}
-                </div>
-
-                {!isEditing && (
-                  <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-900"><FaKey className="text-emerald-700" /> First-time sign-in</div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
-                        <input type="checkbox" checked={form.autoGeneratePassword} onChange={(e) => updateForm('autoGeneratePassword', e.target.checked)} /> Auto-generate temporary password
+                {/* Left: User details */}
+                <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="mb-2 flex items-center gap-2 text-slate-900"><FaUserPlus className="text-emerald-700 text-xs" /><h2 className="text-xs font-black uppercase tracking-wide">User details</h2></div>
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {[
+                      ['surname', 'Surname *'],
+                      ['otherNames', 'Other names *'],
+                      ['idNumber', 'ID / Passport *'],
+                      ['phoneNumber', 'Phone number *'],
+                      ['email', 'Email *'],
+                      ['postalAddress', 'Postal address'],
+                    ].map(([field, label]) => (
+                      <label key={field} className="text-xs font-semibold text-slate-700">
+                        <span className="mb-0.5 block">{label}</span>
+                        <input value={form[field]} onChange={(e) => updateForm(field, e.target.value)} className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-emerald-500" />
                       </label>
-                      <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
+                    ))}
+                    <label className="text-xs font-semibold text-slate-700">
+                      <span className="mb-0.5 block">Gender</span>
+                      <select value={form.gender} onChange={(e) => updateForm('gender', e.target.value)} className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-emerald-500">
+                        <option value="">Select gender</option>
+                        <option>Male</option>
+                        <option>Female</option>
+                        <option>Other</option>
+                      </select>
+                    </label>
+                    <label className="text-xs font-semibold text-slate-700">
+                      <span className="mb-0.5 block">Profile *</span>
+                      <select value={form.profile} onChange={(e) => updateForm('profile', e.target.value)} className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-emerald-500">
+                        {PROFILE_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    </label>
+                    {(isEditing || !form.autoGeneratePassword) && (
+                      <>
+                        <label className="text-xs font-semibold text-slate-700">
+                          <span className="mb-0.5 block">Password {isEditing ? '(optional)' : '*'}</span>
+                          <input type="password" value={form.password} onChange={(e) => updateForm('password', e.target.value)} className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-emerald-500" />
+                        </label>
+                        <label className="text-xs font-semibold text-slate-700">
+                          <span className="mb-0.5 block">Confirm password</span>
+                          <input type="password" value={form.confirmPassword} onChange={(e) => updateForm('confirmPassword', e.target.value)} className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-emerald-500" />
+                        </label>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      ['userControl', 'User control'],
+                      ['adminAccess', 'Company admin'],
+                      ['setupAccess', 'Operational settings'],
+                      ['companySetupAccess', 'Company setup'],
+                    ].map(([field, label]) => (
+                      <label key={field} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700">
+                        <input type="checkbox" checked={Boolean(form[field])} onChange={(e) => updateForm(field, e.target.checked)} /> {label}
+                      </label>
+                    ))}
+                    {isSystemAdmin && (
+                      <label className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1.5 text-xs font-semibold text-slate-700">
+                        <input type="checkbox" checked={Boolean(form.superAdminAccess)} onChange={(e) => updateForm('superAdminAccess', e.target.checked)} /> Milik super admin
+                      </label>
+                    )}
+                  </div>
+
+                  {!isEditing && (
+                    <div className="mt-2 flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                      <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-emerald-700"><FaKey size={9} /> First-time sign-in:</span>
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                        <input type="checkbox" checked={form.autoGeneratePassword} onChange={(e) => updateForm('autoGeneratePassword', e.target.checked)} /> Auto-generate password
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                         <input type="checkbox" checked={form.sendOnboardingEmail} onChange={(e) => updateForm('sendOnboardingEmail', e.target.checked)} disabled={!form.autoGeneratePassword} /> Send onboarding email
                       </label>
                     </div>
-                  </div>
-                )}
-              </section>
+                  )}
+                </section>
 
-              <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center gap-2 text-slate-900"><FaBuilding className="text-emerald-700" /><h2 className="text-lg font-black">Company assignment</h2></div>
-                <p className="mb-4 text-sm text-slate-600">Pick one or many companies, then define modules and exact action permissions for each company assignment.</p>
+                {/* Right: Company assignment */}
+                <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="mb-2 flex items-center gap-2 text-slate-900"><FaBuilding className="text-emerald-700 text-xs" /><h2 className="text-xs font-black uppercase tracking-wide">Company assignment</h2></div>
+                  <div className="space-y-1.5">
+                    {availableCompanies.map((company) => {
+                      const checked = form.accessibleCompanies.includes(company._id);
+                      return (
+                        <label key={company._id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs transition ${checked ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                          <input type="checkbox" checked={checked} onChange={() => toggleCompany(company)} />
+                          <div className="min-w-0 flex-1">
+                            <div className="font-black text-slate-900">{company.companyName}</div>
+                            <div className="text-[10px] text-slate-500">{company.companyCode || 'No code'}</div>
+                          </div>
+                          {checked && <FaCheckCircle className="shrink-0 text-emerald-600" size={11} />}
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <label className="mt-2 block text-xs font-semibold text-slate-700">
+                    <span className="mb-0.5 block">Primary company *</span>
+                    <select value={form.primaryCompany} onChange={(e) => updateForm('primaryCompany', e.target.value)} className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-emerald-500">
+                      <option value="">Select primary company</option>
+                      {form.accessibleCompanies.map((companyId) => {
+                        const company = availableCompanies.find((item) => item._id === companyId);
+                        return <option key={companyId} value={companyId}>{company?.companyName || companyId}</option>;
+                      })}
+                    </select>
+                  </label>
+
+                  <div className="mt-2 flex items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                    <span><span className="font-black text-slate-900">{form.accessibleCompanies.length}</span> compan{form.accessibleCompanies.length === 1 ? 'y' : 'ies'} selected</span>
+                    <span>Primary: <span className="font-bold text-slate-900">{availableCompanies.find((item) => item._id === form.primaryCompany)?.companyName || '—'}</span></span>
+                  </div>
+                </section>
+              </div>
+
+              {/* Modules & privileges */}
+              <section className="mt-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="mb-2 flex items-center gap-2 text-slate-900"><FaShieldAlt className="text-emerald-700 text-xs" /><h2 className="text-xs font-black uppercase tracking-wide">Modules & privileges per company</h2></div>
+
                 <div className="space-y-3">
-                  {availableCompanies.map((company) => {
-                    const checked = form.accessibleCompanies.includes(company._id);
+                  {form.companyAssignments.map((assignment) => {
+                    const company = availableCompanies.find((item) => item._id === assignment.company);
+                    const enabledModuleKeys = getEnabledCompanyModuleKeys(company);
                     return (
-                      <label key={company._id} className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 text-sm transition ${checked ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 hover:border-slate-300 bg-white'}`}>
-                        <input type="checkbox" className="mt-1" checked={checked} onChange={() => toggleCompany(company)} />
-                        <div className="min-w-0 flex-1">
-                          <div className="font-black text-slate-900">{company.companyName}</div>
-                          <div className="mt-1 text-xs text-slate-500">{company.companyCode || 'No code'} · {(company.enabledModules || []).length} module{(company.enabledModules || []).length === 1 ? '' : 's'} enabled</div>
+                      <div key={assignment.company} className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <h3 className="text-xs font-black text-slate-900">{company?.companyName || 'Company'}</h3>
+                          <span className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{enabledModuleKeys.length} modules</span>
                         </div>
-                        {checked ? <FaCheckCircle className="mt-1 text-emerald-600" /> : null}
-                      </label>
+
+                        <div className="grid gap-3 lg:grid-cols-[0.95fr,1.05fr]">
+                          {/* Module access */}
+                          <div className="rounded-lg border border-slate-200 bg-white p-2">
+                            <div className="mb-1.5 text-[11px] font-black text-slate-900">Module access levels</div>
+                            <div className="grid gap-1.5 sm:grid-cols-2">
+                              {enabledModuleKeys.map((moduleKey) => {
+                                const mappedKey = {
+                                  propertyManagement: 'propertyMgmt',
+                                  accounts: 'accounts',
+                                  inventory: 'inventory',
+                                  procurement: 'procurement',
+                                  hr: 'humanResource',
+                                  propertySale: 'propertySale',
+                                  facilityManagement: 'facilityManagement',
+                                  hotelManagement: 'hotelManagement',
+                                  telcoDealership: 'telcoDealership',
+                                  dms: 'dms',
+                                  academics: 'academics',
+                                  projectManagement: 'projectManagement',
+                                  assetValuation: 'assetValuation',
+                                  revenueRecognition: 'revenueRecognition',
+                                  crm: 'crm',
+                                  incidentManagement: 'incidentManagement',
+                                  sacco: 'sacco',
+                                  pos: 'inventory',
+                                }[moduleKey] || moduleKey;
+                                return (
+                                  <div key={moduleKey} className="flex items-center gap-2 rounded border border-slate-200 px-2 py-1.5">
+                                    <span className="flex-1 text-[11px] font-semibold text-slate-800">{MODULE_LABELS[moduleKey] || moduleKey}</span>
+                                    <select value={assignment.moduleAccess?.[mappedKey] || 'View only'} onChange={(e) => updateAssignment(assignment.company, (current) => ({ ...current, moduleAccess: { ...current.moduleAccess, [mappedKey]: e.target.value } }))} className="h-6 rounded border border-slate-200 px-1 text-[10px] outline-none focus:border-emerald-500">
+                                      {ACCESS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                                    </select>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Action permissions */}
+                          <div className="rounded-lg border border-slate-200 bg-white p-2">
+                            <div className="mb-1.5 text-[11px] font-black text-slate-900">Action permissions</div>
+                            <div className="space-y-2">
+                              {ACCESS_SECTIONS.map((section) => {
+                                const enabledPermissions = section.permissions.filter((permission) => !permission.moduleKey || enabledModuleKeys.includes(permission.moduleKey));
+                                if (!enabledPermissions.length) return null;
+                                const granted = sectionPermissionCount(assignment.permissions, enabledPermissions);
+                                return (
+                                  <div key={section.id} className="rounded border border-slate-200 p-2">
+                                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                                      <div>
+                                        <span className="text-[11px] font-black text-slate-900">{section.label}</span>
+                                        <span className="ml-1.5 text-[10px] text-slate-500">{granted}/{enabledPermissions.length}</span>
+                                      </div>
+                                      <div className="flex gap-1 text-[10px] font-bold">
+                                        <button type="button" onClick={() => updateAssignment(assignment.company, (current) => ({ ...current, permissions: setPermissionGroupValue(current.permissions, enabledPermissions, true) }))} className="rounded border border-emerald-200 px-2 py-0.5 text-emerald-700">All</button>
+                                        <button type="button" onClick={() => updateAssignment(assignment.company, (current) => ({ ...current, permissions: setPermissionGroupValue(current.permissions, enabledPermissions, false) }))} className="rounded border border-slate-200 px-2 py-0.5 text-slate-600">Clear</button>
+                                      </div>
+                                    </div>
+                                    <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                                      {enabledPermissions.map((permission) => (
+                                        <label key={`${permission.resource}.${permission.action}`} className="flex items-center gap-1.5 rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700">
+                                          <input
+                                            type="checkbox"
+                                            checked={Boolean(assignment.permissions?.[permission.resource]?.[permission.action])}
+                                            onChange={(e) => updateAssignment(assignment.company, (current) => ({
+                                              ...current,
+                                              permissions: {
+                                                ...normalizePermissionMap(current.permissions || {}),
+                                                [permission.resource]: {
+                                                  ...normalizePermissionMap(current.permissions || {})[permission.resource],
+                                                  [permission.action]: e.target.checked,
+                                                },
+                                              },
+                                            }))}
+                                          />
+                                          {permission.label}
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
-                </div>
 
-                <label className="mt-4 block text-sm font-semibold text-slate-700">
-                  <span className="mb-1 block">Primary company *</span>
-                  <select value={form.primaryCompany} onChange={(e) => updateForm('primaryCompany', e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500">
-                    <option value="">Select primary company</option>
-                    {form.accessibleCompanies.map((companyId) => {
-                      const company = availableCompanies.find((item) => item._id === companyId);
-                      return <option key={companyId} value={companyId}>{company?.companyName || companyId}</option>;
-                    })}
-                  </select>
-                </label>
-
-                <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Assignment summary</div>
-                  <div className="mt-2 text-sm text-slate-700">{form.accessibleCompanies.length} compan{form.accessibleCompanies.length === 1 ? 'y' : 'ies'} selected</div>
-                  <div className="mt-2 text-sm text-slate-700">Primary company: <span className="font-bold text-slate-900">{availableCompanies.find((item) => item._id === form.primaryCompany)?.companyName || '-'}</span></div>
+                  {!form.companyAssignments.length && (
+                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs text-slate-500">
+                      Select at least one company to define modules and action permissions.
+                    </div>
+                  )}
                 </div>
               </section>
             </div>
 
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center gap-2 text-slate-900"><FaShieldAlt className="text-emerald-700" /><h2 className="text-lg font-black">Modules & privileges per company</h2></div>
-              <p className="mb-4 text-sm text-slate-600">Each company assignment owns its own module level and action rights. Route guards, menu visibility, and API enforcement use these saved values.</p>
-
-              <div className="space-y-6">
-                {form.companyAssignments.map((assignment) => {
-                  const company = availableCompanies.find((item) => item._id === assignment.company);
-                  const enabledModuleKeys = getEnabledCompanyModuleKeys(company);
-                  return (
-                    <div key={assignment.company} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
-                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <h3 className="text-lg font-black text-slate-900">{company?.companyName || 'Company'}</h3>
-                          <p className="mt-1 text-sm text-slate-600">Modules and action permissions are limited to what this company already has enabled.</p>
-                        </div>
-                        <div className="rounded-2xl border border-white bg-white px-4 py-3 text-sm font-bold text-slate-700">
-                          {enabledModuleKeys.length} enabled module{enabledModuleKeys.length === 1 ? '' : 's'}
-                        </div>
-                      </div>
-
-                      <div className="grid gap-4 lg:grid-cols-[0.95fr,1.05fr]">
-                        <div className="rounded-3xl border border-slate-200 bg-white p-4">
-                          <div className="mb-3 text-sm font-black text-slate-900">Module access levels</div>
-                          <div className="space-y-3">
-                            {enabledModuleKeys.map((moduleKey) => {
-                              const mappedKey = {
-                                propertyManagement: 'propertyMgmt',
-                                accounts: 'accounts',
-                                inventory: 'inventory',
-                                procurement: 'procurement',
-                                hr: 'humanResource',
-                                propertySale: 'propertySale',
-                                facilityManagement: 'facilityManagement',
-                                hotelManagement: 'hotelManagement',
-                                telcoDealership: 'telcoDealership',
-                                dms: 'dms',
-                                academics: 'academics',
-                                projectManagement: 'projectManagement',
-                                assetValuation: 'assetValuation',
-                                revenueRecognition: 'revenueRecognition',
-                                crm: 'crm',
-                                incidentManagement: 'incidentManagement',
-                                sacco: 'sacco',
-                                pos: 'inventory',
-                              }[moduleKey] || moduleKey;
-                              return (
-                                <div key={moduleKey} className="rounded-2xl border border-slate-200 p-3">
-                                  <div className="mb-2 text-sm font-bold text-slate-900">{MODULE_LABELS[moduleKey] || moduleKey}</div>
-                                  <select value={assignment.moduleAccess?.[mappedKey] || 'View only'} onChange={(e) => updateAssignment(assignment.company, (current) => ({ ...current, moduleAccess: { ...current.moduleAccess, [mappedKey]: e.target.value } }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-emerald-500">
-                                    {ACCESS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                                  </select>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="rounded-3xl border border-slate-200 bg-white p-4">
-                          <div className="mb-3 text-sm font-black text-slate-900">Action permissions</div>
-                          <div className="space-y-4">
-                            {ACCESS_SECTIONS.map((section) => {
-                              const enabledPermissions = section.permissions.filter((permission) => !permission.moduleKey || enabledModuleKeys.includes(permission.moduleKey));
-                              if (!enabledPermissions.length) return null;
-                              const granted = sectionPermissionCount(assignment.permissions, enabledPermissions);
-                              return (
-                                <div key={section.id} className="rounded-2xl border border-slate-200 p-4">
-                                  <div className="mb-3 flex items-center justify-between gap-3">
-                                    <div>
-                                      <div className="text-sm font-black text-slate-900">{section.label}</div>
-                                      <div className="mt-1 text-xs text-slate-500">{granted} of {enabledPermissions.length} enabled</div>
-                                    </div>
-                                    <div className="flex gap-2 text-xs font-bold">
-                                      <button type="button" onClick={() => updateAssignment(assignment.company, (current) => ({ ...current, permissions: setPermissionGroupValue(current.permissions, enabledPermissions, true) }))} className="rounded-full border border-emerald-200 px-3 py-1 text-emerald-700">Enable all</button>
-                                      <button type="button" onClick={() => updateAssignment(assignment.company, (current) => ({ ...current, permissions: setPermissionGroupValue(current.permissions, enabledPermissions, false) }))} className="rounded-full border border-slate-200 px-3 py-1 text-slate-600">Clear</button>
-                                    </div>
-                                  </div>
-                                  <div className="grid gap-2 md:grid-cols-2">
-                                    {enabledPermissions.map((permission) => (
-                                      <label key={`${permission.resource}.${permission.action}`} className="flex items-center gap-3 rounded-2xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700">
-                                        <input
-                                          type="checkbox"
-                                          checked={Boolean(assignment.permissions?.[permission.resource]?.[permission.action])}
-                                          onChange={(e) => updateAssignment(assignment.company, (current) => ({
-                                            ...current,
-                                            permissions: {
-                                              ...normalizePermissionMap(current.permissions || {}),
-                                              [permission.resource]: {
-                                                ...normalizePermissionMap(current.permissions || {})[permission.resource],
-                                                [permission.action]: e.target.checked,
-                                              },
-                                            },
-                                          }))}
-                                        />
-                                        {permission.label}
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {!form.companyAssignments.length && (
-                  <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-sm text-slate-500">
-                    Select at least one company to define modules and action permissions.
-                  </div>
-                )}
+            {/* ── Sticky footer ─────────────────────────────────────── */}
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2 shadow-sm">
+              <div className="flex items-center justify-end gap-2">
+                <button type="button" onClick={() => navigate('/system-setup/users')} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={isSaving} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60">
+                  <FaSave /> {isSaving ? 'Saving...' : (isEditing ? 'Update user access' : 'Create user')}
+                </button>
               </div>
-            </section>
-
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              <button type="button" onClick={() => navigate('/system-setup/users')} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="submit" disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60">
-                <FaSave /> {isSaving ? 'Saving...' : (isEditing ? 'Update user access' : 'Create user')}
-              </button>
             </div>
           </form>
         )}

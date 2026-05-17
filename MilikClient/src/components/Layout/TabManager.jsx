@@ -92,6 +92,27 @@ const getPageTitle = (pathname) => {
     '/settings': 'Operational Settings',
   };
 
+  const hrRouteNames = {
+    '/hr/dashboard':          'Dashboard',
+    '/hr/employees':          'Employees',
+    '/hr/employees/new':      'New Employee',
+    '/hr/setup':              'Setup',
+    '/hr/leave':              'Leave',
+    '/hr/leave/types':        'Leave Types',
+    '/hr/payroll':            'Payroll',
+    '/hr/reports/headcount':  'Headcount Report',
+    '/hr/reports/payroll':    'Payroll Summary',
+    '/hr/reports/leave':      'Leave Summary',
+    '/hr/reports/p9':         'P9 Form',
+    '/hr/leave/balances':     'Leave Balances',
+    '/hr/statutory':          'Statutory Deductions',
+  };
+  if (hrRouteNames[pathname]) return hrRouteNames[pathname];
+  if (/^\/hr\/employees\/[^/]+\/edit$/.test(pathname)) return 'Edit Employee';
+  if (/^\/hr\/employees\/[^/]+$/.test(pathname)) return 'Employee Profile';
+  if (/^\/hr\/payroll\/[^/]+\/payslip\/[^/]+$/.test(pathname)) return 'Payslip';
+  if (/^\/hr\/payroll\/[^/]+$/.test(pathname)) return 'Payroll Period';
+
   if (routeNames[pathname]) return routeNames[pathname];
 
   const parts = pathname.split('/').filter(Boolean);

@@ -13,6 +13,7 @@ import {
   FaEye,
   FaGlobeAfrica,
   FaHistory,
+  FaKey,
   FaLock,
   FaLockOpen,
   FaMapMarkerAlt,
@@ -34,6 +35,7 @@ import {
   deleteUser,
   getCompanies,
   getUsers,
+  resetUserPassword,
   switchCompany,
   toggleUserLock,
 } from "../../redux/apiCalls";
@@ -416,7 +418,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
 };
 
 // ─── Users Panel ───────────────────────────────────────────────────────────────
-const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelectedCompanyIdChange, onAddUser, onEditUser, onToggleUserLock, onDeleteUser }) => {
+const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelectedCompanyIdChange, onAddUser, onEditUser, onToggleUserLock, onDeleteUser, onResetPassword }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -511,6 +513,7 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
                       <button onClick={() => onToggleUserLock(user)} className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-black hover:opacity-90 ${user?.locked ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-amber-300 bg-amber-50 text-amber-700"}`}>
                         {user?.locked ? <><FaLockOpen size={9} /> Unlock</> : <><FaLock size={9} /> Lock</>}
                       </button>
+                      <button onClick={() => onResetPassword(user)} className="inline-flex items-center gap-1 rounded border border-violet-300 bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700 hover:bg-violet-100"><FaKey size={9} /> Reset Password</button>
                       <button onClick={() => onDeleteUser(user)} className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-100"><FaTrash size={9} /> Delete</button>
                     </div>
                   </td>
@@ -815,6 +818,21 @@ export default function SystemSetupPage() {
     });
   };
 
+  const handleResetPassword = (user) => {
+    const id = normalizeId(user);
+    if (!id) return;
+    setConfirmDialog({
+      isOpen: true, title: "Reset password",
+      message: `Send a new temporary password to ${user?.email}?`,
+      isDangerous: false, confirmText: "Reset & Send",
+      onConfirm: async () => {
+        try { await dispatch(resetUserPassword(id)); toast.success("New password sent to " + user.email); }
+        catch (error) { toast.error(error?.response?.data?.message || error?.message || "Failed to reset password."); }
+        finally { setConfirmDialog((prev) => ({ ...prev, isOpen: false })); }
+      },
+    });
+  };
+
   const sections = [
     { key: "overview",   label: "Overview",   icon: FaChartBar },
     { key: "companies",  label: "Companies",  icon: FaBuilding },
@@ -921,6 +939,7 @@ export default function SystemSetupPage() {
                   onEditUser={handleEditUser}
                   onToggleUserLock={handleToggleUserLock}
                   onDeleteUser={handleDeleteUser}
+                  onResetPassword={handleResetPassword}
                 />
               )}
 

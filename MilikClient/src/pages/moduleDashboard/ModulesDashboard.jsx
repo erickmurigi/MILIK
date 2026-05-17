@@ -107,6 +107,17 @@ const moduleRegistry = [
     tint: "milik-icon-cyan",
   },
   {
+    id: "hr",
+    moduleKey: "hr",
+    title: "Human Resource",
+    subtitle: "HR & People management",
+    description: "Manage employees, departments, designations, leave, payroll, and performance appraisals.",
+    status: "active",
+    route: "/hr/dashboard",
+    icon: <FaUsers />,
+    tint: "milik-icon-teal",
+  },
+  {
     id: "vendoor",
     moduleKey: "procurement",
     title: "Ven-Door",

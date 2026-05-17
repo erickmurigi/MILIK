@@ -608,6 +608,11 @@ export const deleteUser = (id) => async (dispatch) => {
   }
 };
 
+export const resetUserPassword = (id) => async () => {
+  const res = await adminRequests.post(`/users/${id}/reset-password`);
+  return res.data;
+};
+
 // Toggle lock status
 export const toggleUserLock = (id) => async (dispatch) => {
   dispatch(toggleUserLockStart());

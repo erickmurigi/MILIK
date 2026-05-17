@@ -125,6 +125,24 @@ const CarWashStaff          = lazy(() => import("./pages/CarWash/CarWashStaff"))
 const CarWashReports        = lazy(() => import("./pages/CarWash/CarWashReports"));
 const CarWashCommissions    = lazy(() => import("./pages/CarWash/CarWashCommissions"));
 
+// HR module
+const HRDashboard        = lazy(() => import("./pages/HR/HRDashboard"));
+const HREmployees        = lazy(() => import("./pages/HR/Employees"));
+const HRAddEmployee      = lazy(() => import("./pages/HR/AddEmployee"));
+const HREmployeeProfile  = lazy(() => import("./pages/HR/EmployeeProfile"));
+const HRSetup            = lazy(() => import("./pages/HR/HRSetup"));
+const HRLeaveApplications  = lazy(() => import("./pages/HR/LeaveApplications"));
+const HRLeaveTypes         = lazy(() => import("./pages/HR/LeaveTypes"));
+const HRPayrollPeriods      = lazy(() => import("./pages/HR/PayrollPeriods"));
+const HRPayrollPeriodDetail = lazy(() => import("./pages/HR/PayrollPeriodDetail"));
+const HRPayslip             = lazy(() => import("./pages/HR/Payslip"));
+const HRReportHeadcount     = lazy(() => import("./pages/HR/HRReportHeadcount"));
+const HRReportPayroll       = lazy(() => import("./pages/HR/HRReportPayroll"));
+const HRReportLeave         = lazy(() => import("./pages/HR/HRReportLeave"));
+const HRReportP9            = lazy(() => import("./pages/HR/HRReportP9"));
+const HRLeaveBalances       = lazy(() => import("./pages/HR/LeaveBalances"));
+const HRStatutoryDeductions = lazy(() => import("./pages/HR/StatutoryDeductions"));
+
 // Property Sale module
 const PropertySaleDashboard = lazy(() => import("./pages/PropertySale/PropertySaleDashboard"));
 const SaleListings          = lazy(() => import("./pages/PropertySale/SaleListings"));
@@ -474,6 +492,25 @@ function App() {
             <Route path="/carwash/staff"             element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-staff" moduleKey="carwash"><CarWashStaff /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/reports"           element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashReports /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/commissions"       element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissions /></PermissionRoute></CompanyModuleRoute>} />
+
+            {/* ── HR module ─────────────────────────────────────────────── */}
+            <Route path="/hr/dashboard"           element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRDashboard /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/employees"           element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HREmployees /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/employees/new"       element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAddEmployee /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/employees/:id"       element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HREmployeeProfile /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/employees/:id/edit"  element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAddEmployee /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/setup"               element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRSetup /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/leave"               element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRLeaveApplications /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/leave/types"         element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRLeaveTypes /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/payroll"             element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRPayrollPeriods /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/payroll/:periodId"   element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRPayrollPeriodDetail /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/payroll/:periodId/payslip/:payslipId" element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRPayslip /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/reports/headcount" element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportHeadcount /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/reports/payroll"   element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportPayroll /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/reports/leave"     element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportLeave /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/reports/p9"        element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportP9 /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/leave/balances"    element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRLeaveBalances /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/statutory"         element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRStatutoryDeductions /></ProtectedRoute></CompanyModuleRoute>} />
 
             {/* ── Property Sale module ──────────────────────────────────── */}
             <Route path="/sale/dashboard"                      element={<CompanyModuleRoute moduleKey="propertySale"><PropertySaleDashboard /></CompanyModuleRoute>} />

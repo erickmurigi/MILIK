@@ -89,3 +89,93 @@ button:focus {
   border-top-color: #374151;
   background-color: #1f2937;
 }
+
+/* ── Screen-only / print-only utilities ──────────────────────── */
+.print-only {
+  display: none;
+}
+
+/* ── Print styles ─────────────────────────────────────────────── */
+@media print {
+  @page {
+    margin: 10mm 12mm;
+    size: A4;
+  }
+
+  /* White foundation — prevents colored layout backgrounds bleeding through */
+  html, body {
+    background: white !important;
+  }
+
+  /* Hide everything; backgrounds vanish with visibility:hidden */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Reveal only the designated print area */
+  .employee-print-area,
+  .employee-print-area * {
+    visibility: visible !important;
+  }
+
+  /*
+   * Cover the full printed page.
+   * max-width / margin overrides neutralise Tailwind classes that may be on
+   * the same element (e.g. mx-auto max-w-2xl on the Payslip wrapper).
+   */
+  .employee-print-area {
+    position: fixed;
+    inset: 0;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    height: auto;
+    min-height: 100vh;
+    background: #ffffff !important;
+    padding: 0;
+    overflow: visible;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 11px;
+    color: #1e293b;
+  }
+
+  /* Prevent page breaks inside cards */
+  .print-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Hide interactive / screen-only elements */
+  .print-hide {
+    display: none !important;
+  }
+
+  /* Show print-only elements */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Repeat table headers / footers across pages */
+  thead { display: table-header-group !important; }
+  tfoot { display: table-footer-group !important; }
+  table { width: 100% !important; }
+
+  /* Compact table rows for dense reports (payroll register, P9) */
+  .employee-print-area th,
+  .employee-print-area td {
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+  }
+
+  /* Hide camera / hover overlays */
+  .group .absolute {
+    display: none !important;
+  }
+
+  /* Preserve background colours only inside the print area */
+  .employee-print-area,
+  .employee-print-area * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

@@ -81,6 +81,11 @@ adminRequests.interceptors.request.use(
       config.headers["x-company-id"] = activeCompanyId;
     }
 
+    // Let axios set Content-Type automatically for FormData (multipart/form-data with boundary)
+    if (config.data instanceof FormData) {
+      delete config.headers["Content-Type"];
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
