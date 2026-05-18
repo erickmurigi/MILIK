@@ -229,24 +229,24 @@ const ServiceProviders = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-[240px] flex-1">
-                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Provider code, contact, phone, email" className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] pl-8 pr-3 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+          <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="relative shrink-0">
+                <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Provider code, contact, phone, email" className="h-7 w-52 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               </div>
-              <input value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} placeholder="Provider name" className="h-8 min-w-[180px] rounded border border-gray-300 bg-[#DDEFE1] px-3 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="h-8 min-w-[170px] rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
+              <input value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} placeholder="Provider name" className="h-7 w-36 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 {CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
-              <button onClick={clearFilters} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100">Clear Filters</button>
-              <button onClick={openCreate} disabled={!canCreate} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> Add Service Provider</button>
+              <button onClick={clearFilters} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Clear</button>
+              <button onClick={openCreate} disabled={!canCreate} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus size={10} /> Add Provider</button>
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
             <table className="min-w-full text-xs">
-              <thead>
-                <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+              <thead className="sticky top-0 z-10 shadow-sm">
+                <tr className="bg-[#0B3B2E] text-white">
                   <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Code</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Name</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Contact</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Category</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Settlement</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Status</th><th className="px-3 py-2 text-right font-black uppercase tracking-[0.14em]">Actions</th>
                 </tr>
               </thead>

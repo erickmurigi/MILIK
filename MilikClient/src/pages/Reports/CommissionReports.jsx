@@ -299,8 +299,80 @@ const CommissionReports = () => {
     toast.success("Commission report exported.");
   };
 
+  const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || "Milik";
+  const preparedBy = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(" ") || currentUser?.email || "Milik Admin";
+
   return (
     <DashboardLayout lockContentScroll>
+      <div className="print-only-wrapper">
+        <style>{`
+          @page { size: landscape; margin: 10mm; }
+          .comm-print-shell { font-family: Arial, sans-serif; color: #0f172a; }
+          .comm-print-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+          .comm-print-brand { color: #0B3B2E; font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 900; }
+          .comm-print-title { margin: 2px 0 4px; font-size: 18px; font-weight: 900; color: #0f172a; }
+          .comm-print-meta { text-align: right; font-size: 9px; color: #475569; line-height: 1.6; }
+          .comm-print-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+          .comm-print-metric { border: 1px solid #dbe2ea; border-radius: 6px; background: #f8fafc; padding: 6px 8px; }
+          .comm-print-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; font-weight: 800; }
+          .comm-print-value { margin-top: 3px; font-size: 13px; font-weight: 900; color: #0f172a; }
+          .comm-print-table { width: 100%; border-collapse: collapse; font-size: 8.5px; }
+          .comm-print-table th, .comm-print-table td { border: 1px solid #dbe2ea; padding: 4px 5px; vertical-align: top; }
+          .comm-print-table thead th { background: #edf4f0; color: #0B3B2E; font-size: 7.5px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 800; }
+          .tr { text-align: right; }
+        `}</style>
+        <div className="comm-print-shell">
+          <div className="comm-print-header">
+            <div>
+              <div className="comm-print-brand">{companyName}</div>
+              <h1 className="comm-print-title">Commission Report</h1>
+              <p style={{ margin: 0, fontSize: "10px", color: "#475569" }}>Recognized landlord commission by period.</p>
+            </div>
+            <div className="comm-print-meta">
+              <div><strong>Period:</strong> {draftFilters.monthFrom || "—"} to {draftFilters.monthTo || "—"}</div>
+              <div><strong>Generated:</strong> {new Date().toLocaleString()}</div>
+              <div><strong>Prepared by:</strong> {preparedBy}</div>
+            </div>
+          </div>
+          <div className="comm-print-grid">
+            {[
+              { label: "Recognized", value: formatCurrency(totals.recognizedCommission) },
+              { label: "Reversed", value: formatCurrency(totals.reversedCommission) },
+              { label: "Statements", value: String(totals.statements) },
+              { label: "Months", value: String(totals.months) },
+            ].map((c) => (
+              <div key={c.label} className="comm-print-metric">
+                <div className="comm-print-label">{c.label}</div>
+                <div className="comm-print-value">{c.value}</div>
+              </div>
+            ))}
+          </div>
+          <table className="comm-print-table">
+            <thead>
+              <tr>
+                {["Recognition Date", "Statement No.", "Property", "Landlord", "Basis", "Structure", "Recognized", "Reversed", "Status"].map((h) => <th key={h}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.length === 0 ? (
+                <tr><td colSpan={9} style={{ textAlign: "center", padding: "12px" }}>No commission data found for the selected filters.</td></tr>
+              ) : filteredRows.map((row) => (
+                <tr key={row.id}>
+                  <td>{formatDate(row.recognitionDate)}</td>
+                  <td>{row.statementNumber}</td>
+                  <td>{row.propertyName}</td>
+                  <td>{row.landlordName}</td>
+                  <td>{row.recognitionBasis}</td>
+                  <td>{row.structureLabel}</td>
+                  <td className="tr"><strong>{formatCurrency(row.recognizedAmount)}</strong></td>
+                  <td className="tr" style={{ color: "#b91c1c" }}>{formatCurrency(row.reversedAmount)}</td>
+                  <td>{row.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="sticky top-0 z-30 bg-gray-50 px-2 pt-2">
           <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">

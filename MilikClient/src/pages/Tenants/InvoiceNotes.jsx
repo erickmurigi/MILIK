@@ -763,131 +763,47 @@ const InvoiceNotes = () => {
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
 
-            {/* ── STICKY HEADER ── */}
-            <div className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-gray-50/95 p-2 shadow-sm backdrop-blur">
-
-              {/* Row 1 – summary chips */}
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                  Total Notes: {filteredNotes.length}
-                </span>
-                <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  Active: {formatCurrency(summaryCards.activeValue)}
-                </span>
-                <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                  Total Value: {formatCurrency(summaryCards.totalValue)}
-                </span>
-                {selectedNotes.length > 0 && (
-                  <span className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
-                    {selectedNotes.length} selected
-                  </span>
-                )}
-              </div>
-
-              {/* Row 2 – note type toggles */}
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setNoteType("CREDIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "CREDIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "credit"); setSearchParams(p, { replace: true }); }}
-                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${filters.noteType === "CREDIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}
-                >
-                  Credit Notes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setNoteType("DEBIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "DEBIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "debit"); setSearchParams(p, { replace: true }); }}
-                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${filters.noteType === "DEBIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}
-                >
-                  Debit Notes
-                </button>
-              </div>
-
-              {/* Row 3 – filters + action buttons */}
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative">
-                  <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400" />
-                  <input
-                    type="text"
-                    value={filters.search}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Search note, tenant, property..."
-                    className="rounded border border-gray-300 py-1 pl-8 pr-3 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                  />
-                </div>
-                <select
-                  value={filters.propertyId}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))}
-                  className={LISTING_UI.filterSelect}
-                >
-                  <option value="">All properties</option>
-                  {properties.map((p) => (
-                    <option key={p._id} value={p._id}>{p.propertyName || p.propertyCode || "Unnamed Property"}</option>
-                  ))}
+            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Notes: {filteredNotes.length}</span>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Active: {formatCurrency(summaryCards.activeValue)}</span>
+                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Total: {formatCurrency(summaryCards.totalValue)}</span>
+                {selectedNotes.length > 0 && <span className="shrink-0 rounded border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">{selectedNotes.length} selected</span>}
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <button type="button" onClick={() => { setNoteType("CREDIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "CREDIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "credit"); setSearchParams(p, { replace: true }); }} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${filters.noteType === "CREDIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>Credit Notes</button>
+                <button type="button" onClick={() => { setNoteType("DEBIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "DEBIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "debit"); setSearchParams(p, { replace: true }); }} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${filters.noteType === "DEBIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>Debit Notes</button>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <input type="text" value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search…" className="h-7 w-36 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="">Property</option>
+                  {properties.map((p) => (<option key={p._id} value={p._id}>{p.propertyName || p.propertyCode || "Unnamed Property"}</option>))}
                 </select>
-                <select
-                  value={filters.tenantScope || "active"}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, tenantScope: e.target.value, tenantId: "" }))}
-                  className={LISTING_UI.filterSelect}
-                >
-                  <option value="active">Active tenants</option>
-                  <option value="terminated">Terminated tenants</option>
-                  <option value="all">All tenants</option>
+                <select value={filters.tenantScope || "active"} onChange={(e) => setFilters((prev) => ({ ...prev, tenantScope: e.target.value, tenantId: "" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="active">Active</option>
+                  <option value="terminated">Terminated</option>
+                  <option value="all">All Tenants</option>
                 </select>
-                <select
-                  value={filters.tenantId}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value }))}
-                  className={LISTING_UI.filterSelect}
-                >
-                  <option value="">All tenants</option>
-                  {filterScopedTenants.map((t) => (
-                    <option key={t._id} value={t._id}>{getTenantDisplayName(t)} ({getTenantStatusLabel(t)})</option>
-                  ))}
+                <select value={filters.tenantId} onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="">Tenant</option>
+                  {filterScopedTenants.map((t) => (<option key={t._id} value={t._id}>{getTenantDisplayName(t)} ({getTenantStatusLabel(t)})</option>))}
                 </select>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className={LISTING_UI.filterSelect}
-                >
-                  <option value="active">Active only</option>
+                <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="active">Active</option>
                   <option value="reversed">Reversed</option>
-                  <option value="all">All statuses</option>
+                  <option value="all">All</option>
                 </select>
-                <button
-                  type="button"
-                  onClick={handleSearchFilters}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} hover:bg-[#e67e00]`}
-                >
-                  <FaSearch className="text-xs" /> Search
-                </button>
-                <button
-                  type="button"
-                  onClick={resetWorkspaceFilters}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}
-                >
-                  <FaRedoAlt className="text-xs" /> Reset
-                </button>
-                <button
-                  type="button"
-                  onClick={loadData}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}
-                >
-                  <FaRedoAlt className="text-xs" /> Refresh
-                </button>
-                <button
-                  type="button"
-                  onClick={openAddModal}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} hover:bg-[#e67e00]`}
-                >
-                  <FaPlus className="text-xs" /> Add Note
-                </button>
+                <button type="button" onClick={handleSearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} hover:bg-[#e67e00]`}><FaSearch size={10} /></button>
+                <button type="button" onClick={resetWorkspaceFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaRedoAlt size={10} /></button>
+                <button type="button" onClick={loadData} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaRedoAlt size={10} /></button>
+                <button type="button" onClick={openAddModal} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} hover:bg-[#e67e00]`}><FaPlus size={10} /> Add Note</button>
               </div>
             </div>
 
             {/* ── TABLE ── */}
             <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
               <table className="w-full min-w-[1320px] text-xs">
-                <thead>
-                  <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className={`${MILIK_GREEN} text-white`}>
                     <th className="px-3 py-2 text-left">
                       <input
                         type="checkbox"

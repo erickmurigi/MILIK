@@ -448,22 +448,23 @@ const ExpenseRequisition = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-[260px] flex-1">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">Selected: {selectedIds.length}</span>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <div className="relative shrink-0">
+                  <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                   <input
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Search requisition no, title, description, category"
-                    className="w-full rounded border border-gray-300 bg-[#DDEFE1] py-1.5 pl-9 pr-3 text-xs text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    placeholder="Requisition no, title, category"
+                    className="h-7 w-48 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   />
                 </div>
-
                 <select
                   value={filters.propertyId}
                   onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                  className="rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 >
                   <option value="all">All properties</option>
                   {properties.map((property) => (
@@ -473,11 +474,10 @@ const ExpenseRequisition = () => {
                     </option>
                   ))}
                 </select>
-
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 >
                   <option value="all">All statuses</option>
                   <option value="draft">Draft</option>
@@ -487,23 +487,17 @@ const ExpenseRequisition = () => {
                   <option value="rejected">Rejected</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
-
-                <button onClick={() => setFilters({ search: "", status: "all", propertyId: "all" })} className="inline-flex items-center gap-2 rounded border border-gray-300 bg-[#DDEFE1] px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"><FaUndo /> Reset</button>
-                <button onClick={loadRows} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100"><FaRedoAlt /> Refresh</button>
-                <button onClick={handleBulkDelete} disabled={!canDelete} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-rose-300 bg-rose-50 px-3 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash /> Delete Selected</button>
-                <button onClick={openCreate} disabled={!canCreate} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> New Requisition</button>
-
-                <div className="ml-auto flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm">
-                  Selected
-                  <span className="text-xs text-slate-900">{selectedIds.length}</span>
-                </div>
+                <button onClick={() => setFilters({ search: "", status: "all", propertyId: "all" })} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaUndo size={9} /> Reset</button>
+                <button onClick={loadRows} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
+                <button onClick={handleBulkDelete} disabled={!canDelete} className="h-7 shrink-0 flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash size={9} /> Delete</button>
+                <button onClick={openCreate} disabled={!canCreate} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus size={9} /> New Requisition</button>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
               <table className="w-full min-w-[1120px] text-xs">
-                <thead>
-                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className="bg-[#0B3B2E] text-white">
                     <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filteredRows.length && filteredRows.length > 0 ? <FaCheck className="text-white" /> : <FaSquare className="text-white/80" />}</button></th>
                     <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Requisition</th>
                     <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Property / Provider</th>

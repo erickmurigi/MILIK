@@ -168,37 +168,14 @@ const UnitTypesPage = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
-        <div className="sticky top-0 z-30 bg-gray-50 px-2 pt-2">
-          <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex min-w-[240px] flex-1 items-center gap-2 rounded-lg border border-gray-300 bg-[#DDEFE1] px-3 py-1.5 text-xs text-gray-800 shadow-sm">
-                <FaSearch className="text-[11px]" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search unit type"
-                  className="w-full bg-transparent text-xs outline-none"
-                />
-              </div>
-
-              <button
-                onClick={() => setSearch("")}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                title="Reset search"
-              >
-                <FaRedoAlt className="text-xs" />
-                Reset
-              </button>
-
-              <button
-                onClick={handleRestoreDefaults}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                title="Restore default unit types"
-              >
-                <FaRedoAlt className="text-xs" />
-                Restore Defaults
-              </button>
+        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <div className="h-7 shrink-0 flex items-center gap-2 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-xs text-gray-800">
+              <FaSearch size={10} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search unit type" className="w-36 bg-transparent text-xs outline-none" />
             </div>
+            <button onClick={() => setSearch("")} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /> Reset</button>
+            <button onClick={handleRestoreDefaults} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaRedoAlt size={10} /> Restore Defaults</button>
           </div>
         </div>
 

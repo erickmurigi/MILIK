@@ -235,83 +235,39 @@ const TenantPrepayments = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2 pb-10">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-2 shadow-sm backdrop-blur">
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-3 lg:grid-cols-4">
-                <div className="relative lg:col-span-2">
-                  <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search tenant, property, unit, reference"
-                    className="h-8 w-full rounded-md border border-slate-300 bg-white py-1.5 pl-8 pr-2.5 text-[11px] text-slate-900 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                  />
-                </div>
-                <div>
-                  <select
-                    value={propertyFilter}
-                    onChange={(e) => setPropertyFilter(e.target.value)}
-                    className="h-8 w-full rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
-                  >
-                    <option value="all">All Properties</option>
-                    {propertyOptions.map((property) => (
-                      <option key={property._id} value={property._id}>
-                        {property.propertyName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="h-8 w-full rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
-                  >
-                    <option value="all">All Active Prepayments</option>
-                    <option value="confirmed">Confirmed Only</option>
-                    <option value="unconfirmed">Unconfirmed Only</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {[
-                    { label: "Open", value: totals.rowCount, accent: "text-slate-900" },
-                    { label: "Unapplied", value: formatMoney(totals.totalUnapplied), accent: "text-amber-700" },
-                    { label: "Allocated", value: formatMoney(totals.totalAllocated), accent: "text-emerald-700" },
-                    { label: "Confirmed", value: totals.confirmedRows, accent: "text-blue-700" },
-                    { label: "Receipt Value", value: formatMoney(totals.totalReceiptAmount), accent: "text-slate-900" },
-                  ].map((card) => (
-                    <span key={card.label} className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                      {card.label} <span className={`normal-case tracking-normal ${card.accent}`}>{card.value}</span>
-                    </span>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => navigate("/receipts/new")}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white shadow-sm transition hover:bg-[#0A3127]"
-                  >
-                    <FaReceipt /> New Receipt
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSearch("");
-                      setPropertyFilter("all");
-                      setStatusFilter("all");
-                    }}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
-                  >
-                    <FaCoins /> Reset Filters
-                  </button>
-                </div>
+            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                {[
+                  { label: "Open", value: totals.rowCount, accent: "text-slate-900" },
+                  { label: "Unapplied", value: formatMoney(totals.totalUnapplied), accent: "text-amber-700" },
+                  { label: "Allocated", value: formatMoney(totals.totalAllocated), accent: "text-emerald-700" },
+                  { label: "Confirmed", value: totals.confirmedRows, accent: "text-blue-700" },
+                  { label: "Receipt Value", value: formatMoney(totals.totalReceiptAmount), accent: "text-slate-900" },
+                ].map((card) => (
+                  <span key={card.label} className="shrink-0 inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                    {card.label} <span className={`normal-case tracking-normal ${card.accent}`}>{card.value}</span>
+                  </span>
+                ))}
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="h-7 w-40 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-[11px] outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200" />
+                <select value={propertyFilter} onChange={(e) => setPropertyFilter(e.target.value)} className="h-7 shrink-0 rounded-md border border-orange-200 bg-orange-50/70 px-2 text-[11px] font-semibold text-slate-800 appearance-none outline-none focus:border-orange-400">
+                  <option value="all">Property</option>
+                  {propertyOptions.map((property) => (<option key={property._id} value={property._id}>{property.propertyName}</option>))}
+                </select>
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded-md border border-orange-200 bg-orange-50/70 px-2 text-[11px] font-semibold text-slate-800 appearance-none outline-none focus:border-orange-400">
+                  <option value="all">All Active</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="unconfirmed">Unconfirmed</option>
+                </select>
+                <button onClick={() => navigate("/receipts/new")} className="h-7 shrink-0 flex items-center gap-1.5 rounded-md bg-[#0B3B2E] px-2.5 text-[11px] font-bold text-white shadow-sm hover:bg-[#0A3127]"><FaReceipt size={10} /> New Receipt</button>
+                <button onClick={() => { setSearch(""); setPropertyFilter("all"); setStatusFilter("all"); }} className="h-7 shrink-0 flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-700 shadow-sm hover:bg-slate-50"><FaCoins size={10} /> Reset</button>
               </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full min-w-[1100px] text-xs">
-                <thead>
-                  <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className={`${MILIK_GREEN} text-white`}>
                     <th className="px-3 py-2 text-left">Receipt #</th>
                     <th className="px-3 py-2 text-left">Date</th>
                     <th className="px-3 py-2 text-left">Tenant</th>

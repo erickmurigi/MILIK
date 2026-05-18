@@ -1210,209 +1210,41 @@ const MeterReadings = () => {
           )}
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-3">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "ALL" }))}
-                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${
-                    draftFilters.status === "ALL"
-                      ? `${MILIK_GREEN} text-white`
-                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                  }`}
-                >
-                  All Active
-                </button>
-                <button
-                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "draft" }))}
-                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${
-                    draftFilters.status === "draft"
-                      ? `${MILIK_GREEN} text-white`
-                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                  }`}
-                >
-                  Draft
-                </button>
-                <button
-                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "billed" }))}
-                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${
-                    draftFilters.status === "billed"
-                      ? `${MILIK_GREEN} text-white`
-                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                  }`}
-                >
-                  Billed
-                </button>
-                <button
-                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "void" }))}
-                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${
-                    draftFilters.status === "void"
-                      ? `${MILIK_GREEN} text-white`
-                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                  }`}
-                >
-                  Voided
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  value={draftFilters.search}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
-                  placeholder="Search property, unit, tenant, utility, invoice #"
-                  className="rounded border border-gray-300 px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                />
-
-                <select
-                  value={draftFilters.property}
-                  onChange={(e) =>
-                    setDraftFilters((prev) => ({
-                      ...prev,
-                      property: e.target.value,
-                      unit: "any",
-                    }))
-                  }
-                  className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm"
-                >
+            <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                {[{val:"ALL",label:"All"},{val:"draft",label:"Draft"},{val:"billed",label:"Billed"},{val:"void",label:"Voided"}].map(({val,label}) => (
+                  <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>{label}</button>
+                ))}
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <input type="text" value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search…" className="h-7 w-44 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "any" }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-xs text-gray-800 appearance-none">
                   <option value="any">Property</option>
-                  {properties.map((property) => (
-                    <option key={property._id} value={property._id}>
-                      {property.propertyName || property.name || property.propertyCode}
-                    </option>
-                  ))}
+                  {properties.map((property) => (<option key={property._id} value={property._id}>{property.propertyName || property.name || property.propertyCode}</option>))}
                 </select>
-
-                <select
-                  value={draftFilters.unit}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))}
-                  className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm"
-                >
+                <select value={draftFilters.unit} onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-xs text-gray-800 appearance-none">
                   <option value="any">Unit</option>
-                  {unitsForSelectedProperty.map((unit) => (
-                    <option key={unit._id} value={unit._id}>
-                      {unit.unitNumber}
-                    </option>
-                  ))}
+                  {unitsForSelectedProperty.map((unit) => (<option key={unit._id} value={unit._id}>{unit.unitNumber}</option>))}
                 </select>
-
-                <select
-                  value={draftFilters.utilityType}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, utilityType: e.target.value }))}
-                  className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm"
-                >
+                <select value={draftFilters.utilityType} onChange={(e) => setDraftFilters((prev) => ({ ...prev, utilityType: e.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-xs text-gray-800 appearance-none">
                   <option value="any">Utility</option>
-                  {utilityOptions.map((utility) => (
-                    <option key={utility} value={utility}>
-                      {utility}
-                    </option>
-                  ))}
+                  {utilityOptions.map((utility) => (<option key={utility} value={utility}>{utility}</option>))}
                 </select>
-
-                <input
-                  type="month"
-                  value={draftFilters.billingPeriod}
-                  onChange={(e) =>
-                    setDraftFilters((prev) => ({ ...prev, billingPeriod: e.target.value }))
-                  }
-                  className="rounded border border-gray-300 px-3 py-1 text-xs shadow-sm"
-                  title="Billing period"
-                />
-
-                <button
-                  onClick={applySearch}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                >
-                  <FaSearch className="text-xs" />
-                  Search
-                </button>
-
-                <button
-                  onClick={resetFilters}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaRedoAlt className="text-xs" />
-                  Reset
-                </button>
-
-                <button
-                  onClick={handleEditSelected}
-                  disabled={!canEditSelected}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    canEditSelected
-                      ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
-                      : "bg-gray-400 cursor-not-allowed"
-                  }`}
-                >
-                  <FaEdit className="text-xs" />
-                  Edit
-                </button>
-
-                <button
-                  onClick={handleDeleteSelected}
-                  disabled={selectedDeletableRows.length === 0 || bulkDeleting || !canDeleteReading}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    selectedDeletableRows.length > 0 && !bulkDeleting && canDeleteReading
-                      ? "bg-red-600 hover:bg-red-700"
-                      : "bg-gray-400 cursor-not-allowed"
-                  }`}
-                >
-                  <FaTrash className="text-xs" />
-                  {bulkDeleting ? "Deleting..." : "Delete"}
-                </button>
-
-                <button
-                  onClick={handleBulkBill}
-                  disabled={selectedDraftCount === 0 || bulkBilling || !canProcessReading}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    selectedDraftCount > 0 && !bulkBilling && canProcessReading
-                      ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
-                      : "bg-gray-400 cursor-not-allowed"
-                  }`}
-                >
-                  <FaFileInvoice className="text-xs" />
-                  {bulkBilling ? "Billing..." : "Bill Selected"}
-                </button>
-
-                <button
-                  onClick={handlePrintList}
-                  disabled={filteredReadings.length === 0}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    filteredReadings.length > 0
-                      ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
-                      : "bg-gray-400 cursor-not-allowed"
-                  }`}
-                >
-                  <FaPrint className="text-xs" />
-                  Print List
-                </button>
-
-                <button
-                  onClick={loadPageData}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaSync className="text-xs" />
-                  Refresh
-                </button>
-
-                <button
-                  onClick={openAddSectionForNew}
-                  disabled={!canCreateReading}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    canCreateReading
-                      ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`
-                      : "bg-gray-400 cursor-not-allowed"
-                  }`}
-                >
-                  <FaPlus className="text-xs" />
-                  Add Reading
-                </button>
+                <input type="month" value={draftFilters.billingPeriod} onChange={(e) => setDraftFilters((prev) => ({ ...prev, billingPeriod: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-gray-300 px-2 text-xs" />
+                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
+                <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
+                <button onClick={handleEditSelected} disabled={!canEditSelected} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${canEditSelected ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={10} /></button>
+                <button onClick={handleDeleteSelected} disabled={selectedDeletableRows.length === 0 || bulkDeleting || !canDeleteReading} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${selectedDeletableRows.length > 0 && !bulkDeleting && canDeleteReading ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}><FaTrash size={10} /></button>
+                <button onClick={handleBulkBill} disabled={selectedDraftCount === 0 || bulkBilling || !canProcessReading} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${selectedDraftCount > 0 && !bulkBilling && canProcessReading ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaFileInvoice size={10} /> {bulkBilling ? "…" : "Bill"}</button>
+                <button onClick={handlePrintList} disabled={filteredReadings.length === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${filteredReadings.length > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPrint size={10} /></button>
+                <button onClick={loadPageData} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSync size={10} /></button>
+                <button onClick={openAddSectionForNew} disabled={!canCreateReading} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${canCreateReading ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPlus size={10} /> Add</button>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
               <table className="w-full min-w-[1540px] text-xs">
-                <thead>
-                  <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className={`${MILIK_GREEN} text-white`}>
                     <th className="px-3 py-2 text-left">
                       <input
                         type="checkbox"

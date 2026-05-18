@@ -655,21 +655,21 @@ const JournalEntries = () => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-[220px] flex-1">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <div className="relative shrink-0">
+                  <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                   <input
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Search journal no, reference, narration"
-                    className="h-8 w-full rounded border border-slate-300 bg-[#DDEFE1] py-1.5 pl-9 pr-3 text-xs shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    placeholder="Journal no, reference, narration"
+                    className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   />
                 </div>
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="h-8 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none"
+                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 >
                   <option value="all">All Statuses</option>
                   <option value="draft">Draft</option>
@@ -679,7 +679,7 @@ const JournalEntries = () => {
                 <select
                   value={filters.journalType}
                   onChange={(e) => setFilters((prev) => ({ ...prev, journalType: e.target.value }))}
-                  className="h-8 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none"
+                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 >
                   <option value="all">All Journal Types</option>
                   {JOURNAL_TYPES.map((type) => (
@@ -691,7 +691,7 @@ const JournalEntries = () => {
                 <select
                   value={filters.propertyId}
                   onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                  className="h-8 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none"
+                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 >
                   <option value="all">All Properties</option>
                   {propertyOptions.map((item) => (
@@ -702,19 +702,19 @@ const JournalEntries = () => {
                 </select>
                 <button
                   onClick={() => setFilters({ search: "", status: "all", journalType: "all", propertyId: "all" })}
-                  className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
+                  className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                  <FaFilter /> Reset
+                  <FaFilter size={9} /> Reset
                 </button>
-                <button onClick={loadJournals} className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100"><FaRedoAlt /> Refresh</button>
-                <button onClick={openCreateModal} className="inline-flex h-8 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"><FaPlus /> New Journal</button>
+                <button onClick={loadJournals} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
+                <button onClick={openCreateModal} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Journal</button>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
               <table className="w-full min-w-[1440px] text-xs">
-                <thead>
-                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className="bg-[#0B3B2E] text-white">
                     <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Journal</th>
                     <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Date</th>
                     <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Type</th>

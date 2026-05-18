@@ -466,53 +466,42 @@ const PettyCash = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
 
             {/* ── Sticky toolbar ───────────────────────────────────────────── */}
-            <div className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-gray-50/95 p-2 shadow-sm backdrop-blur">
-
-              {/* Row 1 — title + account selector + stats */}
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="mr-1 text-sm font-bold text-slate-800">Petty Cash</span>
-
+            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <span className="shrink-0 text-xs font-black text-slate-800">Petty Cash</span>
                 {accounts.length > 0 && (
                   <select
                     value={selectedAccountId}
                     onChange={(e) => setSelectedAccountId(e.target.value)}
-                    className={LISTING_UI.filterSelect}
+                    className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   >
                     {accounts.map((a) => (
                       <option key={a._id} value={String(a._id)}>{a.name}</option>
                     ))}
                   </select>
                 )}
-
                 {selectedAccount && <BalancePill account={selectedAccount} />}
-
                 {selectedAccount && (
-                  <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                  <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
                     Float: KES {fmt(selectedAccount.floatAmount)}
                   </span>
                 )}
-
                 {selectedAccount?.custodianName && (
-                  <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1 text-xs text-slate-500">
-                    Custodian: <span className="ml-1 font-semibold text-slate-700">{selectedAccount.custodianName}</span>
+                  <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
+                    Custodian: <span className="font-semibold text-slate-700">{selectedAccount.custodianName}</span>
                   </span>
                 )}
-
                 {activeTab === "disbursements" && filteredDisbursements.length > 0 && (
-                  <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                  <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
                     {filteredDisbursements.length} voucher{filteredDisbursements.length !== 1 ? "s" : ""} · KES {fmt(activeDisbTotal)}
                   </span>
                 )}
-
                 {activeTab === "replenishments" && pendingRepCount > 0 && (
-                  <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                  <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
                     {pendingRepCount} pending · KES {fmt(pendingRepTotal)}
                   </span>
                 )}
-              </div>
-
-              {/* Row 2 — tabs */}
-              <div className="mb-2 flex items-center gap-0 border-b border-slate-200">
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 {[
                   { id: "disbursements", label: "Disbursements" },
                   { id: "replenishments", label: "Replenishments", badge: pendingRepCount },
@@ -520,81 +509,69 @@ const PettyCash = () => {
                   <button
                     key={tab.id}
                     onClick={() => { setActiveTab(tab.id); resetFilters(); setDisbPage(1); setRepPage(1); }}
-                    className={`relative flex items-center gap-1.5 px-4 py-2 text-xs font-semibold transition-colors ${
+                    className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold ${
                       activeTab === tab.id
-                        ? "border-b-2 border-[#0B3B2E] text-[#0B3B2E]"
-                        : "text-slate-500 hover:text-slate-700"
+                        ? "bg-[#0B3B2E] text-white"
+                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                     }`}
                   >
                     {tab.label}
                     {tab.badge > 0 && (
-                      <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold text-white">{tab.badge}</span>
+                      <span className="rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">{tab.badge}</span>
                     )}
                   </button>
                 ))}
-              </div>
-
-              {/* Row 3 — filters + action buttons */}
-              <div className="flex flex-wrap items-center gap-2">
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input
                   type="text"
                   placeholder={activeTab === "disbursements" ? "Search voucher, description…" : "Search ref no…"}
                   value={draftSearch}
                   onChange={(e) => setDraftSearch(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && applySearch()}
-                  className={LISTING_UI.filterInput + " min-w-[180px]"}
+                  className="h-7 w-40 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
-
                 {activeTab === "disbursements" && (
-                  <select value={draftCategory} onChange={(e) => setDraftCategory(e.target.value)} className={LISTING_UI.filterSelect}>
+                  <select value={draftCategory} onChange={(e) => setDraftCategory(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                     <option value="any">Category</option>
                     {Object.entries(CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 )}
-
-                <select value={draftStatus} onChange={(e) => setDraftStatus(e.target.value)} className={LISTING_UI.filterSelect}>
+                <select value={draftStatus} onChange={(e) => setDraftStatus(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="any">Status</option>
                   {activeTab === "disbursements"
                     ? [["active", "Active"], ["void", "Void"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)
                     : [["pending", "Pending"], ["approved", "Approved"], ["posted", "Posted"], ["rejected", "Rejected"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)
                   }
                 </select>
-
-                <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} className={LISTING_UI.filterInput} title="From date" />
-                <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} className={LISTING_UI.filterInput} title="To date" />
-
-                <button onClick={applySearch} className={`flex items-center gap-1.5 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>
-                  <FaSearch size={10} /> Search
+                <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" title="From date" />
+                <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" title="To date" />
+                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>
+                  <FaSearch size={9} /> Search
                 </button>
-                <button onClick={resetFilters} className={`flex items-center gap-1.5 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
-                  <FaRedoAlt size={10} /> Reset
+                <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
+                  <FaRedoAlt size={9} /> Reset
                 </button>
-
-                {/* spacer */}
-                <div className="flex-1" />
-
-                {/* CRUD buttons */}
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <button
                   onClick={() => setShowNewAccount(true)}
                   disabled={!canCreate}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <FaPlus size={9} /> New Account
                 </button>
-
                 {selectedAccountId && (
                   <>
                     <button
                       onClick={() => setShowReplenishment(true)}
                       disabled={!canCreate}
-                      className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 shadow-sm hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="h-7 shrink-0 flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <FaMoneyBillWave size={10} /> Replenish
+                      <FaMoneyBillWave size={9} /> Replenish
                     </button>
                     <button
                       onClick={() => setShowNewDisbursement(true)}
                       disabled={!canCreate}
-                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                      className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                     >
                       <FaPlus size={9} /> Record Disbursement
                     </button>

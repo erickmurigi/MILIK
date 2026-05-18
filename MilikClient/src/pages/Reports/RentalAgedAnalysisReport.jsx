@@ -26,8 +26,9 @@ const daysBetween = (earlier, later = new Date()) => {
 };
 
 const bucketOutstanding = (dueDate, amount) => {
+  if (!dueDate) return { current: 0, days30: 0, days60: 0, days90: 0, days90Plus: amount };
   const overdueDays = daysBetween(dueDate);
-  if (!dueDate || overdueDays <= 0) return { current: amount, days30: 0, days60: 0, days90: 0, days90Plus: 0 };
+  if (overdueDays <= 0) return { current: amount, days30: 0, days60: 0, days90: 0, days90Plus: 0 };
   if (overdueDays <= 30) return { current: 0, days30: amount, days60: 0, days90: 0, days90Plus: 0 };
   if (overdueDays <= 60) return { current: 0, days30: 0, days60: amount, days90: 0, days90Plus: 0 };
   if (overdueDays <= 90) return { current: 0, days30: 0, days60: 0, days90: amount, days90Plus: 0 };
@@ -300,28 +301,27 @@ const RentalAgedAnalysisReport = () => {
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
-            <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
-              <div className="grid gap-1.5 xl:grid-cols-[1.2fr_1fr_1fr_auto]">
-                <div className="relative">
-                  <FaFilter className="absolute left-2.5 top-2 text-orange-500 text-[10px]" />
-                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search tenant, property, unit" className="h-7 w-full rounded-md border border-slate-300 bg-white pl-7 pr-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
+            <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <div className="relative shrink-0">
+                  <FaFilter className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-orange-500" />
+                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Tenant, property, unit" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500" />
                 </div>
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-500">
                   <option value="all">All properties</option>
                   {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
                 </select>
-                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-500">
                   <option value="all">All charges</option>
                   <option value="RENT_CHARGE">Rent only</option>
                   <option value="UTILITY_CHARGE">Utility only</option>
                   <option value="LATE_PENALTY_CHARGE">Late penalties only</option>
                 </select>
-                <div className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-semibold text-slate-700"><FaClock className="text-amber-600" /> {totals.count} tenant row(s)</div>
-              </div>
-              <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
-                <button onClick={exportCsv} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
-                <button onClick={loadData} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
+                <span className="shrink-0 inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700"><FaClock className="text-amber-600" /> {totals.count} rows</span>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <button onClick={exportCsv} disabled={!canExportReports} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-orange-50 hover:text-orange-700 disabled:opacity-50"><FaFileDownload size={9} /> CSV</button>
+                <button onClick={handlePrint} disabled={!canExportReports} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-orange-50 hover:text-orange-700 disabled:opacity-50"><FaPrint size={9} /> Print</button>
+                <button onClick={loadData} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-orange-50 hover:text-orange-700"><FaSyncAlt size={9} className={loading ? 'animate-spin' : ''} /> Refresh</button>
               </div>
             </div>
 
@@ -339,8 +339,8 @@ const RentalAgedAnalysisReport = () => {
                   <col className="w-[10%]" />
                   <col className="w-[9%]" />
                 </colgroup>
-                <thead>
-                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className="bg-[#0B3B2E] text-white">
                     {['Tenant', 'Property', 'Unit', 'Current', '1-30', '31-60', '61-90', '90+', 'Total', 'Oldest Due'].map((header) => {
                       const isNumeric = ['Current', '1-30', '31-60', '61-90', '90+', 'Total'].includes(header);
                       return (

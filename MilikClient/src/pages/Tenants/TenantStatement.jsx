@@ -1677,51 +1677,48 @@ const TenantStatement = () => {
 
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm statement-tab">
-        <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-1.5 backdrop-blur filter-section">
-          <div className="flex flex-col gap-1.5 xl:flex-row xl:items-center xl:justify-between">
-            <div className="grid min-w-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-[150px_150px_minmax(180px,1fr)_110px]">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
-              />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
-              />
-              <select
-                value={transactionType}
-                onChange={(e) => setTransactionType(e.target.value)}
-                className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
-              >
-                <option value="ALL">All Transactions</option>
-                <option value="CHARGE">Invoices Only</option>
-                <option value="DEBIT_NOTE">Debit Notes</option>
-                <option value="CREDIT_NOTE">Credit Notes</option>
-                <option value="PAYMENT">Receipts Only</option>
-              </select>
-              <div className="inline-flex h-7 items-center rounded-md border border-slate-200 bg-white px-2 text-[10.5px] font-bold text-slate-700">
-                Rows: {visibleStatementTransactions.length}
-              </div>
-            </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-              {statementSummaryChips.map((chip) => (
-                <div key={chip.label} className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10.5px] shadow-sm">
-                  <span className="font-black uppercase tracking-[0.12em] text-slate-500">{chip.label}</span>
-                  <span className={`font-black ${chip.accent}`}>{chip.value}</span>
-                </div>
-              ))}
-            </div>
+        <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm filter-section">
+          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+            />
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+            />
+            <select
+              value={transactionType}
+              onChange={(e) => setTransactionType(e.target.value)}
+              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-500"
+            >
+              <option value="ALL">All Transactions</option>
+              <option value="CHARGE">Invoices Only</option>
+              <option value="DEBIT_NOTE">Debit Notes</option>
+              <option value="CREDIT_NOTE">Credit Notes</option>
+              <option value="PAYMENT">Receipts Only</option>
+            </select>
+            <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+              Rows: {visibleStatementTransactions.length}
+            </span>
+            <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+            {statementSummaryChips.map((chip) => (
+              <span key={chip.label} className="shrink-0 inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px]">
+                <span className="font-black uppercase tracking-[0.12em] text-slate-500">{chip.label}</span>
+                <span className={`font-black ${chip.accent}`}>{chip.value}</span>
+              </span>
+            ))}
           </div>
         </div>
 
         <div className="transaction-scroll-area min-h-[260px] flex-1 overflow-auto">
           <table className="transaction-table min-w-full table-fixed text-[10.5px]">
             <colgroup><col className="w-[10%]" /><col className="w-[35%]" /><col className="w-[11%]" /><col className="w-[13%]" /><col className="w-[9%]" /><col className="w-[11%]" /><col className="w-[11%]" /></colgroup>
-            <thead><tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">{['Date', 'Description', 'Type', 'Code', 'Trace', 'Amount', 'R. Balance'].map((header, index) => (<th key={header} className={`whitespace-nowrap px-2.5 py-1.5 text-[9.5px] font-black uppercase tracking-[0.12em] ${index >= 5 ? 'text-right' : index === 4 || index === 2 ? 'text-center' : 'text-left'}`}>{header}</th>))}</tr></thead>
+            <thead className="sticky top-0 z-10 shadow-sm"><tr className="bg-[#0B3B2E] text-white">{['Date', 'Description', 'Type', 'Code', 'Trace', 'Amount', 'R. Balance'].map((header, index) => (<th key={header} className={`whitespace-nowrap px-2.5 py-1.5 text-[9.5px] font-black uppercase tracking-[0.12em] ${index >= 5 ? 'text-right' : index === 4 || index === 2 ? 'text-center' : 'text-left'}`}>{header}</th>))}</tr></thead>
             <tbody>
               {visibleStatementTransactions.length > 0 ? visibleStatementTransactions.map((transaction, idx) => (
                 <tr key={transaction.id} className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} border-b border-slate-200 hover:bg-orange-50/40`}>
@@ -2433,8 +2430,8 @@ const TenantStatement = () => {
 
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full min-w-[1200px] text-[11px]">
-            <thead>
-              <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+            <thead className="sticky top-0 z-10 shadow-sm">
+              <tr className="bg-[#0B3B2E] text-white">
                 <th className="px-2.5 py-1.5 text-center">
                   <input
                     type="checkbox"
@@ -2973,8 +2970,8 @@ const TenantStatement = () => {
 
           <div className="overflow-auto border border-slate-200 rounded-lg">
             <table className="w-full min-w-[980px] text-sm">
-              <thead>
-                <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white text-[10px]">
+              <thead className="sticky top-0 z-10 shadow-sm">
+                <tr className="bg-[#0B3B2E] text-white text-[10px]">
                   <th className="px-3 py-2 text-left">Effective Date</th>
                   <th className="px-3 py-2 text-left">Type</th>
                   <th className="px-3 py-2 text-left">Frequency</th>
@@ -3503,24 +3500,23 @@ const TenantStatement = () => {
             </div>
           </div>
 
-          <div className="sticky top-0 z-30 flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur no-print">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <button onClick={() => navigate("/tenants")} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100"><FaArrowLeft size={12} /> Back</button>
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-                <span className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-orange-700 truncate">{tenant?.tenantName || tenant?.name || "Loading..."}</span>
-                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 truncate">Unit: {resolveTenantUnitNumber(tenant)}</span>
-                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 truncate">Property: {resolveTenantPropertyName(tenant)}</span>
-                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 truncate">Phone: {tenant?.phone || "-"}</span>
-              </div>
+          <div className="sticky top-0 z-30 flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm no-print">
+            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <button onClick={() => navigate("/tenants")} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"><FaArrowLeft size={10} /> Back</button>
+              <span className="shrink-0 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">{tenant?.tenantName || tenant?.name || "Loading..."}</span>
+              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700">Unit: {resolveTenantUnitNumber(tenant)}</span>
+              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700">Property: {resolveTenantPropertyName(tenant)}</span>
+              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700">Phone: {tenant?.phone || "-"}</span>
               {activeTab === "statement" && (
-                <div className="flex flex-wrap justify-end gap-1.5">
-                  <button onClick={() => navigate(`/receipts/${tenantId}`)} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00]"><FaMoneyBillWave size={12} /> Receipts</button>
-                  <button onClick={handlePrint} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"><FaPrint size={12} /> Print</button>
-                  <button onClick={handleDownload} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100"><FaDownload size={12} /> PDF</button>
-                </div>
+                <>
+                  <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                  <button onClick={() => navigate(`/receipts/${tenantId}`)} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-bold text-white hover:bg-[#e67e00]"><FaMoneyBillWave size={10} /> Receipts</button>
+                  <button onClick={handlePrint} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-bold text-white hover:bg-[#0A3127]"><FaPrint size={10} /> Print</button>
+                  <button onClick={handleDownload} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"><FaDownload size={10} /> PDF</button>
+                </>
               )}
             </div>
-            <div className="mt-2 flex overflow-x-auto rounded-md border border-slate-200 bg-white">
+            <div className="flex overflow-x-auto border-t border-slate-200 bg-white">
               {tabs.map((tab) => (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 border-r border-slate-200 px-3 text-[11px] font-bold transition-colors ${activeTab === tab.id ? "bg-orange-50 text-orange-700 shadow-inner" : "text-slate-600 hover:bg-slate-50"}`}>
                   <span className="text-sm">{tab.icon}</span><span>{tab.label}</span>

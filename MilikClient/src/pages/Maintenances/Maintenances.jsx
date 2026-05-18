@@ -382,68 +382,29 @@ const Maintenances = () => {
           {/* Main card */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
-            {/* Toolbar */}
-            <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-3 py-2 shadow-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="mr-1 text-sm font-black text-slate-800">Maintenance</p>
-                <div className="relative flex-1 min-w-[200px]">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                  <input
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search issue, unit, tenant, assignee…"
-                    className="h-8 w-full rounded border border-slate-300 bg-[#DDEFE1] py-1.5 pl-8 pr-3 text-xs shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                  />
-                </div>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="h-8 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none"
-                >
+            <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <span className="shrink-0 text-xs font-black text-slate-800">Maintenance</span>
+                <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search…" className="h-7 w-44 shrink-0 rounded border border-slate-300 bg-[#DDEFE1] px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 appearance-none focus:outline-none">
                   {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
-                <select
-                  value={priorityFilter}
-                  onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="h-8 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none"
-                >
+                <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 appearance-none focus:outline-none">
                   {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
-                <button
-                  onClick={() => { setSearchTerm(""); setStatusFilter("all"); setPriorityFilter("all"); }}
-                  className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  <FaFilter size={9} /> Reset
-                </button>
-                <button
-                  onClick={loadData}
-                  className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  <FaRedoAlt size={9} /> Refresh
-                </button>
-                <div className="ml-auto flex items-center gap-2">
-                  <button
-                    onClick={exportCsv}
-                    className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    <FaDownload size={9} /> CSV
-                  </button>
-                  <button
-                    onClick={openCreateModal}
-                    disabled={isDemoUser || !canCreate}
-                    className="inline-flex h-8 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
-                  >
-                    <FaPlus size={9} /> New Request
-                  </button>
-                </div>
+                <button onClick={() => { setSearchTerm(""); setStatusFilter("all"); setPriorityFilter("all"); }} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
+                <button onClick={loadData} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <button onClick={exportCsv} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
+                <button onClick={openCreateModal} disabled={isDemoUser || !canCreate} className="h-7 shrink-0 inline-flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus size={9} /> New Request</button>
               </div>
             </div>
 
             {/* Table */}
             <div className="flex-1 min-h-0 overflow-auto">
               <table className="w-full min-w-[900px] text-xs">
-                <thead>
-                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className="bg-[#0B3B2E] text-white">
                     <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.16em]">Request</th>
                     <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.16em]">Location</th>
                     <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.16em]">Assigned To</th>

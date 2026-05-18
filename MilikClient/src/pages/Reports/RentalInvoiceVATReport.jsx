@@ -145,63 +145,135 @@ const RentalInvoiceVATReport = () => {
     a.click();
   };
 
+  const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || "Milik";
+  const preparedBy = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(" ") || currentUser?.email || "Milik Admin";
+
   return (
     <DashboardLayout lockContentScroll>
+      <div className="print-only-wrapper">
+        <style>{`
+          @page { size: landscape; margin: 10mm; }
+          .vat-print-shell { font-family: Arial, sans-serif; color: #0f172a; }
+          .vat-print-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+          .vat-print-brand { color: #0B3B2E; font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 900; }
+          .vat-print-title { margin: 2px 0 4px; font-size: 18px; font-weight: 900; color: #0f172a; }
+          .vat-print-subtitle { margin: 0; font-size: 10px; color: #475569; }
+          .vat-print-meta { text-align: right; font-size: 9px; color: #475569; line-height: 1.6; }
+          .vat-print-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+          .vat-print-metric { border: 1px solid #dbe2ea; border-radius: 6px; background: #f8fafc; padding: 6px 8px; }
+          .vat-print-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; font-weight: 800; }
+          .vat-print-value { margin-top: 3px; font-size: 13px; font-weight: 900; color: #0f172a; }
+          .vat-print-table { width: 100%; border-collapse: collapse; font-size: 8.5px; }
+          .vat-print-table th, .vat-print-table td { border: 1px solid #dbe2ea; padding: 4px 5px; vertical-align: top; }
+          .vat-print-table thead th { background: #edf4f0; color: #0B3B2E; font-size: 7.5px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 800; }
+          .tr { text-align: right; }
+        `}</style>
+        <div className="vat-print-shell">
+          <div className="vat-print-header">
+            <div>
+              <div className="vat-print-brand">{companyName}</div>
+              <h1 className="vat-print-title">Rental Invoice VAT Report</h1>
+              <p className="vat-print-subtitle">Taxable rental invoices for the selected filters.</p>
+            </div>
+            <div className="vat-print-meta">
+              <div><strong>Property:</strong> {filters.propertyId === "all" ? "All properties" : (properties.find((p) => String(p._id) === filters.propertyId)?.propertyName || "Selected")}</div>
+              <div><strong>Category:</strong> {filters.category === "all" ? "All charge types" : filters.category.replace(/_/g, " ")}</div>
+              <div><strong>Generated:</strong> {new Date().toLocaleString()}</div>
+              <div><strong>Prepared by:</strong> {preparedBy}</div>
+            </div>
+          </div>
+          <div className="vat-print-grid">
+            {[
+              { label: "Invoices", value: String(totals.count) },
+              { label: "Net", value: formatMoney(totals.net) },
+              { label: "VAT", value: formatMoney(totals.tax) },
+              { label: "Gross", value: formatMoney(totals.gross) },
+            ].map((c) => (
+              <div key={c.label} className="vat-print-metric">
+                <div className="vat-print-label">{c.label}</div>
+                <div className="vat-print-value">{c.value}</div>
+              </div>
+            ))}
+          </div>
+          <table className="vat-print-table">
+            <thead>
+              <tr>
+                {["Invoice", "Tenant", "Property", "Unit", "Category", "Invoice Date", "Due Date", "Tax Code", "Rate", "Net", "VAT", "Gross", "Status"].map((h) => <th key={h}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.length === 0 ? (
+                <tr><td colSpan={13} style={{ textAlign: "center", padding: "12px" }}>No taxable invoices found.</td></tr>
+              ) : filteredRows.map((row) => (
+                <tr key={row._id}>
+                  <td>{row?.invoiceNumber || "—"}</td>
+                  <td>{row?.tenant?.tenantName || row?.tenant?.name || "—"}</td>
+                  <td>{row?.property?.propertyName || "—"}</td>
+                  <td>{row?.unit?.unitNumber || "—"}</td>
+                  <td>{String(row?.category || "").replace(/_/g, " ")}</td>
+                  <td>{formatDate(row?.invoiceDate)}</td>
+                  <td>{formatDate(row?.dueDate)}</td>
+                  <td>{row?.taxSnapshot?.taxCodeName || "—"}</td>
+                  <td className="tr">{Number(row?.taxSnapshot?.taxRate || 0)}%</td>
+                  <td className="tr">{formatMoney(row?.taxSnapshot?.netAmount || 0)}</td>
+                  <td className="tr">{formatMoney(row?.taxSnapshot?.taxAmount || 0)}</td>
+                  <td className="tr"><strong>{formatMoney(row?.taxSnapshot?.grossAmount || row?.amount || 0)}</strong></td>
+                  <td>{row?.status || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-2 shadow-sm backdrop-blur">
-              <div className="grid gap-2 xl:grid-cols-[1.4fr_1fr_1fr_auto]">
-                <div className="relative">
-                  <FaFilter className="absolute left-2.5 top-2.5 text-xs text-slate-400" />
+            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <div className="relative shrink-0">
+                  <FaFilter className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                   <input
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Search invoice, tenant, property, unit, tax code"
-                    className="h-8 w-full rounded-md border border-slate-300 bg-white py-1.5 pl-8 pr-2.5 text-[11px] text-slate-900 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    placeholder="Invoice, tenant, property, unit"
+                    className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400"
                   />
                 </div>
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100">
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400">
                   <option value="all">All properties</option>
                   {properties.map((property) => (
                     <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>
                   ))}
                 </select>
-                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100">
+                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400">
                   <option value="all">All charge types</option>
                   <option value="RENT_CHARGE">Rent</option>
                   <option value="UTILITY_CHARGE">Utility</option>
                   <option value="LATE_PENALTY_CHARGE">Late penalty</option>
                 </select>
-                <div className="inline-flex h-8 items-center gap-1.5 rounded-md border border-orange-200 bg-orange-50 px-3 text-[11px] font-bold text-orange-700">
-                  <FaPercent /> {filteredRows.length} row(s)
-                </div>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {[
-                    { label: "Invoices", value: totals.count, accent: "text-slate-900" },
-                    { label: "Net", value: formatMoney(totals.net), accent: "text-[#0B3B2E]" },
-                    { label: "VAT", value: formatMoney(totals.tax), accent: "text-amber-700" },
-                    { label: "Gross", value: formatMoney(totals.gross), accent: "text-slate-900" },
-                  ].map((card) => (
-                    <span key={card.label} className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                      {card.label} <span className={`normal-case tracking-normal ${card.accent}`}>{card.value}</span>
-                    </span>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={exportCsv} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"><FaFileDownload /> Export CSV</button>
-                  <button onClick={() => { if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"><FaPrint /> Print</button>
-                  <button onClick={loadData} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white shadow-sm transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"><FaSyncAlt className={loading ? "animate-spin" : ""} /> Refresh</button>
-                </div>
+                <span className="shrink-0 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700"><FaPercent className="inline mr-1" />{filteredRows.length} rows</span>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                {[
+                  { label: "Invoices", value: totals.count, accent: "text-slate-900" },
+                  { label: "Net", value: formatMoney(totals.net), accent: "text-[#0B3B2E]" },
+                  { label: "VAT", value: formatMoney(totals.tax), accent: "text-amber-700" },
+                  { label: "Gross", value: formatMoney(totals.gross), accent: "text-slate-900" },
+                ].map((card) => (
+                  <span key={card.label} className="shrink-0 inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                    {card.label} <span className={`normal-case tracking-normal ${card.accent}`}>{card.value}</span>
+                  </span>
+                ))}
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <button onClick={exportCsv} disabled={!canExportReports} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"><FaFileDownload size={9} /> CSV</button>
+                <button onClick={() => { if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"><FaPrint size={9} /> Print</button>
+                <button onClick={loadData} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"><FaSyncAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh</button>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
               <table className="min-w-full text-xs">
-                <thead>
-                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className="bg-[#0B3B2E] text-white">
                     {['Invoice', 'Tenant', 'Property', 'Unit', 'Category', 'Invoice Date', 'Due Date', 'Tax', 'Net', 'VAT', 'Gross', 'Status'].map((header) => (
                       <th key={header} className="whitespace-nowrap px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.12em]">{header}</th>
                     ))}

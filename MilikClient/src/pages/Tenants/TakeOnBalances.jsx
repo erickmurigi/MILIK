@@ -944,126 +944,45 @@ const TakeOnBalances = () => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-1.5 py-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-[260px] flex-1">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
-                  <input
-                    value={draftFilters.search}
-                    onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Tenant, property, unit, bill item, invoice number"
-                    className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[10px] shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                  />
-                </div>
-
-                <select
-                  value={draftFilters.propertyId}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, tenant: "" }))}
-                  className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-[10px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                >
-                  <option value="">All properties</option>
-                  {propertyOptions.map((property) => (
-                    <option key={property._id || property.id} value={normalizeId(property._id || property.id)}>
-                      {getPropertyDisplay(property)}
-                    </option>
-                  ))}
+            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Rows <span className="text-slate-900 normal-case">{filteredRows.length}</span></span>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <input value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search…" className="h-7 w-40 shrink-0 rounded border border-slate-300 bg-white px-2 text-[10px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <select value={draftFilters.propertyId} onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, tenant: "" }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="">Property</option>
+                  {propertyOptions.map((property) => (<option key={property._id || property.id} value={normalizeId(property._id || property.id)}>{getPropertyDisplay(property)}</option>))}
                 </select>
-
-                <select
-                  value={draftFilters.tenant}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenant: e.target.value }))}
-                  className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-[10px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                >
-                  <option value="">All tenants</option>
-                  {tenants
-                    .filter((tenant) => !draftFilters.propertyId || getTenantPropertyId(tenant) === draftFilters.propertyId)
-                    .map((tenant) => (
-                      <option key={tenant._id} value={tenant._id}>
-                        {getTenantDisplayName(tenant)}
-                      </option>
-                    ))}
+                <select value={draftFilters.tenant} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenant: e.target.value }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="">Tenant</option>
+                  {tenants.filter((tenant) => !draftFilters.propertyId || getTenantPropertyId(tenant) === draftFilters.propertyId).map((tenant) => (<option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)}</option>))}
                 </select>
-
-                <select
-                  value={draftFilters.billItem}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, billItem: e.target.value }))}
-                  className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-[10px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                >
-                  <option value="">All bill items</option>
-                  {filterBillItemOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
+                <select value={draftFilters.billItem} onChange={(e) => setDraftFilters((prev) => ({ ...prev, billItem: e.target.value }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="">Bill Item</option>
+                  {filterBillItemOptions.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
                 </select>
-
-                <select
-                  value={draftFilters.type}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, type: e.target.value }))}
-                  className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-[10px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                >
-                  <option value="">All types</option>
+                <select value={draftFilters.type} onChange={(e) => setDraftFilters((prev) => ({ ...prev, type: e.target.value }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="">Type</option>
                   <option value="Debit">Debit</option>
                   <option value="Credit">Credit</option>
                 </select>
-
-                <select
-                  value={draftFilters.status}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="h-7 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-[10px] text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                >
-                  <option value="">All statuses</option>
+                <select value={draftFilters.status} onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="">Status</option>
                   <option value="unallocated">Unallocated</option>
                   <option value="partially_allocated">Partially Allocated</option>
                   <option value="fully_allocated">Fully Allocated</option>
                 </select>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraftFilters(emptyFilters);
-                    setAppliedFilters(emptyFilters);
-                  }}
-                  className="rounded-lg border border-slate-300 bg-white px-1.5 py-1 text-[10px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
-                >
-                  Reset
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setAppliedFilters(draftFilters)}
-                  className={`rounded-lg px-1.5 py-1 text-[10px] font-semibold text-white shadow-sm transition ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                >
-                  Apply Filters
-                </button>
-
-                <button
-                  type="button"
-                  onClick={loadRows}
-                  className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
-                >
-                  <FaRedoAlt /> Refresh
-                </button>
-
-                <button
-                  type="button"
-                  onClick={openCreateModal}
-                  className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-black text-white shadow-sm transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaPlus /> Add Take-On Balance
-                </button>
-
-                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs font-black uppercase tracking-[0.18em] text-slate-500 shadow-sm">
-                  Rows
-                  <span className="text-[10px] text-slate-900">{filteredRows.length}</span>
-                </div>
+                <button type="button" onClick={() => setAppliedFilters(draftFilters)} className={`h-7 shrink-0 rounded px-2 text-[10px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>Apply</button>
+                <button type="button" onClick={() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100">Reset</button>
+                <button type="button" onClick={loadRows} className={`h-7 shrink-0 flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 shadow-sm hover:bg-slate-50`}><FaRedoAlt size={9} /></button>
+                <button type="button" onClick={openCreateModal} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={9} /> Add Take-On</button>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
               <table className="w-full min-w-[1120px] table-fixed text-[10px]">
-                <thead>
-                  <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className={`${MILIK_GREEN} text-white`}>
                     <th className="px-1.5 py-1 text-left text-[9px] font-black uppercase tracking-[0.1em]">Tenant</th>
                     <th className="px-1.5 py-1 text-left text-[9px] font-black uppercase tracking-[0.1em]">Property</th>
                     <th className="px-1.5 py-1 text-left text-[9px] font-black uppercase tracking-[0.1em]">Unit</th>

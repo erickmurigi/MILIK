@@ -218,47 +218,24 @@ const CommissionsList = () => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50 px-2 py-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-[220px] flex-1">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by property code or name"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[10px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                  />
-                </div>
-
-                <select
-                  value={filterMode}
-                  onChange={(e) => setFilterMode(e.target.value)}
-                  className="h-8 rounded-md border border-slate-300 bg-[#DDEFE1] px-2.5 text-[10px] text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                >
+            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Visible <span className="normal-case text-slate-900">{filteredProperties.length}</span></span>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <input type="text" placeholder="Search by property code or name" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-7 w-40 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-[10px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <select value={filterMode} onChange={(e) => setFilterMode(e.target.value)} className="h-7 shrink-0 rounded-md border border-slate-300 bg-[#DDEFE1] px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="all">All Properties</option>
                   <option value="configured">Configured Only</option>
                   <option value="unconfigured">Unconfigured Only</option>
                 </select>
-
-                <button
-                  onClick={resetFilters}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[10px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
-                >
-                  <FaRedoAlt /> Reset
-                </button>
-
-                <div className="ml-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 shadow-sm">
-                  Visible
-                  <span className="text-[10px] text-slate-900">{filteredProperties.length}</span>
-                </div>
+                <button onClick={resetFilters} className="h-7 shrink-0 inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100"><FaRedoAlt size={9} /> Reset</button>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
               <table className="w-full min-w-[980px] text-[10px]">
-                <thead>
-                  <tr className={`${MILIK_GREEN_BG} sticky top-0 z-10 text-white`}>
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className={`${MILIK_GREEN_BG} text-white`}>
                     <th className="sticky left-0 z-20 bg-[#0B3B2E] px-2 py-1.5 text-left text-[9px] font-black uppercase tracking-[0.12em]">Code</th>
                     <th className="px-2 py-1 text-left text-[9px] font-black uppercase tracking-[0.12em]">Property</th>
                     <th className="px-2 py-1 text-left text-[9px] font-black uppercase tracking-[0.12em]">Commission</th>

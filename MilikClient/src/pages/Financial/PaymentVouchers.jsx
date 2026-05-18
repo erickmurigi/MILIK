@@ -523,22 +523,21 @@ const PaymentVouchers = () => {
             ))}
           </div>
 
-          <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm rounded-t-xl">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
-              <div className="relative md:col-span-2">
-                <FaSearch className="absolute left-3 top-2.5 text-xs text-slate-400" />
+          <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
+            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="relative shrink-0">
+                <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                 <input
                   value={filters.search}
                   onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                  placeholder={isLandlordWorkspace ? "Search voucher, narration, owner, property" : "Search voucher, narration, landlord, property"}
-                  className="h-8 w-full rounded border border-[#FF8C00]/70 bg-white py-1.5 pl-8 pr-3 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
+                  placeholder={isLandlordWorkspace ? "Voucher, narration, owner, property" : "Voucher, narration, landlord, property"}
+                  className="h-7 w-52 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
                 />
               </div>
-
               <select
                 value={filters.category}
                 onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
-                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
+                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
               >
                 <option value="all">All categories</option>
                 {categories.map((item) => (
@@ -547,11 +546,10 @@ const PaymentVouchers = () => {
                   </option>
                 ))}
               </select>
-
               <select
                 value={filters.status}
                 onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
+                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
               >
                 <option value="all">All statuses</option>
                 <option value="draft">Draft</option>
@@ -559,11 +557,10 @@ const PaymentVouchers = () => {
                 <option value="paid">Paid</option>
                 <option value="reversed">Reversed</option>
               </select>
-
               <select
                 value={filters.propertyId}
                 onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
+                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
               >
                 <option value="all">All properties</option>
                 {properties.map((property) => (
@@ -572,17 +569,15 @@ const PaymentVouchers = () => {
                   </option>
                 ))}
               </select>
-
               <button
                 onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })}
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-4 py-1 text-xs text-white shadow-sm bg-[#0B3B2E] hover:bg-[#0A3127]"
+                className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"
               >
-                <FaFilter /> Reset
+                <FaFilter size={9} /> Reset
               </button>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button onClick={bulkDeleteSelected} className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">Delete Selected</button>
-              <button onClick={openCreate} disabled={!canCreateVoucher} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus /> New Voucher</button>
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <button onClick={bulkDeleteSelected} className="h-7 shrink-0 flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-100">Delete Selected</button>
+              <button onClick={openCreate} disabled={!canCreateVoucher} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus size={9} /> New Voucher</button>
             </div>
           </div>
 

@@ -554,96 +554,40 @@ const TenantAgreements = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
-        <div className="flex-shrink-0 sticky top-0 z-30 border-b border-gray-200 bg-white px-2 pt-1">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <select
-              value={draftFilters.property}
-              onChange={(event) => setDraftFilters((prev) => ({ ...prev, property: event.target.value }))}
-              className={LISTING_UI.filterSelect}
-            >
-              {uniqueProperties.map((propertyName) => (
-                <option key={propertyName} value={propertyName}>
-                  {propertyName === "any" ? "All Properties" : toListingCaps(propertyName)}
-                </option>
-              ))}
+        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <span className="shrink-0 text-[10px] font-bold text-gray-500">Total <span className="text-gray-900">{summary.total}</span></span>
+            <span className="shrink-0 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">Active: {summary.active}</span>
+            <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Expiring: {summary.expiring}</span>
+            <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">Pending: {summary.pending}</span>
+            {selectedAgreements.length > 0 && <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{selectedAgreements.length} selected</span>}
+            <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+            <button onClick={expandAllAgreements} className="h-7 shrink-0 rounded p-1.5 text-gray-700 hover:bg-gray-200" title="Expand all"><FaExpandAlt size={11} /></button>
+            <button onClick={collapseAllAgreements} className="h-7 shrink-0 rounded p-1.5 text-gray-700 hover:bg-gray-200" title="Collapse all"><FaCompressAlt size={11} /></button>
+            <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+            <select value={draftFilters.property} onChange={(event) => setDraftFilters((prev) => ({ ...prev, property: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              {uniqueProperties.map((propertyName) => (<option key={propertyName} value={propertyName}>{propertyName === "any" ? "Property" : toListingCaps(propertyName)}</option>))}
             </select>
-
-            <select
-              value={draftFilters.status}
-              onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))}
-              className={LISTING_UI.filterSelect}
-            >
-              <option value="any">All Status</option>
-              {AGREEMENT_STATUS_OPTIONS.map((status) => (
-                <option key={status} value={status}>{getStatusLabel(status)}</option>
-              ))}
+            <select value={draftFilters.status} onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <option value="any">Status</option>
+              {AGREEMENT_STATUS_OPTIONS.map((status) => (<option key={status} value={status}>{getStatusLabel(status)}</option>))}
             </select>
-
-            <label className="inline-flex items-center gap-2 rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white">
-              <input
-                type="checkbox"
-                checked={draftFilters.expiringOnly}
-                onChange={(event) => setDraftFilters((prev) => ({ ...prev, expiringOnly: event.target.checked }))}
-                className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-              />
-              Expiring in 30 days
+            <label className="h-7 shrink-0 inline-flex items-center gap-1.5 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-xs text-gray-800 hover:bg-white cursor-pointer">
+              <input type="checkbox" checked={draftFilters.expiringOnly} onChange={(event) => setDraftFilters((prev) => ({ ...prev, expiringOnly: event.target.checked }))} className="rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
+              Expiring 30d
             </label>
-
-            <div className="relative min-w-[260px] flex-1">
-              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400" />
-              <input
-                type="text"
-                value={draftFilters.search}
-                onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(event.target.value) }))}
-                placeholder="Search agreement, tenant, property or unit"
-                className="w-full rounded border border-gray-300 bg-white py-1 pl-9 pr-3 text-xs shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-2 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <button onClick={expandAllAgreements} className="rounded p-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-200" title="Expand all">
-              <FaExpandAlt />
-            </button>
-            <button onClick={collapseAllAgreements} className="rounded p-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-200" title="Collapse all">
-              <FaCompressAlt />
-            </button>
-            <span className="text-xs font-bold text-gray-700">{selectedAgreements.length} selected</span>
-            <span className="text-xs font-bold text-gray-500">
-              Total {summary.total} | Active {summary.active} | Pending {summary.pending} | Expiring {summary.expiring} | Terminated {summary.terminated}
-            </span>
-            <button
-              onClick={() => selectedAgreements.length === 1 && openEditModal(sortedFilteredRows.find((row) => row.id === selectedAgreements[0]))}
-              disabled={selectedAgreements.length !== 1}
-              className="flex items-center gap-1 rounded bg-blue-500 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <FaEdit size={10} />
-              <span>Edit</span>
-            </button>
-            <button onClick={() => openNewModal()} className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-medium text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>
-              <FaPlus className="text-xs" />
-              <span>New Agreement</span>
-            </button>
-            <button onClick={handleSearchFilters} className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-medium text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
-              <FaSearch className="text-xs" />
-              <span>Search</span>
-            </button>
-            <button onClick={handleResetFilters} className="flex items-center gap-1 rounded bg-gray-500 px-3 py-1 text-xs font-medium text-white shadow-sm transition-colors hover:bg-gray-600">
-              <FaRedoAlt className="text-xs" />
-              <span>Reset</span>
-            </button>
-            <button onClick={() => loadData()} className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-medium text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
-              <FaSyncAlt className="text-xs" />
-              <span>Refresh</span>
-            </button>
+            <input type="text" value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(event.target.value) }))} placeholder="Search…" className="h-7 w-40 shrink-0 rounded border border-gray-300 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+            <button onClick={handleSearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-medium text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
+            <button onClick={handleResetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-gray-500 px-2.5 text-xs font-medium text-white shadow-sm hover:bg-gray-600"><FaRedoAlt size={10} /></button>
+            <button onClick={() => loadData()} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-medium text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSyncAlt size={10} /></button>
+            <button onClick={() => selectedAgreements.length === 1 && openEditModal(sortedFilteredRows.find((row) => row.id === selectedAgreements[0]))} disabled={selectedAgreements.length !== 1} className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-medium text-white shadow-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"><FaEdit size={10} /></button>
+            <button onClick={() => openNewModal()} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-medium text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaPlus size={10} /> New Agreement</button>
           </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto px-2 py-1">
               <table className="w-full min-w-[1320px] border-collapse">
-                <thead>
+                <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className={`${MILIK_GREEN} text-xs text-white`}>
                     <th className="w-6 border-r border-gray-400 px-2 py-1.5 text-center font-bold">
                       <input

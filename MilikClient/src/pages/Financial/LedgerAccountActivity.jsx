@@ -329,40 +329,32 @@ const LedgerAccountActivity = () => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-3 py-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <div className="mr-1 inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
-                  <FaFilter className="text-[10px]" />
-                  Filters
-                </div>
-
+            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <input
                   type="date"
                   value={filters.startDate}
                   onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
-                  className="h-8 rounded-md border border-gray-300 px-2.5 text-[11px] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   title="From date"
                 />
-
                 <input
                   type="date"
                   value={filters.endDate}
                   onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
-                  className="h-8 rounded-md border border-gray-300 px-2.5 text-[11px] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   title="To date"
                 />
-
                 <select
                   value={filters.direction}
                   onChange={(e) => setFilters((prev) => ({ ...prev, direction: e.target.value }))}
-                  className="h-8 rounded-md border border-gray-300 bg-[#DDEFE1] px-2.5 text-[11px] text-gray-800 shadow-sm"
+                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 >
                   <option value="all">All directions</option>
                   <option value="debit">Debits only</option>
                   <option value="credit">Credits only</option>
                 </select>
-
-                <label className="flex h-8 items-center gap-2 rounded-md border border-[#0B3B2E]/20 bg-white px-2.5 text-[11px] font-medium text-slate-700 shadow-sm">
+                <label className="h-7 shrink-0 flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700">
                   <input
                     type="checkbox"
                     checked={filters.includeReversed}
@@ -375,15 +367,12 @@ const LedgerAccountActivity = () => {
                   />
                   Show reversals
                 </label>
-
                 <button
                   onClick={loadActivity}
-                  className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
                 >
-                  <FaFilter className="text-[10px]" />
-                  Apply
+                  <FaFilter size={9} /> Apply
                 </button>
-
                 <button
                   onClick={() => {
                     const now = new Date();
@@ -394,10 +383,9 @@ const LedgerAccountActivity = () => {
                       includeReversed: false,
                     });
                   }}
-                  className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                 >
-                  <FaRedoAlt className="text-[10px]" />
-                  Reset
+                  <FaRedoAlt size={9} /> Reset
                 </button>
               </div>
             </div>
@@ -407,8 +395,8 @@ const LedgerAccountActivity = () => {
             ) : (
               <div className="min-h-0 flex-1 overflow-auto">
                 <table className="w-full min-w-[1500px] text-xs">
-                  <thead>
-                    <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                  <thead className="sticky top-0 z-10 shadow-sm">
+                    <tr className={`${MILIK_GREEN} text-white`}>
                       <th className="px-3 py-2 text-left font-semibold">Date</th>
                       <th className="px-3 py-2 text-left font-semibold">Reference</th>
                       <th className="px-3 py-2 text-left font-semibold">Type</th>

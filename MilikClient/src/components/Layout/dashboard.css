@@ -112,9 +112,11 @@ button:focus {
     visibility: hidden !important;
   }
 
-  /* Reveal only the designated print area */
+  /* Reveal designated print areas */
   .employee-print-area,
-  .employee-print-area * {
+  .employee-print-area *,
+  .print-only-wrapper,
+  .print-only-wrapper * {
     visibility: visible !important;
   }
 
@@ -137,6 +139,20 @@ button:focus {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 11px;
     color: #1e293b;
+  }
+
+  /* Report print areas — cover the full printed page */
+  .print-only-wrapper {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 10mm 12mm;
+    background: #ffffff !important;
+    overflow: visible;
+    z-index: 9999;
   }
 
   /* Prevent page breaks inside cards */
@@ -172,9 +188,11 @@ button:focus {
     display: none !important;
   }
 
-  /* Preserve background colours only inside the print area */
+  /* Preserve background colours inside print areas */
   .employee-print-area,
-  .employee-print-area * {
+  .employee-print-area *,
+  .print-only-wrapper,
+  .print-only-wrapper * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }

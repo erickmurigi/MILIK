@@ -772,128 +772,43 @@ const Vacants = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
-        <div className="sticky top-0 z-30 flex-shrink-0 bg-gray-50 px-2 pt-2">
-          <div className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 shadow-sm">
-            {/* Row 1: Action buttons */}
-            <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-              <button
-                onClick={applySearch}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-bold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                title="Search using the selected filters"
-              >
-                <FaSearch className="text-[10px]" /> Search
-              </button>
-              <button
-                onClick={resetFilters}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                title="Reset filters"
-              >
-                <FaRedoAlt className="text-[10px]" /> Reset
-              </button>
-              <button
-                onClick={allExpanded ? collapseAll : expandAll}
-                disabled={!currentRows.length}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-bold text-white shadow-sm ${
-                  currentRows.length
-                    ? allExpanded ? "bg-orange-600 hover:bg-orange-700" : `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
-                    : "cursor-not-allowed bg-gray-400"
-                }`}
-              >
-                {allExpanded ? <FaCompressAlt className="text-[10px]" /> : <FaExpandAlt className="text-[10px]" />}
-                {allExpanded ? "Collapse All" : "Expand All"}
-              </button>
-              <div className="h-4 w-px bg-gray-300 mx-0.5" />
-              <button
-                onClick={() => navigate("/tenant/new")}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                title="Open tenant take-on"
-              >
-                <FaUserPlus className="text-[10px]" /> Add Tenant
-              </button>
-              <button
-                onClick={() => navigate("/units/new")}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                title="Add new unit"
-              >
-                <FaPlus className="text-[10px]" /> Add Unit
-              </button>
-              <div className="h-4 w-px bg-gray-300 mx-0.5" />
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-1 rounded-md bg-slate-700 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm hover:bg-slate-800"
-                title="Print availability list"
-              >
-                <FaPrint className="text-[10px]" /> Print List
-              </button>
-              <button
-                onClick={handleExport}
-                className="flex items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1 text-[10px] font-bold shadow-sm hover:bg-gray-50"
-                title="Export current availability list"
-              >
-                <FaFileExport className="text-[10px]" /> Export
-              </button>
-            </div>
-
-            {/* Row 2: Filter dropdowns + text search */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <select
-                value={draftFilters.property}
-                onChange={(event) => setDraftFilters((prev) => ({ ...prev, property: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-2.5 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              >
-                {uniqueProperties.map((property) => (
-                  <option key={property.value} value={property.value}>{property.label}</option>
-                ))}
-              </select>
-              <select
-                value={draftFilters.status}
-                onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-2.5 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              >
-                <option value="any">All Statuses</option>
-                <option value="occupied">Occupied</option>
-                <option value="vacant">Vacant</option>
-                <option value="notice_given">Notice Given</option>
-                <option value="reserved">Reserved</option>
-                <option value="under_maintenance">Under Maintenance</option>
-                <option value="off_market">Off Market</option>
-              </select>
-              <select
-                value={draftFilters.unitType}
-                onChange={(event) => setDraftFilters((prev) => ({ ...prev, unitType: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-2.5 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              >
-                <option value="any">Unit Type</option>
-                {unitTypeOptions.map((type) => (
-                  <option key={type} value={type}>{formatUnitTypeLabel(type)}</option>
-                ))}
-              </select>
-              <select
-                value={draftFilters.window}
-                onChange={(event) => setDraftFilters((prev) => ({ ...prev, window: event.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-2.5 py-1 text-[11px] text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              >
-                <option value="all">Availability Window</option>
-                <option value="now">Available Now</option>
-                <option value="next7">Available in 7 Days</option>
-                <option value="next30">Available in 30 Days</option>
-              </select>
-              <div className="h-4 w-px bg-gray-300 mx-0.5" />
-              <input
-                value={draftFilters.search}
-                onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))}
-                onKeyDown={handleFilterEnter}
-                placeholder="Search unit, property or code"
-                className="rounded border border-gray-300 bg-white px-2.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              />
-              <input
-                value={draftFilters.tenant}
-                onChange={(event) => setDraftFilters((prev) => ({ ...prev, tenant: event.target.value }))}
-                onKeyDown={handleFilterEnter}
-                placeholder="Tenant name"
-                className="rounded border border-gray-300 bg-white px-2.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              />
-            </div>
+        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2.5 text-[10px] font-bold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={9} /></button>
+            <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={9} /></button>
+            <button onClick={allExpanded ? collapseAll : expandAll} disabled={!currentRows.length} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${currentRows.length ? (allExpanded ? "bg-orange-600 hover:bg-orange-700" : `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`) : "cursor-not-allowed bg-gray-400"}`}>{allExpanded ? <FaCompressAlt size={9} /> : <FaExpandAlt size={9} />}</button>
+            <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
+            <button onClick={() => navigate("/tenant/new")} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaUserPlus size={9} /> Add Tenant</button>
+            <button onClick={() => navigate("/units/new")} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={9} /> Add Unit</button>
+            <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
+            <button onClick={handlePrint} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-slate-700 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-slate-800"><FaPrint size={9} /></button>
+            <button onClick={handleExport} className="h-7 shrink-0 flex items-center gap-1 rounded-md border border-gray-300 px-2 text-[10px] font-bold shadow-sm hover:bg-gray-50"><FaFileExport size={9} /></button>
+            <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
+            <select value={draftFilters.property} onChange={(event) => setDraftFilters((prev) => ({ ...prev, property: event.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              {uniqueProperties.map((property) => (<option key={property.value} value={property.value}>{property.label}</option>))}
+            </select>
+            <select value={draftFilters.status} onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <option value="any">Status</option>
+              <option value="occupied">Occupied</option>
+              <option value="vacant">Vacant</option>
+              <option value="notice_given">Notice Given</option>
+              <option value="reserved">Reserved</option>
+              <option value="under_maintenance">Under Maintenance</option>
+              <option value="off_market">Off Market</option>
+            </select>
+            <select value={draftFilters.unitType} onChange={(event) => setDraftFilters((prev) => ({ ...prev, unitType: event.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <option value="any">Unit Type</option>
+              {unitTypeOptions.map((type) => (<option key={type} value={type}>{formatUnitTypeLabel(type)}</option>))}
+            </select>
+            <select value={draftFilters.window} onChange={(event) => setDraftFilters((prev) => ({ ...prev, window: event.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <option value="all">Availability</option>
+              <option value="now">Available Now</option>
+              <option value="next7">In 7 Days</option>
+              <option value="next30">In 30 Days</option>
+            </select>
+            <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
+            <input value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))} onKeyDown={handleFilterEnter} placeholder="Search…" className="h-7 w-36 shrink-0 rounded border border-gray-300 bg-white px-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+            <input value={draftFilters.tenant} onChange={(event) => setDraftFilters((prev) => ({ ...prev, tenant: event.target.value }))} onKeyDown={handleFilterEnter} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-gray-300 bg-white px-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
           </div>
         </div>
 
@@ -937,8 +852,8 @@ const Vacants = () => {
                   <col style={{ width: "85px" }} />
                   <col style={{ width: "180px" }} />
                 </colgroup>
-                <thead>
-                  <tr className="sticky top-0 z-10 border-b border-gray-300 bg-[#0B3B2E]">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className="border-b border-gray-300 bg-[#0B3B2E]">
                     <th className="border-r border-gray-300 px-1 py-1.5 text-center font-bold text-white"></th>
                     <th className="sticky left-[42px] z-20 border-r border-gray-300 bg-[#0B3B2E] px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Property</th>
                     <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Unit No</th>

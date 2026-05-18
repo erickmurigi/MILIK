@@ -687,144 +687,120 @@ const LatePenalties = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white p-2 md:p-3">
         <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col gap-2">
           <div className={`${pageShellClass} flex-shrink-0`}>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/95 px-2 py-2 shadow-sm backdrop-blur">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWorkspaceView("processed_penalties");
-                    setSelectedBatchRows({});
-                  }}
-                  className={`inline-flex h-8 items-center rounded-md border px-3 text-[11px] font-bold transition ${pillTabClass(
-                    workspaceView === "processed_penalties",
-                    "green"
-                  )}`}
-                >
-                  Processed Penalties
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWorkspaceView("processed_batches");
-                    setSelectedBatchRows({});
-                  }}
-                  className={`inline-flex h-8 items-center rounded-md border px-3 text-[11px] font-bold transition ${pillTabClass(
-                    workspaceView === "processed_batches",
-                    "slate"
-                  )}`}
-                >
-                  Processed Batches
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWorkspaceView("rules");
-                    setSelectedBatchRows({});
-                  }}
-                  className={`inline-flex h-8 items-center rounded-md border px-3 text-[11px] font-bold transition ${pillTabClass(
-                    workspaceView === "rules",
-                    "orange"
-                  )}`}
-                >
-                  Rules / Preview / Process
-                </button>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {[
-                  { label: "Processed", value: processedPenaltyStats.totalRows, accent: "text-slate-900" },
-                  { label: "Active", value: processedPenaltyStats.activeRows, accent: "text-emerald-700" },
-                  { label: "Reversed", value: processedPenaltyStats.reversedRows, accent: "text-amber-700" },
-                  { label: "Deleted", value: processedPenaltyStats.deletedRows, accent: "text-rose-700" },
-                  { label: "Amount", value: formatCurrency(processedPenaltyStats.activeAmount), accent: "text-slate-900" },
-                ].map((item) => (
-                  <span key={item.label} className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                    {item.label} <span className={`normal-case tracking-normal ${item.accent}`}>{item.value}</span>
-                  </span>
-                ))}
-                <button
-                  type="button"
-                  onClick={openNewRuleModal}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white shadow-sm transition hover:bg-[#0A3127]"
-                >
-                  <FaPlus /> Add Rule
-                </button>
-              </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-2 py-1.5 shadow-sm">
+              <button
+                type="button"
+                onClick={() => { setWorkspaceView("processed_penalties"); setSelectedBatchRows({}); }}
+                className={`h-7 shrink-0 flex items-center rounded border px-2.5 text-xs font-bold transition ${pillTabClass(workspaceView === "processed_penalties", "green")}`}
+              >
+                Processed Penalties
+              </button>
+              <button
+                type="button"
+                onClick={() => { setWorkspaceView("processed_batches"); setSelectedBatchRows({}); }}
+                className={`h-7 shrink-0 flex items-center rounded border px-2.5 text-xs font-bold transition ${pillTabClass(workspaceView === "processed_batches", "slate")}`}
+              >
+                Processed Batches
+              </button>
+              <button
+                type="button"
+                onClick={() => { setWorkspaceView("rules"); setSelectedBatchRows({}); }}
+                className={`h-7 shrink-0 flex items-center rounded border px-2.5 text-xs font-bold transition ${pillTabClass(workspaceView === "rules", "orange")}`}
+              >
+                Rules / Preview / Process
+              </button>
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              {[
+                { label: "Processed", value: processedPenaltyStats.totalRows, accent: "text-slate-900" },
+                { label: "Active", value: processedPenaltyStats.activeRows, accent: "text-emerald-700" },
+                { label: "Reversed", value: processedPenaltyStats.reversedRows, accent: "text-amber-700" },
+                { label: "Deleted", value: processedPenaltyStats.deletedRows, accent: "text-rose-700" },
+                { label: "Amount", value: formatCurrency(processedPenaltyStats.activeAmount), accent: "text-slate-900" },
+              ].map((item) => (
+                <span key={item.label} className="shrink-0 inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                  {item.label} <span className={`normal-case tracking-normal ${item.accent}`}>{item.value}</span>
+                </span>
+              ))}
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <button
+                type="button"
+                onClick={openNewRuleModal}
+                className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-bold text-white hover:bg-[#0A3127]"
+              >
+                <FaPlus size={9} /> Add Rule
+              </button>
             </div>
           </div>
 
           <div className={`${pageShellClass} flex min-h-0 flex-1 flex-col`}>
             {workspaceView === "processed_penalties" ? (
               <>
-                <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-2 shadow-sm backdrop-blur">
-                  <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="flex flex-1 flex-col gap-2 lg:flex-row">
-                      <input
-                        value={penaltySearch}
-                        onChange={(e) => setPenaltySearch(e.target.value)}
-                        placeholder="Search batch, tenant, penalty invoice, property, unit"
-                        className={`h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[11px] text-slate-900 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 lg:max-w-md`}
-                      />
-                      <select
-                        value={penaltyStatusFilter}
-                        onChange={(e) => setPenaltyStatusFilter(e.target.value)}
-                        className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
-                      >
-                        <option value="all">All statuses</option>
-                        <option value="processed">Processed</option>
-                        <option value="reversed">Reversed</option>
-                        <option value="deleted">Deleted</option>
-                      </select>
-                      <select
-                        value={penaltyRuleFilter}
-                        onChange={(e) => setPenaltyRuleFilter(e.target.value)}
-                        className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
-                      >
-                        <option value="all">All rules</option>
-                        {processedPenaltyRuleOptions.map((ruleName) => (
-                          <option key={ruleName} value={ruleName}>{ruleName}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={penaltyPropertyFilter}
-                        onChange={(e) => setPenaltyPropertyFilter(e.target.value)}
-                        className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
-                      >
-                        <option value="all">All properties</option>
-                        {processedPenaltyPropertyOptions.map((propertyName) => (
-                          <option key={propertyName} value={propertyName}>{propertyName}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => runReverseForItems(selectedProcessedItemIds)}
-                        disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
-                        className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white shadow-sm ${
-                          selectedProcessedItemIds.length > 0 ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-400 cursor-not-allowed"
-                        }`}
-                      >
-                        <FaCheckSquare /> Reverse Selected
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => runDeleteForItems(selectedProcessedItemIds)}
-                        disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
-                        className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white shadow-sm ${
-                          selectedProcessedItemIds.length > 0 ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-400 cursor-not-allowed"
-                        }`}
-                      >
-                        <FaTrash /> Delete Selected
-                      </button>
-                    </div>
+                <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                    <input
+                      value={penaltySearch}
+                      onChange={(e) => setPenaltySearch(e.target.value)}
+                      placeholder="Batch, tenant, penalty invoice, property, unit"
+                      className="h-7 w-52 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400"
+                    />
+                    <select
+                      value={penaltyStatusFilter}
+                      onChange={(e) => setPenaltyStatusFilter(e.target.value)}
+                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400"
+                    >
+                      <option value="all">All statuses</option>
+                      <option value="processed">Processed</option>
+                      <option value="reversed">Reversed</option>
+                      <option value="deleted">Deleted</option>
+                    </select>
+                    <select
+                      value={penaltyRuleFilter}
+                      onChange={(e) => setPenaltyRuleFilter(e.target.value)}
+                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400"
+                    >
+                      <option value="all">All rules</option>
+                      {processedPenaltyRuleOptions.map((ruleName) => (
+                        <option key={ruleName} value={ruleName}>{ruleName}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={penaltyPropertyFilter}
+                      onChange={(e) => setPenaltyPropertyFilter(e.target.value)}
+                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400"
+                    >
+                      <option value="all">All properties</option>
+                      {processedPenaltyPropertyOptions.map((propertyName) => (
+                        <option key={propertyName} value={propertyName}>{propertyName}</option>
+                      ))}
+                    </select>
+                    <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                    <button
+                      type="button"
+                      onClick={() => runReverseForItems(selectedProcessedItemIds)}
+                      disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
+                      className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-bold text-white ${
+                        selectedProcessedItemIds.length > 0 ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-400 cursor-not-allowed"
+                      }`}
+                    >
+                      <FaCheckSquare size={9} /> Reverse Selected
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => runDeleteForItems(selectedProcessedItemIds)}
+                      disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
+                      className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-bold text-white ${
+                        selectedProcessedItemIds.length > 0 ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-400 cursor-not-allowed"
+                      }`}
+                    >
+                      <FaTrash size={9} /> Delete Selected
+                    </button>
                   </div>
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-auto">
                   <table className="w-full min-w-[1500px] text-xs">
-                    <thead>
-                      <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                    <thead className="sticky top-0 z-10 shadow-sm">
+                      <tr className="bg-[#0B3B2E] text-white">
                         <th className="px-3 py-2 text-left">
                           <input
                             type="checkbox"
@@ -944,37 +920,33 @@ const LatePenalties = () => {
 
             {workspaceView === "processed_batches" ? (
               <>
-                <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-2 shadow-sm backdrop-blur">
-                  <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="flex flex-1 flex-col gap-2 lg:flex-row">
-                      <input
-                        value={batchSearch}
-                        onChange={(e) => setBatchSearch(e.target.value)}
-                        placeholder="Search batch name, rule, status"
-                        className={`h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[11px] text-slate-900 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 lg:max-w-md`}
-                      />
-                      <select
-                        value={batchStatusFilter}
-                        onChange={(e) => setBatchStatusFilter(e.target.value)}
-                        className="h-8 rounded-md border border-orange-200 bg-orange-50/70 px-2.5 text-[11px] font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
-                      >
-                        <option value="all">All batch statuses</option>
-                        <option value="processed">Processed</option>
-                        <option value="partial">Partial</option>
-                        <option value="failed">Failed</option>
-                        <option value="reversed_ready">Reversed ready</option>
-                      </select>
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Click a batch row to open the invoice list in a bottom sheet.
-                    </div>
+                <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                    <input
+                      value={batchSearch}
+                      onChange={(e) => setBatchSearch(e.target.value)}
+                      placeholder="Batch name, rule, status"
+                      className="h-7 w-48 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400"
+                    />
+                    <select
+                      value={batchStatusFilter}
+                      onChange={(e) => setBatchStatusFilter(e.target.value)}
+                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400"
+                    >
+                      <option value="all">All batch statuses</option>
+                      <option value="processed">Processed</option>
+                      <option value="partial">Partial</option>
+                      <option value="failed">Failed</option>
+                      <option value="reversed_ready">Reversed ready</option>
+                    </select>
+                    <span className="shrink-0 text-xs text-slate-500">Click a row to open details.</span>
                   </div>
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-auto">
                   <table className="w-full min-w-[1200px] text-xs">
-                    <thead>
-                      <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                    <thead className="sticky top-0 z-10 shadow-sm">
+                      <tr className="bg-[#0B3B2E] text-white">
                         <th className="px-3 py-2 text-left font-semibold">Batch</th>
                         <th className="px-3 py-2 text-left font-semibold">Rule</th>
                         <th className="px-3 py-2 text-center font-semibold">Run Date</th>
@@ -1148,71 +1120,55 @@ const LatePenalties = () => {
                 </div>
 
                 <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
-                  <div className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                      <div className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-3">
-                        <div>
-                          <label className={labelClass}>Selected rule</label>
-                          <select
-                            className={inputClass}
-                            value={selectedRuleId}
-                            onChange={(e) => setSelectedRuleId(e.target.value)}
-                          >
-                            <option value="">Select rule</option>
-                            {rules.map((rule) => (
-                              <option key={rule._id} value={rule._id}>
-                                {rule.ruleName}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className={labelClass}>Run date</label>
-                          <div className="relative">
-                            <FaCalendarAlt className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input
-                              type="date"
-                              className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm text-slate-900 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
-                              value={runDate}
-                              onChange={(e) => setRunDate(e.target.value)}
-                            />
-                          </div>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Selected total</p>
-                          <p className="mt-1 text-sm font-semibold text-slate-900">
-                            {selectedCount} row(s) · {formatCurrency(selectedPenaltyAmount)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={handlePreview}
-                          disabled={loading}
-                          className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-60"
-                        >
-                          <FaEye /> Preview Penalties
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleProcess}
-                          disabled={loading || selectedCount === 0}
-                          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white ${
-                            selectedCount > 0 ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-400 cursor-not-allowed"
-                          }`}
-                        >
-                          <FaCheckSquare /> Process Selected
-                        </button>
-                      </div>
+                  <div className="flex-none sticky top-0 z-10 border-b border-slate-200 bg-white shadow-sm">
+                    <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                      <select
+                        className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                        value={selectedRuleId}
+                        onChange={(e) => setSelectedRuleId(e.target.value)}
+                      >
+                        <option value="">Select rule</option>
+                        {rules.map((rule) => (
+                          <option key={rule._id} value={rule._id}>
+                            {rule.ruleName}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="date"
+                        className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                        value={runDate}
+                        onChange={(e) => setRunDate(e.target.value)}
+                      />
+                      <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                        {selectedCount} row(s) · {formatCurrency(selectedPenaltyAmount)}
+                      </span>
+                      <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                      <button
+                        type="button"
+                        onClick={handlePreview}
+                        disabled={loading}
+                        className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-60"
+                      >
+                        <FaEye size={9} /> Preview
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleProcess}
+                        disabled={loading || selectedCount === 0}
+                        className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-bold text-white ${
+                          selectedCount > 0 ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-400 cursor-not-allowed"
+                        }`}
+                      >
+                        <FaCheckSquare size={9} /> Process Selected
+                      </button>
                     </div>
                   </div>
 
                   <div className="flex-1 min-h-0 overflow-auto">
                     <table className="w-full min-w-[1400px] text-xs">
-                      <thead>
-                        <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                      <thead className="sticky top-0 z-10 shadow-sm">
+                        <tr className="bg-[#0B3B2E] text-white">
                           <th className="px-3 py-2 text-left">
                             <input
                               type="checkbox"
@@ -1390,8 +1346,8 @@ const LatePenalties = () => {
 
             <div className="max-h-[52vh] overflow-auto">
               <table className="w-full min-w-[1450px] text-xs">
-                <thead>
-                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className="bg-[#0B3B2E] text-white">
                     <th className="px-3 py-2 text-left">
                       <input
                         type="checkbox"

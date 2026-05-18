@@ -444,8 +444,8 @@ const PaidBalanceReport = () => {
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
                   <div>
-                    Showing {report.rows?.length ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}-
-                    {Math.min(currentPage * ITEMS_PER_PAGE, report.rows?.length || 0)} of {report.rows?.length || 0} tenant row(s)
+                    Showing {searchFilteredRows.length ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}-
+                    {Math.min(currentPage * ITEMS_PER_PAGE, searchFilteredRows.length)} of {searchFilteredRows.length} tenant row(s)
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-700">50 items per page</span>

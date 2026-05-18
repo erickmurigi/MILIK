@@ -735,186 +735,50 @@ const TenantDeposits = () => {
       <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full min-h-0 w-full max-w-none flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-gray-50/95 p-2 shadow-sm backdrop-blur">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                  Total Deposit Invoices: {totals.count}
-                </span>
-                <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  Total Amount: {formatCurrency(totals.amount)}
-                </span>
-                <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                  Outstanding: {formatCurrency(totals.outstanding)}
-                </span>
-              </div>
-
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "ACTIVE" }))}
-                  className={`rounded px-3 py-1 text-xs font-semibold transition-colors ${
-                    draftFilters.status === "ACTIVE"
-                      ? `${MILIK_GREEN} text-white`
-                      : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
-                  }`}
-                >
-                  Issued + Paid
-                </button>
-                <button
-                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "Issued" }))}
-                  className={`rounded px-3 py-1 text-xs font-semibold transition-colors ${
-                    draftFilters.status === "Issued"
-                      ? `${MILIK_GREEN} text-white`
-                      : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
-                  }`}
-                >
-                  Issued
-                </button>
-                <button
-                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "Paid" }))}
-                  className={`rounded px-3 py-1 text-xs font-semibold transition-colors ${
-                    draftFilters.status === "Paid"
-                      ? `${MILIK_GREEN} text-white`
-                      : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
-                  }`}
-                >
-                  Paid
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  value={draftFilters.invoiceNo}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))}
-                  placeholder="Invoice #"
-                  className={LISTING_UI.filterInput}
-                />
-                <input
-                  type="text"
-                  value={draftFilters.tenantName}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantName: e.target.value }))}
-                  placeholder="Tenant name"
-                  className={LISTING_UI.filterInput}
-                />
-                <select
-                  value={draftFilters.propertyId}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, unitId: "any" }))}
-                  className={LISTING_UI.filterSelect}
-                >
+            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Deposits: {totals.count}</span>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{formatCurrency(totals.amount)}</span>
+                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">O/S: {formatCurrency(totals.outstanding)}</span>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                {[{val:"ACTIVE",label:"All"},{val:"Issued",label:"Issued"},{val:"Paid",label:"Paid"}].map(({val,label}) => (
+                  <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}`}>{label}</button>
+                ))}
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="text" value={draftFilters.tenantName} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantName: e.target.value }))} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <select value={draftFilters.propertyId} onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, unitId: "any" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="any">Property</option>
-                  {activeProperties.map((property) => (
-                    <option key={property._id} value={property._id}>
-                      {formatPropertyName(property)}
-                    </option>
-                  ))}
+                  {activeProperties.map((property) => (<option key={property._id} value={property._id}>{formatPropertyName(property)}</option>))}
                 </select>
-                <select
-                  value={draftFilters.unitId}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, unitId: e.target.value }))}
-                  className={LISTING_UI.filterSelect}
-                >
+                <select value={draftFilters.unitId} onChange={(e) => setDraftFilters((prev) => ({ ...prev, unitId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="any">Unit</option>
-                  {unitsForFilter.map((unit) => (
-                    <option key={unit._id} value={unit._id}>
-                      {formatUnitName(unit)}
-                    </option>
-                  ))}
+                  {unitsForFilter.map((unit) => (<option key={unit._id} value={unit._id}>{formatUnitName(unit)}</option>))}
                 </select>
-                <select
-                  value={draftFilters.depositTypeId}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, depositTypeId: e.target.value }))}
-                  className={LISTING_UI.filterSelect}
-                >
-                  <option value="any">Deposit type</option>
-                  {activeDepositTypes.map((type) => (
-                    <option key={type._id || type.code || type.name} value={type._id || `deposit:${slugify(type.code || type.name)}`}>
-                      {type.name}
-                    </option>
-                  ))}
+                <select value={draftFilters.depositTypeId} onChange={(e) => setDraftFilters((prev) => ({ ...prev, depositTypeId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="any">Deposit Type</option>
+                  {activeDepositTypes.map((type) => (<option key={type._id || type.code || type.name} value={type._id || `deposit:${slugify(type.code || type.name)}`}>{type.name}</option>))}
                 </select>
-                <select
-                  value={draftFilters.holder}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, holder: e.target.value }))}
-                  className={LISTING_UI.filterSelect}
-                >
+                <select value={draftFilters.holder} onChange={(e) => setDraftFilters((prev) => ({ ...prev, holder: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="any">{holderColumnLabel}</option>
                   {!isLandlordWorkspace && <option value="manager">Management Company</option>}
                   <option value="landlord">{isLandlordWorkspace ? "Owner / Landlord" : "Landlord"}</option>
                 </select>
-                <input
-                  type="date"
-                  value={draftFilters.fromDate}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
-                  className={LISTING_UI.filterInput}
-                  title="From date"
-                />
-                <input
-                  type="date"
-                  value={draftFilters.toDate}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))}
-                  className={LISTING_UI.filterInput}
-                  title="To date"
-                />
-                <button
-                  onClick={applySearch}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                >
-                  <FaSearch className="text-xs" />
-                  Search
-                </button>
-                <button
-                  onClick={resetFilters}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaRedoAlt className="text-xs" />
-                  Reset
-                </button>
-                <button
-                  onClick={loadDepositInvoices}
-                  disabled={loading}
-                  className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-1 text-xs text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60"
-                >
-                  {loading ? <FaSpinner className="animate-spin text-xs" /> : <FaRedoAlt className="text-xs" />}
-                  Refresh
-                </button>
-                <button
-                  onClick={handleDeleteSelected}
-                  disabled={!canDeleteInvoice || selectedCount === 0 || deleting}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "cursor-not-allowed bg-gray-400"
-                  }`}
-                >
-                  <FaTrash className="text-xs" />
-                  Delete
-                </button>
-                <button
-                  onClick={handlePrintList}
-                  disabled={!canExportInvoice || totalFilteredCount === 0}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
-                  }`}
-                >
-                  <FaPrint className="text-xs" />
-                  Print List
-                </button>
-                <button
-                  type="button"
-                  onClick={openDepositModal}
-                  disabled={!canCreateInvoice}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
-                  }`}
-                >
-                  <FaPlus className="text-xs" />
-                  New Deposit Invoice
-                </button>
+                <input type="date" value={draftFilters.fromDate} onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="date" value={draftFilters.toDate} onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
+                <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
+                <button onClick={loadDepositInvoices} disabled={loading} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 text-xs text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60">{loading ? <FaSpinner className="animate-spin" size={10} /> : <FaRedoAlt size={10} />}</button>
+                <button onClick={handleDeleteSelected} disabled={!canDeleteInvoice || selectedCount === 0 || deleting} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "cursor-not-allowed bg-gray-400"}`}><FaTrash size={10} /></button>
+                <button onClick={handlePrintList} disabled={!canExportInvoice || totalFilteredCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaPrint size={10} /></button>
+                <button type="button" onClick={openDepositModal} disabled={!canCreateInvoice} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaPlus size={10} /> Deposit</button>
               </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
               <table className="w-full min-w-[1480px] text-xs">
-                <thead>
-                  <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className={`${MILIK_GREEN} text-white`}>
                     <th className="px-3 py-2 text-left">
                       <input type="checkbox" checked={currentPageRows.length > 0 && selectAll} onChange={toggleSelectAll} />
                     </th>

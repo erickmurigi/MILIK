@@ -469,37 +469,33 @@ const ChartOfAccounts = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
-            <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
-              <div className="relative w-full lg:max-w-xl">
-                <FaSearch className="absolute left-3 top-3 text-slate-400" />
+          <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="relative shrink-0">
+                <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by code, account name, type, class, or subgroup"
-                  className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] pl-8 pr-3 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  placeholder="Code, account name, type, class, subgroup"
+                  className="h-7 w-56 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
               </div>
-
-              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
-                <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={showControlAccounts}
-                    onChange={(e) => setShowControlAccounts(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
-                  />
-                  Show Control Accounts
-                </label>
-                <div className="text-sm text-slate-600 flex items-center gap-2">
-                  <FaFolderOpen className="text-[#0B3B2E]" />
-                  {selectedAccounts.length} selected
-                </div>
-                <button onClick={loadAccounts} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-bold text-slate-700 hover:bg-slate-100"><FaSyncAlt /> Refresh</button>
-                <button onClick={openCreateModal} disabled={!canCreateCOA} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> Add Account</button>
-                <button onClick={openEditModal} disabled={selectedAccounts.length !== 1 || !canUpdateCOA} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length === 1 && canUpdateCOA ? "bg-amber-500 hover:bg-amber-600" : "bg-slate-300"}`}><FaEdit /> Edit</button>
-                <button onClick={handleDeleteSelected} disabled={selectedAccounts.length === 0 || !canDeleteCOA} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length > 0 && canDeleteCOA ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-300"}`}><FaTrash /> Delete</button>
-              </div>
+              <label className="h-7 shrink-0 flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={showControlAccounts}
+                  onChange={(e) => setShowControlAccounts(e.target.checked)}
+                  className="rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                />
+                Control Accounts
+              </label>
+              <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                <FaFolderOpen className="inline mr-1 text-[#0B3B2E]" />{selectedAccounts.length} selected
+              </span>
+              <button onClick={loadAccounts} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaSyncAlt size={9} /></button>
+              <button onClick={openCreateModal} disabled={!canCreateCOA} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus size={9} /> Add Account</button>
+              <button onClick={openEditModal} disabled={selectedAccounts.length !== 1 || !canUpdateCOA} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length === 1 && canUpdateCOA ? "bg-amber-500 hover:bg-amber-600" : "bg-slate-300"}`}><FaEdit size={9} /> Edit</button>
+              <button onClick={handleDeleteSelected} disabled={selectedAccounts.length === 0 || !canDeleteCOA} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length > 0 && canDeleteCOA ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-300"}`}><FaTrash size={9} /> Delete</button>
             </div>
           </div>
 

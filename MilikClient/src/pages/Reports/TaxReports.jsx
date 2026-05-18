@@ -74,9 +74,10 @@ const TaxReports = () => {
       if (!currentCompany?._id) return;
       setLoading(true);
       try {
+        const invoiceUrl = `/tenant-invoices?business=${currentCompany._id}${filters.startDate ? `&fromDate=${filters.startDate}` : ""}${filters.endDate ? `&toDate=${filters.endDate}` : ""}`;
         const [settingsRes, invoiceRes, statementRes] = await Promise.all([
           adminRequests.get(`/company-settings/${currentCompany._id}`),
-          adminRequests.get(`/tenant-invoices?business=${currentCompany._id}`),
+          adminRequests.get(invoiceUrl),
           adminRequests.get(`/processed-statements/business/${currentCompany._id}`),
         ]);
 
@@ -106,13 +107,12 @@ const TaxReports = () => {
     return () => {
       cancelled = true;
     };
-  }, [currentCompany?._id]);
+  }, [currentCompany?._id, filters.startDate, filters.endDate]);
 
   const rows = useMemo(() => {
     const invoiceRows = invoices
       .filter((invoice) => {
         if (filters.propertyId && String(invoice?.property?._id || invoice?.property) !== String(filters.propertyId)) return false;
-        if (!withinRange(invoice?.invoiceDate || invoice?.createdAt, filters.startDate, filters.endDate)) return false;
         if (['cancelled', 'reversed'].includes(String(invoice?.status || '').toLowerCase())) return false;
         return Number(invoice?.taxSnapshot?.taxAmount || 0) > 0;
       })
@@ -218,8 +218,81 @@ const TaxReports = () => {
     URL.revokeObjectURL(url);
   };
 
+  const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || "Milik";
+  const preparedBy = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(" ") || currentUser?.email || "Milik Admin";
+
   return (
     <DashboardLayout lockContentScroll>
+      <div className="print-only-wrapper">
+        <style>{`
+          @page { size: landscape; margin: 10mm; }
+          .tax-print-shell { font-family: Arial, sans-serif; color: #0f172a; }
+          .tax-print-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+          .tax-print-brand { color: #0B3B2E; font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 900; }
+          .tax-print-title { margin: 2px 0 4px; font-size: 18px; font-weight: 900; color: #0f172a; }
+          .tax-print-meta { text-align: right; font-size: 9px; color: #475569; line-height: 1.6; }
+          .tax-print-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+          .tax-print-metric { border: 1px solid #dbe2ea; border-radius: 6px; background: #f8fafc; padding: 6px 8px; }
+          .tax-print-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; font-weight: 800; }
+          .tax-print-value { margin-top: 3px; font-size: 13px; font-weight: 900; color: #0f172a; }
+          .tax-print-table { width: 100%; border-collapse: collapse; font-size: 8.5px; }
+          .tax-print-table th, .tax-print-table td { border: 1px solid #dbe2ea; padding: 4px 5px; vertical-align: top; }
+          .tax-print-table thead th { background: #edf4f0; color: #0B3B2E; font-size: 7.5px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 800; }
+          .tr { text-align: right; }
+        `}</style>
+        <div className="tax-print-shell">
+          <div className="tax-print-header">
+            <div>
+              <div className="tax-print-brand">{companyName}</div>
+              <h1 className="tax-print-title">Tax Report</h1>
+              <p style={{ margin: 0, fontSize: "10px", color: "#475569" }}>VAT and tax summary for the selected period.</p>
+            </div>
+            <div className="tax-print-meta">
+              <div><strong>Period:</strong> {filters.startDate} to {filters.endDate}</div>
+              <div><strong>Property:</strong> {filters.propertyId ? (properties.find((p) => String(p._id) === filters.propertyId)?.propertyName || "Selected") : "All properties"}</div>
+              <div><strong>Generated:</strong> {new Date().toLocaleString()}</div>
+              <div><strong>Prepared by:</strong> {preparedBy}</div>
+            </div>
+          </div>
+          <div className="tax-print-grid">
+            {[
+              { label: "Net Amount", value: formatMoney(totals.netAmount) },
+              { label: "Tax Amount", value: formatMoney(totals.taxAmount) },
+              { label: "Gross Amount", value: formatMoney(totals.grossAmount) },
+            ].map((c) => (
+              <div key={c.label} className="tax-print-metric">
+                <div className="tax-print-label">{c.label}</div>
+                <div className="tax-print-value">{c.value}</div>
+              </div>
+            ))}
+          </div>
+          <table className="tax-print-table">
+            <thead>
+              <tr>
+                {["Date", "Source", "Reference", "Property", "Party", "Tax Code", "Rate %", "Net", "Tax", "Gross"].map((h) => <th key={h}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr><td colSpan={10} style={{ textAlign: "center", padding: "12px" }}>No taxable entries found for the selected period.</td></tr>
+              ) : rows.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.date ? new Date(row.date).toLocaleDateString() : "—"}</td>
+                  <td>{row.source}</td>
+                  <td>{row.reference}</td>
+                  <td>{row.propertyName}</td>
+                  <td>{row.partyName}</td>
+                  <td>{row.taxCode}</td>
+                  <td className="tr">{row.taxRate}%</td>
+                  <td className="tr">{formatMoney(row.netAmount)}</td>
+                  <td className="tr">{formatMoney(row.taxAmount)}</td>
+                  <td className="tr"><strong>{formatMoney(row.grossAmount)}</strong></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 p-2">
         <div className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur print:hidden">

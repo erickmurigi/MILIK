@@ -123,7 +123,7 @@ const PropertyIncomeSummaryReport = () => {
       toast.warning ? toast.warning('You do not have permission to export reports') : toast.error('You do not have permission to export reports');
       return;
     }
-    const header = ['Property', 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Total Collected', 'Total Expenses', 'Net Income', 'Collection Rate'];
+    const header = ['Property', 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Total Collected', 'Total Expenses', 'Net Income (Cash)', 'Collection Rate'];
     const rows = (report.byProperty || []).map((row) => [
       row.propertyName || '',
       row.rentInvoiced || 0,
@@ -217,7 +217,7 @@ const PropertyIncomeSummaryReport = () => {
               { label: 'Total Invoiced', value: formatMoney(summary.totalInvoiced) },
               { label: 'Total Collected', value: formatMoney(summary.totalCollected) },
               { label: 'Total Expenses', value: formatMoney(summary.totalExpenses) },
-              { label: 'Net Income', value: formatMoney(summary.netIncome) },
+              { label: 'Net Income (Cash)', value: formatMoney(summary.netIncome) },
             ].map((card) => (
               <div key={card.label} className="report-print-metric">
                 <div className="report-print-label">{card.label}</div>
@@ -329,7 +329,7 @@ const PropertyIncomeSummaryReport = () => {
                 { label: 'Total Collected', value: formatMoney(summary.totalCollected), accent: 'text-emerald-700' },
                 { label: 'Collection Rate', value: formatPercent(summary.collectionRate), accent: 'text-slate-900' },
                 { label: 'Total Expenses', value: formatMoney(summary.totalExpenses), accent: 'text-red-700' },
-                { label: 'Net Income', value: formatMoney(summary.netIncome), accent: Number(summary.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-700' },
+                { label: 'Net Income (Cash)', value: formatMoney(summary.netIncome), accent: Number(summary.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-700' },
                 { label: 'Properties', value: summary.propertyCount || 0, accent: 'text-slate-900' },
               ].map((card) => (
                 <div key={card.label} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
@@ -375,7 +375,7 @@ const PropertyIncomeSummaryReport = () => {
                   <table className="min-w-full text-xs">
                     <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
                       <tr>
-                        {['Property', 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Collected', 'Expenses', 'Net Income', 'Collection %'].map((h) => (
+                        {['Property', 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Collected', 'Expenses', 'Net Income (Cash)', 'Collection %'].map((h) => (
                           <th key={h} className="whitespace-nowrap px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.12em]">{h}</th>
                         ))}
                       </tr>
