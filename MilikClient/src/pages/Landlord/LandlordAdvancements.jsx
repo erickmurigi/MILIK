@@ -645,70 +645,34 @@ const LandlordAdvancements = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-        <div className="sticky top-0 z-30 flex-shrink-0 rounded-lg border border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
-          <div className="grid gap-2 lg:grid-cols-4">
-            <label className="block">
-              <span className="text-xs font-black uppercase tracking-wide text-slate-500">Search</span>
-              <div className="relative mt-2">
-                <FaSearch className="absolute left-3 top-2.5 text-slate-400" />
-                <input
-                  value={filters.search}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                  placeholder="Reference, title, note..."
-                  className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] px-9 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
-                />
-              </div>
-            </label>
-            <label className="block">
-              <span className="text-xs font-black uppercase tracking-wide text-slate-500">Status</span>
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
-              >
-                <option value="all">All statuses</option>
-                {["draft", "submitted", "approved", "disbursed", "recovering", "paused", "cleared", "cancelled", "rejected", "reversed"].map((status) => (
-                  <option key={status} value={status}>{statusLabel(status)}</option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs font-black uppercase tracking-wide text-slate-500">Landlord</span>
-              <select
-                value={filters.landlordId}
-                onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))}
-                className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
-              >
-                <option value="all">All landlords</option>
-                {activeLandlords.map((landlord) => (
-                  <option key={landlord._id} value={landlord._id}>
-                    {landlord.landlordName || landlord.firstName || landlord.email || "Landlord"}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs font-black uppercase tracking-wide text-slate-500">Advance type</span>
-              <select
-                value={filters.advanceType}
-                onChange={(e) => setFilters((prev) => ({ ...prev, advanceType: e.target.value }))}
-                className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
-              >
-                <option value="all">All types</option>
-                {TYPE_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>{item.label}</option>
-                ))}
-              </select>
-            </label>
+        <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <div className="relative shrink-0">
+              <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
+              <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Reference, title…" className="h-7 w-40 rounded border border-gray-300 bg-[#DDEFE1] pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E]" />
+            </div>
+            <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <option value="all">All statuses</option>
+              {["draft", "submitted", "approved", "disbursed", "recovering", "paused", "cleared", "cancelled", "rejected", "reversed"].map((status) => (<option key={status} value={status}>{statusLabel(status)}</option>))}
+            </select>
+            <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <option value="all">All landlords</option>
+              {activeLandlords.map((landlord) => (<option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.firstName || landlord.email || "Landlord"}</option>))}
+            </select>
+            <select value={filters.advanceType} onChange={(e) => setFilters((prev) => ({ ...prev, advanceType: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <option value="all">All types</option>
+              {TYPE_OPTIONS.map((item) => (<option key={item.value} value={item.value}>{item.label}</option>))}
+            </select>
+            <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+            <button onClick={openCreate} disabled={!canWrite} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-[#FF8C00] hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> New Advance</button>
           </div>
-          <div className="mt-2 flex flex-wrap justify-end gap-2"><button onClick={openCreate} disabled={!canWrite} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> New Landlord Advance</button></div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="min-h-0 flex-1 overflow-auto">
             <table className="min-w-full text-xs">
-              <thead>
-                <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+              <thead className="sticky top-0 z-10 shadow-sm">
+                <tr className="bg-[#0B3B2E] text-white">
                   <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Reference</th>
                   <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Landlord / Property</th>
                   <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Type</th>

@@ -3306,210 +3306,53 @@ const createInvoiceForTenant = async (
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-gray-50/95 p-2 shadow-sm backdrop-blur">
-              {tenantId && (
-                <div className="mb-2 flex items-center justify-between">
-                  <button
-                    onClick={() => navigate("/tenants")}
-                    className="flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-gray-900"
-                    title="Back to Tenants"
-                  >
-                    <FaArrowLeft size={12} />
-                    Back to tenant list
+            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                {tenantId && (
+                  <button onClick={() => navigate("/tenants")} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-gray-600 hover:text-gray-900">
+                    <FaArrowLeft size={11} /> Back
                   </button>
-                </div>
-              )}
-
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                  Total Invoices: {invoiceListPagination.totalItems || 0}
-                </span>
-                <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  Page Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}
-                </span>
-                <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                  Page Pending: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}
-                </span>
-              </div>
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "ACTIVE" }))}
-                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${
-                    draftFilters.status === "ACTIVE"
-                      ? `${MILIK_GREEN} text-white`
-                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                  }`}
-                >
-                  Issued + Paid
-                </button>
-                <button
-                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "Issued" }))}
-                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${
-                    draftFilters.status === "Issued"
-                      ? `${MILIK_GREEN} text-white`
-                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                  }`}
-                >
-                  Issued
-                </button>
-                <button
-                  onClick={() => setDraftFilters((prev) => ({ ...prev, status: "Paid" }))}
-                  className={`px-3 py-1 text-xs rounded font-semibold transition-colors ${
-                    draftFilters.status === "Paid"
-                      ? `${MILIK_GREEN} text-white`
-                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                  }`}
-                >
-                  Paid
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  value={draftFilters.invoiceNo}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))}
-                  placeholder="Invoice #"
-                  className="rounded border border-gray-300 px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                />
-
-                {!tenantId && (
-                  <input
-                    type="text"
-                    value={draftFilters.tenantName}
-                    onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantName: e.target.value }))}
-                    placeholder="Tenant name"
-                    className="rounded border border-gray-300 px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                  />
                 )}
-
-                <select
-                  value={draftFilters.property}
-                  onChange={(e) =>
-                    setDraftFilters((prev) => ({
-                      ...prev,
-                      property: e.target.value,
-                      unit: "any",
-                    }))
-                  }
-                  className={LISTING_UI.filterSelect}
-                >
-                  {uniqueProperties.map((property) => (
-                    <option key={property} value={property}>
-                      {property === "any" ? "Property" : property}
-                    </option>
-                  ))}
+                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Invoices: {invoiceListPagination.totalItems || 0}</span>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
+                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Pending: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                {[{val:"ACTIVE",label:"All"},{val:"Issued",label:"Issued"},{val:"Paid",label:"Paid"}].map(({val,label}) => (
+                  <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>{label}</button>
+                ))}
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                {!tenantId && <input type="text" value={draftFilters.tenantName} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantName: e.target.value }))} placeholder="Tenant" className="h-7 w-28 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />}
+                <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "any" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  {uniqueProperties.map((property) => (<option key={property} value={property}>{property === "any" ? "Property" : property}</option>))}
                 </select>
-
-                <select
-                  value={draftFilters.unit}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))}
-                  className={LISTING_UI.filterSelect}
-                >
-                  {unitsForSelectedProperty.map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit === "any" ? "Unit" : unit}
-                    </option>
-                  ))}
+                <select value={draftFilters.unit} onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  {unitsForSelectedProperty.map((unit) => (<option key={unit} value={unit}>{unit === "any" ? "Unit" : unit}</option>))}
                 </select>
-
-                <input
-                  type="date"
-                  value={draftFilters.fromDate}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
-                  className={LISTING_UI.filterInput}
-                  title="From date"
-                />
-
-                <input
-                  type="date"
-                  value={draftFilters.toDate}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))}
-                  className={LISTING_UI.filterInput}
-                  title="To date"
-                />
-
-                <button
-                  onClick={applySearch}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                >
-                  <FaSearch className="text-xs" />
-                  Search
-                </button>
-
-                <button
-                  onClick={resetFilters}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaRedoAlt className="text-xs" />
-                  Reset
-                </button>
-
-                <button
-                  onClick={handleEditSelected}
-                  disabled={!canUpdateInvoice || !canEdit}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    canEdit ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"
-                  }`}
-                >
-                  <FaEdit className="text-xs" />
-                  Edit
-                </button>
-
-                <button
-                  onClick={handleDeleteSelected}
-                  disabled={!canDeleteInvoice || selectedCount === 0}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"
-                  }`}
-                >
-                  <FaTrash className="text-xs" />
-                  Delete
-                </button>
-
-                <button
-                  onClick={handlePrintList}
-                  disabled={!canExportInvoice || totalFilteredCount === 0}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${
-                    totalFilteredCount > 0
-                      ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
-                      : "bg-gray-400 cursor-not-allowed"
-                  }`}
-                >
-                  <FaPrint className="text-xs" />
-                  Print List
-                </button>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => navigate("/tenants/deposits")}
-                    disabled={!canCreateInvoice}
-                    className={`rounded-lg px-3 py-1 text-xs font-semibold text-white ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}
-                  >
-                    Book Deposit
-                  </button>
-                  <div className="flex items-center gap-1">
-                    <FaPlus className="text-[10px] text-[#0B3B2E]" />
-                    <select
-                      value={bookingAction}
-                      disabled={!canCreateInvoice}
-                      onChange={(e) => handleBookingActionChange(e.target.value)}
-                      className="rounded-lg border border-[#0B3B2E] bg-[#E7F5EC] px-3 py-1 text-xs font-semibold text-[#0B3B2E] shadow-sm"
-                    >
-                      <option value="">Booking</option>
-                      <option value="single">Create Single Booking</option>
-                      <option value="batch">Create Batch Booking</option>
-                    </select>
-                  </div>
+                <input type="date" value={draftFilters.fromDate} onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="date" value={draftFilters.toDate} onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
+                <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
+                <button onClick={handleEditSelected} disabled={!canUpdateInvoice || !canEdit} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${canEdit ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={10} /></button>
+                <button onClick={handleDeleteSelected} disabled={!canDeleteInvoice || selectedCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}><FaTrash size={10} /></button>
+                <button onClick={handlePrintList} disabled={!canExportInvoice || totalFilteredCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPrint size={10} /></button>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <button type="button" onClick={() => navigate("/tenants/deposits")} disabled={!canCreateInvoice} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold text-white ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}>Deposit</button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <FaPlus className="text-[10px] text-[#0B3B2E]" />
+                  <select value={bookingAction} disabled={!canCreateInvoice} onChange={(e) => handleBookingActionChange(e.target.value)} className="h-7 rounded border border-[#0B3B2E] bg-[#E7F5EC] px-2 text-xs font-semibold text-[#0B3B2E]">
+                    <option value="">Booking</option>
+                    <option value="single">Single Booking</option>
+                    <option value="batch">Batch Booking</option>
+                  </select>
                 </div>
               </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
               <table className="w-full min-w-[1320px] text-xs">
-                <thead>
-                  <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className={`${MILIK_GREEN} text-white`}>
                     <th className="px-3 py-2 text-left">
                       <input type="checkbox" checked={currentPageInvoices.length > 0 && selectAll} onChange={toggleSelectAll} />
                     </th>

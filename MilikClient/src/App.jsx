@@ -142,6 +142,9 @@ const HRReportLeave         = lazy(() => import("./pages/HR/HRReportLeave"));
 const HRReportP9            = lazy(() => import("./pages/HR/HRReportP9"));
 const HRLeaveBalances       = lazy(() => import("./pages/HR/LeaveBalances"));
 const HRStatutoryDeductions = lazy(() => import("./pages/HR/StatutoryDeductions"));
+const HRKpiLibrary          = lazy(() => import("./pages/HR/KpiLibrary"));
+const HRAppraisalCycles     = lazy(() => import("./pages/HR/AppraisalCycles"));
+const HRAppraisals          = lazy(() => import("./pages/HR/Appraisals"));
 
 // Property Sale module
 const PropertySaleDashboard = lazy(() => import("./pages/PropertySale/PropertySaleDashboard"));
@@ -511,6 +514,9 @@ function App() {
             <Route path="/hr/reports/p9"        element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportP9 /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/leave/balances"    element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRLeaveBalances /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/statutory"         element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRStatutoryDeductions /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/appraisals/kpis"   element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRKpiLibrary /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/appraisals/cycles" element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAppraisalCycles /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/appraisals"        element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAppraisals /></ProtectedRoute></CompanyModuleRoute>} />
 
             {/* ── Property Sale module ──────────────────────────────────── */}
             <Route path="/sale/dashboard"                      element={<CompanyModuleRoute moduleKey="propertySale"><PropertySaleDashboard /></CompanyModuleRoute>} />

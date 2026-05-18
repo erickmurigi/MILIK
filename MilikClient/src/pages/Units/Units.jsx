@@ -849,220 +849,94 @@ const Units = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex flex-col h-full min-h-0 p-0 bg-gray-50 overflow-hidden">
-        {/* Filters Card (consistent style) */}
-        <div className="flex-shrink-0 sticky top-0 z-30 bg-gray-50 pt-2 px-2">
-          <div className={LISTING_UI.toolbarCard}>
-            {/* Row 1: dropdowns + action buttons */}
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={draftFilters.property}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, property: e.target.value }))}
-                className={LISTING_UI.filterSelect}
-              >
-                {uniqueProperties.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+        {/* Toolbar — single scrollable row */}
+        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+              value={draftFilters.property} onChange={(e) => setDraftFilters((p) => ({ ...p, property: e.target.value }))}>
+              {uniqueProperties.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
 
-              <select
-                value={draftFilters.status}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}
-                className={LISTING_UI.filterSelect}
-              >
-                <option value="active">Active</option>
-                <option value="any">All Statuses</option>
-                <option value="occupied">Occupied</option>
-                <option value="vacant">Vacant</option>
-                <option value="maintenance">Maintenance</option>
-                <option value="archived">Archived</option>
-              </select>
+            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+              value={draftFilters.status} onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}>
+              <option value="active">Active</option>
+              <option value="any">All Statuses</option>
+              <option value="occupied">Occupied</option>
+              <option value="vacant">Vacant</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="archived">Archived</option>
+            </select>
 
-              <select
-                value={draftFilters.unitType}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, unitType: e.target.value }))}
-                className={LISTING_UI.filterSelect}
-              >
-                <option value="any">Unit Type</option>
-                {unitTypeOptions.map((type) => (
-                  <option key={type} value={type}>{formatUnitTypeLabel(type)}</option>
-                ))}
-              </select>
+            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+              value={draftFilters.unitType} onChange={(e) => setDraftFilters((p) => ({ ...p, unitType: e.target.value }))}>
+              <option value="any">Unit Type</option>
+              {unitTypeOptions.map((type) => <option key={type} value={type}>{formatUnitTypeLabel(type)}</option>)}
+            </select>
 
-              <button
-                onClick={applySearch}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                title="Search using the fields"
-              >
-                <FaSearch className="text-xs" />
-                Search
+            <div className="h-4 w-px shrink-0 bg-slate-200" />
+
+            <input value={draftFilters.unitNo} onChange={(e) => setDraftFilters((p) => ({ ...p, unitNo: normalizeUppercaseInput(e.target.value) }))}
+              onKeyDown={onFilterEnter} placeholder="Unit No."
+              className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+            <input value={draftFilters.tenant} onChange={(e) => setDraftFilters((p) => ({ ...p, tenant: normalizeUppercaseInput(e.target.value) }))}
+              onKeyDown={onFilterEnter} placeholder="Tenant"
+              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+
+            <div className="h-4 w-px shrink-0 bg-slate-200" />
+
+            <button onClick={applySearch} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00]">
+              <FaSearch size={9} /> Search
+            </button>
+            <button onClick={resetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
+              <FaRedoAlt size={9} /> Reset
+            </button>
+            <button onClick={allUnitsExpanded ? collapseAllUnits : expandAllUnits} disabled={!filteredUnits || filteredUnits.length === 0}
+              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${filteredUnits && filteredUnits.length > 0 ? allUnitsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+              {allUnitsExpanded ? <><FaCompressAlt size={9} /> Collapse</> : <><FaExpandAlt size={9} /> Expand</>}
+            </button>
+            <button disabled={!canEdit} onClick={() => { const id = selectedUnits[0]; if (id) navigate(`/units/${id}`); }}
+              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canEdit ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaEdit size={9} /> Edit
+            </button>
+
+            <div className="relative shrink-0" ref={actionMenuRef}>
+              <button onClick={() => setActionMenuOpen((v) => !v)} disabled={selectedCount === 0}
+                className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaArchive size={9} /> Actions <FaChevronDown size={8} />
               </button>
-
-              <button
-                onClick={resetFilters}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                title="Reset filters and selection"
-              >
-                <FaRedoAlt className="text-xs" />
-                Reset
-              </button>
-
-              <button
-                onClick={allUnitsExpanded ? collapseAllUnits : expandAllUnits}
-                disabled={!filteredUnits || filteredUnits.length === 0}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  filteredUnits && filteredUnits.length > 0
-                    ? allUnitsExpanded
-                      ? "bg-orange-600 hover:bg-orange-700"
-                      : `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
-                    : "bg-gray-400 cursor-not-allowed"
-                }`}
-                title={allUnitsExpanded ? "Collapse all units" : "Expand all units"}
-              >
-                {allUnitsExpanded ? (
-                  <>
-                    <FaCompressAlt className="text-xs" />
-                    Collapse All
-                  </>
-                ) : (
-                  <>
-                    <FaExpandAlt className="text-xs" />
-                    Expand All
-                  </>
-                )}
-              </button>
-
-              <button
-                disabled={!canEdit}
-                onClick={() => {
-                  const unitId = selectedUnits[0];
-                  if (unitId) navigate(`/units/${unitId}`);
-                }}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  canEdit ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"
-                }`}
-                title={canEdit ? "Edit selected unit" : "Select exactly 1 unit to edit"}
-              >
-                <FaEdit className="text-xs" />
-                Edit
-              </button>
-
-              {/* Archive / Restore dropdown (one button) */}
-              <div className="relative" ref={actionMenuRef}>
-                <button
-                  onClick={() => setActionMenuOpen((v) => !v)}
-                  disabled={selectedCount === 0}
-                  className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                    selectedCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"
-                  }`}
-                  title={selectedCount ? "Archive/Restore selected units" : "Select unit(s) first"}
-                >
-                  <FaArchive className="text-xs" />
-                  Actions
-                  <FaChevronDown className="text-[10px] opacity-90" />
-                </button>
-
-                {actionMenuOpen && selectedCount > 0 && (
-                  <div className="absolute mt-1 right-0 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
-                    <button
-                      onClick={archiveSelected}
-                      disabled={selectedArchivableUnits.length === 0}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
-                      title={selectedArchivableUnits.length > 0 ? "Archive eligible selected units" : "Only non-archived, non-occupied units can be archived"}
-                    >
-                      <FaArchive className="text-xs text-gray-700" />
-                      Archive
-                    </button>
-                    <button
-                      onClick={restoreSelected}
-                      disabled={selectedRestorableUnits.length === 0}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
-                      title={selectedRestorableUnits.length > 0 ? "Restore archived selected units" : "Select archived units to restore"}
-                    >
-                      <FaUndo className="text-xs text-gray-700" />
-                      Restore
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={deleteSelected}
-                disabled={selectedCount === 0 || selectedDeletableUnits.length === 0}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  selectedCount > 0 && selectedDeletableUnits.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"
-                }`}
-                title={selectedCount === 0 ? "Select unit(s) to delete" : selectedDeletableUnits.length > 0 ? "Delete selected units with no occupancy or tenant history" : "Selected units are protected because they are occupied or have tenant history"}
-              >
-                <FaTrash className="text-xs" />
-                Delete {selectedCount > 0 ? `(${selectedCount})` : ""}
-              </button>
-
-              <button
-                onClick={() => navigate("/units/new")}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-              >
-                <FaPlus className="text-xs" />
-                Add Unit
-              </button>
-
-              <button
-                onClick={handlePrintList}
-                className="px-4 py-1 text-xs bg-slate-700 text-white rounded-lg flex items-center gap-2 hover:bg-slate-800 transition-colors shadow-sm"
-                title="Print units list"
-              >
-                <FaPrint className="text-xs" />
-                Print List
-              </button>
-
-              <button 
-                onClick={handleDownloadTemplate}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                title="Download Excel import template"
-              >
-                <FaDownload className="text-xs" />
-                Template
-              </button>
-
-              <button 
-                onClick={() => setShowImportModal(true)}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm bg-orange-600 hover:bg-orange-700`}
-                title="Import units from Excel"
-              >
-                <FaFileExport className="text-xs" />
-                Import
-              </button>
-
-              <button 
-                onClick={handleExportToExcel}
-                className="px-4 py-1 text-xs border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
-                title="Export units to Excel"
-              >
-                <FaFileExport className="text-xs" />
-                Export
-              </button>
+              {actionMenuOpen && selectedCount > 0 && (
+                <div className="absolute mt-1 right-0 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                  <button onClick={archiveSelected} disabled={selectedArchivableUnits.length === 0}
+                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                    <FaArchive className="text-xs text-gray-700" /> Archive
+                  </button>
+                  <button onClick={restoreSelected} disabled={selectedRestorableUnits.length === 0}
+                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                    <FaUndo className="text-xs text-gray-700" /> Restore
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Row 2: typed fields */}
-            <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
-              <input
-                value={draftFilters.unitNo}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, unitNo: normalizeUppercaseInput(e.target.value) }))}
-                onKeyDown={onFilterEnter}
-                placeholder="Unit/Space No"
-                className={LISTING_UI.filterInput}
-              />
-              <input
-                value={draftFilters.tenant}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, tenant: normalizeUppercaseInput(e.target.value) }))}
-                onKeyDown={onFilterEnter}
-                placeholder="Tenant"
-                className={LISTING_UI.filterInput}
-              />
-              <div className="hidden md:block" />
-              <div className="hidden md:block" />
-            </div>
+            <button onClick={deleteSelected} disabled={selectedCount === 0 || selectedDeletableUnits.length === 0}
+              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 && selectedDeletableUnits.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaTrash size={9} /> Delete{selectedCount > 0 ? ` (${selectedCount})` : ""}
+            </button>
+            <button onClick={() => navigate("/units/new")} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
+              <FaPlus size={9} /> Add
+            </button>
+            <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
+              <FaPrint size={9} /> Print
+            </button>
+            <button onClick={handleDownloadTemplate} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
+              <FaDownload size={9} /> Template
+            </button>
+            <button onClick={() => setShowImportModal(true)} className="h-7 shrink-0 flex items-center gap-1 rounded bg-orange-600 px-2.5 text-xs font-semibold text-white hover:bg-orange-700">
+              <FaFileExport size={9} /> Import
+            </button>
+            <button onClick={handleExportToExcel} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+              <FaFileExport size={9} /> Export
+            </button>
           </div>
         </div>
 
@@ -1071,9 +945,9 @@ const Units = () => {
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm h-full flex flex-col">
             <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
               <table className="min-w-full text-xs border-collapse bg-white" style={{ tableLayout: "auto" }}>
-                <thead>
-                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] border-b border-gray-300">
-                    <th className="px-2 py-2 text-left font-bold text-white border-r border-gray-300 w-8">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className="bg-[#0B3B2E] border-b border-gray-300">
+                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-8">
                       <input
                         type="checkbox"
                         checked={selectAll && visibleUnitIds.length > 0}
@@ -1084,14 +958,14 @@ const Units = () => {
                       />
                     </th>
                     <th className="px-1 py-2 text-center font-bold text-white border-r border-gray-300 w-8" title="Expand details"></th>
-                    <th className="px-2 py-2 text-left font-bold text-white border-r border-gray-300 w-20">Property</th>
-                    <th className="px-2 py-2 text-left font-bold text-white border-r border-gray-300 w-24">Unit No</th>
-                    <th className="px-2 py-2 text-left font-bold text-white border-r border-gray-300 w-16">Code</th>
-                    <th className="px-2 py-2 text-left font-bold text-white border-r border-gray-300 w-24">Unit Type</th>
-                    <th className="px-2 py-2 text-right font-bold text-white border-r border-gray-300 w-28">Rent (Kshs)</th>
-                    <th className="px-2 py-2 text-center font-bold text-white border-r border-gray-300 w-24">Status</th>
-                    <th className="px-2 py-2 text-left font-bold text-white border-r border-gray-300 w-32">Tenant</th>
-                    <th className="px-2 py-2 text-center font-bold text-white border-r border-gray-300 w-20">Vacant From</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-20">Property</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-24">Unit No</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-16">Code</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-24">Unit Type</th>
+                    <th className="px-2 py-1.5 text-right font-bold text-white border-r border-gray-300 w-28">Rent (Kshs)</th>
+                    <th className="px-2 py-1.5 text-center font-bold text-white border-r border-gray-300 w-24">Status</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-32">Tenant</th>
+                    <th className="px-2 py-1.5 text-center font-bold text-white border-r border-gray-300 w-20">Vacant From</th>
                     <th className="px-2 py-2 text-center font-bold text-white w-16">Action</th>
                   </tr>
                 </thead>

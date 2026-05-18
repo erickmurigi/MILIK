@@ -53,8 +53,8 @@ const LandlordPaymentHistory = () => {
 
         <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm">
           <table className="w-full min-w-[900px] text-xs">
-            <thead>
-              <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+            <thead className="sticky top-0 z-10 shadow-sm">
+              <tr className="bg-[#0B3B2E] text-white">
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-left">Landlord</th>
                 <th className="px-3 py-2 text-right">Amount</th>

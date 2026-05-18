@@ -422,10 +422,10 @@ const TopToolbar = ({
         "hr-report-p9":             "/hr/reports/p9",
         "hr-report-payroll":        "/hr/reports/payroll",
         "hr-report-leave":          "/hr/reports/leave",
-        // Appraisals — Phase 5 (coming soon)
-        "hr-appraisal-cycles":      "coming-soon:Appraisal Cycles",
-        "hr-appraisals":            "coming-soon:Employee Appraisals",
-        "hr-kpis":                  "coming-soon:KPI Library",
+        // Appraisals — Phase 5 (live)
+        "hr-appraisal-cycles":      "/hr/appraisals/cycles",
+        "hr-appraisals":            "/hr/appraisals",
+        "hr-kpis":                  "/hr/appraisals/kpis",
         // Setup — Phase 1 + 2 (live)
         "hr-setup":                 "/hr/setup",
         "hr-setup-leave-types":     "/hr/leave/types",

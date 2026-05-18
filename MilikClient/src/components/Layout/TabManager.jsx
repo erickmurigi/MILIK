@@ -106,6 +106,9 @@ const getPageTitle = (pathname) => {
     '/hr/reports/p9':         'P9 Form',
     '/hr/leave/balances':     'Leave Balances',
     '/hr/statutory':          'Statutory Deductions',
+    '/hr/appraisals/kpis':    'KPI Library',
+    '/hr/appraisals/cycles':  'Appraisal Cycles',
+    '/hr/appraisals':         'Appraisals',
   };
   if (hrRouteNames[pathname]) return hrRouteNames[pathname];
   if (/^\/hr\/employees\/[^/]+\/edit$/.test(pathname)) return 'Edit Employee';

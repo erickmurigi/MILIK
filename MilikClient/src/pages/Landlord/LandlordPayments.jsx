@@ -694,27 +694,25 @@ const LandlordPayments = ({ mode = "payments" }) => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-              <div className="relative md:col-span-2">
-                <FaSearch className="absolute left-3 top-2.5 text-slate-400 text-xs" />
-                <input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search landlord name, code, email..." className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 pl-8 pr-3 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]" />
+          <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="relative shrink-0">
+                <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
+                <input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search name, code, email…" className="h-7 w-44 rounded border border-orange-300 bg-orange-50 pl-6 pr-2 text-xs outline-none focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]" />
               </div>
-              <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]">
+              <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="all">All Status</option><option value="Active">Active</option><option value="Archived">Archived</option>
               </select>
-              <select value={filters.paymentStatus} onChange={(e) => setFilters({ ...filters, paymentStatus: e.target.value })} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]">
+              <select value={filters.paymentStatus} onChange={(e) => setFilters({ ...filters, paymentStatus: e.target.value })} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="all">All Payment Status</option><option value="owed">Balance Owed</option><option value="clear">Fully Paid</option>
               </select>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Landlords: <span className="text-slate-900">{stats.totalLandlords}</span></span>
-                <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-blue-700">Collected: Ksh {stats.totalCollected.toLocaleString()}</span>
-                <span className="rounded-md border border-green-200 bg-green-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-green-700">Paid: Ksh {stats.totalPaid.toLocaleString()}</span>
-                <span className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-orange-700">Balance: Ksh {stats.totalOwed.toLocaleString()}</span>
-              </div>
-              <button onClick={() => dispatch(getLandlords({ business: currentCompany._id }))} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt /> Refresh</button>
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{stats.totalLandlords} landlords</span>
+              <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Collected: Ksh {stats.totalCollected.toLocaleString()}</span>
+              <span className="shrink-0 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">Paid: Ksh {stats.totalPaid.toLocaleString()}</span>
+              <span className="shrink-0 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">Balance: Ksh {stats.totalOwed.toLocaleString()}</span>
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <button onClick={() => dispatch(getLandlords({ business: currentCompany._id }))} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-[#0B3B2E] hover:bg-[#0A3127]"><FaRedoAlt /></button>
             </div>
           </div>
 
@@ -722,8 +720,8 @@ const LandlordPayments = ({ mode = "payments" }) => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full min-w-[1400px] text-xs">
-                <thead>
-                  <tr className={`sticky top-0 z-10 ${MILIK_GREEN} text-white`}>
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className={`${MILIK_GREEN} text-white`}>
                     <th className="px-3 py-2 text-center">
                       <input
                         type="checkbox"

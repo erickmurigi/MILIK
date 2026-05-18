@@ -574,247 +574,116 @@ const Properties = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex flex-col h-full min-h-0 p-0 bg-white overflow-hidden">
-        {/* Filters Card */}
-        <div className="flex-shrink-0 sticky top-0 z-30 bg-white pt-2 px-2">
-          <div className={LISTING_UI.toolbarCard}>
-            {/* Row 1 */}
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                className={LISTING_UI.filterSelect}
-                value={draftFilters.status}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}
-              >
-                <option value="active">Active</option>
-                <option value="">All Status</option>
-                <option value="maintenance">Maintenance</option>
-                <option value="closed">Closed</option>
-              </select>
+        {/* Toolbar — single scrollable row */}
+        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+              value={draftFilters.status} onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}>
+              <option value="active">Active</option>
+              <option value="">All Status</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="closed">Closed</option>
+            </select>
 
-              <select
-                className={LISTING_UI.filterSelect}
-                value={draftFilters.zone}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, zone: e.target.value }))}
-              >
-                <option value="">All Zones</option>
-                <option value="Nairobi CBD">Nairobi CBD</option>
-                <option value="Westlands">Westlands</option>
-                <option value="Kilimani">Kilimani</option>
-                <option value="Karen">Karen</option>
-                <option value="Mombasa Road">Mombasa Road</option>
-                <option value="Thika Road">Thika Road</option>
-              </select>
+            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+              value={draftFilters.zone} onChange={(e) => setDraftFilters((p) => ({ ...p, zone: e.target.value }))}>
+              <option value="">All Zones</option>
+              <option value="Nairobi CBD">Nairobi CBD</option>
+              <option value="Westlands">Westlands</option>
+              <option value="Kilimani">Kilimani</option>
+              <option value="Karen">Karen</option>
+              <option value="Mombasa Road">Mombasa Road</option>
+              <option value="Thika Road">Thika Road</option>
+            </select>
 
-              <select
-                className={LISTING_UI.filterSelect}
-                value={draftFilters.category}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, category: e.target.value }))}
-              >
-                <option value="">All Categories</option>
-                <option value="Residential">Residential</option>
-                <option value="Commercial">Commercial</option>
-                <option value="Mixed Use">Mixed Use</option>
-                <option value="Industrial">Industrial</option>
-                <option value="Agricultural">Agricultural</option>
-              </select>
+            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+              value={draftFilters.category} onChange={(e) => setDraftFilters((p) => ({ ...p, category: e.target.value }))}>
+              <option value="">All Categories</option>
+              <option value="Residential">Residential</option>
+              <option value="Commercial">Commercial</option>
+              <option value="Mixed Use">Mixed Use</option>
+              <option value="Industrial">Industrial</option>
+              <option value="Agricultural">Agricultural</option>
+            </select>
 
-              <button
-                onClick={applySearch}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                title="Search using the fields"
-              >
-                <FaSearch className="text-xs" />
-                Search
+            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+              value={draftFilters.landlord} onChange={(e) => setDraftFilters((p) => ({ ...p, landlord: e.target.value }))}>
+              <option value="">All Landlords</option>
+              {landlords && landlords.length > 0 ? landlords.map((l) => (
+                <option key={l._id || l.id} value={l._id || l.id || ""}>{l.fullName || l.name || l.landlordName || "Unnamed"}</option>
+              )) : <option disabled>No landlords</option>}
+            </select>
+
+            <div className="h-4 w-px shrink-0 bg-slate-200" />
+
+            <input value={draftFilters.code} onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))}
+              onKeyDown={onFilterEnter} placeholder="Code"
+              className="h-7 w-20 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+            <input value={draftFilters.name} onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
+              onKeyDown={onFilterEnter} placeholder="Name"
+              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+            <input value={draftFilters.lr} onChange={(e) => setDraftFilters((p) => ({ ...p, lr: e.target.value }))}
+              onKeyDown={onFilterEnter} placeholder="LR No."
+              className="h-7 w-20 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+            <input value={draftFilters.location} onChange={(e) => setDraftFilters((p) => ({ ...p, location: normalizeUppercaseInput(e.target.value) }))}
+              onKeyDown={onFilterEnter} placeholder="Location"
+              className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+
+            <div className="h-4 w-px shrink-0 bg-slate-200" />
+
+            <button onClick={applySearch} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00]">
+              <FaSearch size={9} /> Search
+            </button>
+            <button onClick={resetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
+              <FaRedoAlt size={9} /> Reset
+            </button>
+            <button onClick={allRowsExpanded ? collapseAllRows : expandAllRows} disabled={!properties || properties.length === 0}
+              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${properties && properties.length > 0 ? allRowsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+              {allRowsExpanded ? <><FaCompressAlt size={9} /> Collapse</> : <><FaExpandAlt size={9} /> Expand</>}
+            </button>
+            <button onClick={() => openEditProperty(selectedProperties[0])} disabled={selectedProperties.length !== 1}
+              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length === 1 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaEdit size={9} /> Edit
+            </button>
+
+            <div className="relative shrink-0" ref={actionMenuRef}>
+              <button onClick={() => setActionMenuOpen((v) => !v)} disabled={selectedProperties.length === 0}
+                className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaArchive size={9} /> Actions <FaChevronDown size={8} />
               </button>
-
-              <button
-                onClick={resetFilters}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                title="Reset filters and selection"
-              >
-                <FaRedoAlt className="text-xs" />
-                Reset
-              </button>
-
-              <button
-                onClick={allRowsExpanded ? collapseAllRows : expandAllRows}
-                disabled={!properties || properties.length === 0}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  properties && properties.length > 0
-                    ? allRowsExpanded
-                      ? "bg-orange-600 hover:bg-orange-700"
-                      : `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
-                    : "bg-gray-400 cursor-not-allowed"
-                }`}
-                title={allRowsExpanded ? "Collapse all properties" : "Expand all properties"}
-              >
-                {allRowsExpanded ? (
-                  <>
-                    <FaCompressAlt className="text-xs" />
-                    Collapse All
-                  </>
-                ) : (
-                  <>
-                    <FaExpandAlt className="text-xs" />
-                    Expand All
-                  </>
-                )}
-              </button>
-
-              <button
-                onClick={() => openEditProperty(selectedProperties[0])}
-                disabled={selectedProperties.length !== 1}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  selectedProperties.length === 1
-                    ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
-                    : "bg-gray-400 cursor-not-allowed"
-                }`}
-                title={selectedProperties.length === 1 ? "Edit selected property" : "Select exactly 1 property to edit"}
-              >
-                <FaEdit className="text-xs" />
-                Edit
-              </button>
-
-              <div className="relative" ref={actionMenuRef}>
-                <button
-                  onClick={() => setActionMenuOpen((v) => !v)}
-                  disabled={selectedProperties.length === 0}
-                  className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                    selectedProperties.length > 0
-                      ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
-                      : "bg-gray-400 cursor-not-allowed"
-                  }`}
-                  title={selectedProperties.length ? "Archive/Restore selected properties" : "Select properties first"}
-                >
-                  <FaArchive className="text-xs" />
-                  Actions
-                  <FaChevronDown className="text-[10px] opacity-90" />
-                </button>
-
-                {actionMenuOpen && selectedProperties.length > 0 && (
-                  <div className="absolute mt-1 right-0 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
-                    <button
-                      onClick={archiveSelected}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <FaArchive className="text-xs text-gray-700" />
-                      Archive
-                    </button>
-                    <button
-                      onClick={restoreSelected}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <FaUndo className="text-xs text-gray-700" />
-                      Restore
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={handleBulkDelete}
-                disabled={selectedProperties.length === 0}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  selectedProperties.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"
-                }`}
-                title={selectedProperties.length ? "Delete selected properties" : "Select properties to delete"}
-              >
-                <FaTrash className="text-xs" />
-                Delete {selectedProperties.length > 0 ? `(${selectedProperties.length})` : ""}
-              </button>
-
-              <button
-                onClick={() => downloadPropertiesTemplate()}
-                className="px-4 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-300 rounded-lg flex items-center gap-2 hover:bg-blue-100 transition-colors shadow-sm"
-                title="Download Excel import template"
-              >
-                <FaFileDownload className="text-xs" />
-                Template
-              </button>
-
-              <button
-                onClick={() => setShowImportModal(true)}
-                className="px-4 py-1 text-xs bg-green-50 text-green-700 border border-green-300 rounded-lg flex items-center gap-2 hover:bg-green-100 transition-colors shadow-sm"
-                title="Import properties from Excel"
-              >
-                <FaFileImport className="text-xs" />
-                Import
-              </button>
-
-              <button
-                onClick={handlePrintList}
-                className="px-4 py-1 text-xs bg-slate-700 text-white border border-slate-700 rounded-lg flex items-center gap-2 hover:bg-slate-800 transition-colors shadow-sm"
-                title="Print current properties list"
-              >
-                <FaPrint className="text-xs" />
-                Print List
-              </button>
-
-              <Link to="/properties/new">
-                <button
-                  className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaPlus className="text-xs" />
-                  Add Property
-                </button>
-              </Link>
-
-              <button
-                onClick={handleExport}
-                className="px-4 py-1 text-xs border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
-              >
-                <FaFileExport className="text-xs" />
-                Export
-              </button>
+              {actionMenuOpen && selectedProperties.length > 0 && (
+                <div className="absolute mt-1 right-0 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                  <button onClick={archiveSelected} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2">
+                    <FaArchive className="text-xs text-gray-700" /> Archive
+                  </button>
+                  <button onClick={restoreSelected} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2">
+                    <FaUndo className="text-xs text-gray-700" /> Restore
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Row 2 */}
-            <div className="mt-2 grid grid-cols-2 md:grid-cols-5 gap-2">
-              <input
-                value={draftFilters.code}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))}
-                onKeyDown={onFilterEnter}
-                placeholder="Property Code"
-                className={LISTING_UI.filterInput}
-              />
-              <input
-                value={draftFilters.name}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
-                onKeyDown={onFilterEnter}
-                placeholder="Property Name"
-                className={LISTING_UI.filterInput}
-              />
-              <input
-                value={draftFilters.lr}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, lr: e.target.value }))}
-                onKeyDown={onFilterEnter}
-                placeholder="LR Number"
-                className={LISTING_UI.filterInput}
-              />
-              <select
-                value={draftFilters.landlord}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, landlord: e.target.value }))}
-                onKeyDown={onFilterEnter}
-                className={LISTING_UI.filterInput}
-              >
-                <option value="">All Landlords</option>
-                {landlords && landlords.length > 0 ? (
-                  landlords.map((l) => (
-                    <option key={l._id || l.id} value={l._id || l.id || ""}>
-                      {l.fullName || l.name || l.landlordName || "Unnamed"}
-                    </option>
-                  ))
-                ) : (
-                  <option disabled>No landlords available</option>
-                )}
-              </select>
-              <input
-                value={draftFilters.location}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, location: normalizeUppercaseInput(e.target.value) }))}
-                onKeyDown={onFilterEnter}
-                placeholder="Location"
-                className={LISTING_UI.filterInput}
-              />
-            </div>
+            <button onClick={handleBulkDelete} disabled={selectedProperties.length === 0}
+              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaTrash size={9} /> Delete{selectedProperties.length > 0 ? ` (${selectedProperties.length})` : ""}
+            </button>
+            <Link to="/properties/new" className="shrink-0">
+              <button className="h-7 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
+                <FaPlus size={9} /> Add
+              </button>
+            </Link>
+            <button onClick={() => downloadPropertiesTemplate()} className="h-7 shrink-0 flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+              <FaFileDownload size={9} /> Template
+            </button>
+            <button onClick={() => setShowImportModal(true)} className="h-7 shrink-0 flex items-center gap-1 rounded border border-green-300 bg-green-50 px-2.5 text-xs font-semibold text-green-700 hover:bg-green-100">
+              <FaFileImport size={9} /> Import
+            </button>
+            <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
+              <FaPrint size={9} /> Print
+            </button>
+            <button onClick={handleExport} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+              <FaFileExport size={9} /> Export
+            </button>
           </div>
         </div>
 
@@ -829,10 +698,10 @@ const Properties = () => {
                     ref={tableRef}
                     style={{ tableLayout: "fixed" }}
                   >
-                    <thead>
-                      <tr className="sticky top-0 z-10">
+                    <thead className="sticky top-0 z-10 shadow-sm">
+                      <tr className="bg-[#0B3B2E]">
                         <th
-                          className="px-3 py-1 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
+                          className="px-3 py-1.5 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
                           style={{ width: "46px" }}
                         >
                           <input
@@ -845,14 +714,14 @@ const Properties = () => {
                         </th>
 
                         <th
-                          className="px-3 py-1 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
+                          className="px-3 py-1.5 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
                           style={{ width: "44px" }}
                         />
 
                         {columns.map((column) => (
                           <th
                             key={column.key}
-                            className="px-3 py-1 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E] whitespace-nowrap"
+                            className="px-3 py-1.5 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E] whitespace-nowrap"
                           >
                             {column.label}
                           </th>

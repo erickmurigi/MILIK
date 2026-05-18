@@ -810,256 +810,147 @@ const Landlords = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
-        {/* Filters Row */}
-        <div className="sticky top-0 z-30 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm">
-          <div className="space-y-2">
-            {/* Row 1: dropdown filters */}
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={draftFilters.status}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}
-                className="rounded border border-[#FF8C00]/70 bg-white px-3 py-2 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
-              >
-                <option value="Active">Active</option>
-                <option value="any">All Status</option>
-                <option value="Archived">Archived</option>
-              </select>
+        {/* Toolbar — single scrollable row */}
+        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <select
+              value={draftFilters.status}
+              onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}
+              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+            >
+              <option value="Active">Active</option>
+              <option value="any">All Status</option>
+              <option value="Archived">Archived</option>
+            </select>
 
-              <select
-                value={draftFilters.portal}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, portal: e.target.value }))}
-                className="rounded border border-[#FF8C00]/70 bg-white px-3 py-2 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
-              >
-                <option value="any">Portal Access</option>
-                <option value="Enabled">Enabled</option>
-                <option value="Disabled">Disabled</option>
-              </select>
+            <select
+              value={draftFilters.portal}
+              onChange={(e) => setDraftFilters((p) => ({ ...p, portal: e.target.value }))}
+              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+            >
+              <option value="any">Portal</option>
+              <option value="Enabled">Enabled</option>
+              <option value="Disabled">Disabled</option>
+            </select>
 
-              <select
-                value={draftFilters.propsCount}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, propsCount: e.target.value }))}
-                className="rounded border border-[#FF8C00]/70 bg-white px-3 py-2 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
-              >
-                <option value="any">Properties Count</option>
-                <option value="1-5">1-5 Properties</option>
-                <option value="6-10">6-10 Properties</option>
-                <option value="10+">10+ Properties</option>
-              </select>
+            <select
+              value={draftFilters.propsCount}
+              onChange={(e) => setDraftFilters((p) => ({ ...p, propsCount: e.target.value }))}
+              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+            >
+              <option value="any">Props</option>
+              <option value="1-5">1–5</option>
+              <option value="6-10">6–10</option>
+              <option value="10+">10+</option>
+            </select>
 
-              <select
-                value={draftFilters.location}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, location: e.target.value }))}
-                className="rounded border border-[#FF8C00]/70 bg-white px-3 py-2 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
-              >
-                {uniqueLocations.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc === "any" ? "Location" : loc}
-                  </option>
-                ))}
-              </select>
+            <select
+              value={draftFilters.location}
+              onChange={(e) => setDraftFilters((p) => ({ ...p, location: e.target.value }))}
+              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+            >
+              {uniqueLocations.map((loc) => (
+                <option key={loc} value={loc}>{loc === "any" ? "Location" : loc}</option>
+              ))}
+            </select>
 
-              {/* Search button */}
-              <button
-                onClick={applySearch}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                title="Search using the fields"
-              >
-                <FaSearch className="text-xs" />
-                Search
+            <div className="h-4 w-px shrink-0 bg-slate-200" />
+
+            <input
+              value={draftFilters.code}
+              onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))}
+              onKeyDown={onFilterEnter}
+              placeholder="Code"
+              className="h-7 w-20 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+            />
+            <input
+              value={draftFilters.name}
+              onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
+              onKeyDown={onFilterEnter}
+              placeholder="Name"
+              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+            />
+            <input
+              value={draftFilters.regId}
+              onChange={(e) => setDraftFilters((p) => ({ ...p, regId: normalizeUppercaseInput(e.target.value) }))}
+              onKeyDown={onFilterEnter}
+              placeholder="Reg/ID"
+              className="h-7 w-20 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+            />
+            <input
+              value={draftFilters.email}
+              onChange={(e) => setDraftFilters((p) => ({ ...p, email: e.target.value }))}
+              onKeyDown={onFilterEnter}
+              placeholder="Email"
+              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+            />
+            <input
+              value={draftFilters.phone}
+              onChange={(e) => setDraftFilters((p) => ({ ...p, phone: normalizeUppercaseInput(e.target.value) }))}
+              onKeyDown={onFilterEnter}
+              placeholder="Phone"
+              className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+            />
+
+            <div className="h-4 w-px shrink-0 bg-slate-200" />
+
+            <button onClick={applySearch} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00]">
+              <FaSearch size={9} /> Search
+            </button>
+            <button onClick={resetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
+              <FaRedoAlt size={9} /> Reset
+            </button>
+            <button onClick={openEditModal} disabled={!canEdit}
+              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canEdit ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaEdit size={9} /> Edit
+            </button>
+
+            <div className="relative shrink-0" ref={actionMenuRef}>
+              <button onClick={() => setActionMenuOpen((v) => !v)} disabled={selectedCount === 0}
+                className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaArchive size={9} /> Actions <FaChevronDown size={8} />
               </button>
-
-              {/* Reset */}
-              <button
-                onClick={resetFilters}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                title="Reset filters and selection"
-              >
-                <FaRedoAlt className="text-xs" />
-                Reset
-              </button>
-
-              {/* Edit */}
-              <button
-                onClick={openEditModal}
-                disabled={!canEdit}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  canEdit ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"
-                }`}
-                title={canEdit ? "Edit selected landlord" : "Select exactly 1 landlord to edit"}
-              >
-                <FaEdit className="text-xs" />
-                Edit
-              </button>
-
-              {/* Archive / Restore dropdown */}
-              <div className="relative" ref={actionMenuRef}>
-                <button
-                  onClick={() => setActionMenuOpen((v) => !v)}
-                  disabled={selectedCount === 0}
-                  className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                    selectedCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"
-                  }`}
-                  title={selectedCount ? "Archive/Restore selected landlord(s)" : "Select landlord(s) first"}
-                >
-                  <FaArchive className="text-xs" />
-                  Actions
-                  <FaChevronDown className="text-[10px] opacity-90" />
-                </button>
-
-                {actionMenuOpen && selectedCount > 0 && (
-                  <div className="absolute mt-1 right-0 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
-                    <button
-                      onClick={archiveSelected}
-                      disabled={selectedArchivableLandlords.length === 0}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
-                      title={selectedArchivableLandlords.length > 0 ? "Archive selected landlords" : "All selected landlords are already archived"}
-                    >
-                      <FaArchive className="text-xs text-gray-700" />
-                      Archive
-                    </button>
-                    <button
-                      onClick={restoreSelected}
-                      disabled={selectedRestorableLandlords.length === 0}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}
-                      title={selectedRestorableLandlords.length > 0 ? "Restore selected landlords" : "Select archived landlords to restore"}
-                    >
-                      <FaUndo className="text-xs text-gray-700" />
-                      Restore
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={() => setShowCommunicationModal(true)}
-                disabled={selectedCount === 0}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  selectedCount > 0 ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"
-                }`}
-                title={selectedCount ? "SMS selected landlord(s)" : "Select landlord(s) first"}
-              >
-                <FaSms className="text-xs" />
-                SMS Selected Landlords
-              </button>
-
-              {/* Delete */}
-              <button
-                onClick={deleteSelected}
-                disabled={!canDelete || selectedCount === 0 || selectedDeletableLandlords.length === 0}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${
-                  canDelete && selectedCount > 0 && selectedDeletableLandlords.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"
-                }`}
-                title={!canDelete ? "You don't have permission to delete landlords" : selectedCount === 0 ? "Select landlord(s) to delete" : selectedDeletableLandlords.length > 0 ? "Delete selected landlord(s) with no linked properties" : "Selected landlords still have linked properties and cannot be deleted"}
-              >
-                <FaTrash className="text-xs" />
-                Delete
-              </button>
-
-              {/* Existing actions */}
-              <button
-                onClick={openAddModal}
-                disabled={!canCreate}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${canCreate ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}
-              >
-                <FaPlus className="text-xs" />
-                <span>Add Landlord</span>
-              </button>
-
-              {/* View Payments */}
-              <button
-                onClick={() => navigate("/landlord-payments")}
-                className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                title="View landlord payments"
-              >
-                <FaMoneyBillWave className="text-xs" />
-                <span>Payments</span>
-              </button>
-
-              {/* Download Template */}
-              <button 
-                onClick={() => downloadLandlordsTemplate()}
-                className="px-4 py-1 text-xs border border-gray-300 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2 hover:bg-blue-100 transition-colors shadow-sm"
-                title="Download Excel template for bulk import"
-              >
-                <FaFileDownload className="text-xs" />
-                <span>Template</span>
-              </button>
-
-              {/* Import */}
-              <button 
-                onClick={() => setShowImportModal(true)}
-                className="px-4 py-1 text-xs border border-gray-300 bg-green-50 text-green-700 rounded-lg flex items-center gap-2 hover:bg-green-100 transition-colors shadow-sm"
-                title="Import landlords from Excel"
-              >
-                <FaFileImport className="text-xs" />
-                <span>Import</span>
-              </button>
-
-              <button
-                onClick={handlePrintList}
-                className="px-4 py-1 text-xs border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
-                title="Print current landlords list"
-              >
-                <FaPrint className="text-xs" />
-                <span>Print List</span>
-              </button>
-
-              {/* Export */}
-              <button 
-                onClick={handleExport}
-                className="px-4 py-1 text-xs border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
-                title="Export current landlords to Excel"
-              >
-                <FaFileExport className="text-xs" />
-                <span>Export</span>
-              </button>
-
-              <button className="px-4 py-1 text-xs border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm">
-                <FaEllipsisH className="text-xs" />
-                <span>
-                  <strong></strong>More
-                </span>
-              </button>
+              {actionMenuOpen && selectedCount > 0 && (
+                <div className="absolute mt-1 right-0 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                  <button onClick={archiveSelected} disabled={selectedArchivableLandlords.length === 0}
+                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                    <FaArchive className="text-xs text-gray-700" /> Archive
+                  </button>
+                  <button onClick={restoreSelected} disabled={selectedRestorableLandlords.length === 0}
+                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                    <FaUndo className="text-xs text-gray-700" /> Restore
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Row 2: typed fields */}
-            <div className="mt-2 grid grid-cols-2 md:grid-cols-6 gap-2">
-              <input
-                value={draftFilters.code}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))}
-                onKeyDown={onFilterEnter}
-                placeholder="Landlord Code"
-                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              />
-              <input
-                value={draftFilters.name}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
-                onKeyDown={onFilterEnter}
-                placeholder="Landlord Name"
-                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              />
-              <input
-                value={draftFilters.regId}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, regId: normalizeUppercaseInput(e.target.value) }))}
-                onKeyDown={onFilterEnter}
-                placeholder="Reg/ID No."
-                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              />
-              <input
-                value={draftFilters.email}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, email: e.target.value }))}
-                onKeyDown={onFilterEnter}
-                placeholder="Email"
-                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              />
-              <input
-                value={draftFilters.phone}
-                onChange={(e) => setDraftFilters((p) => ({ ...p, phone: normalizeUppercaseInput(e.target.value) }))}
-                onKeyDown={onFilterEnter}
-                placeholder="Phone"
-                className="rounded border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              />
-            </div>
+            <button onClick={() => setShowCommunicationModal(true)} disabled={selectedCount === 0}
+              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 ? "bg-[#FF8C00] hover:bg-[#e67e00]" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaSms size={9} /> SMS
+            </button>
+            <button onClick={deleteSelected} disabled={!canDelete || selectedCount === 0 || selectedDeletableLandlords.length === 0}
+              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canDelete && selectedCount > 0 && selectedDeletableLandlords.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaTrash size={9} /> Delete
+            </button>
+            <button onClick={openAddModal} disabled={!canCreate}
+              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canCreate ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+              <FaPlus size={9} /> Add
+            </button>
+            <button onClick={() => navigate("/landlord-payments")} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00]">
+              <FaMoneyBillWave size={9} /> Payments
+            </button>
+            <button onClick={() => downloadLandlordsTemplate()} className="h-7 shrink-0 flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+              <FaFileDownload size={9} /> Template
+            </button>
+            <button onClick={() => setShowImportModal(true)} className="h-7 shrink-0 flex items-center gap-1 rounded border border-green-300 bg-green-50 px-2.5 text-xs font-semibold text-green-700 hover:bg-green-100">
+              <FaFileImport size={9} /> Import
+            </button>
+            <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+              <FaPrint size={9} /> Print
+            </button>
+            <button onClick={handleExport} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+              <FaFileExport size={9} /> Export
+            </button>
           </div>
         </div>
 
@@ -1073,10 +964,10 @@ const Landlords = () => {
                 ref={tableRef}
                 style={{ tableLayout: "fixed" }}
               >
-                <thead>
-                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className="bg-[#0B3B2E] text-white">
                     <th
-                      className="px-3 py-2 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
+                      className="px-3 py-1.5 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
                       style={{ width: "50px", minWidth: "50px", maxWidth: "50px" }}
                     >
                       <input
@@ -1093,7 +984,7 @@ const Landlords = () => {
                       return (
                         <th
                           key={column.key}
-                          className="relative px-3 py-2 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
+                          className="relative px-3 py-1.5 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
                           style={{
                             width: `${width}px`,
                             minWidth: "80px",
@@ -1139,7 +1030,7 @@ const Landlords = () => {
                         onClick={() => handleSelectLandlord(landlord._id)}
                       >
                         <td
-                          className="px-3 py-2 border border-gray-200 align-top"
+                          className="px-3 py-1 border border-gray-200 align-top"
                           style={{ width: "50px", minWidth: "50px", maxWidth: "50px" }}
                           onClick={handleCheckboxClick}
                         >
@@ -1152,14 +1043,14 @@ const Landlords = () => {
                           />
                         </td>
 
-                        <td className="px-3 py-2 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
+                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
                           {toListingCaps(landlord.landlordCode || landlord.code)}
                         </td>
-                        <td className="px-3 py-2 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
+                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
                           {toListingCaps(landlord.fullName || landlord.landlordName || landlord.name || landlord.firstName || "-")}
                         </td>
 
-                        <td className="px-3 py-2 border border-gray-200 align-top">
+                        <td className="px-3 py-1 border border-gray-200 align-top">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap border ${
                               String(landlord.status || "Active") === "Active"
@@ -1175,17 +1066,17 @@ const Landlords = () => {
                           </span>
                         </td>
 
-                        <td className="px-3 py-2 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
+                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
                           {toListingCaps(landlord.location || "—")}
                         </td>
-                        <td className="px-3 py-2 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
+                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
                           {landlord.email || "—"}
                         </td>
-                        <td className="px-3 py-2 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
+                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
                           {landlord.phoneNumber || landlord.phone || "—"}
                         </td>
 
-                        <td className="px-3 py-2 text-center font-bold text-gray-900 border border-gray-200 align-top">
+                        <td className="px-3 py-1 text-center font-bold text-gray-900 border border-gray-200 align-top">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${
                               selectedLandlords.includes(landlord._id)
@@ -1197,7 +1088,7 @@ const Landlords = () => {
                           </span>
                         </td>
 
-                        <td className="px-3 py-2 text-center font-bold text-gray-900 border border-gray-200 align-top">
+                        <td className="px-3 py-1 text-center font-bold text-gray-900 border border-gray-200 align-top">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${
                               selectedLandlords.includes(landlord._id)
@@ -1209,7 +1100,7 @@ const Landlords = () => {
                           </span>
                         </td>
 
-                        <td className="px-3 py-2 border border-gray-200 align-top">
+                        <td className="px-3 py-1 border border-gray-200 align-top">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap border ${
                               landlord.portalAccess === "Enabled"

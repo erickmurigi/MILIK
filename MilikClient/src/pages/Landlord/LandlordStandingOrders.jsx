@@ -583,95 +583,43 @@ const LandlordStandingOrders = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-2 shadow-sm backdrop-blur">
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
-                <div className="relative xl:col-span-2">
-                  <FaSearch className="absolute left-3 top-3.5 text-slate-400" />
-                  <input
-                    value={filters.search}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-                    placeholder="Search order number, title, narration"
-                    className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-3 py-1.5 pl-9 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]"
-                  />
+            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <div className="relative shrink-0">
+                  <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
+                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search order, title…" className="h-7 w-40 rounded border border-orange-300 bg-orange-50 pl-6 pr-2 text-xs outline-none focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]" />
                 </div>
-                <div>
-                  <select
-                    value={filters.landlordId}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))}
-                    className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]"
-                  >
-                    <option value="all">All Landlords</option>
-                    {activeLandlords.map((landlord) => (
-                      <option key={landlord._id} value={landlord._id}>
-                        {getLandlordLabel(landlord)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <select
-                    value={filters.propertyId}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                    className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]"
-                  >
-                    <option value="all">All Properties</option>
-                    {activeProperties.map((property) => (
-                      <option key={property._id} value={property._id}>
-                        {property.propertyCode ? `[${property.propertyCode}] ` : ""}
-                        {property.propertyName || property.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <select
-                    value={filters.status}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                    className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]"
-                  >
-                    <option value="all">All Statuses</option>
-                    <option value="draft">Draft</option>
-                    <option value="active">Active</option>
-                    <option value="paused">Paused</option>
-                    <option value="stopped">Stopped</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Orders: <span className="text-slate-900">{stats.total}</span></span>
-                <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-700">Active: {stats.active}</span>
-                <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-blue-700">Processed: {money(stats.processed)}</span>
-                <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">Pending: {stats.pendingPeriods}</span>
-              </div>
-              <div className="mt-2 flex flex-wrap justify-end gap-2">
-                <button
-                  onClick={handleRunSelected}
-                  disabled={bulkRunning || selectedIds.length === 0}
-                  className="flex items-center gap-2 rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FaCheck /> {bulkRunning ? "Running..." : `Run Selected${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
-                </button>
-                <button
-                  onClick={openCreate}
-                  disabled={!canWrite}
-                  className="flex items-center gap-2 rounded-md bg-[#0B3B2E] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:bg-slate-300"
-                >
-                  <FaPlus /> Add Standing Order
-                </button>
-                <button
-                  onClick={() => setFilters({ search: "", status: "all", landlordId: "all", propertyId: "all" })}
-                  className="rounded-md bg-slate-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
-                >
-                  Reset Filters
-                </button>
+                <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="all">All Landlords</option>
+                  {activeLandlords.map((landlord) => (<option key={landlord._id} value={landlord._id}>{getLandlordLabel(landlord)}</option>))}
+                </select>
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="all">All Properties</option>
+                  {activeProperties.map((property) => (<option key={property._id} value={property._id}>{property.propertyCode ? `[${property.propertyCode}] ` : ""}{property.propertyName || property.name}</option>))}
+                </select>
+                <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="all">All Statuses</option>
+                  <option value="draft">Draft</option>
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="stopped">Stopped</option>
+                </select>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{stats.total} orders</span>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Active: {stats.active}</span>
+                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Processed: {money(stats.processed)}</span>
+                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Pending: {stats.pendingPeriods}</span>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <button onClick={handleRunSelected} disabled={bulkRunning || selectedIds.length === 0} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"><FaCheck /> {bulkRunning ? "Running…" : `Run${selectedIds.length ? ` (${selectedIds.length})` : ""}`}</button>
+                <button onClick={openCreate} disabled={!canWrite} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> Add</button>
+                <button onClick={() => setFilters({ search: "", status: "all", landlordId: "all", propertyId: "all" })} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-slate-500 hover:bg-slate-600">Reset</button>
               </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full min-w-[1340px] text-xs">
-                <thead>
-                  <tr className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className="bg-[#0B3B2E] text-white">
                     <th className="px-3 py-2 text-left font-semibold">
                       <input
                         type="checkbox"

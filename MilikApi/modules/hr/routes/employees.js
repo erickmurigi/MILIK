@@ -1,28 +1,29 @@
 import express from 'express';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import multer from 'multer';
 import mongoose from 'mongoose';
+import { v2 as cloudinary } from 'cloudinary';
 import { verifyUser } from '../../../controllers/verifyToken.js';
 import HREmployee from '../models/HREmployee.js';
 import HRDepartment from '../models/HRDepartment.js';
 import { resolveCompanyId, currentUserId, escapeRegex, parsePage, parseLimit } from '../services/hrScope.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const PHOTOS_DIR = path.join(__dirname, '../../../uploads/hr/photos');
-fs.mkdirSync(PHOTOS_DIR, { recursive: true });
-
-const photoStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, PHOTOS_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
-    cb(null, `${req.params.id}${ext}`);
-  },
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+function uploadToCloudinary(buffer, options) {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_stream(options, (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
+    }).end(buffer);
+  });
+}
+
 const photoUpload = multer({
-  storage: photoStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (/^image\/(jpeg|jpg|png|gif|webp)/.test(file.mimetype)) cb(null, true);
@@ -251,15 +252,14 @@ router.post('/:id/photo', verifyUser, (req, res) => {
       const emp = await HREmployee.findOne({ _id: req.params.id, company: companyId });
       if (!emp) return res.status(404).json({ message: 'Employee not found' });
 
-      // Remove old photo if it has a different filename (different extension)
-      if (emp.profilePicture) {
-        const oldFilePath = path.join(PHOTOS_DIR, path.basename(emp.profilePicture));
-        if (oldFilePath !== req.file.path && fs.existsSync(oldFilePath)) {
-          fs.unlinkSync(oldFilePath);
-        }
-      }
+      const result = await uploadToCloudinary(req.file.buffer, {
+        folder: 'hr/employees',
+        public_id: req.params.id,
+        overwrite: true,
+        resource_type: 'image',
+      });
 
-      emp.profilePicture = `/uploads/hr/photos/${req.file.filename}`;
+      emp.profilePicture = result.secure_url;
       emp.updatedBy = currentUserId(req);
       await emp.save();
 
@@ -278,8 +278,7 @@ router.delete('/:id/photo', verifyUser, async (req, res) => {
     if (!emp) return res.status(404).json({ message: 'Employee not found' });
 
     if (emp.profilePicture) {
-      const filePath = path.join(PHOTOS_DIR, path.basename(emp.profilePicture));
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      await cloudinary.uploader.destroy(`hr/employees/${req.params.id}`).catch(() => {});
       emp.profilePicture = '';
       emp.updatedBy = currentUserId(req);
       await emp.save();

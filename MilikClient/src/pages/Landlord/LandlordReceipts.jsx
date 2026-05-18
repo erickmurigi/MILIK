@@ -429,89 +429,41 @@ const LandlordReceipts = () => {
     <DashboardLayout lockContentScroll>
       <div className="no-print flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
-          <div className="sticky top-0 z-20 flex-shrink-0 border-b border-gray-200 bg-gray-50 p-2 shadow-sm">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">Receipts: {stats.count}</span>
-              <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Posted: {formatMoney(stats.posted)}</span>
-              <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">Drafts: {formatMoney(stats.draft)}</span>
-              <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">Total: {formatMoney(stats.total)}</span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="relative block min-w-[260px] flex-1">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400"><FaSearch /></span>
-                <input
-                  value={filters.search}
-                  onChange={(e) => {
-                    setCurrentPage(1);
-                    setFilters((prev) => ({ ...prev, search: e.target.value }));
-                  }}
-                  placeholder="Search by receipt no, reference, landlord, or property"
-                  className="h-8 w-full rounded border border-[#FF8C00]/70 bg-white py-1.5 pl-8 pr-3 text-xs shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
-                />
+          <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
+            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <label className="relative shrink-0">
+                <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"><FaSearch /></span>
+                <input value={filters.search} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, search: e.target.value })); }} placeholder="Search receipt, landlord…" className="h-7 w-44 rounded border border-[#FF8C00]/70 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]" />
               </label>
-              <select
-                value={filters.status}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setFilters((prev) => ({ ...prev, status: e.target.value }));
-                }}
-                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
-              >
+              <select value={filters.status} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, status: e.target.value })); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="all">All Statuses</option>
                 <option value="draft">Draft</option>
                 <option value="posted">Posted</option>
                 <option value="reversed">Reversed</option>
               </select>
-              <select
-                value={filters.category}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setFilters((prev) => ({ ...prev, category: e.target.value }));
-                }}
-                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
-              >
+              <select value={filters.category} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, category: e.target.value })); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="all">All Categories</option>
-                {CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
+                {CATEGORY_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
               </select>
-              <select
-                value={filters.landlord}
-                onChange={(e) => {
-                  setCurrentPage(1);
-                  setFilters((prev) => ({ ...prev, landlord: e.target.value }));
-                }}
-                className="h-8 rounded border border-[#FF8C00]/70 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm outline-none accent-[#FF8C00] focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]"
-              >
+              <select value={filters.landlord} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, landlord: e.target.value })); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="all">All Landlords</option>
-                {activeLandlords.map((landlord) => (
-                  <option key={landlord._id} value={landlord._id}>{landlord.landlordName}</option>
-                ))}
+                {activeLandlords.map((landlord) => (<option key={landlord._id} value={landlord._id}>{landlord.landlordName}</option>))}
               </select>
-              <button
-                type="button"
-                onClick={loadData}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-4 py-1 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-              >
-                <FaRedoAlt /> Refresh
-              </button>
-              <button
-                type="button"
-                onClick={openCreateModal}
-                disabled={!canCreate}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-4 py-1 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-              >
-                <FaPlus /> Add Landlord Receipt
-              </button>
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{stats.count} receipts</span>
+              <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Posted: {formatMoney(stats.posted)}</span>
+              <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Draft: {formatMoney(stats.draft)}</span>
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <button type="button" onClick={loadData} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaRedoAlt /></button>
+              <button type="button" onClick={openCreateModal} disabled={!canCreate} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus /> Add Receipt</button>
             </div>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="min-h-0 flex-1 overflow-auto">
               <table className="min-w-[1180px] w-full text-xs">
-                <thead>
-                  <tr className={`${MILIK_GREEN} sticky top-0 z-10 text-white`}>
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className={`${MILIK_GREEN} text-white`}>
                     {["Date", "Receipt No", "Landlord", "Property", "Category", "Amount", "Status", "Actions"].map((label) => (
                       <th key={label} className={`px-3 py-2 text-xs font-semibold ${label === "Amount" || label === "Actions" ? "text-right" : "text-left"}`}>{label}</th>
                     ))}

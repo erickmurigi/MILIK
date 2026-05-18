@@ -530,23 +530,22 @@ const ProcessedStatements = () => {
       <DashboardLayout lockContentScroll>
         <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
           <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
-            <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
-              <div className="flex flex-wrap items-center gap-2">
-                <button onClick={() => setActiveTab("outstanding")} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Outstanding ({stats.totalUnpaid})</button>
-                <button onClick={() => setActiveTab("recoveries")} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Recoveries ({stats.totalRecoveries})</button>
-                <button onClick={() => setActiveTab("paid")} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle /> Paid ({stats.totalPaid})</button>
-                <input type="text" placeholder="Search by landlord or property..." value={searchText} onChange={(e) => setSearchText(e.target.value)} className="h-8 min-w-[260px] flex-1 rounded-md border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]" />
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]">
+            <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <button onClick={() => setActiveTab("outstanding")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Outstanding ({stats.totalUnpaid})</button>
+                <button onClick={() => setActiveTab("recoveries")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Recoveries ({stats.totalRecoveries})</button>
+                <button onClick={() => setActiveTab("paid")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle /> Paid ({stats.totalPaid})</button>
+                <input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => setSearchText(e.target.value)} className="h-7 w-44 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-xs outline-none focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]" />
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="date-desc">Newest First</option>
                   <option value="date-asc">Oldest First</option>
                 </select>
-                <button onClick={() => navigate(-1)} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-600 px-3 text-[11px] font-bold text-white hover:bg-slate-700"><FaArrowLeft /> Back</button>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <span className="rounded-md border border-yellow-200 bg-yellow-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-yellow-700">Outstanding: {stats.totalUnpaid} • {money(stats.totalAmountUnpaid)}</span>
-                <span className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-red-700">Recoveries: {stats.totalRecoveries} • {money(stats.totalRecoveryAmount)}</span>
-                <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-700">Paid: {stats.totalPaid} • {money(stats.totalAmountPaid)}</span>
-                <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-blue-700">Statements: {statements.length} • Reversed {stats.totalReversed}</span>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <span className="shrink-0 rounded border border-yellow-200 bg-yellow-50 px-2 py-0.5 text-[10px] font-bold text-yellow-700">Outstanding: {stats.totalUnpaid} • {money(stats.totalAmountUnpaid)}</span>
+                <span className="shrink-0 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700">Recoveries: {stats.totalRecoveries} • {money(stats.totalRecoveryAmount)}</span>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Paid: {stats.totalPaid} • {money(stats.totalAmountPaid)}</span>
+                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <button onClick={() => navigate(-1)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-slate-600 hover:bg-slate-700"><FaArrowLeft /> Back</button>
               </div>
             </div>
 
@@ -558,8 +557,8 @@ const ProcessedStatements = () => {
               ) : (
                 <div className="flex-1 min-h-0 overflow-auto">
                   <table className="w-full min-w-[1160px] text-sm">
-                    <thead>
-                      <tr className="sticky top-0 z-10 border-b bg-[#0B3B2E] text-white">
+                    <thead className="sticky top-0 z-10 shadow-sm">
+                      <tr className="border-b bg-[#0B3B2E] text-white">
                         <th className="px-4 py-3 text-left text-sm font-semibold text-white">STMT #</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-white">LANDLORD</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-white">PROPERTY</th>

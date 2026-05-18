@@ -1665,213 +1665,62 @@ const visibleReceiptIds = useMemo(
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
-          <div className="sticky top-0 z-30 mb-2 shrink-0 rounded-lg border border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur">
-            <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-[180px]">
-                <button
-                  onClick={() => navigate(backPath)}
-                  className="mb-1 flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
-                >
-                  <FaArrowLeft /> {isLandlordReceiptView ? "Back to Landlords" : "Back to Tenants"}
-                </button>
-                <div className="text-sm font-black tracking-tight text-slate-900">{pageLabel}</div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
-                  <span className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 font-semibold text-slate-700">
-                    Receipts: <strong className="text-slate-900">{stats.count}</strong>
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded border border-green-300 bg-green-50 px-2 py-0.5 font-semibold text-green-700">
-                    Total: <strong>Ksh {stats.total.toLocaleString()}</strong>
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2 py-0.5 font-semibold text-blue-700">
-                    Confirmed: <strong>{stats.confirmedCount}</strong>
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded border border-orange-300 bg-orange-50 px-2 py-0.5 font-semibold text-orange-700">
-                    Pending: <strong>{stats.pendingCount}</strong>
-                  </span>
-                </div>
-
-                <button
-                  onClick={loadData}
-                  className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold hover:bg-slate-50"
-                >
-                  <FaRedoAlt /> Refresh
-                </button>
-                <button
-                  onClick={openCreateForm}
-                  disabled={!canCreateReceipt}
-                  title={canCreateReceipt ? pageCreateLabel : "You do not have permission to record receipts"}
-                  className={`flex items-center gap-2 rounded-md px-3 py-1 text-xs font-semibold text-white ${canCreateReceipt ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}
-                >
-                  <FaPlus /> {pageCreateLabel}
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
-              <div className="relative md:col-span-2">
-                <FaSearch className="absolute left-3 top-2.5 text-xs text-slate-400" />
-                <input
-                  value={draftFilters.search}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(e.target.value) }))}
-                  placeholder="Search tenant, receipt, reference"
-                  className="w-full rounded-md border border-slate-300 py-2 pl-8 pr-3 text-xs uppercase"
-                />
-              </div>
-
-              <input
-                value={draftFilters.tenantSearch}
-                onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))}
-                placeholder="Filter tenant by name"
-                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
-              />
-
-              <select
-                value={draftFilters.property}
-                onChange={(e) =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    property: e.target.value,
-                    unit: "all",
-                  }))
-                }
-                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
-              >
-                {propertyOptions.map((property) => (
-                  <option key={property} value={property}>
-                    {property === "all" ? "All Properties" : property}
-                  </option>
-                ))}
+          <div className="flex-none sticky top-0 z-30 mb-2 border-b border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <button onClick={() => navigate(backPath)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-slate-600 hover:text-slate-900">
+                <FaArrowLeft size={11} /> {isLandlordReceiptView ? "Landlords" : "Tenants"}
+              </button>
+              <span className="shrink-0 text-xs font-black text-slate-800">{pageLabel}</span>
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <span className="shrink-0 rounded border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700">{stats.count} Receipts</span>
+              <span className="shrink-0 rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">Ksh {stats.total.toLocaleString()}</span>
+              <span className="shrink-0 rounded border border-blue-300 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{stats.confirmedCount} Confirmed</span>
+              <span className="shrink-0 rounded border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">{stats.pendingCount} Pending</span>
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <input value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(e.target.value) }))} placeholder="Search…" className="h-7 w-32 shrink-0 rounded border border-slate-300 px-2 text-xs uppercase focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-slate-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "all" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                {propertyOptions.map((p) => (<option key={p} value={p}>{p === "all" ? "Property" : p}</option>))}
               </select>
-
-              <select
-                value={draftFilters.unit}
-                onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))}
-                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
-              >
-                {unitOptions.map((unit) => (
-                  <option key={unit} value={unit}>
-                    {unit === "all" ? "All Units" : unit}
-                  </option>
-                ))}
+              <select value={draftFilters.unit} onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                {unitOptions.map((u) => (<option key={u} value={u}>{u === "all" ? "Unit" : u}</option>))}
               </select>
-
-              <select
-                value={draftFilters.ledger}
-                onChange={(e) => setDraftFilters((prev) => ({ ...prev, ledger: e.target.value }))}
-                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
-              >
-                <option value="all">All Ledgers</option>
-                <option value="receipts">Receipts Ledger</option>
-                <option value="cashbook">Cashbook Ledger</option>
+              <select value={draftFilters.ledger} onChange={(e) => setDraftFilters((prev) => ({ ...prev, ledger: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <option value="all">Ledger</option>
+                <option value="receipts">Receipts</option>
+                <option value="cashbook">Cashbook</option>
               </select>
-
-              <select
-                value={draftFilters.status}
-                onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
-              >
-                <option value="active">Active Receipts</option>
+              <select value={draftFilters.status} onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <option value="active">Active</option>
                 <option value="confirmed">Confirmed</option>
                 <option value="pending">Pending</option>
-                <option value="reversed">Reversed Receipts</option>
-                <option value="all">All Visible</option>
+                <option value="reversed">Reversed</option>
+                <option value="all">All</option>
               </select>
-
-              <select
-                value={draftFilters.paymentType}
-                onChange={(e) => setDraftFilters((prev) => ({ ...prev, paymentType: e.target.value }))}
-                className="rounded-md border border-slate-300 px-3 py-2 text-xs"
-              >
-                <option value="all">All Types</option>
+              <select value={draftFilters.paymentType} onChange={(e) => setDraftFilters((prev) => ({ ...prev, paymentType: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <option value="all">Type</option>
                 <option value="rent">Rent</option>
                 <option value="deposit">Deposit</option>
                 <option value="utility">Utility</option>
                 <option value="late_fee">Late Fee</option>
                 <option value="other">Other</option>
               </select>
-
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={draftFilters.from}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, from: e.target.value }))}
-                  className="w-full rounded-md border border-slate-300 px-2 py-2 text-xs"
-                />
-                <input
-                  type="date"
-                  value={draftFilters.to}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, to: e.target.value }))}
-                  className="w-full rounded-md border border-slate-300 px-2 py-2 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                onClick={() => applyDatePreset("today")}
-                className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-200"
-              >
-                Today
-              </button>
-              <button
-                onClick={() => applyDatePreset("thisMonth")}
-                className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-200"
-              >
-                This Month
-              </button>
-              <button
-                onClick={() => applyDatePreset("lastMonth")}
-                className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-200"
-              >
-                Last Month
-              </button>
-              <button
-                onClick={applySearchFilters}
-                className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-              >
-                <FaSearch /> Search
-              </button>
-              <button
-                onClick={resetSearchFilters}
-                className="flex items-center gap-2 rounded-md bg-slate-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
-              >
-                <FaRedoAlt /> Reset Filters
-              </button>
-              <button
-                onClick={handleConfirmSelected}
-                disabled={!canProcessReceipt}
-                title={canProcessReceipt ? "Confirm selected receipts" : "You do not have permission to confirm receipts"}
-                className="flex items-center gap-2 rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <FaCheck /> Confirm Selected
-              </button>
-              <button
-                onClick={handleReverseSelected}
-                disabled={!canReverseReceipt}
-                title={canReverseReceipt ? "Reverse selected receipts" : "You do not have permission to reverse receipts"}
-                className="flex items-center gap-2 rounded-md bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <FaUndo /> Reverse Selected
-              </button>
-              <button
-                onClick={handleDeleteSelected}
-                disabled={!canDeleteReceipt}
-                title={canDeleteReceipt ? "Delete selected receipts" : "You do not have permission to delete receipts"}
-                className="flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <FaTrash /> Delete Selected
-              </button>
-              <button
-                onClick={handlePrintList}
-                disabled={!canExportReceipt}
-                title={canExportReceipt ? "Print receipt list" : "You do not have permission to print receipts"}
-                className="flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <FaPrint /> Print List
-              </button>
+              <input type="date" value={draftFilters.from} onChange={(e) => setDraftFilters((prev) => ({ ...prev, from: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <input type="date" value={draftFilters.to} onChange={(e) => setDraftFilters((prev) => ({ ...prev, to: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <button onClick={() => applyDatePreset("today")} className="h-7 shrink-0 rounded bg-slate-100 px-2 text-xs font-semibold text-slate-800 hover:bg-slate-200">Today</button>
+              <button onClick={() => applyDatePreset("thisMonth")} className="h-7 shrink-0 rounded bg-slate-100 px-2 text-xs font-semibold text-slate-800 hover:bg-slate-200">This Mo.</button>
+              <button onClick={() => applyDatePreset("lastMonth")} className="h-7 shrink-0 rounded bg-slate-100 px-2 text-xs font-semibold text-slate-800 hover:bg-slate-200">Last Mo.</button>
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <button onClick={applySearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
+              <button onClick={resetSearchFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-500 px-2.5 text-xs font-semibold text-white hover:bg-slate-600"><FaRedoAlt size={10} /></button>
+              <button onClick={loadData} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-300 bg-white px-2.5 text-xs font-semibold hover:bg-slate-50"><FaRedoAlt size={10} /></button>
+              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <button onClick={handleConfirmSelected} disabled={!canProcessReceipt} title={canProcessReceipt ? "Confirm selected" : "No permission"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-green-600 px-2.5 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"><FaCheck size={10} /></button>
+              <button onClick={handleReverseSelected} disabled={!canReverseReceipt} title={canReverseReceipt ? "Reverse selected" : "No permission"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-orange-600 px-2.5 text-xs font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"><FaUndo size={10} /></button>
+              <button onClick={handleDeleteSelected} disabled={!canDeleteReceipt} title={canDeleteReceipt ? "Delete selected" : "No permission"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-red-600 px-2.5 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash size={10} /></button>
+              <button onClick={handlePrintList} disabled={!canExportReceipt} title={canExportReceipt ? "Print list" : "No permission"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-indigo-600 px-2.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"><FaPrint size={10} /></button>
+              <button onClick={openCreateForm} disabled={!canCreateReceipt} title={canCreateReceipt ? pageCreateLabel : "No permission"} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canCreateReceipt ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPlus size={10} /></button>
             </div>
           </div>
 
