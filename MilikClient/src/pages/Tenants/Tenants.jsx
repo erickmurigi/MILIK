@@ -1443,141 +1443,147 @@ const confirmTransferUnit = async () => {
       <div className="flex flex-col h-full min-h-0 p-0 bg-gray-50 overflow-hidden">
         {/* Toolbar — single scrollable row */}
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-              value={draftFilters.property} onChange={(e) => setDraftFilters({ ...draftFilters, property: e.target.value })}>
-              {uniqueProperties.map((prop) => (
-                <option key={prop} value={prop}>{prop === "any" ? "All Properties" : prop}</option>
-              ))}
-            </select>
+          <div className="flex items-center gap-0">
+            {/* Scrollable filters section */}
+            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5 min-w-0 flex-1">
+              <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+                value={draftFilters.property} onChange={(e) => setDraftFilters({ ...draftFilters, property: e.target.value })}>
+                {uniqueProperties.map((prop) => (
+                  <option key={prop} value={prop}>{prop === "any" ? "All Properties" : prop}</option>
+                ))}
+              </select>
 
-            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-              value={draftFilters.status} onChange={(e) => setDraftFilters({ ...draftFilters, status: e.target.value })}>
-              {statusOptions.map((s) => (
-                <option key={s} value={s}>{s === "any" ? "All Status" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
-              ))}
-            </select>
+              <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+                value={draftFilters.status} onChange={(e) => setDraftFilters({ ...draftFilters, status: e.target.value })}>
+                {statusOptions.map((s) => (
+                  <option key={s} value={s}>{s === "any" ? "All Status" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                ))}
+              </select>
 
-            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-              value={draftFilters.balanceScope} onChange={(e) => setDraftFilters({ ...draftFilters, balanceScope: e.target.value })}>
-              {balanceScopeOptions.map((s) => (
-                <option key={s} value={s}>{s === "with_balance" ? "With Balance" : "All Balances"}</option>
-              ))}
-            </select>
+              <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
+                value={draftFilters.balanceScope} onChange={(e) => setDraftFilters({ ...draftFilters, balanceScope: e.target.value })}>
+                {balanceScopeOptions.map((s) => (
+                  <option key={s} value={s}>{s === "with_balance" ? "With Balance" : "All Balances"}</option>
+                ))}
+              </select>
 
-            <div className="h-4 w-px shrink-0 bg-slate-200" />
+              <div className="h-4 w-px shrink-0 bg-slate-200" />
 
-            <input type="text" placeholder="Name" value={draftFilters.tenantName}
-              onChange={(e) => setDraftFilters({ ...draftFilters, tenantName: normalizeUppercaseInput(e.target.value) })}
-              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            <input type="text" placeholder="Code (TT####)" value={draftFilters.tenantCode}
-              onChange={(e) => setDraftFilters({ ...draftFilters, tenantCode: normalizeUppercaseInput(e.target.value) })}
-              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            <input type="text" placeholder={isTerminatedView ? "Search terminated…" : "Search tenants…"} value={draftFilters.search}
-              onChange={(e) => setDraftFilters({ ...draftFilters, search: normalizeUppercaseInput(e.target.value) })}
-              className="h-7 w-36 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <input type="text" placeholder="Name" value={draftFilters.tenantName}
+                onChange={(e) => setDraftFilters({ ...draftFilters, tenantName: normalizeUppercaseInput(e.target.value) })}
+                className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <input type="text" placeholder="Code (TT####)" value={draftFilters.tenantCode}
+                onChange={(e) => setDraftFilters({ ...draftFilters, tenantCode: normalizeUppercaseInput(e.target.value) })}
+                className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <input type="text" placeholder={isTerminatedView ? "Search terminated…" : "Search tenants…"} value={draftFilters.search}
+                onChange={(e) => setDraftFilters({ ...draftFilters, search: normalizeUppercaseInput(e.target.value) })}
+                className="h-7 w-36 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
 
-            <div className="h-4 w-px shrink-0 bg-slate-200" />
+              <div className="h-4 w-px shrink-0 bg-slate-200" />
 
-            <button onClick={() => setAppliedFilters(draftFilters)} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-              <FaSearch size={9} /> Search
-            </button>
-            <button onClick={handleResetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-gray-500 px-2.5 text-xs font-semibold text-white hover:bg-gray-600">
-              <FaRedoAlt size={9} /> Reset
-            </button>
-            <button onClick={expandAllTenants} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 px-2 text-xs text-gray-600 hover:bg-gray-50" title="Expand all">
-              <FaExpandAlt size={9} />
-            </button>
-            <button onClick={collapseAllTenants} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 px-2 text-xs text-gray-600 hover:bg-gray-50" title="Collapse all">
-              <FaCompressAlt size={9} />
-            </button>
-            <button onClick={handleEditTenant} disabled={!canUpdateTenant || selectedTenants.length !== 1}
-              className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
-              <FaEdit size={9} /> Edit
-            </button>
-
-            <div className="relative shrink-0" ref={actionMenuRef}>
-              <button onClick={() => setActionMenuOpen(!actionMenuOpen)}
-                className="h-7 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-                <FaEllipsisV size={9} /> Actions
+              <button onClick={() => setAppliedFilters(draftFilters)} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
+                <FaSearch size={9} /> Search
               </button>
-              {actionMenuOpen && (
-                <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                  <div className="py-1">
-                    <button onClick={handleViewStatement} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
-                      <FaFileInvoiceDollar size={12} /> View Tenant Statement
-                    </button>
-                    {canUpdateTenant && (
-                      <button onClick={handleEditTenant} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
-                        <FaUserEdit size={12} /> Edit Tenant Details
-                      </button>
-                    )}
-                    {canUpdateTenant && (
-                      <button onClick={handleTransferUnit}
-                        disabled={isTerminatedView || selectedTenants.length !== 1 || !selectedPrimaryTenant?.canTransfer}
-                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTransfer ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                        <FaExchangeAlt size={12} /> Transfer Tenant Unit
-                      </button>
-                    )}
-                    <button onClick={handleViewReceipts} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
-                      <FaMoneyBillWave size={12} /> View Tenant Receipts
-                    </button>
-                    <button onClick={handleOpenAgreement} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
-                      <FaFileInvoiceDollar size={12} /> Open Tenant Agreement
-                    </button>
-                    {canUpdateTenant && (
-                      <button onClick={handleAddUtility} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
-                        <FaBolt size={12} /> Add Utility to Selected Tenant
-                      </button>
-                    )}
-                    {canUpdateTenant && (
-                      <button onClick={handleReviewRent} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700 border-t border-gray-200">
-                        <FaChartLine size={12} /> Review Rent for Selected Tenant
-                      </button>
-                    )}
-                    {canUpdateTenant && (
-                      <button onClick={handleOpenTerminateTenant}
-                        disabled={isTerminatedView || selectedTenants.length !== 1 || !selectedPrimaryTenant?.canTerminate}
-                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 border-t border-gray-200 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTerminate ? "hover:bg-amber-50 text-amber-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                        <FaUserSlash size={12} /> Terminate Tenant
-                      </button>
-                    )}
-                    <button onClick={() => { setActionMenuOpen(false); setShowCommunicationModal(true); }}
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 flex items-center gap-2 text-orange-700 border-t border-gray-200">
-                      <FaSms size={12} /> SMS Tenants
-                    </button>
-                    {canDeleteTenant && (
-                      <button onClick={handleDeleteSelectedTenants} disabled={selectedDeletableTenants.length === 0}
-                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 border-t border-gray-200 font-semibold ${selectedDeletableTenants.length > 0 ? "hover:bg-red-50 text-red-600" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                        <FaTrash size={12} /> Delete Selected Tenant(s)
-                      </button>
-                    )}
-                  </div>
-                </div>
+              <button onClick={handleResetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-gray-500 px-2.5 text-xs font-semibold text-white hover:bg-gray-600">
+                <FaRedoAlt size={9} /> Reset
+              </button>
+              <button onClick={expandAllTenants} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 px-2 text-xs text-gray-600 hover:bg-gray-50" title="Expand all">
+                <FaExpandAlt size={9} />
+              </button>
+              <button onClick={collapseAllTenants} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 px-2 text-xs text-gray-600 hover:bg-gray-50" title="Collapse all">
+                <FaCompressAlt size={9} />
+              </button>
+              <button onClick={handleEditTenant} disabled={!canUpdateTenant || selectedTenants.length !== 1}
+                className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                <FaEdit size={9} /> Edit
+              </button>
+              {selectedTenants.length > 0 && (
+                <span className="shrink-0 text-[10px] font-bold text-slate-500 tabular-nums">{selectedTenants.length} selected</span>
               )}
             </div>
 
-            <button onClick={() => isTerminatedView ? navigate("/invoices/new") : navigate("/tenant/new")}
-              disabled={!isTerminatedView && !canCreateTenant}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canCreateTenant ? "bg-[#FF8C00] hover:bg-[#e67e00]" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaPlus size={9} /> {isTerminatedView ? "Final Billing" : "Add"}
-            </button>
-            <button onClick={handleDownloadTemplate} className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-semibold text-white hover:bg-blue-600">
-              <FaDownload size={9} /> Template
-            </button>
-            <button onClick={() => setShowImportModal(true)} disabled={isTerminatedView || !canCreateTenant}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canCreateTenant && !isTerminatedView ? "bg-[#FF8C00] hover:bg-[#e67e00]" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaFileExport size={9} className="rotate-180" /> Import
-            </button>
-            <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
-              <FaPrint size={9} /> Print
-            </button>
-            <button onClick={handleExportToExcel} className="h-7 shrink-0 flex items-center gap-1 rounded bg-gray-600 px-2.5 text-xs font-semibold text-white hover:bg-gray-700">
-              <FaFileExport size={9} /> Export
-            </button>
-            {selectedTenants.length > 0 && (
-              <span className="shrink-0 text-[10px] font-bold text-slate-500 tabular-nums">{selectedTenants.length} selected</span>
-            )}
+            {/* Action buttons — NOT inside overflow container so dropdowns are never clipped */}
+            <div className="flex items-center gap-1.5 shrink-0 px-2 py-1.5 border-l border-slate-200">
+              <div className="relative" ref={actionMenuRef}>
+                <button onClick={() => setActionMenuOpen(!actionMenuOpen)}
+                  className="h-7 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
+                  <FaEllipsisV size={9} /> Actions
+                </button>
+                {actionMenuOpen && (
+                  <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                    <div className="py-1">
+                      <button onClick={handleViewStatement} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
+                        <FaFileInvoiceDollar size={12} /> View Tenant Statement
+                      </button>
+                      {canUpdateTenant && (
+                        <button onClick={handleEditTenant} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
+                          <FaUserEdit size={12} /> Edit Tenant Details
+                        </button>
+                      )}
+                      {canUpdateTenant && (
+                        <button onClick={handleTransferUnit}
+                          disabled={isTerminatedView || selectedTenants.length !== 1 || !selectedPrimaryTenant?.canTransfer}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTransfer ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                          <FaExchangeAlt size={12} /> Transfer Tenant Unit
+                        </button>
+                      )}
+                      <button onClick={handleViewReceipts} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
+                        <FaMoneyBillWave size={12} /> View Tenant Receipts
+                      </button>
+                      <button onClick={handleOpenAgreement} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
+                        <FaFileInvoiceDollar size={12} /> Open Tenant Agreement
+                      </button>
+                      {canUpdateTenant && (
+                        <button onClick={handleAddUtility} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
+                          <FaBolt size={12} /> Add Utility to Selected Tenant
+                        </button>
+                      )}
+                      {canUpdateTenant && (
+                        <button onClick={handleReviewRent} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700 border-t border-gray-200">
+                          <FaChartLine size={12} /> Review Rent for Selected Tenant
+                        </button>
+                      )}
+                      {canUpdateTenant && (
+                        <button onClick={handleOpenTerminateTenant}
+                          disabled={isTerminatedView || selectedTenants.length !== 1 || !selectedPrimaryTenant?.canTerminate}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 border-t border-gray-200 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTerminate ? "hover:bg-amber-50 text-amber-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                          <FaUserSlash size={12} /> Terminate Tenant
+                        </button>
+                      )}
+                      <button onClick={() => { setActionMenuOpen(false); setShowCommunicationModal(true); }}
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 flex items-center gap-2 text-orange-700 border-t border-gray-200">
+                        <FaSms size={12} /> SMS Tenants
+                      </button>
+                      {canDeleteTenant && (
+                        <button onClick={handleDeleteSelectedTenants} disabled={selectedDeletableTenants.length === 0}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 border-t border-gray-200 font-semibold ${selectedDeletableTenants.length > 0 ? "hover:bg-red-50 text-red-600" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                          <FaTrash size={12} /> Delete Selected Tenant(s)
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button onClick={() => isTerminatedView ? navigate("/invoices/new") : navigate("/tenant/new")}
+                disabled={!isTerminatedView && !canCreateTenant}
+                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canCreateTenant ? "bg-[#FF8C00] hover:bg-[#e67e00]" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaPlus size={9} /> {isTerminatedView ? "Final Billing" : "Add"}
+              </button>
+              <button onClick={handleDownloadTemplate} className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-semibold text-white hover:bg-blue-600">
+                <FaDownload size={9} /> Template
+              </button>
+              <button onClick={() => setShowImportModal(true)} disabled={isTerminatedView || !canCreateTenant}
+                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canCreateTenant && !isTerminatedView ? "bg-[#FF8C00] hover:bg-[#e67e00]" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaFileExport size={9} className="rotate-180" /> Import
+              </button>
+              <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
+                <FaPrint size={9} /> Print
+              </button>
+              <button onClick={handleExportToExcel} className="h-7 shrink-0 flex items-center gap-1 rounded bg-gray-600 px-2.5 text-xs font-semibold text-white hover:bg-gray-700">
+                <FaFileExport size={9} /> Export
+              </button>
+            </div>
           </div>
         </div>
 

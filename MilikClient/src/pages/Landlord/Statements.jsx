@@ -1305,507 +1305,578 @@ const Statements = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden bg-slate-50 p-2">
-          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white/95 shadow-sm backdrop-blur">
-            <div className="h-1 rounded-t-lg bg-[#0B3B2E]" />
-            <div className="grid grid-cols-1 gap-2 px-3 py-2 md:grid-cols-2 xl:grid-cols-7">
-              <div>
-                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Statement Type</label>
-                <SearchableSelect
-                  value={statementType}
-                  onChange={setStatementType}
-                  options={[
-                    { value: "provisional", label: "Provisional" },
-                    { value: "final", label: "Final" },
-                  ]}
-                  placeholder="Select type"
-                />
-              </div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100">
 
-              <div>
-                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Property</label>
-                <SearchableSelect
-                  value={selectedPropertyId}
-                  onChange={setSelectedPropertyId}
-                  options={properties.map((p) => ({ value: p._id, label: getPropertyLabel(p) }))}
-                  placeholder="Select property"
-                />
-              </div>
+        {/* ── TOP CONTROLS ─────────────────────────────────────────────── */}
+        <div className="flex-shrink-0 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
+          <div className="h-0.5 bg-gradient-to-r from-[#0B3B2E] via-[#1a6b4e] to-[#0B3B2E]" />
 
-              <div>
-                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Month</label>
-                <SearchableSelect
-                  value={month}
-                  onChange={setMonth}
-                  options={monthOptions.map((label, index) => ({ value: String(index + 1), label }))}
-                  placeholder="Select month"
-                />
-              </div>
-
-              <div>
-                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Year</label>
-                <input
-                  type="number"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
-                />
-              </div>
-
-              <div>
-                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Period Start</label>
-                <input
-                  type="date"
-                  value={periodStart}
-                  max={todayIso}
-                  onChange={(e) => setPeriodStart(e.target.value)}
-                  className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
-                />
-              </div>
-
-              <div>
-                <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Period End</label>
-                <input
-                  type="date"
-                  value={periodEnd}
-                  min={periodStart || undefined}
-                  max={todayIso}
-                  onChange={(e) => setPeriodEnd(e.target.value)}
-                  className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
-                />
-              </div>
-
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={() => loadDraftWorkspace({ refresh: true })}
-                  disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <FaSyncAlt className={loadingDraft ? "animate-spin" : ""} />
-                  {loadingDraft ? "Loading..." : loadingProcessedContext ? "Checking..." : "Generate / Refresh"}
-                </button>
-              </div>
+          {/* Filter grid */}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-3 xl:grid-cols-7">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Statement Type</label>
+              <SearchableSelect
+                value={statementType}
+                onChange={setStatementType}
+                options={[
+                  { value: "provisional", label: "Provisional" },
+                  { value: "final", label: "Final" },
+                ]}
+                placeholder="Select type"
+              />
             </div>
-            <div className="border-t border-slate-200 px-3">
-              <div className="flex flex-wrap items-center justify-between gap-1">
-                <div className="flex items-center">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("workspace")}
-                    className={`border-b-2 px-4 py-2.5 text-xs font-bold transition-colors ${
-                      activeTab === "workspace"
-                        ? "border-[#0B3B2E] text-[#0B3B2E]"
-                        : "border-transparent text-slate-500 hover:text-slate-700"
-                    }`}
-                  >
-                    Workspace
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("summary")}
-                    className={`border-b-2 px-4 py-2.5 text-xs font-bold transition-colors ${
-                      activeTab === "summary"
-                        ? "border-[#0B3B2E] text-[#0B3B2E]"
-                        : "border-transparent text-slate-500 hover:text-slate-700"
-                    }`}
-                  >
-                    Summary
-                  </button>
-                </div>
 
-                <div className="flex flex-wrap items-center gap-1.5 py-1.5">
-                  <button
-                    type="button"
-                    onClick={handleRegenerateDraft}
-                    disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                    className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    <FaSyncAlt size={10} />
-                    Regenerate Draft
-                  </button>
+            <div className="col-span-2 xl:col-span-1">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Property</label>
+              <SearchableSelect
+                value={selectedPropertyId}
+                onChange={setSelectedPropertyId}
+                options={properties.map((p) => ({ value: p._id, label: getPropertyLabel(p) }))}
+                placeholder="Select property"
+              />
+            </div>
 
-                  <button
-                    type="button"
-                    onClick={handleApprove}
-                    disabled={!canApproveStatement || !draftStatement?._id}
-                    className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-2.5 text-[11px] font-bold text-white hover:bg-[#0a3228] disabled:opacity-50"
-                  >
-                    <FaCheckCircle size={10} />
-                    Approve
-                  </button>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Month</label>
+              <SearchableSelect
+                value={month}
+                onChange={setMonth}
+                options={monthOptions.map((label, index) => ({ value: String(index + 1), label }))}
+                placeholder="Select month"
+              />
+            </div>
 
-                  <button
-                    type="button"
-                    onClick={handlePrint}
-                    disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
-                    className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    <FaPrint size={10} className={loadingPdfPreview ? "animate-pulse" : ""} />
-                    {loadingPdfPreview ? "Printing..." : "Print"}
-                  </button>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Year</label>
+              <input
+                type="number"
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
+              />
+            </div>
 
-                  <button
-                    type="button"
-                    onClick={handleOpenPdf}
-                    disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
-                    className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    <FaDownload size={10} className={loadingPdfPreview ? "animate-pulse" : ""} />
-                    {loadingPdfPreview ? "Loading..." : "PDF"}
-                  </button>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Period Start</label>
+              <input
+                type="date"
+                value={periodStart}
+                max={todayIso}
+                onChange={(e) => setPeriodStart(e.target.value)}
+                className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
+              />
+            </div>
 
-                  <button
-                    type="button"
-                    onClick={handleProcessStatement}
-                    disabled={!canApproveStatement || !draftStatement?._id || processing || !hasValidPeriodSelection}
-                    className="inline-flex h-7 items-center gap-1.5 rounded bg-slate-800 px-2.5 text-[11px] font-bold text-white hover:bg-slate-900 disabled:opacity-50"
-                  >
-                    <FaFileAlt size={10} />
-                    {processing ? "Processing..." : "Process Statement"}
-                  </button>
-                </div>
-              </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Period End</label>
+              <input
+                type="date"
+                value={periodEnd}
+                min={periodStart || undefined}
+                max={todayIso}
+                onChange={(e) => setPeriodEnd(e.target.value)}
+                className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
+              />
+            </div>
+
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={() => loadDraftWorkspace({ refresh: true })}
+                disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-[#0a3228] disabled:cursor-not-allowed disabled:opacity-55"
+              >
+                <FaSyncAlt className={loadingDraft ? "animate-spin" : ""} size={11} />
+                {loadingDraft ? "Loading…" : loadingProcessedContext ? "Checking…" : "Generate"}
+              </button>
             </div>
           </div>
 
-          {!selectedPropertyId ? (
-            <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[#0B3B2E]/10">
-                <FaFileAlt className="text-[#0B3B2E]" size={18} />
-              </div>
-              <p className="text-sm font-semibold text-slate-700">Select a Property</p>
-              <p className="mt-1 text-xs text-slate-400">Choose a property above to load the landlord statement workspace.</p>
+          {/* Tabs + action buttons */}
+          <div className="flex items-center justify-between border-t border-slate-100 px-4">
+            <div className="flex items-center">
+              {[
+                { id: "workspace", label: "Workspace" },
+                { id: "summary", label: "Summary" },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative px-4 py-2.5 text-xs font-bold transition-colors ${
+                    activeTab === tab.id ? "text-[#0B3B2E]" : "text-slate-400 hover:text-slate-600"
+                  }`}
+                >
+                  {tab.label}
+                  {activeTab === tab.id && (
+                    <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-t-full bg-[#0B3B2E]" />
+                  )}
+                </button>
+              ))}
+              {draftStatement?.status && (
+                <span className={`ml-3 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                  draftStatement.status === "approved"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}>
+                  {draftStatement.status}
+                </span>
+              )}
             </div>
-          ) : !draftStatement ? (
-            <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[#0B3B2E]/10">
-                <FaSyncAlt className={`text-[#0B3B2E] ${loadingDraft ? "animate-spin" : ""}`} size={18} />
-              </div>
-              <p className="text-sm font-semibold text-slate-700">{loadingDraft ? "Loading Statement..." : "No Statement Loaded"}</p>
-              <p className="mt-1 text-xs text-slate-400">{loadingDraft ? "Building workspace from ledger data..." : "Click Generate / Refresh to load the statement for this period."}</p>
+
+            <div className="flex items-center gap-1.5 py-2">
+              <button
+                type="button"
+                onClick={handleRegenerateDraft}
+                disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+              >
+                <FaSyncAlt size={9} />
+                Regenerate
+              </button>
+              <button
+                type="button"
+                onClick={handleApprove}
+                disabled={!canApproveStatement || !draftStatement?._id}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-40"
+              >
+                <FaCheckCircle size={9} />
+                Approve
+              </button>
+              <button
+                type="button"
+                onClick={handlePrint}
+                disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+              >
+                <FaPrint size={9} className={loadingPdfPreview ? "animate-pulse" : ""} />
+                Print
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenPdf}
+                disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+              >
+                <FaDownload size={9} className={loadingPdfPreview ? "animate-pulse" : ""} />
+                PDF
+              </button>
+              <button
+                type="button"
+                onClick={handleProcessStatement}
+                disabled={!canApproveStatement || !draftStatement?._id || processing || !hasValidPeriodSelection}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white transition-colors hover:bg-[#0a3228] disabled:opacity-40"
+              >
+                <FaFileAlt size={9} />
+                {processing ? "Processing…" : "Process"}
+              </button>
             </div>
-          ) : (
-            <>
-              {activeTab === "summary" ? (
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                  <div className="border-b border-[#0a3228] bg-[#0B3B2E] px-5 py-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-green-200/60">Landlord Statement · Summary</p>
-                        <h3 className="mt-0.5 text-sm font-bold text-white">
-                          {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Summary"}
-                          {landlord ? <span className="ml-2 text-xs font-normal text-green-100/60">· {landlord.name || landlord.fullName || ""}</span> : null}
-                        </h3>
+          </div>
+        </div>
+
+        {/* ── MAIN CONTENT ─────────────────────────────────────────────── */}
+        {!selectedPropertyId ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B3B2E]/10">
+              <FaFileAlt className="text-[#0B3B2E]" size={22} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-700">Select a Property</p>
+              <p className="mt-1 max-w-xs text-xs text-slate-400">Choose a property from the filter above to load the landlord statement workspace.</p>
+            </div>
+          </div>
+        ) : !draftStatement ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+            <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${loadingDraft ? "bg-[#0B3B2E]/10" : "bg-slate-200/60"}`}>
+              <FaSyncAlt className={`${loadingDraft ? "animate-spin text-[#0B3B2E]" : "text-slate-400"}`} size={22} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-700">{loadingDraft ? "Building Statement…" : "No Statement Loaded"}</p>
+              <p className="mt-1 max-w-xs text-xs text-slate-400">{loadingDraft ? "Compiling workspace from ledger data…" : "Click Generate to load the statement for this period."}</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {activeTab === "summary" ? (
+
+              /* ══════════ SUMMARY TAB ══════════ */
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {/* Header banner */}
+                <div className="flex-shrink-0 bg-[#0B3B2E] px-5 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Landlord Statement · Summary</p>
+                      <h3 className="mt-1 text-sm font-bold text-white">
+                        {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Summary"}
+                      </h3>
+                      {landlord && (
+                        <p className="mt-0.5 text-xs text-green-100/60">{landlord.name || landlord.fullName || ""}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-right">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Period</p>
+                        <p className="mt-0.5 text-xs font-bold text-white">{statementPeriodLabel}</p>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="rounded border border-white/20 bg-white/10 px-3 py-1.5 text-right">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-green-200/60">Period</p>
-                          <p className="text-xs font-bold text-white">{statementPeriodLabel}</p>
-                        </div>
-                        <div className="rounded border border-white/20 bg-white/10 px-3 py-1.5 text-right">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-green-200/60">Type</p>
-                          <p className="text-xs font-bold capitalize text-white">{statementType}</p>
-                        </div>
-                        {draftStatement?.status && (
-                          <span className={`rounded border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
-                            draftStatement.status === "approved"
-                              ? "border-emerald-300/40 bg-emerald-500/25 text-emerald-100"
-                              : "border-amber-300/40 bg-amber-500/25 text-amber-100"
-                          }`}>
-                            {draftStatement.status}
-                          </span>
-                        )}
+                      <div className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-right">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Type</p>
+                        <p className="mt-0.5 text-xs font-bold capitalize text-white">{statementType}</p>
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  <div className="flex-shrink-0 grid grid-cols-2 gap-px bg-slate-100 md:grid-cols-3 xl:grid-cols-5">
-                    <div className="bg-white px-4 py-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Opening Balance</p>
-                      <p className="mt-1 text-sm font-bold text-slate-900">{currency(summary.openingBalance)}</p>
-                    </div>
-                    <div className="bg-white px-4 py-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Closing Balance</p>
-                      <p className="mt-1 text-sm font-bold text-slate-900">{currency(summary.closingBalance)}</p>
-                    </div>
-                    <div className="bg-white px-4 py-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Occupied Units</p>
-                      <p className="mt-1 text-sm font-bold text-slate-900">{Number(summary.occupiedUnits || 0)}</p>
-                    </div>
-                    <div className="bg-amber-50 px-4 py-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600">Unapplied Credits</p>
-                      <p className="mt-1 text-sm font-bold text-amber-800">{currency(summary.unappliedPayments || 0)}</p>
-                    </div>
-                    <div className={`px-4 py-3 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
-                      <p className={`text-[10px] font-semibold uppercase tracking-wide ${settlement.isNegative ? "text-red-500" : "text-green-200/70"}`}>{settlement.label}</p>
-                      <p className={`mt-1 text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</p>
-                    </div>
+                {/* KPI strip */}
+                <div className="flex-shrink-0 grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-200 bg-white md:grid-cols-5">
+                  <div className="px-5 py-4">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Opening Balance</p>
+                    <p className="mt-1.5 text-base font-bold text-slate-900">{currency(summary.openingBalance)}</p>
                   </div>
+                  <div className="px-5 py-4">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Closing Balance</p>
+                    <p className="mt-1.5 text-base font-bold text-slate-900">{currency(summary.closingBalance)}</p>
+                  </div>
+                  <div className="px-5 py-4">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Occupied Units</p>
+                    <p className="mt-1.5 text-base font-bold text-slate-900">{Number(summary.occupiedUnits || 0)}</p>
+                  </div>
+                  <div className="px-5 py-4">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-amber-500">Unapplied Credits</p>
+                    <p className="mt-1.5 text-base font-bold text-amber-700">{currency(summary.unappliedPayments || 0)}</p>
+                  </div>
+                  <div className={`px-5 py-4 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
+                    <p className={`text-[9px] font-bold uppercase tracking-widest ${settlement.isNegative ? "text-red-500" : "text-green-200/60"}`}>
+                      {settlement.label}
+                    </p>
+                    <p className={`mt-1.5 text-base font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>
+                      {currency(settlement.amount)}
+                    </p>
+                  </div>
+                </div>
 
-                  <div className="flex-1 min-h-0 overflow-y-auto">
+                {/* Scrollable breakdown */}
+                <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
                   {Number(summary.unappliedPayments || 0) > 0 && (
-                    <div className="px-6 pb-2 pt-3">
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                        Unapplied tenant credits are being carried separately from allocated rent and utility receipts. They reduce the tenant net position but do not count as paid in the landlord statement until they are allocated to actual bills.
+                    <div className="px-5 pt-4">
+                      <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                        <div className="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full bg-amber-400" />
+                        <p className="text-xs text-amber-800">
+                          Unapplied tenant credits are carried separately from allocated rent and utility receipts. They reduce the tenant net position but do not count as paid until allocated to actual bills.
+                        </p>
                       </div>
                     </div>
                   )}
-
-                  <div className="px-5 pb-5 pt-4">
-                    <div className="overflow-hidden rounded-lg border border-slate-200">
-                      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Settlement Breakdown</p>
+                  <div className="p-5">
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                      <div className="border-b border-slate-100 bg-slate-50 px-5 py-2.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Settlement Breakdown</p>
                       </div>
                       <table className="min-w-full divide-y divide-slate-100 text-sm">
                         <tbody className="divide-y divide-slate-100 bg-white">
-                          <tr>
-                            <td className="px-4 py-3 font-semibold text-slate-700">Opening landlord settlement B/F</td>
-                            <td className={`px-4 py-3 text-right font-medium ${openingLandlordSettlementBalance < 0 ? "text-red-700" : "text-slate-900"}`}>
+                          <tr className="transition-colors hover:bg-slate-50/60">
+                            <td className="px-5 py-3 font-medium text-slate-700">Opening landlord settlement B/F</td>
+                            <td className={`px-5 py-3 text-right font-semibold ${openingLandlordSettlementBalance < 0 ? "text-red-600" : "text-slate-900"}`}>
                               {currency(openingLandlordSettlementBalance)}
                             </td>
                           </tr>
-                          <tr>
-                            <td className="px-4 py-3 font-semibold text-slate-700">{basisCollectionsLabel}</td>
-                            <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(basisCollectionsAmount)}</td>
+                          <tr className="transition-colors hover:bg-slate-50/60">
+                            <td className="px-5 py-3 font-medium text-slate-700">{basisCollectionsLabel}</td>
+                            <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(basisCollectionsAmount)}</td>
                           </tr>
                           {Number(summary?.utilityPassThroughAmount || 0) > 0 && (
-                            <tr>
-                              <td className="px-4 py-3 font-semibold text-slate-700">{summary?.utilityPassThroughLabel || "Utilities (added as billed)"}</td>
-                              <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(summary?.utilityPassThroughAmount || 0)}</td>
+                            <tr className="transition-colors hover:bg-slate-50/60">
+                              <td className="px-5 py-3 font-medium text-slate-700">{summary?.utilityPassThroughLabel || "Utilities (added as billed)"}</td>
+                              <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(summary?.utilityPassThroughAmount || 0)}</td>
                             </tr>
                           )}
                           {invoiceVatPassThroughAmount > 0 && (
-                            <tr>
-                              <td className="px-4 py-3 font-semibold text-slate-700">{invoiceVatPassThroughLabel}</td>
-                              <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(invoiceVatPassThroughAmount)}</td>
+                            <tr className="transition-colors hover:bg-slate-50/60">
+                              <td className="px-5 py-3 font-medium text-slate-700">{invoiceVatPassThroughLabel}</td>
+                              <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(invoiceVatPassThroughAmount)}</td>
                             </tr>
                           )}
-                          <tr>
-                            <td className="px-4 py-3 font-semibold text-slate-700">Additions</td>
-                            <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(additionsAmount)}</td>
+                          <tr className="transition-colors hover:bg-slate-50/60">
+                            <td className="px-5 py-3 font-medium text-slate-700">Additions</td>
+                            <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(additionsAmount)}</td>
                           </tr>
-                          <tr>
-                            <td className="px-4 py-3 font-semibold text-slate-700">Expenses &amp; other deductions</td>
-                            <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(nonCommissionDeductions)}</td>
+                          <tr className="transition-colors hover:bg-slate-50/60">
+                            <td className="px-5 py-3 font-medium text-slate-700">Expenses &amp; other deductions</td>
+                            <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(nonCommissionDeductions)}</td>
                           </tr>
-                          <tr>
-                            <td className="px-4 py-3 font-semibold text-slate-700">Commission</td>
-                            <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(commissionAmount)}</td>
+                          <tr className="transition-colors hover:bg-slate-50/60">
+                            <td className="px-5 py-3 font-medium text-slate-700">Commission</td>
+                            <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(commissionAmount)}</td>
                           </tr>
                           {commissionTaxAmount > 0 && (
-                            <tr>
-                              <td className="px-4 py-3 font-semibold text-slate-700">VAT on commission</td>
-                              <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(commissionTaxAmount)}</td>
+                            <tr className="transition-colors hover:bg-slate-50/60">
+                              <td className="px-5 py-3 font-medium text-slate-700">VAT on commission</td>
+                              <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(commissionTaxAmount)}</td>
                             </tr>
                           )}
-                          <tr>
-                            <td className="px-4 py-3 font-semibold text-slate-700">Direct to landlord collections</td>
-                            <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(directToLandlordAmount)}</td>
+                          <tr className="transition-colors hover:bg-slate-50/60">
+                            <td className="px-5 py-3 font-medium text-slate-700">Direct to landlord collections</td>
+                            <td className="px-5 py-3 text-right font-semibold text-slate-900">{currency(directToLandlordAmount)}</td>
                           </tr>
                           {Number(summary?.totalEarlyPayouts || 0) > 0 && (
-                            <tr>
-                              <td className="px-4 py-3 font-semibold text-slate-700">Early payout already paid to landlord</td>
-                              <td className="px-4 py-3 text-right font-medium text-amber-700">({currency(Number(summary?.totalEarlyPayouts || 0))})</td>
+                            <tr className="transition-colors hover:bg-slate-50/60">
+                              <td className="px-5 py-3 font-medium text-slate-700">Early payout already paid to landlord</td>
+                              <td className="px-5 py-3 text-right font-semibold text-amber-700">({currency(Number(summary?.totalEarlyPayouts || 0))})</td>
                             </tr>
                           )}
                           {Number(summary?.totalAdvanceRecoveries || 0) > 0 && (
-                            <tr>
-                              <td className="px-4 py-3 font-semibold text-slate-700">Advance recovery deduction</td>
-                              <td className="px-4 py-3 text-right font-medium text-red-700">({currency(Number(summary?.totalAdvanceRecoveries || 0))})</td>
+                            <tr className="transition-colors hover:bg-slate-50/60">
+                              <td className="px-5 py-3 font-medium text-slate-700">Advance recovery deduction</td>
+                              <td className="px-5 py-3 text-right font-semibold text-red-600">({currency(Number(summary?.totalAdvanceRecoveries || 0))})</td>
                             </tr>
                           )}
                           <tr className={settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}>
-                            <td className={`px-4 py-3.5 text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{settlement.label}</td>
-                            <td className={`px-4 py-3.5 text-right text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</td>
+                            <td className={`px-5 py-4 text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{settlement.label}</td>
+                            <td className={`px-5 py-4 text-right text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</td>
                           </tr>
                         </tbody>
                       </table>
                     </div>
                   </div>
-                  </div>{/* end scroll wrapper */}
                 </div>
-              ) : (
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                  <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-2 border-b border-[#0a3228] bg-[#0B3B2E] px-5 py-2.5">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-green-200/60">Workspace Preview</p>
-                      <h3 className="mt-0.5 text-sm font-bold text-white">
-                        {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Workspace"}
-                        {landlord ? <span className="ml-2 text-xs font-normal text-green-100/60">· {landlord.name || landlord.fullName || ""}</span> : null}
-                      </h3>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="rounded border border-white/20 bg-white/10 px-3 py-1 text-right">
-                        <p className="text-[10px] font-bold text-white">{statementPeriodLabel}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setCollapseAdditionalUnitRows(!collapseAdditionalUnitRows)}
-                        className={`rounded border px-2.5 py-1 text-[10px] font-semibold transition-colors ${
-                          collapseAdditionalUnitRows
-                            ? "border-green-300/50 bg-green-600/40 text-white"
-                            : "border-white/20 bg-white/10 text-green-100 hover:bg-white/20"
-                        }`}
-                      >
-                        {collapseAdditionalUnitRows ? "Collapse: ON" : "Collapse Multi-Unit"}
-                      </button>
-                    </div>
-                  </div>
+              </div>
 
-                  <div className="flex-1 min-h-0 overflow-auto">
-                    <table className="min-w-[1400px] w-full divide-y divide-slate-200 text-sm whitespace-nowrap">
-                      <thead className="sticky top-0 z-20 bg-[#0B3B2E] text-white">
+            ) : (
+
+              /* ══════════ WORKSPACE TAB ══════════ */
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {/* Header banner */}
+                <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-3 bg-[#0B3B2E] px-5 py-3">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Workspace Preview</p>
+                    <h3 className="mt-1 text-sm font-bold text-white">
+                      {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Workspace"}
+                    </h3>
+                    {landlord && (
+                      <p className="mt-0.5 text-xs text-green-100/60">{landlord.name || landlord.fullName || ""}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-right">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Period</p>
+                      <p className="mt-0.5 text-xs font-bold text-white">{statementPeriodLabel}</p>
+                    </div>
+                    <div className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-right">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Rows</p>
+                      <p className="mt-0.5 text-xs font-bold text-white">{statementDisplayRows.length}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCollapseAdditionalUnitRows(!collapseAdditionalUnitRows)}
+                      className={`rounded-lg border px-3 py-1.5 text-[10px] font-semibold transition-colors ${
+                        collapseAdditionalUnitRows
+                          ? "border-green-300/40 bg-green-500/30 text-white"
+                          : "border-white/20 bg-white/10 text-green-100/80 hover:bg-white/20"
+                      }`}
+                    >
+                      {collapseAdditionalUnitRows ? "Multi-Unit: Collapsed" : "Collapse Multi-Unit"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Scrollable table + detail sections */}
+                <div className="min-h-0 flex-1 overflow-auto bg-white">
+                  <table className="min-w-max w-full whitespace-nowrap text-xs">
+                    <thead className="sticky top-0 z-20">
+                      <tr className="bg-[#0B3B2E]">
+                        {/* Sticky: Unit */}
+                        <th className="sticky left-0 z-30 w-[88px] min-w-[88px] bg-[#0B3B2E] px-3 py-3 text-left">
+                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">—</div>
+                          <div className="text-[11px] font-semibold text-white">Unit</div>
+                        </th>
+                        {/* Sticky: Tenant */}
+                        <th className="sticky left-[88px] z-30 w-[155px] min-w-[155px] bg-[#0B3B2E] px-3 py-3 text-left border-r border-white/10">
+                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">—</div>
+                          <div className="text-[11px] font-semibold text-white">Tenant</div>
+                        </th>
+                        {/* Ledger group */}
+                        <th className="px-3 py-3 text-right">
+                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Ledger</div>
+                          <div className="text-[11px] font-semibold text-white">Bal B/F</div>
+                        </th>
+                        {/* Rent group */}
+                        <th className="border-l border-white/10 px-3 py-3 text-right">
+                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Rent</div>
+                          <div className="text-[11px] font-semibold text-white">Invoiced</div>
+                        </th>
+                        {hasInvoiceVatColumn && (
+                          <th className="px-3 py-3 text-right">
+                            <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Rent</div>
+                            <div className="text-[11px] font-semibold text-white">VAT Inv.</div>
+                          </th>
+                        )}
+                        <th className="px-3 py-3 text-right">
+                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Rent</div>
+                          <div className="text-[11px] font-semibold text-white">Paid</div>
+                        </th>
+                        {hasInvoiceVatColumn && (
+                          <th className="px-3 py-3 text-right">
+                            <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Rent</div>
+                            <div className="text-[11px] font-semibold text-white">VAT Pd.</div>
+                          </th>
+                        )}
+                        {/* Utility groups */}
+                        {statementColumns.map((column) => (
+                          <React.Fragment key={`head-${column.key}`}>
+                            <th className="border-l border-white/10 px-3 py-3 text-right">
+                              <div className="mb-0.5 max-w-[90px] truncate text-[8px] font-bold uppercase tracking-widest text-white/30">{column.label}</div>
+                              <div className="text-[11px] font-semibold text-white">Invoiced</div>
+                            </th>
+                            <th className="px-3 py-3 text-right">
+                              <div className="mb-0.5 max-w-[90px] truncate text-[8px] font-bold uppercase tracking-widest text-white/30">{column.label}</div>
+                              <div className="text-[11px] font-semibold text-white">Paid</div>
+                            </th>
+                          </React.Fragment>
+                        ))}
+                        {/* Summary group */}
+                        <th className="border-l border-white/10 px-3 py-3 text-right">
+                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Summary</div>
+                          <div className="text-[11px] font-semibold text-white">Total Paid</div>
+                        </th>
+                        <th className="px-3 py-3 text-right">
+                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Summary</div>
+                          <div className="text-[11px] font-semibold text-white">Bal C/F</div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white">
+                      {statementDisplayRows.length === 0 ? (
                         <tr>
-                          <th className="sticky left-0 z-30 bg-[#0B3B2E] px-4 py-3 text-left font-semibold text-white">Unit</th>
-                          <th className="sticky left-[120px] z-30 bg-[#0B3B2E] px-4 py-3 text-left font-semibold text-white">Tenant</th>
-                          <th className="px-4 py-3 text-right font-semibold text-white">Balance B/F</th>
-                          <th className="px-4 py-3 text-right font-semibold text-white">Rent Invoiced</th>
-                          {hasInvoiceVatColumn && (
-                            <th className="px-4 py-3 text-right font-semibold text-white">VAT Invoiced</th>
-                          )}
-                          <th className="px-4 py-3 text-right font-semibold text-white">Rent Paid</th>
-                          {hasInvoiceVatColumn && (
-                            <th className="px-4 py-3 text-right font-semibold text-white">VAT Paid</th>
-                          )}
-                          {statementColumns.map((column) => (
-                            <React.Fragment key={`head-${column.key}`}>
-                              <th className="px-4 py-3 text-right font-semibold text-white">
-                                {column.label} Invoiced
-                              </th>
-                              <th className="px-4 py-3 text-right font-semibold text-white">
-                                {column.label} Paid
-                              </th>
-                            </React.Fragment>
-                          ))}
-                          <th className="px-4 py-3 text-right font-semibold text-white">Total Paid</th>
-                          <th className="px-4 py-3 text-right font-semibold text-white">Balance C/F</th>
+                          <td colSpan={statementColSpan} className="px-4 py-14 text-center">
+                            <div className="flex flex-col items-center gap-3">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100">
+                                <FaFileAlt className="text-slate-400" size={16} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-700">No rows generated</p>
+                                <p className="mt-0.5 text-xs text-slate-400">Adjust the date range and regenerate the draft.</p>
+                              </div>
+                            </div>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 bg-white">
-                        {statementDisplayRows.length === 0 ? (
-                          <tr>
-                            <td colSpan={statementColSpan} className="px-4 py-8 text-center text-slate-500">
-                              No tenant or unit rows were generated for this period. Adjust the date range and regenerate the draft.
-                            </td>
-                          </tr>
-                        ) : (
-                          statementDisplayRows.map((row, index) => (
-                            <tr key={`${row.unitId || row.unitNumber || "row"}-${index}`}>
-                              <td className="sticky left-0 z-10 bg-white px-4 py-3 text-slate-700 shadow-[1px_0_0_0_#e2e8f0]">
-                                <div className="font-medium text-slate-900">{row.displayUnitLabel || row.unit || row.unitNumber || "-"}</div>
-                                {Array.isArray(row.allUnitLabels) && row.allUnitLabels.length > 1 ? (
-                                  <div className="text-[11px] text-slate-500">{row.allUnitLabels.join(", ")}</div>
-                                ) : null}
+                      ) : (
+                        statementDisplayRows.map((row, index) => {
+                          const closingBal = Number(row.closingBalance ?? row.balanceCF ?? row.balance ?? 0);
+                          const isOdd = index % 2 !== 0;
+                          const rowBase = isOdd ? "bg-slate-50" : "bg-white";
+                          return (
+                            <tr
+                              key={`${row.unitId || row.unitNumber || "row"}-${index}`}
+                              className={`${rowBase} border-b border-slate-100 transition-colors hover:bg-orange-50/30`}
+                            >
+                              <td className={`sticky left-0 z-10 w-[88px] min-w-[88px] ${rowBase} px-3 py-2.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.1)]`}>
+                                <div className="text-xs font-semibold text-slate-900">{row.displayUnitLabel || row.unit || row.unitNumber || "—"}</div>
+                                {Array.isArray(row.allUnitLabels) && row.allUnitLabels.length > 1 && (
+                                  <div className="mt-0.5 text-[10px] text-slate-400 truncate max-w-[76px]">{row.allUnitLabels.join(", ")}</div>
+                                )}
                               </td>
-                              <td className="sticky left-[120px] z-10 bg-white px-4 py-3 text-slate-700 shadow-[1px_0_0_0_#e2e8f0]">
-                                <div className="font-medium text-slate-900">{row.tenantName || "-"}</div>
-                                {Number(row.multiUnitCount || 1) > 1 ? (
-                                  <div className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                              <td className={`sticky left-[88px] z-10 w-[155px] min-w-[155px] ${rowBase} border-r border-slate-100 px-3 py-2.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.1)]`}>
+                                <div className="max-w-[135px] truncate text-xs font-medium text-slate-800">{row.tenantName || "—"}</div>
+                                {Number(row.multiUnitCount || 1) > 1 && (
+                                  <div className="mt-1 inline-flex rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700">
                                     {row.multiUnitCount} units
                                   </div>
-                                ) : null}
+                                )}
                               </td>
-                              <td className="px-4 py-3 text-right text-slate-700">{currency(row.openingBalance ?? row.balanceBF ?? 0)}</td>
-                              <td className="px-4 py-3 text-right text-slate-700">{currency(row.invoicedRent)}</td>
-                              {hasInvoiceVatColumn ? (
-                                <td className="px-4 py-3 text-right text-slate-700">{currency(row.invoicedTax ?? 0)}</td>
-                              ) : null}
-                              <td className="px-4 py-3 text-right text-slate-700">{currency(row.paidRent)}</td>
-                              {hasInvoiceVatColumn ? (
-                                <td className="px-4 py-3 text-right text-slate-700">{currency(row.paidTax ?? 0)}</td>
-                              ) : null}
+                              <td className="px-3 py-2.5 text-right text-slate-500">{currency(row.openingBalance ?? row.balanceBF ?? 0)}</td>
+                              <td className="border-l border-slate-100 px-3 py-2.5 text-right text-slate-700">{currency(row.invoicedRent)}</td>
+                              {hasInvoiceVatColumn && (
+                                <td className="px-3 py-2.5 text-right text-slate-500">{currency(row.invoicedTax ?? 0)}</td>
+                              )}
+                              <td className="px-3 py-2.5 text-right font-medium text-emerald-700">{currency(row.paidRent)}</td>
+                              {hasInvoiceVatColumn && (
+                                <td className="px-3 py-2.5 text-right text-emerald-600">{currency(row.paidTax ?? 0)}</td>
+                              )}
                               {statementColumns.map((column) => (
                                 <React.Fragment key={`${row.unitId || row.unitNumber || "row"}-${column.key}`}>
-                                  <td className="px-4 py-3 text-right text-slate-700">
+                                  <td className="border-l border-slate-100 px-3 py-2.5 text-right text-slate-700">
                                     {currency(getPreparedStatementColumnValue(row, column.key, "invoiced"))}
                                   </td>
-                                  <td className="px-4 py-3 text-right text-slate-700">
+                                  <td className="px-3 py-2.5 text-right font-medium text-emerald-700">
                                     {currency(getPreparedStatementColumnValue(row, column.key, "paid"))}
                                   </td>
                                 </React.Fragment>
                               ))}
-                              <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(row.totalPaid)}</td>
-                              <td className="px-4 py-3 text-right font-medium text-slate-900">{currency(row.closingBalance ?? row.balanceCF ?? row.balance ?? 0)}</td>
+                              <td className="border-l border-slate-100 px-3 py-2.5 text-right font-semibold text-slate-900">{currency(row.totalPaid)}</td>
+                              <td className={`px-3 py-2.5 text-right font-semibold ${
+                                closingBal < 0 ? "text-red-600" : closingBal > 0 ? "text-emerald-700" : "text-slate-400"
+                              }`}>
+                                {currency(closingBal)}
+                              </td>
                             </tr>
-                          ))
-                        )}
-                        {preparedRows.length > 0 ? (
-                          <tr className="bg-slate-50">
-                            <td colSpan={2} className="px-4 py-3 font-semibold text-slate-700">Total</td>
-                            <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
-                            <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
-                            {hasInvoiceVatColumn ? (
-                              <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.invoicedTax ?? summary.totalInvoiceVatInvoiced ?? 0)}</td>
-                            ) : null}
-                            <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
-                            {hasInvoiceVatColumn ? (
-                              <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>
-                            ) : null}
-                            {statementColumns.map((column) => (
-                              <React.Fragment key={`foot-${column.key}`}>
-                                <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(Number(column?.invoiced || 0))}</td>
-                                <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(Number(column?.paid || 0))}</td>
-                              </React.Fragment>
-                            ))}
-                            <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.totalPaid ?? 0)}</td>
-                            <td className="px-4 py-3 text-right font-semibold text-slate-900">{currency(totals.closingBalance ?? summary.closingBalance ?? 0)}</td>
-                          </tr>
-                        ) : null}
-                      </tbody>
-                    </table>
+                          );
+                        })
+                      )}
+                      {/* Totals row */}
+                      {preparedRows.length > 0 && (
+                        <tr className="border-t-2 border-[#0B3B2E] bg-[#0B3B2E]">
+                          <td className="sticky left-0 z-10 w-[88px] min-w-[88px] bg-[#0B3B2E] px-3 py-3 text-xs font-bold text-white">Totals</td>
+                          <td className="sticky left-[88px] z-10 w-[155px] min-w-[155px] border-r border-white/10 bg-[#0B3B2E] px-3 py-3"></td>
+                          <td className="px-3 py-3 text-right text-xs font-semibold text-white/80">{currency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
+                          <td className="border-l border-white/10 px-3 py-3 text-right text-xs font-semibold text-white">{currency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
+                          {hasInvoiceVatColumn && (
+                            <td className="px-3 py-3 text-right text-xs font-semibold text-white/80">{currency(totals.invoicedTax ?? summary.totalInvoiceVatInvoiced ?? 0)}</td>
+                          )}
+                          <td className="px-3 py-3 text-right text-xs font-bold text-white">{currency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
+                          {hasInvoiceVatColumn && (
+                            <td className="px-3 py-3 text-right text-xs font-semibold text-white/80">{currency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>
+                          )}
+                          {statementColumns.map((column) => (
+                            <React.Fragment key={`foot-${column.key}`}>
+                              <td className="border-l border-white/10 px-3 py-3 text-right text-xs font-semibold text-white">{currency(Number(column?.invoiced || 0))}</td>
+                              <td className="px-3 py-3 text-right text-xs font-bold text-white">{currency(Number(column?.paid || 0))}</td>
+                            </React.Fragment>
+                          ))}
+                          <td className="border-l border-white/10 px-3 py-3 text-right text-xs font-bold text-white">{currency(totals.totalPaid ?? 0)}</td>
+                          <td className="px-3 py-3 text-right text-xs font-bold text-white">{currency(totals.closingBalance ?? summary.closingBalance ?? 0)}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
 
+                  {/* Detail sections */}
                   {hasWorkspaceDetailSections && (
-                    <div className="space-y-5 border-t border-slate-200 px-5 py-4">
+                    <div className="space-y-5 border-t border-slate-200 bg-slate-50 px-5 py-5">
                       {depositSettlementRows.length > 0 && (
                         <div>
-                          <h4 className="mb-3 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
+                          <h4 className="mb-3 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
                             Deposit Remittance
                           </h4>
-                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                            <div className="rounded-lg bg-emerald-50 px-4 py-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                                Added to landlord
-                              </p>
-                              <p className="mt-2 text-lg font-semibold text-emerald-900">
-                                {currency(depositSettlementTotals.additions)}
-                              </p>
+                          <div className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            <div className="rounded-xl bg-emerald-50 px-4 py-3.5">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Added to landlord</p>
+                              <p className="mt-1.5 text-base font-bold text-emerald-900">{currency(depositSettlementTotals.additions)}</p>
                             </div>
-                            <div className="rounded-lg bg-amber-50 px-4 py-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-                                Direct receipt offsets
-                              </p>
-                              <p className="mt-2 text-lg font-semibold text-amber-900">
-                                {currency(depositSettlementTotals.offsets)}
-                              </p>
+                            <div className="rounded-xl bg-amber-50 px-4 py-3.5">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600">Direct receipt offsets</p>
+                              <p className="mt-1.5 text-base font-bold text-amber-900">{currency(depositSettlementTotals.offsets)}</p>
                             </div>
-                            <div className="rounded-lg bg-slate-50 px-4 py-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                                Net settlement impact
-                              </p>
-                              <p className="mt-2 text-lg font-semibold text-slate-900">
-                                {currency(depositSettlementTotals.netImpact)}
-                              </p>
+                            <div className="rounded-xl bg-white px-4 py-3.5 border border-slate-200">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Net settlement impact</p>
+                              <p className="mt-1.5 text-base font-bold text-slate-900">{currency(depositSettlementTotals.netImpact)}</p>
                             </div>
                           </div>
-
-                          <div className="mt-4 space-y-2">
+                          <div className="space-y-1.5">
                             {depositSettlementAdditionRows.map((item, index) => (
-                              <div key={`deposit-settlement-add-${index}`} className="flex items-center justify-between rounded-lg bg-emerald-50/70 px-4 py-3">
+                              <div key={`deposit-settlement-add-${index}`} className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/70 px-4 py-2.5">
                                 <div>
-                                  <p className="text-slate-700">{item.description || "Deposit remittance"}</p>
-                                  <p className="text-xs text-slate-500">{item.holder === "landlord" ? "Landlord-held deposit" : "Deposit settlement"}</p>
+                                  <p className="text-xs text-slate-700">{item.description || "Deposit remittance"}</p>
+                                  <p className="mt-0.5 text-[10px] text-slate-400">{item.holder === "landlord" ? "Landlord-held deposit" : "Deposit settlement"}</p>
                                 </div>
-                                <span className="font-medium text-emerald-900">{currency(item.amount)}</span>
+                                <span className="text-xs font-semibold text-emerald-800">{currency(item.amount)}</span>
                               </div>
                             ))}
                             {depositSettlementOffsetRows.map((item, index) => (
-                              <div key={`deposit-settlement-offset-${index}`} className="flex items-center justify-between rounded-lg bg-amber-50/80 px-4 py-3">
+                              <div key={`deposit-settlement-offset-${index}`} className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50/70 px-4 py-2.5">
                                 <div>
-                                  <p className="text-slate-700">{item.description || "Deposit offset"}</p>
-                                  <p className="text-xs text-slate-500">Shown as both addition and deduction for direct landlord deposit receipts</p>
+                                  <p className="text-xs text-slate-700">{item.description || "Deposit offset"}</p>
+                                  <p className="mt-0.5 text-[10px] text-slate-400">Shown as both addition and deduction for direct landlord deposit receipts</p>
                                 </div>
-                                <span className="font-medium text-amber-900">{currency(item.amount)}</span>
+                                <span className="text-xs font-semibold text-amber-800">{currency(item.amount)}</span>
                               </div>
                             ))}
                           </div>
@@ -1814,60 +1885,37 @@ const Statements = () => {
 
                       {broughtForwardCreditApplicationRows.length > 0 && (
                         <div>
-                          <h4 className="mb-3 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
+                          <h4 className="mb-3 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
                             Brought Forward Credits Applied
                           </h4>
-                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                            <div className="rounded-lg bg-sky-50 px-4 py-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
-                                Total applied
-                              </p>
-                              <p className="mt-2 text-lg font-semibold text-sky-900">
-                                {currency(broughtForwardCreditApplicationTotals.totalApplied || 0)}
-                              </p>
+                          <div className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            <div className="rounded-xl bg-sky-50 px-4 py-3.5">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-sky-600">Total applied</p>
+                              <p className="mt-1.5 text-base font-bold text-sky-900">{currency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</p>
                             </div>
-                            <div className="rounded-lg bg-slate-50 px-4 py-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                                Rent portion
-                              </p>
-                              <p className="mt-2 text-lg font-semibold text-slate-900">
-                                {currency(broughtForwardCreditApplicationTotals.rentApplied || 0)}
-                              </p>
-                            </div>
-                            <div className="rounded-lg bg-slate-50 px-4 py-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                                Utility portion
-                              </p>
-                              <p className="mt-2 text-lg font-semibold text-slate-900">
-                                {currency(broughtForwardCreditApplicationTotals.utilityApplied || 0)}
-                              </p>
-                            </div>
-                            <div className="rounded-lg bg-slate-50 px-4 py-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                                VAT portion
-                              </p>
-                              <p className="mt-2 text-lg font-semibold text-slate-900">
-                                {currency(broughtForwardCreditApplicationTotals.taxApplied || 0)}
-                              </p>
-                            </div>
+                            {[
+                              { label: "Rent portion", val: broughtForwardCreditApplicationTotals.rentApplied || 0 },
+                              { label: "Utility portion", val: broughtForwardCreditApplicationTotals.utilityApplied || 0 },
+                              { label: "VAT portion", val: broughtForwardCreditApplicationTotals.taxApplied || 0 },
+                            ].map(({ label, val }) => (
+                              <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-3.5">
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+                                <p className="mt-1.5 text-base font-bold text-slate-900">{currency(val)}</p>
+                              </div>
+                            ))}
                           </div>
-
-                          <div className="mt-4 space-y-2">
+                          <div className="space-y-1.5">
                             {broughtForwardCreditApplicationRows.map((item, index) => (
-                              <div key={`bf-credit-${index}`} className="rounded-lg bg-sky-50/60 px-4 py-3">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-slate-700">
-                                      {item.description || "Brought forward credit applied"}
-                                    </p>
-                                    <p className="mt-1 text-xs text-slate-500">
-                                      Receipt {item.receiptReference || "-"}
-                                      {item.chargeReference ? ` • Applied to ${item.chargeReference}` : ""}
-                                      {item.unit ? ` • Unit ${item.unit}` : ""}
-                                    </p>
-                                  </div>
-                                  <span className="font-medium text-sky-900">{currency(item.amount)}</span>
+                              <div key={`bf-credit-${index}`} className="flex items-start justify-between gap-3 rounded-lg border border-sky-100 bg-sky-50/60 px-4 py-2.5">
+                                <div>
+                                  <p className="text-xs text-slate-700">{item.description || "Brought forward credit applied"}</p>
+                                  <p className="mt-0.5 text-[10px] text-slate-400">
+                                    Receipt {item.receiptReference || "—"}
+                                    {item.chargeReference ? ` · Applied to ${item.chargeReference}` : ""}
+                                    {item.unit ? ` · Unit ${item.unit}` : ""}
+                                  </p>
                                 </div>
+                                <span className="flex-shrink-0 text-xs font-semibold text-sky-800">{currency(item.amount)}</span>
                               </div>
                             ))}
                           </div>
@@ -1876,39 +1924,37 @@ const Statements = () => {
 
                       {depositMemoRows.length > 0 && (
                         <div>
-                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
+                          <h4 className="mb-1 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
                             Deposit Memorandum
                           </h4>
-                          <p className="mb-3 text-xs text-slate-500">
-                            Displayed as memorandum balances. Held deposit positions are shown as positive values for readability and remain excluded from settlement.
+                          <p className="mb-3 text-[11px] text-slate-500">
+                            Held deposit positions shown as positive values for readability — excluded from settlement.
                           </p>
-                          <div className="overflow-x-auto rounded-xl border border-slate-200">
-                            <table className="min-w-full divide-y divide-slate-200 text-sm">
+                          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                            <table className="min-w-full divide-y divide-slate-100 text-xs">
                               <thead className="bg-slate-50">
                                 <tr>
-                                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Holder</th>
-                                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Opening</th>
-                                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Billed / Adj.</th>
-                                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Received</th>
-                                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Closing</th>
+                                  {["Holder", "Opening", "Billed / Adj.", "Received", "Closing"].map((h, i) => (
+                                    <th key={h} className={`px-4 py-2.5 ${i === 0 ? "text-left" : "text-right"} font-semibold text-slate-600`}>{h}</th>
+                                  ))}
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-200 bg-white">
+                              <tbody className="divide-y divide-slate-100 bg-white">
                                 {depositMemoRows.map((item, index) => (
-                                  <tr key={`deposit-memo-${index}`}>
-                                    <td className="px-4 py-3 text-slate-700">{item.label || item.key || "Deposit memo"}</td>
-                                    <td className="px-4 py-3 text-right text-slate-700">{depositMemoCurrency(item.openingBalance)}</td>
-                                    <td className="px-4 py-3 text-right text-slate-700">{depositMemoCurrency(item.billed)}</td>
-                                    <td className="px-4 py-3 text-right text-slate-700">{depositMemoCurrency(item.received)}</td>
-                                    <td className="px-4 py-3 text-right font-medium text-slate-900">{depositMemoCurrency(item.closingBalance)}</td>
+                                  <tr key={`deposit-memo-${index}`} className="hover:bg-slate-50/60 transition-colors">
+                                    <td className="px-4 py-2.5 text-slate-700">{item.label || item.key || "Deposit memo"}</td>
+                                    <td className="px-4 py-2.5 text-right text-slate-600">{depositMemoCurrency(item.openingBalance)}</td>
+                                    <td className="px-4 py-2.5 text-right text-slate-600">{depositMemoCurrency(item.billed)}</td>
+                                    <td className="px-4 py-2.5 text-right text-slate-600">{depositMemoCurrency(item.received)}</td>
+                                    <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{depositMemoCurrency(item.closingBalance)}</td>
                                   </tr>
                                 ))}
-                                <tr className="bg-slate-50">
-                                  <td className="px-4 py-3 font-semibold text-slate-700">Total</td>
-                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{depositMemoCurrency(depositMemoTotals.openingBalance)}</td>
-                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{depositMemoCurrency(depositMemoTotals.billed)}</td>
-                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{depositMemoCurrency(depositMemoTotals.received)}</td>
-                                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{depositMemoCurrency(depositMemoTotals.closingBalance)}</td>
+                                <tr className="bg-slate-50 font-semibold">
+                                  <td className="px-4 py-2.5 text-slate-700">Total</td>
+                                  <td className="px-4 py-2.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.openingBalance)}</td>
+                                  <td className="px-4 py-2.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.billed)}</td>
+                                  <td className="px-4 py-2.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.received)}</td>
+                                  <td className="px-4 py-2.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.closingBalance)}</td>
                                 </tr>
                               </tbody>
                             </table>
@@ -1918,12 +1964,12 @@ const Statements = () => {
 
                       {nonDepositExpenseRows.length > 0 && (
                         <div>
-                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
+                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
                             Deductions / Expenses
                           </h4>
-                          <div className="overflow-hidden rounded-lg border border-slate-200">
+                          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                             {nonDepositExpenseRows.map((item, index) => (
-                              <div key={`expense-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2 last:border-0 odd:bg-white even:bg-slate-50/60">
+                              <div key={`expense-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-slate-50/60">
                                 <span className="text-xs text-slate-700">{item.description || item.name || "Expense"}</span>
                                 <span className="text-xs font-semibold text-slate-900">{currency(item.amount)}</span>
                               </div>
@@ -1934,12 +1980,12 @@ const Statements = () => {
 
                       {nonDepositAdditionRows.length > 0 && (
                         <div>
-                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
+                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
                             Additions
                           </h4>
-                          <div className="overflow-hidden rounded-lg border border-slate-200">
+                          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                             {nonDepositAdditionRows.map((item, index) => (
-                              <div key={`addition-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2 last:border-0 odd:bg-white even:bg-slate-50/60">
+                              <div key={`addition-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-slate-50/60">
                                 <span className="text-xs text-slate-700">{item.description || item.name || "Addition"}</span>
                                 <span className="text-xs font-semibold text-emerald-700">{currency(item.amount)}</span>
                               </div>
@@ -1950,13 +1996,13 @@ const Statements = () => {
 
                       {earlyPayoutRows.length > 0 && (
                         <div>
-                          <h4 className="mb-2 border-l-2 border-amber-500 pl-2 text-xs font-bold uppercase tracking-wide text-amber-700">
+                          <h4 className="mb-1 border-l-2 border-amber-400 pl-2.5 text-[10px] font-bold uppercase tracking-widest text-amber-700">
                             Early Payouts to Landlord
                           </h4>
-                          <p className="mb-2 text-xs text-slate-500">Advances already paid to the landlord against future remittances. Deducted from the settlement.</p>
-                          <div className="overflow-hidden rounded-lg border border-amber-200">
+                          <p className="mb-2 text-[11px] text-slate-500">Advances already paid against future remittances. Deducted from settlement.</p>
+                          <div className="overflow-hidden rounded-xl border border-amber-200 bg-white">
                             {earlyPayoutRows.map((item, index) => (
-                              <div key={`early-payout-${index}`} className="flex items-center justify-between border-b border-amber-100 px-4 py-2 last:border-0 odd:bg-white even:bg-amber-50/40">
+                              <div key={`early-payout-${index}`} className="flex items-center justify-between border-b border-amber-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-amber-50/40">
                                 <div>
                                   <span className="text-xs text-slate-700">{item.description || "Early payout"}</span>
                                   {item.date && <span className="ml-2 text-[10px] text-slate-400">{new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>}
@@ -1964,7 +2010,7 @@ const Statements = () => {
                                 <span className="text-xs font-semibold text-amber-700">({currency(item.amount)})</span>
                               </div>
                             ))}
-                            <div className="flex items-center justify-between border-t border-amber-200 bg-amber-50 px-4 py-2">
+                            <div className="flex items-center justify-between border-t border-amber-200 bg-amber-50 px-4 py-2.5">
                               <span className="text-xs font-bold text-amber-800">Total early payouts</span>
                               <span className="text-xs font-bold text-amber-800">({currency(earlyPayoutRows.reduce((s, r) => s + Number(r.amount || 0), 0))})</span>
                             </div>
@@ -1974,21 +2020,21 @@ const Statements = () => {
 
                       {advanceRecoveryRows.length > 0 && (
                         <div>
-                          <h4 className="mb-2 border-l-2 border-red-500 pl-2 text-xs font-bold uppercase tracking-wide text-red-700">
+                          <h4 className="mb-1 border-l-2 border-red-400 pl-2.5 text-[10px] font-bold uppercase tracking-widest text-red-700">
                             Advance Recoveries
                           </h4>
-                          <p className="mb-2 text-xs text-slate-500">Landlord advances being recovered through this statement period.</p>
-                          <div className="overflow-hidden rounded-lg border border-red-200">
+                          <p className="mb-2 text-[11px] text-slate-500">Landlord advances being recovered through this statement period.</p>
+                          <div className="overflow-hidden rounded-xl border border-red-200 bg-white">
                             {advanceRecoveryRows.map((item, index) => (
-                              <div key={`advance-recovery-${index}`} className="flex items-center justify-between border-b border-red-100 px-4 py-2 last:border-0 odd:bg-white even:bg-red-50/40">
+                              <div key={`advance-recovery-${index}`} className="flex items-center justify-between border-b border-red-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-red-50/40">
                                 <div>
                                   <span className="text-xs text-slate-700">{item.description || "Advance recovery"}</span>
                                   {item.date && <span className="ml-2 text-[10px] text-slate-400">{new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>}
                                 </div>
-                                <span className="text-xs font-semibold text-red-700">({currency(item.amount)})</span>
+                                <span className="text-xs font-semibold text-red-600">({currency(item.amount)})</span>
                               </div>
                             ))}
-                            <div className="flex items-center justify-between border-t border-red-200 bg-red-50 px-4 py-2">
+                            <div className="flex items-center justify-between border-t border-red-200 bg-red-50 px-4 py-2.5">
                               <span className="text-xs font-bold text-red-800">Total advance recoveries</span>
                               <span className="text-xs font-bold text-red-800">({currency(advanceRecoveryRows.reduce((s, r) => s + Number(r.amount || 0), 0))})</span>
                             </div>
@@ -1998,15 +2044,13 @@ const Statements = () => {
 
                       {directToLandlordRows.length > 0 && (
                         <div>
-                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2 text-xs font-bold uppercase tracking-wide text-[#0B3B2E]">
+                          <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
                             Direct to Landlord Receipts
                           </h4>
-                          <div className="overflow-hidden rounded-lg border border-slate-200">
+                          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                             {directToLandlordRows.map((item, index) => (
-                              <div key={`direct-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2 last:border-0 odd:bg-white even:bg-slate-50/60">
-                                <span className="text-xs text-slate-700">
-                                  {item.description || item.referenceNumber || item.receiptNumber || "Direct receipt"}
-                                </span>
+                              <div key={`direct-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-slate-50/60">
+                                <span className="text-xs text-slate-700">{item.description || item.referenceNumber || item.receiptNumber || "Direct receipt"}</span>
                                 <span className="text-xs font-semibold text-slate-900">{currency(item.amount)}</span>
                               </div>
                             ))}
@@ -2015,33 +2059,43 @@ const Statements = () => {
                       )}
                     </div>
                   )}
-                  </div>{/* end scroll area */}
+                </div>
 
-                  <div className="flex-shrink-0 grid grid-cols-2 gap-px border-t border-slate-200 bg-slate-100 md:grid-cols-4">
-                    <div className="bg-white px-4 py-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Rent Paid</p>
-                      <p className="mt-1 text-sm font-bold text-slate-900">{currency(totals.rentPaid)}</p>
-                    </div>
-                    <div className="bg-white px-4 py-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Utilities Paid</p>
-                      <p className="mt-1 text-sm font-bold text-slate-900">{currency(totals.utilityPaid)}</p>
-                      {hasInvoiceVatColumn ? (
+                {/* KPI footer */}
+                <div className="flex-shrink-0 border-t border-slate-200 bg-white shadow-[0_-2px_6px_rgba(0,0,0,0.05)]">
+                  <div className="grid grid-cols-2 divide-x divide-slate-100 md:grid-cols-4">
+                    <div className="px-5 py-3.5">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Rent Collected</p>
+                      <p className="mt-1.5 text-sm font-bold text-slate-900">{currency(totals.rentPaid)}</p>
+                      {hasInvoiceVatColumn && (
                         <p className="mt-0.5 text-[10px] text-slate-400">VAT: {currency(totalInvoiceVatReceived)}</p>
-                      ) : null}
+                      )}
                     </div>
-                    <div className="bg-white px-4 py-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Expenses</p>
-                      <p className="mt-1 text-sm font-bold text-slate-900">{currency(totals.expenses)}</p>
+                    <div className="px-5 py-3.5">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Utilities Paid</p>
+                      <p className="mt-1.5 text-sm font-bold text-slate-900">{currency(totals.utilityPaid)}</p>
                     </div>
-                    <div className={`px-4 py-3 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
-                      <p className={`text-[10px] font-semibold uppercase tracking-wide ${settlement.isNegative ? "text-red-500" : "text-green-200/70"}`}>{settlement.label}</p>
-                      <p className={`mt-1 text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</p>
+                    <div className="px-5 py-3.5">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Expenses</p>
+                      <p className={`mt-1.5 text-sm font-bold ${Number(totals.expenses || 0) > 0 ? "text-amber-700" : "text-slate-900"}`}>
+                        {currency(totals.expenses)}
+                      </p>
+                    </div>
+                    <div className={`px-5 py-3.5 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
+                      <p className={`text-[9px] font-bold uppercase tracking-widest ${settlement.isNegative ? "text-red-500" : "text-green-200/60"}`}>
+                        {settlement.label}
+                      </p>
+                      <p className={`mt-1.5 text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>
+                        {currency(settlement.amount)}
+                      </p>
                     </div>
                   </div>
                 </div>
-              )}
-            </>
-          )}
+              </div>
+
+            )}
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

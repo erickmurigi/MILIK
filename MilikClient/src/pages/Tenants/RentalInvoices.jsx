@@ -542,6 +542,18 @@ const isInvoiceInBillingPeriod = (dateRef, month, year) => {
   return dt.getMonth() === Number(month) && dt.getFullYear() === Number(year);
 };
 
+const isInvoiceTakeOnBalance = (invoice = {}) => {
+  const metadata = invoice?.metadata || {};
+  return (
+    metadata?.isTakeOnBalance === true ||
+    metadata?.takeOnBalance === true ||
+    metadata?.openingBalance === true ||
+    ["tenant_take_on_balance", "tenant_opening_balance", "opening_balance"].includes(
+      String(metadata?.sourceTransactionType || "").toLowerCase()
+    )
+  );
+};
+
 const getActiveInvoicesForTenantPeriod = ({ invoices = [], tenantId, unitId = null, month, year, periodKey = "" }) =>
   invoices.filter((invoice) => {
     const invoiceTenantId = String(invoice?.tenant?._id || invoice?.tenant || "");
@@ -551,6 +563,7 @@ const getActiveInvoicesForTenantPeriod = ({ invoices = [], tenantId, unitId = nu
       if (invoiceUnitId !== String(unitId)) return false;
     }
     if (!isActiveInvoiceStatus(invoice?.status)) return false;
+    if (isInvoiceTakeOnBalance(invoice)) return false;
 
     const invoicePeriodKey = String(invoice?.metadata?.periodKey || "").trim();
     if (periodKey && invoicePeriodKey) {
@@ -1468,14 +1481,15 @@ const getTenantPricing = (tenant) => {
       return sum + (Number(utility?.unitCharge || utility?.amount || 0) || 0);
     }, 0);
 
-    const billableUtilityLabels = context.utilityRows
+    const useTenantUtilities = utilitiesFromTenant > 0 && assignedUnitContexts.length === 1;
+    const billableUtilityLabels = (useTenantUtilities ? tenantUtilities : context.utilityRows)
       .filter((item) => item?.isIncluded !== true)
       .map((item) => extractUtilityLabel(item))
       .filter(Boolean);
 
     return {
       ...context,
-      utilityAmount: utilitiesFromTenant > 0 && assignedUnitContexts.length === 1 ? utilitiesFromTenant : utilitiesFromUnit,
+      utilityAmount: useTenantUtilities ? utilitiesFromTenant : utilitiesFromUnit,
       utilityLabel:
         billableUtilityLabels.length === 1 ? billableUtilityLabels[0] : billableUtilityLabels.length > 1 ? "Utilities" : "",
     };

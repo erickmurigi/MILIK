@@ -413,6 +413,7 @@ const findConflictingMonthlyInvoice = ({ existingInvoices = [], category, metada
   return (
     existingInvoices.find((invoice) => {
       if (!isActiveInvoiceStatus(invoice?.status)) return false;
+      if (isTakeOnBalanceInvoice(invoice)) return false;
 
       const existingBucket = getInvoiceDuplicateBucket({
         category: invoice?.category,

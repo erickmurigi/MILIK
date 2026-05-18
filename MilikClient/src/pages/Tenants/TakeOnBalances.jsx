@@ -322,14 +322,22 @@ function TakeOnBalanceModal({
               {form.billItem === "utility" && (
                 <div>
                   <label className="mb-2 block text-[10px] font-semibold text-slate-700">
-                    Utility Name
+                    Utility Type
                   </label>
-                  <input
+                  <select
                     value={form.utilityLabel}
                     onChange={(e) => setForm((prev) => ({ ...prev, utilityLabel: e.target.value }))}
-                    placeholder="e.g. Water, Electricity, Garbage"
                     className="w-full rounded-xl border border-slate-300 px-1.5 py-1 text-[10px] shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                  />
+                  >
+                    <option value="">Select utility type</option>
+                    <option value="Water">Water</option>
+                    <option value="Electricity">Electricity</option>
+                    <option value="Gas">Gas</option>
+                    <option value="Garbage">Garbage</option>
+                    <option value="Internet">Internet</option>
+                    <option value="Security">Security</option>
+                    <option value="Service Charge">Service Charge</option>
+                  </select>
                 </div>
               )}
 
