@@ -202,37 +202,44 @@ export const repostInvoicesToLedger = async (req, res) => {
           status: "approved",
         });
 
-        const incomeEntry = await postEntry({
-          business: invoice.business,
-          property: invoice.property,
-          landlord: invoice.landlord,
-          tenant: invoice.tenant,
-          unit: invoice.unit,
-          sourceTransactionType: "invoice",
-          sourceTransactionId: String(invoice._id),
-          transactionDate: txDate,
-          statementPeriodStart: monthStart,
-          statementPeriodEnd: monthEnd,
-          category: invoice.category,
-          amount: Math.abs(Number(invoice.amount || 0)),
-          direction: "credit",
-          debit: 0,
-          credit: Math.abs(Number(invoice.amount || 0)),
-          accountId: invoice.chartAccount,
-          journalGroupId,
-          payer: "tenant",
-          receiver: "manager",
-          notes: `Rebuilt income leg for invoice ${invoice.invoiceNumber}`,
-          metadata: {
-            includeInLandlordStatement: false,
-            includeInCategoryTotals: false,
-            rebuiltByDiagnostics: true,
-          },
-          createdBy: userId,
-          approvedBy: userId,
-          approvedAt: new Date(),
-          status: "approved",
-        });
+        let incomeEntry;
+        try {
+          incomeEntry = await postEntry({
+            business: invoice.business,
+            property: invoice.property,
+            landlord: invoice.landlord,
+            tenant: invoice.tenant,
+            unit: invoice.unit,
+            sourceTransactionType: "invoice",
+            sourceTransactionId: String(invoice._id),
+            transactionDate: txDate,
+            statementPeriodStart: monthStart,
+            statementPeriodEnd: monthEnd,
+            category: invoice.category,
+            amount: Math.abs(Number(invoice.amount || 0)),
+            direction: "credit",
+            debit: 0,
+            credit: Math.abs(Number(invoice.amount || 0)),
+            accountId: invoice.chartAccount,
+            journalGroupId,
+            payer: "tenant",
+            receiver: "manager",
+            notes: `Rebuilt income leg for invoice ${invoice.invoiceNumber}`,
+            metadata: {
+              includeInLandlordStatement: false,
+              includeInCategoryTotals: false,
+              rebuiltByDiagnostics: true,
+            },
+            createdBy: userId,
+            approvedBy: userId,
+            approvedAt: new Date(),
+            status: "approved",
+          });
+        } catch (incomeErr) {
+          // Income leg failed — void the receivable leg to prevent an orphan debit entry
+          await FinancialLedgerEntry.findByIdAndUpdate(receivableEntry._id, { $set: { status: "void" } });
+          throw incomeErr;
+        }
 
         touchedAccountIds.add(String(receivableEntry.accountId || ""));
         touchedAccountIds.add(String(incomeEntry.accountId || ""));
@@ -282,6 +289,106 @@ export const recomputeChartBalances = async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Balance recompute failed" });
+  }
+};
+
+export const checkLedgerBalance = async (req, res) => {
+  try {
+    const businessId = req.user?.company;
+    if (!businessId) {
+      return res.status(400).json({ error: "Business context required" });
+    }
+
+    const STATUSES = ["approved", "reversed"];
+
+    // Overall debit vs credit totals
+    const [totals] = await FinancialLedgerEntry.aggregate([
+      { $match: { business: businessId, status: { $in: STATUSES } } },
+      {
+        $group: {
+          _id: null,
+          totalDebit: {
+            $sum: {
+              $cond: [{ $gt: ["$debit", 0] }, "$debit", {
+                $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] }, { $ifNull: ["$amount", 0] }, 0],
+              }],
+            },
+          },
+          totalCredit: {
+            $sum: {
+              $cond: [{ $gt: ["$credit", 0] }, "$credit", {
+                $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] }, { $ifNull: ["$amount", 0] }, 0],
+              }],
+            },
+          },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const totalDebit = Number(totals?.totalDebit || 0);
+    const totalCredit = Number(totals?.totalCredit || 0);
+    const difference = totalDebit - totalCredit;
+    const balanced = Math.abs(difference) < 0.005;
+
+    // Find unbalanced journal groups
+    const groupResults = await FinancialLedgerEntry.aggregate([
+      { $match: { business: businessId, status: { $in: STATUSES }, journalGroupId: { $ne: null } } },
+      {
+        $group: {
+          _id: "$journalGroupId",
+          sourceTransactionType: { $first: "$sourceTransactionType" },
+          sourceTransactionId: { $first: "$sourceTransactionId" },
+          firstEntry: { $min: "$transactionDate" },
+          debitSum: {
+            $sum: {
+              $cond: [{ $gt: ["$debit", 0] }, "$debit", {
+                $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] }, { $ifNull: ["$amount", 0] }, 0],
+              }],
+            },
+          },
+          creditSum: {
+            $sum: {
+              $cond: [{ $gt: ["$credit", 0] }, "$credit", {
+                $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] }, { $ifNull: ["$amount", 0] }, 0],
+              }],
+            },
+          },
+          entryCount: { $sum: 1 },
+        },
+      },
+      {
+        $addFields: { diff: { $subtract: ["$debitSum", "$creditSum"] } },
+      },
+      {
+        $match: { diff: { $not: { $gt: -0.005, $lt: 0.005 } } },
+      },
+      { $sort: { firstEntry: -1 } },
+      { $limit: 50 },
+    ]);
+
+    return res.json({
+      success: true,
+      summary: {
+        totalDebit,
+        totalCredit,
+        difference,
+        balanced,
+        entryCount: totals?.count || 0,
+      },
+      unbalancedGroups: groupResults.map((g) => ({
+        journalGroupId: g._id,
+        sourceTransactionType: g.sourceTransactionType,
+        sourceTransactionId: g.sourceTransactionId,
+        date: g.firstEntry,
+        debit: g.debitSum,
+        credit: g.creditSum,
+        difference: g.diff,
+        entryCount: g.entryCount,
+      })),
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Ledger balance check failed" });
   }
 };
 

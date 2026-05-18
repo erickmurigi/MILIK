@@ -606,8 +606,156 @@ const BalanceSheetReport = () => {
     </div>
   );
 
+  const preparedBy = currentUser?.name || currentUser?.username || currentUser?.email || "System";
+
   return (
     <DashboardLayout lockContentScroll>
+      {/* ── Native print (Ctrl+P) fallback ─────────────────────────── */}
+      <div className="print-only-wrapper">
+        <style>{`
+          .bs-print-header { border-bottom: 3px solid #0B3B2E; padding-bottom: 10px; margin-bottom: 16px; }
+          .bs-print-company { font-size: 18px; font-weight: 900; color: #0B3B2E; margin: 0 0 2px; }
+          .bs-print-title { font-size: 14px; font-weight: 700; color: #374151; margin: 0 0 2px; }
+          .bs-print-meta { font-size: 11px; color: #6b7280; margin: 0; }
+          .bs-print-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+          .bs-print-metric { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; background: #f9fafb; }
+          .bs-print-metric-label { font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
+          .bs-print-metric-value { font-size: 13px; font-weight: 900; color: #111827; }
+          .bs-print-metric-value.bad { color: #DC2626; }
+          .bs-print-metric-value.ok { color: #0B3B2E; }
+          .bs-print-metric-value.liab { color: #b91c1c; }
+          .bs-print-metric-value.eq { color: #15803d; }
+          .bs-print-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+          .bs-print-right-col { display: flex; flex-direction: column; gap: 12px; }
+          .bs-print-card { border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; margin-bottom: 0; }
+          .bs-print-card-header { background: #0B3B2E; color: #fff; padding: 7px 10px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+          .bs-print-section-label { font-size: 10px; font-weight: 800; color: #374151; padding: 6px 10px 3px; border-bottom: 1px solid #f3f4f6; display: flex; justify-content: space-between; }
+          .bs-print-row { display: flex; justify-content: space-between; padding: 3px 10px 3px 18px; font-size: 10px; color: #374151; font-weight: 600; }
+          .bs-print-total-row { display: flex; justify-content: space-between; padding: 6px 10px; font-size: 11px; font-weight: 900; border-top: 2px solid #e5e7eb; background: #f9fafb; }
+          .bs-print-summary { border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; }
+          .bs-print-summary-header { background: #374151; color: #fff; padding: 7px 10px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+          .bs-print-summary-row { display: flex; justify-content: space-between; padding: 5px 10px; font-size: 11px; border-bottom: 1px solid #f3f4f6; }
+          .bs-print-summary-row.diff { font-weight: 900; border-top: 2px solid #e5e7eb; border-bottom: none; }
+          .bs-print-footer { margin-top: 10px; font-size: 9px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 6px; display: flex; justify-content: space-between; }
+        `}</style>
+
+        <div className="bs-print-header">
+          <p className="bs-print-company">{businessName}</p>
+          <p className="bs-print-title">Balance Sheet (Statement of Financial Position)</p>
+          <p className="bs-print-meta">As at {filters.asOfDate} &nbsp;|&nbsp; Generated: {new Date().toLocaleDateString()}</p>
+        </div>
+
+        <div className="bs-print-metrics">
+          <div className="bs-print-metric">
+            <div className="bs-print-metric-label">Total Assets</div>
+            <div className="bs-print-metric-value ok">KES {formatSignedMoney(report.summary?.totalAssets)}</div>
+          </div>
+          <div className="bs-print-metric">
+            <div className="bs-print-metric-label">Total Liabilities</div>
+            <div className="bs-print-metric-value liab">KES {formatSignedMoney(report.summary?.totalLiabilities)}</div>
+          </div>
+          <div className="bs-print-metric">
+            <div className="bs-print-metric-label">Total Equity</div>
+            <div className="bs-print-metric-value eq">KES {formatSignedMoney(report.summary?.totalEquity)}</div>
+          </div>
+          <div className="bs-print-metric">
+            <div className="bs-print-metric-label">Status</div>
+            <div className={`bs-print-metric-value ${report.summary?.balanced ? "ok" : "bad"}`}>
+              {report.summary?.balanced ? "Balanced" : "Out of Balance"}
+            </div>
+          </div>
+        </div>
+
+        <div className="bs-print-cols">
+          {/* Assets */}
+          <div className="bs-print-card">
+            <div className="bs-print-card-header">Assets</div>
+            {(report.assets?.sections || []).map((section) => (
+              <div key={section.label}>
+                <div className="bs-print-section-label">
+                  <span>{section.label}</span>
+                  <span>KES {formatSignedMoney(section.total)}</span>
+                </div>
+                {(section.rows || []).map((row) => (
+                  <div key={row._id || row.code} className="bs-print-row">
+                    <span><strong>{row.code}</strong> {row.name}</span>
+                    <span>KES {formatSignedMoney(row.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div className="bs-print-total-row">
+              <span>Total Assets</span>
+              <span>KES {formatSignedMoney(report.summary?.totalAssets)}</span>
+            </div>
+          </div>
+
+          {/* Liabilities + Equity */}
+          <div className="bs-print-right-col">
+            <div className="bs-print-card">
+              <div className="bs-print-card-header">Liabilities</div>
+              {(report.liabilities?.sections || []).map((section) => (
+                <div key={section.label}>
+                  <div className="bs-print-section-label">
+                    <span>{section.label}</span>
+                    <span>KES {formatSignedMoney(section.total)}</span>
+                  </div>
+                  {(section.rows || []).map((row) => (
+                    <div key={row._id || row.code} className="bs-print-row">
+                      <span><strong>{row.code}</strong> {row.name}</span>
+                      <span>KES {formatSignedMoney(row.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <div className="bs-print-total-row" style={{ color: "#b91c1c" }}>
+                <span>Total Liabilities</span>
+                <span>KES {formatSignedMoney(report.summary?.totalLiabilities)}</span>
+              </div>
+            </div>
+
+            <div className="bs-print-card">
+              <div className="bs-print-card-header">Equity</div>
+              {(report.equity?.sections || []).map((section) => (
+                <div key={section.label}>
+                  <div className="bs-print-section-label">
+                    <span>{section.label}</span>
+                    <span>KES {formatSignedMoney(section.total)}</span>
+                  </div>
+                  {(section.rows || []).map((row) => (
+                    <div key={row._id || row.code} className="bs-print-row">
+                      <span><strong>{row.code}</strong> {row.name}</span>
+                      <span>KES {formatSignedMoney(row.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <div className="bs-print-total-row" style={{ color: "#15803d" }}>
+                <span>Total Equity</span>
+                <span>KES {formatSignedMoney(report.summary?.totalEquity)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bs-print-summary">
+          <div className="bs-print-summary-header">Statement Summary</div>
+          <div className="bs-print-summary-row"><span>Total Assets</span><span>KES {formatSignedMoney(report.summary?.totalAssets)}</span></div>
+          <div className="bs-print-summary-row"><span>Total Liabilities</span><span>KES {formatSignedMoney(report.summary?.totalLiabilities)}</span></div>
+          <div className="bs-print-summary-row"><span>Total Equity</span><span>KES {formatSignedMoney(report.summary?.totalEquity)}</span></div>
+          <div className="bs-print-summary-row"><span>Liabilities + Equity</span><span>KES {formatSignedMoney(report.summary?.totalLiabilitiesAndEquity)}</span></div>
+          <div className={`bs-print-summary-row diff`} style={{ color: report.summary?.balanced ? "#0B3B2E" : "#DC2626" }}>
+            <span>Difference</span>
+            <span>KES {formatSignedMoney(report.summary?.difference)}</span>
+          </div>
+        </div>
+
+        <div className="bs-print-footer">
+          <span>Basis: {report.reportBasis || "Statement of financial position"}</span>
+          <span>Prepared by: {preparedBy}</span>
+        </div>
+      </div>
+
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-100 p-2">
         <div className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
           <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur print:hidden">

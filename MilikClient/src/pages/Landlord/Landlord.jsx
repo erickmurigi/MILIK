@@ -755,7 +755,7 @@ const Landlords = () => {
       // Call backend bulk import endpoint
       const response = await adminRequests.post('/landlords/bulk-import', {
         landlords,
-        business: currentCompany._id
+        company: currentCompany._id
       });
 
       console.log('Bulk import response:', response.data);

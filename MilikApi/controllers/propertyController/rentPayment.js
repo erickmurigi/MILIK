@@ -1556,7 +1556,25 @@ const rollbackFailedReceiptPosting = async ({ payment, actorId, reason = "" }) =
 
     return reversalEntries;
   } catch (rollbackError) {
-    console.error("Receipt posting rollback failed:", rollbackError);
+    console.error("Receipt posting rollback failed — voiding orphan entries directly:", rollbackError);
+
+    // Reversal failed (e.g. account deactivated). Void any entries that were saved so they
+    // are excluded from buildLedgerMap (which only includes "approved" and "reversed" status).
+    try {
+      await FinancialLedgerEntry.updateMany(
+        {
+          business: payment.business,
+          sourceTransactionType: "rent_payment",
+          sourceTransactionId: String(payment._id),
+          status: "approved",
+          category: { $ne: "REVERSAL" },
+        },
+        { $set: { status: "void" } }
+      );
+    } catch (voidError) {
+      console.error("Failed to void orphan ledger entries after rollback failure:", voidError);
+    }
+
     return [];
   }
 };

@@ -439,8 +439,107 @@ const TrialBalanceReport = () => {
     }
   };
 
+  const preparedBy = currentUser?.name || currentUser?.username || currentUser?.email || "System";
+
   return (
     <DashboardLayout lockContentScroll>
+      {/* ── Native print (Ctrl+P) fallback ─────────────────────────── */}
+      <div className="print-only-wrapper">
+        <style>{`
+          .tb-print-header { border-bottom: 3px solid #0B3B2E; padding-bottom: 10px; margin-bottom: 16px; }
+          .tb-print-company { font-size: 18px; font-weight: 900; color: #0B3B2E; margin: 0 0 2px; }
+          .tb-print-title { font-size: 14px; font-weight: 700; color: #374151; margin: 0 0 2px; }
+          .tb-print-meta { font-size: 11px; color: #6b7280; margin: 0; }
+          .tb-print-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+          .tb-print-metric { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; background: #f9fafb; }
+          .tb-print-metric-label { font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
+          .tb-print-metric-value { font-size: 13px; font-weight: 900; color: #111827; }
+          .tb-print-metric-value.bad { color: #DC2626; }
+          .tb-print-metric-value.ok { color: #0B3B2E; }
+          .tb-print-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+          .tb-print-table thead th { background: #0B3B2E; color: #fff; padding: 6px 8px; text-align: left; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+          .tb-print-table thead th.r { text-align: right; }
+          .tb-print-table tbody tr { border-bottom: 1px solid #e5e7eb; }
+          .tb-print-table tbody tr:nth-child(even) { background: #f9fafb; }
+          .tb-print-table tbody td { padding: 5px 8px; color: #374151; font-weight: 600; }
+          .tb-print-table tbody td.code { font-weight: 900; color: #111827; }
+          .tb-print-table tbody td.r { text-align: right; font-weight: 800; white-space: nowrap; }
+          .tb-print-table tfoot td { background: #f3f4f6; padding: 6px 8px; font-weight: 900; border-top: 2px solid #d1d5db; }
+          .tb-print-table tfoot td.r { text-align: right; }
+          .tb-print-footer { margin-top: 14px; font-size: 9px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 6px; display: flex; justify-content: space-between; }
+        `}</style>
+
+        <div className="tb-print-header">
+          <p className="tb-print-company">{businessName}</p>
+          <p className="tb-print-title">Trial Balance</p>
+          <p className="tb-print-meta">As at {filters.asOfDate} &nbsp;|&nbsp; Generated: {new Date().toLocaleDateString()}</p>
+        </div>
+
+        <div className="tb-print-metrics">
+          <div className="tb-print-metric">
+            <div className="tb-print-metric-label">Total Debits</div>
+            <div className="tb-print-metric-value">KES {formatMoney(report.totals?.debit)}</div>
+          </div>
+          <div className="tb-print-metric">
+            <div className="tb-print-metric-label">Total Credits</div>
+            <div className="tb-print-metric-value">KES {formatMoney(report.totals?.credit)}</div>
+          </div>
+          <div className="tb-print-metric">
+            <div className="tb-print-metric-label">Difference</div>
+            <div className={`tb-print-metric-value ${Math.abs(Number(report.totals?.difference || 0)) < 0.005 ? "ok" : "bad"}`}>
+              KES {formatMoney(report.totals?.difference)}
+            </div>
+          </div>
+          <div className="tb-print-metric">
+            <div className="tb-print-metric-label">Status</div>
+            <div className={`tb-print-metric-value ${report.totals?.balanced ? "ok" : "bad"}`}>
+              {report.totals?.balanced ? "Balanced" : "Out of Balance"}
+            </div>
+          </div>
+        </div>
+
+        <table className="tb-print-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Account Name</th>
+              <th>Type</th>
+              <th>Group</th>
+              <th>Sub Group</th>
+              <th className="r">Debit</th>
+              <th className="r">Credit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.rows?.length ? report.rows.map((row) => (
+              <tr key={row._id || `${row.code}-${row.name}`}>
+                <td className="code">{row.code}</td>
+                <td>{row.name}</td>
+                <td style={{ textTransform: "capitalize" }}>{row.type}</td>
+                <td>{row.group}</td>
+                <td>{row.subGroup || "-"}</td>
+                <td className="r">{row.debitBalance ? formatMoney(row.debitBalance) : "-"}</td>
+                <td className="r">{row.creditBalance ? formatMoney(row.creditBalance) : "-"}</td>
+              </tr>
+            )) : (
+              <tr><td colSpan="7" style={{ textAlign: "center", padding: "16px", color: "#6b7280" }}>No data found.</td></tr>
+            )}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan="5" className="r">TOTAL</td>
+              <td className="r">{formatMoney(report.totals?.debit)}</td>
+              <td className="r">{formatMoney(report.totals?.credit)}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div className="tb-print-footer">
+          <span>Rows: {report.count || 0}</span>
+          <span>Prepared by: {preparedBy}</span>
+        </div>
+      </div>
+
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-100 p-2">
         <div className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
           <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur print:hidden">
