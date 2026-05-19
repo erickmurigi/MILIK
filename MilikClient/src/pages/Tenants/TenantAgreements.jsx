@@ -4,11 +4,13 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import {
   FaCheck,
+  FaChevronDown,
   FaChevronLeft,
   FaChevronRight,
   FaClock,
   FaCompressAlt,
   FaEdit,
+  FaEllipsisV,
   FaExpandAlt,
   FaFileSignature,
   FaFilePdf,
@@ -169,6 +171,14 @@ const TenantAgreements = () => {
   const [submitting, setSubmitting] = useState(false);
   const [generatingDocId, setGeneratingDocId] = useState(null);
   const [includeTerminatedTenants, setIncludeTerminatedTenants] = useState(false);
+  const [openDropdownId, setOpenDropdownId] = useState(null);
+
+  useEffect(() => {
+    if (!openDropdownId) return;
+    const close = () => setOpenDropdownId(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [openDropdownId]);
 
   const loadData = async () => {
     if (!currentCompany?._id) return;
@@ -609,7 +619,7 @@ const TenantAgreements = () => {
                     <th className="min-w-[100px] border-r border-gray-400 px-2 py-1.5 text-right font-bold">Rent</th>
                     <th className="min-w-[105px] border-r border-gray-400 px-2 py-1.5 text-right font-bold">Deposit</th>
                     <th className="min-w-[130px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Signatures</th>
-                    <th className="min-w-[320px] px-2 py-1.5 text-left font-bold">Actions</th>
+                    <th className="min-w-[120px] px-2 py-1.5 text-left font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -671,14 +681,11 @@ const TenantAgreements = () => {
                             className="cursor-pointer rounded border-gray-300 text-orange-600 focus:ring-orange-500"
                           />
                         </td>
-                        <td
-                          className="cursor-pointer border-r border-gray-200 px-2 py-1 text-center"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              toggleAgreementExpand(row.id);
-                            }}
-                          >
-                          <span>{isExpanded ? "v" : ">"}</span>
+                          <td
+                          className="cursor-pointer border-r border-gray-200 px-2 py-1 text-center text-slate-400 transition hover:text-slate-700"
+                          onClick={(event) => { event.stopPropagation(); toggleAgreementExpand(row.id); }}
+                        >
+                          {isExpanded ? <FaChevronDown size={10} /> : <FaChevronRight size={10} />}
                         </td>
                         <td className="border-r border-gray-200 px-2 py-1 font-mono text-xs font-bold text-[#0B3B2E]">
                           <div>{toListingCaps(row.agreementNumber)}</div>
@@ -719,79 +726,73 @@ const TenantAgreements = () => {
                         <td className="border-r border-gray-200 px-2 py-1 text-right font-bold text-gray-900">{formatCurrency(row.rentAmount)}</td>
                         <td className="border-r border-gray-200 px-2 py-1 text-right font-bold text-gray-900">{formatCurrency(row.depositAmount)}</td>
                         <td className="border-r border-gray-200 px-2 py-1">
-                          <div className="space-y-1 text-xs">
-                            <div className={row.signedByTenant ? "text-emerald-700 font-semibold" : "text-slate-500"}>
-                              Tenant: {row.signedByTenant ? "Signed" : "Pending"}
-                            </div>
-                            <div className={row.signedByLandlord ? "text-emerald-700 font-semibold" : "text-slate-500"}>
-                              Landlord: {row.signedByLandlord ? "Signed" : "Pending"}
-                            </div>
+                          <div className="flex flex-col gap-1">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.signedByTenant ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${row.signedByTenant ? "bg-emerald-500" : "bg-slate-400"}`} />
+                              T: {row.signedByTenant ? "Signed" : "Pending"}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.signedByLandlord ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${row.signedByLandlord ? "bg-emerald-500" : "bg-slate-400"}`} />
+                              L: {row.signedByLandlord ? "Signed" : "Pending"}
+                            </span>
                           </div>
                         </td>
-                        <td className="px-2 py-1" onClick={(event) => event.stopPropagation()}>
-                          <div className="flex flex-wrap gap-1.5">
+                        <td className="px-2 py-1" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5">
                             {canEdit && (
                               <button
-                                onClick={(event) => { event.stopPropagation(); openEditModal(row); }}
-                                className="rounded-lg border border-[#0B3B2E]/15 bg-[#0B3B2E]/5 px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E]/10"
+                                onClick={(e) => { e.stopPropagation(); openEditModal(row); }}
+                                className="inline-flex items-center gap-1 rounded-lg border border-[#0B3B2E]/15 bg-[#0B3B2E]/5 px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E]/10"
                               >
-                                <FaEdit className="inline mr-1" /> Edit
+                                <FaEdit size={10} /> Edit
                               </button>
                             )}
-                            <button
-                              onClick={(event) => { event.stopPropagation(); handleGenerateDocument(row); }}
-                              disabled={generatingDocId === row.id}
-                              className={`rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-orange-700 transition hover:bg-orange-100 ${generatingDocId === row.id ? "opacity-60 cursor-not-allowed" : ""}`}
-                            >
-                              <FaFilePdf className="inline mr-1" />
-                              {generatingDocId === row.id ? "Generating..." : hasDocument ? "Regenerate Doc" : "Generate Doc"}
-                            </button>
-                            {canSign && tenantPending && (
+                            <div className="relative">
                               <button
-                                onClick={(event) => { event.stopPropagation(); handleSign(row, "tenant"); }}
-                                className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 transition hover:bg-blue-100"
+                                onClick={(e) => { e.stopPropagation(); setOpenDropdownId((prev) => (prev === row.id ? null : row.id)); }}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50"
                               >
-                                <FaFileSignature className="inline mr-1" /> Tenant Sign
+                                <FaEllipsisV size={10} />
                               </button>
-                            )}
-                            {canSign && landlordPending && (
-                              <button
-                                onClick={(event) => { event.stopPropagation(); handleSign(row, "landlord"); }}
-                                className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700 transition hover:bg-violet-100"
-                              >
-                                <FaCheck className="inline mr-1" /> Landlord Sign
-                              </button>
-                            )}
-                            {canRenew && (
-                              <button
-                                onClick={(event) => { event.stopPropagation(); handleRenew(row); }}
-                                className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 transition hover:bg-amber-100"
-                              >
-                                <FaClock className="inline mr-1" /> Renew
-                              </button>
-                            )}
-                            {canTerminate && (
-                              <button
-                                onClick={(event) => { event.stopPropagation(); handleTerminate(row); }}
-                                className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700 transition hover:bg-red-100"
-                              >
-                                <FaTimes className="inline mr-1" /> Terminate
-                              </button>
-                            )}
-                            <button
-                              onClick={(event) => { event.stopPropagation(); navigate(`/tenant/${row.tenantId}/statement`, { state: { tabTitle: `${row.tenantName} Statement` } }); }}
-                              className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 transition hover:bg-emerald-100"
-                            >
-                              <FaFileContract className="inline mr-1" /> Statement
-                            </button>
-                            {canDelete && (
-                              <button
-                                onClick={(event) => { event.stopPropagation(); handleDelete(row); }}
-                                className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-700 transition hover:bg-slate-100"
-                              >
-                                <FaTrash className="inline mr-1" /> Delete
-                              </button>
-                            )}
+                              {openDropdownId === row.id && (
+                                <div
+                                  className="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button onClick={() => { handleGenerateDocument(row); setOpenDropdownId(null); }} disabled={generatingDocId === row.id} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-orange-700 transition hover:bg-orange-50 disabled:opacity-60">
+                                    <FaFilePdf size={11} /> {generatingDocId === row.id ? "Generating…" : hasDocument ? "Regenerate Doc" : "Generate Doc"}
+                                  </button>
+                                  {canSign && tenantPending && (
+                                    <button onClick={() => { handleSign(row, "tenant"); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-blue-700 transition hover:bg-blue-50">
+                                      <FaFileSignature size={11} /> Tenant Sign
+                                    </button>
+                                  )}
+                                  {canSign && landlordPending && (
+                                    <button onClick={() => { handleSign(row, "landlord"); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-violet-700 transition hover:bg-violet-50">
+                                      <FaCheck size={11} /> Landlord Sign
+                                    </button>
+                                  )}
+                                  {canRenew && (
+                                    <button onClick={() => { handleRenew(row); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-amber-700 transition hover:bg-amber-50">
+                                      <FaClock size={11} /> Renew
+                                    </button>
+                                  )}
+                                  <button onClick={() => { navigate(`/tenant/${row.tenantId}/statement`, { state: { tabTitle: `${row.tenantName} Statement` } }); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50">
+                                    <FaFileContract size={11} /> Statement
+                                  </button>
+                                  {canTerminate && (
+                                    <button onClick={() => { handleTerminate(row); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-xs font-semibold text-red-700 transition hover:bg-red-50">
+                                      <FaTimes size={11} /> Terminate
+                                    </button>
+                                  )}
+                                  {canDelete && (
+                                    <button onClick={() => { handleDelete(row); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+                                      <FaTrash size={11} /> Delete
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -860,191 +861,89 @@ const TenantAgreements = () => {
             </div>
 
         {modalOpen && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-4xl rounded-xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-                <div>
-                  <h2 className="text-lg font-black text-gray-900">{form._id ? "Edit Tenant Agreement" : "New Tenant Agreement"}</h2>
-                  <p className="mt-1 text-[11px] text-gray-600">Capture rent terms, deposit, due day, and renewal details in one place.</p>
+          <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:items-center">
+            <div className="relative w-full max-w-4xl overflow-hidden rounded-xl bg-white shadow-2xl">
+              {/* Modal header */}
+              <div className="bg-[#0B3B2E] px-6 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-white/50">Tenant Agreements</p>
+                    <h2 className="mt-1 text-lg font-bold text-white">{form._id ? "Edit Agreement" : "New Agreement"}</h2>
+                    <p className="mt-0.5 text-[10px] text-white/60">Capture rent terms, deposit, due day, and renewal details.</p>
+                  </div>
+                  <button onClick={closeModal} className="shrink-0 rounded-lg border border-white/20 bg-white/10 p-2 text-white/80 transition hover:bg-white/20 hover:text-white">
+                    <FaTimes size={12} />
+                  </button>
                 </div>
-                <button onClick={closeModal} className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
-                  <FaTimes />
-                </button>
               </div>
 
-              <form onSubmit={handleSave} className="px-5 py-5">
+              <form onSubmit={handleSave} className="px-6 py-5">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Tenant</label>
-                    <select
-                      value={form.tenant}
-                      onChange={(event) => handleTenantChange(event.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                    >
-                      <option value="">Select tenant</option>
-                      {(Array.isArray(tenants) ? tenants : [])
-                        .filter((tenant) => includeTerminatedTenants || isActiveTenant(tenant))
-                        .map((tenant) => (
-                          <option key={tenant._id} value={tenant._id}>{tenant.name} {tenant.tenantCode ? `(${tenant.tenantCode})` : ""}</option>
-                        ))}
-                    </select>
-                    <label className="mt-1.5 inline-flex cursor-pointer items-center gap-2 text-[11px] text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={includeTerminatedTenants}
-                        onChange={(e) => setIncludeTerminatedTenants(e.target.checked)}
-                      />
-                      Include terminated tenants
-                    </label>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Unit</label>
-                    <select
-                      value={form.unit}
-                      onChange={(event) => setForm((prev) => ({ ...prev, unit: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                    >
-                      <option value="">Select unit</option>
-                      {(Array.isArray(units) ? units : []).map((unit) => (
-                        <option key={unit._id} value={unit._id}>{unit.unitNumber || unit.unitName || unit.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Status</label>
-                    <select
-                      value={form.status}
-                      onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                    >
-                      {AGREEMENT_STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>{getStatusLabel(status)}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Start Date</label>
-                    <input
-                      type="date"
-                      value={form.startDate}
-                      onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">End Date</label>
-                    <input
-                      type="date"
-                      value={form.endDate}
-                      onChange={(event) => setForm((prev) => ({ ...prev, endDate: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Lease Type</label>
-                    <select
-                      value={form.leaseType}
-                      onChange={(event) => setForm((prev) => ({ ...prev, leaseType: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                    >
-                      <option value="fixed">Fixed Term</option>
-                      <option value="at_will">At Will</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Monthly Rent</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form.rentAmount}
-                      onChange={(event) => setForm((prev) => ({ ...prev, rentAmount: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Deposit Amount</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form.depositAmount}
-                      onChange={(event) => setForm((prev) => ({ ...prev, depositAmount: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Payment Due Day</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="28"
-                      value={form.paymentDueDay}
-                      onChange={(event) => setForm((prev) => ({ ...prev, paymentDueDay: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Notice Period (Days)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={form.noticePeriodDays}
-                      onChange={(event) => setForm((prev) => ({ ...prev, noticePeriodDays: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Late Fee</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form.lateFee}
-                      onChange={(event) => setForm((prev) => ({ ...prev, lateFee: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Document URL</label>
-                    <input
-                      type="text"
-                      value={form.documentUrl}
-                      onChange={(event) => setForm((prev) => ({ ...prev, documentUrl: event.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                      placeholder="Optional link to signed PDF"
-                    />
-                  </div>
+                  {[
+                    { label: "Tenant", content: (
+                      <>
+                        <select value={form.tenant} onChange={(e) => handleTenantChange(e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10">
+                          <option value="">Select tenant</option>
+                          {(Array.isArray(tenants) ? tenants : []).filter((t) => includeTerminatedTenants || isActiveTenant(t)).map((t) => (
+                            <option key={t._id} value={t._id}>{t.name} {t.tenantCode ? `(${t.tenantCode})` : ""}</option>
+                          ))}
+                        </select>
+                        <label className="mt-1.5 inline-flex cursor-pointer items-center gap-2 text-[10px] text-slate-500">
+                          <input type="checkbox" checked={includeTerminatedTenants} onChange={(e) => setIncludeTerminatedTenants(e.target.checked)} className="rounded border-slate-300" />
+                          Include terminated tenants
+                        </label>
+                      </>
+                    )},
+                    { label: "Unit", content: (
+                      <select value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10">
+                        <option value="">Select unit</option>
+                        {(Array.isArray(units) ? units : []).map((u) => (<option key={u._id} value={u._id}>{u.unitNumber || u.unitName || u.name}</option>))}
+                      </select>
+                    )},
+                    { label: "Status", content: (
+                      <select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10">
+                        {AGREEMENT_STATUS_OPTIONS.map((s) => (<option key={s} value={s}>{getStatusLabel(s)}</option>))}
+                      </select>
+                    )},
+                    { label: "Start Date", content: <input type="date" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
+                    { label: "End Date", content: <input type="date" value={form.endDate} onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
+                    { label: "Lease Type", content: (
+                      <select value={form.leaseType} onChange={(e) => setForm((p) => ({ ...p, leaseType: e.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10">
+                        <option value="fixed">Fixed Term</option>
+                        <option value="at_will">At Will</option>
+                      </select>
+                    )},
+                    { label: "Monthly Rent", content: <input type="number" min="0" step="0.01" value={form.rentAmount} onChange={(e) => setForm((p) => ({ ...p, rentAmount: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
+                    { label: "Deposit Amount", content: <input type="number" min="0" step="0.01" value={form.depositAmount} onChange={(e) => setForm((p) => ({ ...p, depositAmount: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
+                    { label: "Payment Due Day", content: <input type="number" min="1" max="28" value={form.paymentDueDay} onChange={(e) => setForm((p) => ({ ...p, paymentDueDay: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
+                    { label: "Notice Period (Days)", content: <input type="number" min="0" value={form.noticePeriodDays} onChange={(e) => setForm((p) => ({ ...p, noticePeriodDays: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
+                    { label: "Late Fee", content: <input type="number" min="0" step="0.01" value={form.lateFee} onChange={(e) => setForm((p) => ({ ...p, lateFee: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
+                    { label: "Document URL", content: <input type="text" value={form.documentUrl} onChange={(e) => setForm((p) => ({ ...p, documentUrl: e.target.value }))} placeholder="Optional link to signed PDF" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
+                  ].map(({ label, content }) => (
+                    <div key={label}>
+                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{label}</label>
+                      {content}
+                    </div>
+                  ))}
                 </div>
 
                 <div className="mt-4">
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-600">Terms / Notes</label>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Terms / Notes</label>
                   <textarea
-                    rows={4}
+                    rows={3}
                     value={form.terms}
-                    onChange={(event) => setForm((prev) => ({ ...prev, terms: event.target.value }))}
-                    className="w-full rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    onChange={(e) => setForm((p) => ({ ...p, terms: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                     placeholder="Capture notice terms, utility arrangement, renewal notes, or special clauses."
                   />
                 </div>
 
-                <div className="mt-5 flex items-center justify-end gap-2 border-t border-gray-200 pt-4">
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] font-semibold text-gray-700 transition hover:bg-gray-50"
-                  >
+                <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
+                  <button type="button" onClick={closeModal} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
                     Cancel
                   </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className={`rounded-lg px-1.5 py-1 text-[11px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER} ${submitting ? "opacity-70 cursor-not-allowed" : ""}`}
-                  >
-                    {submitting ? "Saving..." : form._id ? "Update Agreement" : "Create Agreement"}
+                  <button type="submit" disabled={submitting} className={`rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-sm transition ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER} ${submitting ? "cursor-not-allowed opacity-70" : ""}`}>
+                    {submitting ? "Saving…" : form._id ? "Update Agreement" : "Create Agreement"}
                   </button>
                 </div>
               </form>

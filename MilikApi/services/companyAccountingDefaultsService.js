@@ -84,6 +84,95 @@ const ACCOUNTING_DEFAULT_KEYS = {
   },
 };
 
+const HR_ACCOUNTING_DEFAULT_KEYS = {
+  salaryExpenseAccount: {
+    label: "Salaries & Wages Expense Account",
+    allowedTypes: ["expense"],
+    fallbackCandidates: [
+      { code: "5400", type: "expense" },
+      { nameRegex: "^salaries and wages expense$", type: "expense" },
+      { nameRegex: "salary|salaries|wages", type: "expense" },
+    ],
+  },
+  netPayableAccount: {
+    label: "Net Salaries Payable Account",
+    allowedTypes: ["liability"],
+    fallbackCandidates: [
+      { code: "2175", type: "liability" },
+      { nameRegex: "^net salaries payable$", type: "liability" },
+      { nameRegex: "net salary|net salaries", type: "liability" },
+    ],
+  },
+  payePayableAccount: {
+    label: "PAYE Tax Payable Account",
+    allowedTypes: ["liability"],
+    fallbackCandidates: [
+      { code: "2170", type: "liability" },
+      { nameRegex: "^paye tax payable$", type: "liability" },
+      { nameRegex: "paye", type: "liability" },
+    ],
+  },
+  nhifPayableAccount: {
+    label: "NHIF Contributions Payable Account",
+    allowedTypes: ["liability"],
+    fallbackCandidates: [
+      { code: "2171", type: "liability" },
+      { nameRegex: "^nhif contributions payable$", type: "liability" },
+      { nameRegex: "nhif", type: "liability" },
+    ],
+  },
+  nssfPayableAccount: {
+    label: "NSSF Contributions Payable Account",
+    allowedTypes: ["liability"],
+    fallbackCandidates: [
+      { code: "2172", type: "liability" },
+      { nameRegex: "^nssf contributions payable$", type: "liability" },
+      { nameRegex: "nssf", type: "liability" },
+    ],
+  },
+  ahlPayableAccount: {
+    label: "AHL Levy Payable Account",
+    allowedTypes: ["liability"],
+    fallbackCandidates: [
+      { code: "2173", type: "liability" },
+      { nameRegex: "^ahl levy payable$", type: "liability" },
+      { nameRegex: "ahl", type: "liability" },
+    ],
+  },
+  otherDeductionsPayableAccount: {
+    label: "Other Payroll Deductions Payable Account",
+    allowedTypes: ["liability"],
+    fallbackCandidates: [
+      { code: "2174", type: "liability" },
+      { nameRegex: "other payroll deductions", type: "liability" },
+    ],
+  },
+  employerNhifExpenseAccount: {
+    label: "Employer NHIF Contribution Expense Account",
+    allowedTypes: ["expense"],
+    fallbackCandidates: [
+      { code: "5401", type: "expense" },
+      { nameRegex: "employer nhif", type: "expense" },
+    ],
+  },
+  employerNssfExpenseAccount: {
+    label: "Employer NSSF Contribution Expense Account",
+    allowedTypes: ["expense"],
+    fallbackCandidates: [
+      { code: "5402", type: "expense" },
+      { nameRegex: "employer nssf", type: "expense" },
+    ],
+  },
+  employerAhlExpenseAccount: {
+    label: "Employer AHL Levy Expense Account",
+    allowedTypes: ["expense"],
+    fallbackCandidates: [
+      { code: "5403", type: "expense" },
+      { nameRegex: "employer ahl", type: "expense" },
+    ],
+  },
+};
+
 const normalizeType = (value = "") => String(value || "").trim().toLowerCase();
 
 const buildCandidateQuery = (businessId, candidate = {}) => {
@@ -122,6 +211,8 @@ const getConfiguredAccountId = async (businessId, field) => {
 
 export const getAccountingDefaultDefinition = (field) => ACCOUNTING_DEFAULT_KEYS[field] || null;
 
+export const getHrAccountingDefaultDefinition = (field) => HR_ACCOUNTING_DEFAULT_KEYS[field] || null;
+
 export const resolveConfiguredAccountingDefaultAccount = async ({ businessId, field, fallbackCandidates = null } = {}) => {
   if (!businessId || !field) return null;
 
@@ -150,8 +241,7 @@ export const resolveConfiguredAccountingDefaultAccount = async ({ businessId, fi
   return findFirstAccount(businessId, fallbackCandidates || definition.fallbackCandidates || []);
 };
 
-export const validateAccountingDefaultAccount = async ({ businessId, field, rawValue }) => {
-  const definition = getAccountingDefaultDefinition(field);
+const validateAccountingDefaultAccountForDefinition = async ({ businessId, field, rawValue, definition }) => {
   if (!definition) {
     throw new Error(`Unknown accounting default field: ${field}`);
   }
@@ -184,8 +274,53 @@ export const validateAccountingDefaultAccount = async ({ businessId, field, rawV
   return account;
 };
 
+export const validateAccountingDefaultAccount = async ({ businessId, field, rawValue }) => {
+  const definition = getAccountingDefaultDefinition(field);
+  return validateAccountingDefaultAccountForDefinition({ businessId, field, rawValue, definition });
+};
+
+export const validateHrAccountingDefaultAccount = async ({ businessId, field, rawValue }) => {
+  const definition = getHrAccountingDefaultDefinition(field);
+  return validateAccountingDefaultAccountForDefinition({ businessId, field, rawValue, definition });
+};
+
+export const resolveConfiguredHrAccountingDefaultAccount = async ({ businessId, field, fallbackCandidates = null } = {}) => {
+  if (!businessId || !field) return null;
+
+  const definition = getHrAccountingDefaultDefinition(field);
+  if (!definition) return null;
+
+  await ensureSystemChartOfAccounts(businessId);
+
+  const settings = await CompanySettings.findOne({ company: businessId })
+    .select(`hrAccountingDefaults.${field}`)
+    .lean();
+
+  const configuredAccountId = settings?.hrAccountingDefaults?.[field] || null;
+  if (configuredAccountId) {
+    const query = {
+      business: businessId,
+      _id: configuredAccountId,
+      isPosting: { $ne: false },
+      isHeader: { $ne: true },
+    };
+
+    if (Array.isArray(definition.allowedTypes) && definition.allowedTypes.length > 0) {
+      query.type = definition.allowedTypes.length === 1 ? definition.allowedTypes[0] : { $in: definition.allowedTypes };
+    }
+
+    const configuredAccount = await ChartOfAccount.findOne(query).lean();
+    if (configuredAccount) return configuredAccount;
+  }
+
+  return findFirstAccount(businessId, fallbackCandidates || definition.fallbackCandidates || []);
+};
+
 export default {
   getAccountingDefaultDefinition,
+  getHrAccountingDefaultDefinition,
   resolveConfiguredAccountingDefaultAccount,
+  resolveConfiguredHrAccountingDefaultAccount,
   validateAccountingDefaultAccount,
+  validateHrAccountingDefaultAccount,
 };

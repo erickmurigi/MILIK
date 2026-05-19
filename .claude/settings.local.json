@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\" -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Recurse -Directory -Name)",
+      "Bash(xargs grep -l \"menu\\\\|Menu\")",
+      "Bash(xargs grep -l \"audit\\\\|trial\\\\|company\\\\|user\")",
+      "Bash(xargs -I {} basename {})"
     ]
   }
 }

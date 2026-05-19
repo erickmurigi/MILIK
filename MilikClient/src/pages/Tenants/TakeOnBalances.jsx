@@ -214,45 +214,42 @@ function TakeOnBalanceModal({
         onClick={onClose}
       />
       <div className="relative flex w-full max-w-3xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
-        <div className="shrink-0 border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-[#0F5132] to-[#FF8C00] px-6 py-5 text-white">
-          <div className="flex items-start justify-between gap-4">
+        {/* Header */}
+        <div className="shrink-0 bg-[#0B3B2E] px-6 py-4">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/70">
+              <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-white/50">
                 Tenant Take-On Balances
               </p>
-              <h2 className="mt-2 text-2xl font-bold">
+              <h2 className="mt-1 text-lg font-bold text-white">
                 {mode === "edit" ? "Edit Take-On Balance" : "Add Take-On Balance"}
               </h2>
-              <p className="mt-1 text-[10px] text-white/80">
+              <p className="mt-0.5 text-[10px] text-white/60">
                 Keep opening balances clean, auditable, and aligned to the right tenant bill item.
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-white/20 bg-white/10 p-2 text-white transition hover:bg-white/20"
+              className="shrink-0 rounded-lg border border-white/20 bg-white/10 p-2 text-white/80 transition hover:bg-white/20 hover:text-white"
             >
-              <FaTimes />
+              <FaTimes size={12} />
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div className="space-y-5">
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_260px]">
+            {/* Left — form fields */}
+            <div className="space-y-4">
               <div>
-                <label className="mb-2 block text-[10px] font-semibold text-slate-700">Property</label>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Property</label>
                 <select
                   value={form.propertyId}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      propertyId: e.target.value,
-                      tenantId: "",
-                    }))
-                  }
+                  onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))}
                   disabled={mode === "edit"}
-                  className="w-full rounded-xl border border-slate-300 px-1.5 py-1 text-[10px] shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100 disabled:bg-slate-100"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
                 >
                   <option value="">Select property</option>
                   {propertyOptions.map((property) => {
@@ -267,28 +264,28 @@ function TakeOnBalanceModal({
               </div>
 
               <div>
-                <label className="mb-2 block text-[10px] font-semibold text-slate-700">Find Tenant</label>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Find Tenant</label>
                 <div className="relative">
-                  <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
                   <input
                     value={form.tenantSearch}
                     onChange={(e) => setForm((prev) => ({ ...prev, tenantSearch: e.target.value }))}
                     placeholder="Type tenant name, unit, or property"
-                    className="w-full rounded-xl border border-slate-300 py-3 pl-11 pr-4 text-[10px] shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
+                    className="w-full rounded-lg border border-slate-300 py-2 pl-8 pr-3 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-2 block text-[10px] font-semibold text-slate-700">Tenant</label>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Tenant</label>
                 <select
                   value={form.tenantId}
                   onChange={(e) => setForm((prev) => ({ ...prev, tenantId: e.target.value }))}
                   disabled={mode === "edit" || (!form.propertyId && mode !== "edit")}
-                  className="w-full rounded-xl border border-slate-300 px-1.5 py-1 text-[10px] shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100 disabled:bg-slate-100"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
                 >
                   <option value="">
-                    {form.propertyId ? "Select tenant in selected property" : "Select property first"}
+                    {form.propertyId ? "Select tenant" : "Select property first"}
                   </option>
                   {filteredTenants.map((tenant) => (
                     <option key={tenant._id} value={tenant._id}>
@@ -297,68 +294,66 @@ function TakeOnBalanceModal({
                     </option>
                   ))}
                 </select>
-                {!filteredTenants.length && form.propertyId ? (
-                  <p className="mt-2 text-xs text-slate-500">
-                    No tenant matched the selected property and search term.
-                  </p>
-                ) : null}
+                {!filteredTenants.length && form.propertyId && (
+                  <p className="mt-1.5 text-[10px] text-slate-400">No tenants matched.</p>
+                )}
               </div>
 
-              <div>
-                <label className="mb-2 block text-[10px] font-semibold text-slate-700">Bill Item</label>
-                <select
-                  value={form.billItem}
-                  onChange={(e) => setForm((prev) => ({ ...prev, billItem: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-1.5 py-1 text-[10px] shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                >
-                  {(Array.isArray(filterBillItemOptions) ? filterBillItemOptions : []).map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {form.billItem === "utility" && (
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-2 block text-[10px] font-semibold text-slate-700">
-                    Utility Type
-                  </label>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Bill Item</label>
                   <select
-                    value={form.utilityLabel}
-                    onChange={(e) => setForm((prev) => ({ ...prev, utilityLabel: e.target.value }))}
-                    className="w-full rounded-xl border border-slate-300 px-1.5 py-1 text-[10px] shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
+                    value={form.billItem}
+                    onChange={(e) => setForm((prev) => ({ ...prev, billItem: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   >
-                    <option value="">Select utility type</option>
-                    <option value="Water">Water</option>
-                    <option value="Electricity">Electricity</option>
-                    <option value="Gas">Gas</option>
-                    <option value="Garbage">Garbage</option>
-                    <option value="Internet">Internet</option>
-                    <option value="Security">Security</option>
-                    <option value="Service Charge">Service Charge</option>
+                    {(Array.isArray(filterBillItemOptions) ? filterBillItemOptions : []).map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
-              )}
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {form.billItem === "utility" ? (
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Utility Type</label>
+                    <select
+                      value={form.utilityLabel}
+                      onChange={(e) => setForm((prev) => ({ ...prev, utilityLabel: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    >
+                      <option value="">Select type</option>
+                      <option value="Water">Water</option>
+                      <option value="Electricity">Electricity</option>
+                      <option value="Gas">Gas</option>
+                      <option value="Garbage">Garbage</option>
+                      <option value="Internet">Internet</option>
+                      <option value="Security">Security</option>
+                      <option value="Service Charge">Service Charge</option>
+                    </select>
+                  </div>
+                ) : <div />}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-2 block text-[10px] font-semibold text-slate-700">Type</label>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Type</label>
                   <select
                     value={form.type}
                     onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
                     disabled={mode === "edit" && form.type === "credit"}
-                    className="w-full rounded-xl border border-slate-300 px-1.5 py-1 text-[10px] shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100 disabled:bg-slate-100"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
                   >
                     <option value="debit">Debit</option>
                     <option value="credit">Credit</option>
                   </select>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Debit take-ons raise opening tenant charges. Credit take-ons create opening tenant credits and post them through the selected opening balance account.
+                  <p className="mt-1 text-[10px] leading-4 text-slate-400">
+                    {form.type === "credit"
+                      ? "Creates an opening credit posted through the selected account."
+                      : "Raises an opening charge on the tenant ledger."}
                   </p>
                 </div>
                 <div>
-                  <label className="mb-2 block text-[10px] font-semibold text-slate-700">Amount</label>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Amount</label>
                   <input
                     type="number"
                     min="0"
@@ -366,20 +361,18 @@ function TakeOnBalanceModal({
                     value={form.amount}
                     onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
                     placeholder="0.00"
-                    className="w-full rounded-xl border border-slate-300 px-1.5 py-1 text-[10px] shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   />
                 </div>
               </div>
 
               {form.type === "credit" && (
                 <div>
-                  <label className="mb-2 block text-[10px] font-semibold text-slate-700">
-                    Opening Balance Posting Account
-                  </label>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Opening Balance Posting Account</label>
                   <select
                     value={form.openingBalanceAccountId}
                     onChange={(e) => setForm((prev) => ({ ...prev, openingBalanceAccountId: e.target.value }))}
-                    className="w-full rounded-xl border border-slate-300 px-1.5 py-1 text-[10px] shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   >
                     <option value="">Select account</option>
                     {chartAccounts.map((account) => (
@@ -391,104 +384,92 @@ function TakeOnBalanceModal({
                 </div>
               )}
 
-              <div>
-                <label className="mb-2 block text-[10px] font-semibold text-slate-700">
-                  Effective Date
-                </label>
-                <input
-                  type="date"
-                  value={form.effectiveDate}
-                  onChange={(e) => setForm((prev) => ({ ...prev, effectiveDate: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-1.5 py-1 text-[10px] shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Effective Date</label>
+                  <input
+                    type="date"
+                    value={form.effectiveDate}
+                    onChange={(e) => setForm((prev) => ({ ...prev, effectiveDate: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                  />
+                </div>
+                <div />
               </div>
 
               <div>
-                <label className="mb-2 block text-[10px] font-semibold text-slate-700">
-                  Notes / Description
-                </label>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Notes / Description</label>
                 <textarea
-                  rows={4}
+                  rows={3}
                   value={form.description}
                   onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                   placeholder="Optional narration for this take-on balance"
-                  className="w-full rounded-xl border border-slate-300 px-1.5 py-1 text-[10px] shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                 />
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+            {/* Right — preview + guide */}
+            <div className="space-y-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-[9px] font-bold uppercase tracking-[0.24em] text-slate-400">
                   Selection Preview
                 </p>
-                <div className="mt-4 space-y-3 text-[10px] text-slate-700">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-slate-500">Tenant</span>
-                    <span className="font-semibold text-slate-900">
-                      {getTenantDisplayName(selectedTenant)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-slate-500">Property</span>
-                    <span className="font-semibold text-slate-900">
-                      {getPropertyDisplay(selectedProperty)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-slate-500">Unit</span>
-                    <span className="font-semibold text-slate-900">
-                      {getUnitDisplay(selectedUnit)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-slate-500">Bill Item</span>
-                    <span className="font-semibold text-slate-900">
-                      {form.billItem === "utility"
-                        ? form.utilityLabel || "Utility"
-                        : selectedBillItem.defaultLabel}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-slate-500">Amount</span>
-                    <span className="font-semibold text-slate-900">
-                      {formatCurrency(form.amount || 0)}
-                    </span>
-                  </div>
+                <div className="mt-3 divide-y divide-slate-100">
+                  {[
+                    ["Tenant", getTenantDisplayName(selectedTenant)],
+                    ["Property", getPropertyDisplay(selectedProperty)],
+                    ["Unit", getUnitDisplay(selectedUnit)],
+                    ["Bill Item", form.billItem === "utility" ? (form.utilityLabel || "Utility") : selectedBillItem.defaultLabel],
+                    ["Amount", formatCurrency(form.amount || 0)],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between gap-2 py-2">
+                      <span className="text-[10px] text-slate-400">{label}</span>
+                      <span className="text-right text-[10px] font-semibold text-slate-800">{value}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-orange-200 bg-orange-50/80 p-5 text-[10px] text-slate-700">
-                <p className="font-semibold text-slate-900">How this pass works</p>
-                <ul className="mt-3 space-y-2 text-[10px] leading-6 text-slate-600">
-                  <li>• Choose a property first so only the right tenants appear.</li>
-                  <li>• Each take-on row is stored as a dedicated tenant invoice flagged as a take-on balance.</li>
-                  <li>• Allocated and Balance values are computed live from the tenant allocation engine.</li>
-                  <li>• Edits are blocked once the take-on balance is allocated, to keep the audit trail clean.</li>
+              <div className="rounded-xl border border-[#0B3B2E]/10 bg-[#0B3B2E]/5 p-4">
+                <p className="text-[10px] font-bold text-[#0B3B2E]">How this works</p>
+                <ul className="mt-2 space-y-1.5">
+                  {[
+                    "Choose a property first so only the right tenants appear.",
+                    "Each row is stored as a dedicated invoice flagged as a take-on balance.",
+                    "Allocated and Balance values are computed live from the allocation engine.",
+                    "Edits are locked once the balance is allocated.",
+                  ].map((tip) => (
+                    <li key={tip} className="flex gap-2 text-[10px] leading-4 text-slate-600">
+                      <span className="mt-0.5 shrink-0 text-[#0B3B2E]">•</span>
+                      {tip}
+                    </li>
+                  ))}
                 </ul>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-6 py-4">
-          <div className="flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-slate-300 bg-white px-1.5 py-1.5 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-100"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saving}
-            className={`inline-flex items-center gap-2 rounded-xl px-1.5 py-1.5 text-[10px] font-semibold text-white shadow-sm transition ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER} disabled:cursor-not-allowed disabled:opacity-60`}
-          >
-            <FaSave />
-            {saving ? "Saving..." : mode === "edit" ? "Save Changes" : "Save Take-On Balance"}
-          </button>
+        {/* Footer */}
+        <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-3">
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-sm transition ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER} disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              <FaSave size={11} />
+              {saving ? "Saving…" : mode === "edit" ? "Save Changes" : "Save Take-On Balance"}
+            </button>
           </div>
         </div>
       </div>

@@ -1195,8 +1195,10 @@ export const getAllCompanies = async (req, res, next) => {
       return next(createError(403, "Only Milik/System Admin can view all companies"));
     }
 
-    const { page = 1, limit = 10, search: rawSearch } = req.query;
-    const search = escapeRegex(rawSearch);
+    const rawLimit = Number(req.query.limit) || 200;
+    const limit = Math.min(Math.max(rawLimit, 1), 500);
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const search = escapeRegex(req.query.search);
     const includeDemoCompanies = shouldIncludeDemoCompanies(req);
 
     const query = includeDemoCompanies ? {} : buildLiveCompanyFilter();
@@ -1210,22 +1212,24 @@ export const getAllCompanies = async (req, res, next) => {
       ];
     }
 
-    const companies = await Company.find(query)
-      .select(companySummarySelect)
-      .limit(Number(limit))
-      .skip((Number(page) - 1) * Number(limit))
-      .sort({ createdAt: -1 })
-      .lean();
-
-    const total = await Company.countDocuments(query);
+    const [companies, total] = await Promise.all([
+      Company.find(query)
+        .select(companySummarySelect)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      Company.countDocuments(query),
+    ]);
 
     res.status(200).json({
       success: true,
       companies: companies.map((company) => serializeCompanyResponse(company, req.user)),
       pagination: {
-        currentPage: Number(page),
-        totalPages: Math.ceil(total / Number(limit)),
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
         total,
+        limit,
       },
       message: "Companies retrieved successfully",
     });

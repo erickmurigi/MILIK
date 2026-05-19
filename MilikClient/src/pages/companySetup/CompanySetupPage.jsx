@@ -35,7 +35,7 @@ import {
 } from "react-icons/fa";
 import { getChartOfAccounts, getCompany, getSmsLogs, updateCompany } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
-import { COMPANY_OPERATING_MODES, MODULE_LABELS, normalizeCompanyModules, normalizeCompanyOperatingMode } from "../../utils/companyModules";
+import { COMPANY_OPERATING_MODES, MODULE_LABELS, hasCompanyModule, normalizeCompanyModules, normalizeCompanyOperatingMode } from "../../utils/companyModules";
 import { useConfirm } from "../../context/ConfirmContext";
 
 const PAYMENT_DRAFT_ID = "__new_mpesa_paybill__";
@@ -1401,6 +1401,11 @@ export default function CompanySetupPage() {
       taxableCategoryCount,
     };
   }, [taxConfig]);
+
+  const hasPM   = hasCompanyModule(currentCompany, "propertyManagement");
+  const hasHR   = hasCompanyModule(currentCompany, "hr");
+  const hasCW   = hasCompanyModule(currentCompany, "carwash");
+  const hasSale = hasCompanyModule(currentCompany, "propertySale");
 
   const handleRefreshSetup = async () => {
     if (!currentCompany?._id) return;
@@ -3837,7 +3842,9 @@ export default function CompanySetupPage() {
           <div>
             <div className="text-xl font-extrabold text-slate-900">Company Setup</div>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{companyOperatingModeOptions.find((option) => option.value === normalizeCompanyOperatingMode(company.companyMode))?.label || "Other"}</span>
+              {hasPM && (
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{companyOperatingModeOptions.find((option) => option.value === normalizeCompanyOperatingMode(company.companyMode))?.label || "Other"}</span>
+              )}
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{Object.values(normalizeCompanyModules(company.modules || {})).filter(Boolean).length} modules assigned</span>
             </div>
           </div>
@@ -3875,7 +3882,9 @@ export default function CompanySetupPage() {
           </button>
           <button onClick={() => navigate('/settings')} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left shadow-sm transition hover:border-amber-300 hover:bg-amber-100/70">
             <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">Operational</div>
-            <div className="mt-0.5 text-xs font-extrabold text-slate-900">Tax {taxSetupSummary.enabled ? 'enabled' : 'disabled'}</div>
+            <div className="mt-0.5 text-xs font-extrabold text-slate-900">
+              {hasPM ? `Tax ${taxSetupSummary.enabled ? 'enabled' : 'disabled'}` : hasHR ? 'HR & Payroll' : hasCW ? 'Car Wash' : hasSale ? 'Property Sales' : 'Settings'}
+            </div>
           </button>
         </div>
 

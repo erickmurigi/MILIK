@@ -37,7 +37,7 @@ const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 25;
 
 const CATEGORY_LABELS = {
   maintenance: "Maintenance & Repairs",
@@ -153,6 +153,7 @@ const PettyCash = () => {
   const [showVoidModal, setShowVoidModal] = useState(null);
   const [showRejectModal, setShowRejectModal] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [disbPage, setDisbPage] = useState(1);
   const [repPage, setRepPage] = useState(1);
 
@@ -263,11 +264,11 @@ const PettyCash = () => {
 
   // ── Paged slices
   const pagedDisbursements = useMemo(
-    () => filteredDisbursements.slice((disbPage - 1) * PAGE_SIZE, disbPage * PAGE_SIZE),
+    () => filteredDisbursements.slice((disbPage - 1) * pageSize, disbPage * pageSize),
     [filteredDisbursements, disbPage]
   );
   const pagedReplenishments = useMemo(
-    () => filteredReplenishments.slice((repPage - 1) * PAGE_SIZE, repPage * PAGE_SIZE),
+    () => filteredReplenishments.slice((repPage - 1) * pageSize, repPage * pageSize),
     [filteredReplenishments, repPage]
   );
 
@@ -781,16 +782,26 @@ const PettyCash = () => {
               <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
                 <div className="font-semibold">
                   Showing{" "}
-                  <span className="font-bold text-slate-900">{filteredDisbursements.length === 0 ? 0 : (disbPage - 1) * PAGE_SIZE + 1}</span>
+                  <span className="font-bold text-slate-900">{filteredDisbursements.length === 0 ? 0 : (disbPage - 1) * pageSize + 1}</span>
                   {" "}to{" "}
-                  <span className="font-bold text-slate-900">{Math.min(disbPage * PAGE_SIZE, filteredDisbursements.length)}</span>
+                  <span className="font-bold text-slate-900">{Math.min(disbPage * pageSize, filteredDisbursements.length)}</span>
                   {" "}of{" "}
                   <span className="font-bold text-slate-900">{filteredDisbursements.length}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-500">Per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => { setPageSize(Number(e.target.value)); setDisbPage(1); setRepPage(1); }}
+                      className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                    >
+                      {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
                   <button type="button" onClick={() => setDisbPage((p) => Math.max(1, p - 1))} disabled={disbPage === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-                  <span className="font-semibold text-slate-700">Page {disbPage} of {Math.max(1, Math.ceil(filteredDisbursements.length / PAGE_SIZE))}</span>
-                  <button type="button" onClick={() => setDisbPage((p) => Math.min(Math.ceil(filteredDisbursements.length / PAGE_SIZE), p + 1))} disabled={disbPage >= Math.ceil(filteredDisbursements.length / PAGE_SIZE)} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+                  <span className="font-semibold text-slate-700">Page {disbPage} of {Math.max(1, Math.ceil(filteredDisbursements.length / pageSize))}</span>
+                  <button type="button" onClick={() => setDisbPage((p) => Math.min(Math.ceil(filteredDisbursements.length / pageSize), p + 1))} disabled={disbPage >= Math.ceil(filteredDisbursements.length / pageSize)} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
                 </div>
               </div>
             )}
@@ -798,16 +809,26 @@ const PettyCash = () => {
               <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
                 <div className="font-semibold">
                   Showing{" "}
-                  <span className="font-bold text-slate-900">{filteredReplenishments.length === 0 ? 0 : (repPage - 1) * PAGE_SIZE + 1}</span>
+                  <span className="font-bold text-slate-900">{filteredReplenishments.length === 0 ? 0 : (repPage - 1) * pageSize + 1}</span>
                   {" "}to{" "}
-                  <span className="font-bold text-slate-900">{Math.min(repPage * PAGE_SIZE, filteredReplenishments.length)}</span>
+                  <span className="font-bold text-slate-900">{Math.min(repPage * pageSize, filteredReplenishments.length)}</span>
                   {" "}of{" "}
                   <span className="font-bold text-slate-900">{filteredReplenishments.length}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-500">Per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => { setPageSize(Number(e.target.value)); setDisbPage(1); setRepPage(1); }}
+                      className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                    >
+                      {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
                   <button type="button" onClick={() => setRepPage((p) => Math.max(1, p - 1))} disabled={repPage === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-                  <span className="font-semibold text-slate-700">Page {repPage} of {Math.max(1, Math.ceil(filteredReplenishments.length / PAGE_SIZE))}</span>
-                  <button type="button" onClick={() => setRepPage((p) => Math.min(Math.ceil(filteredReplenishments.length / PAGE_SIZE), p + 1))} disabled={repPage >= Math.ceil(filteredReplenishments.length / PAGE_SIZE)} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+                  <span className="font-semibold text-slate-700">Page {repPage} of {Math.max(1, Math.ceil(filteredReplenishments.length / pageSize))}</span>
+                  <button type="button" onClick={() => setRepPage((p) => Math.min(Math.ceil(filteredReplenishments.length / pageSize), p + 1))} disabled={repPage >= Math.ceil(filteredReplenishments.length / pageSize)} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
                 </div>
               </div>
             )}

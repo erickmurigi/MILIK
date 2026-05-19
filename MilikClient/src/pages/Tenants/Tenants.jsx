@@ -5,6 +5,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
   FaPlus,
   FaSearch,
+  FaChevronDown,
   FaChevronLeft,
   FaChevronRight,
   FaExpandAlt,
@@ -25,6 +26,7 @@ import {
   FaSms,
   FaExchangeAlt,
   FaUserSlash,
+  FaTimes,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getTenants, deleteTenant, updateTenant } from "../../redux/tenantsRedux";
@@ -55,7 +57,7 @@ import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
-const ITEMS_PER_PAGE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 const normalizeId = (value) => {
   if (!value) return "";
@@ -213,6 +215,7 @@ const Tenants = ({ listingMode = "active" }) => {
   const defaultStatusFilter = isTerminatedView ? "terminated" : "active";
 
   // ===== UI STATE =====
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedTenants, setExpandedTenants] = useState([]);
   const [selectedTenants, setSelectedTenants] = useState([]);
@@ -591,10 +594,10 @@ const Tenants = ({ listingMode = "active" }) => {
   }, [filteredTenants]);
 
   // ===== PAGINATION =====
-  const totalPages = Math.max(1, Math.ceil(sortedFilteredTenants.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(sortedFilteredTenants.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const currentTenants = sortedFilteredTenants.slice(startIndex, endIndex);
 
   const selectedPrimaryTenant = useMemo(
@@ -1601,9 +1604,7 @@ const confirmTransferUnit = async () => {
                     className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
                   />
                 </th>
-                <th className="px-2 py-1.5 text-center font-bold border-r border-gray-400 w-6">
-                  ⬇️
-                </th>
+                <th className="px-2 py-1.5 text-center font-bold border-r border-gray-400 w-6" />
                 <th className="px-2 py-1.5 text-left font-bold border-r border-gray-400 min-w-[80px]">
                   Code
                 </th>
@@ -1706,12 +1707,12 @@ const confirmTransferUnit = async () => {
                           />
                         </td>
                         <td
-                          className="px-2 py-1 text-center border-r border-gray-200 cursor-pointer"
-                          onClick={() => toggleTenantExpand(tenant.id)}
+                          className="px-2 py-1 text-center border-r border-gray-200 cursor-pointer text-slate-400 transition hover:text-slate-700"
+                          onClick={(e) => { e.stopPropagation(); toggleTenantExpand(tenant.id); }}
                         >
-                          <span>
-                            {expandedTenants.includes(tenant.id) ? "▼" : "▶"}
-                          </span>
+                          {expandedTenants.includes(tenant.id)
+                            ? <FaChevronDown size={10} />
+                            : <FaChevronRight size={10} />}
                         </td>
                         <td className="px-2 py-1 font-mono text-gray-600 border-r border-gray-200 text-xs">
                           {toListingCaps(tenant.tenantCode)}
@@ -1764,7 +1765,7 @@ const confirmTransferUnit = async () => {
                                   ? "bg-red-100 text-red-700"
                                   : "bg-amber-100 text-amber-800"
                               }`}>
-                                {tenant.settlementStatus.replace(/_/g, " ")}
+                                {tenant.settlementStatus.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}
                               </span>
                             </td>
                             <td className="px-2 py-1 font-bold text-gray-900">
@@ -1829,8 +1830,8 @@ const confirmTransferUnit = async () => {
                           <td colSpan="12" className="px-3 py-1.5">
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
                               <div>
-                                <h4 className="font-bold text-gray-900 mb-2 text-xs border-b-2 border-orange-500 pb-1">
-                                  👤 Tenant Details
+                                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                                  Tenant Details
                                 </h4>
                                 <div className="space-y-1 text-xs">
                                   <div>
@@ -1849,8 +1850,8 @@ const confirmTransferUnit = async () => {
                               </div>
 
                               <div>
-                                <h4 className="font-bold text-gray-900 mb-2 text-xs border-b-2 border-green-500 pb-1">
-                                  💰 Billing Info
+                                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                                  Billing Info
                                 </h4>
                                 <div className="space-y-1 text-xs">
                                   <div>
@@ -1887,8 +1888,8 @@ const confirmTransferUnit = async () => {
                               </div>
 
                               <div>
-                                <h4 className="font-bold text-gray-900 mb-2 text-xs border-b-2 border-blue-500 pb-1">
-                                  📋 Lease Details
+                                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                                  Lease Details
                                 </h4>
                                 <div className="space-y-1 text-xs">
                                   <div>
@@ -1913,8 +1914,8 @@ const confirmTransferUnit = async () => {
                               </div>
 
                               <div>
-                                <h4 className="font-bold text-gray-900 mb-2 text-xs border-b-2 border-purple-500 pb-1">
-                                  ⚙️ Actions
+                                <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                                  Actions
                                 </h4>
                                 <div className="flex flex-col gap-1">
                                   <button
@@ -1923,29 +1924,29 @@ const confirmTransferUnit = async () => {
                                       const tabTitle = `${firstName}-${tenant.tenantCode || "TT0000"}`;
                                       navigate(`/tenant/${tenant.id}/statement`, { state: { tabTitle } });
                                     }}
-                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-xs transition-colors"
+                                    className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-[#0B3B2E] hover:bg-[#0A3127]"
                                   >
-                                    💳 View Statement
+                                    View Statement
                                   </button>
                                   {isTerminatedView && (
                                     <>
                                       <button
                                         onClick={() => navigate(`/invoices/rental/${tenant.id}`, { state: { openSingleBooking: true } })}
-                                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-xs transition-colors"
+                                        className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-emerald-600 hover:bg-emerald-700"
                                       >
-                                        🧾 Final Billing
+                                        Final Billing
                                       </button>
                                       <button
                                         onClick={() => openDepositSettlementModal(tenant.id)}
-                                        className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded text-xs transition-colors"
+                                        className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-amber-600 hover:bg-amber-700"
                                       >
-                                        💰 Deposit Settlement
+                                        Deposit Settlement
                                       </button>
                                       <button
                                         onClick={() => navigate(`/inspections`)}
-                                        className="px-2 py-1 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded text-xs transition-colors"
+                                        className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-slate-600 hover:bg-slate-700"
                                       >
-                                        🧪 Move-out Inspection
+                                        Move-out Inspection
                                       </button>
                                     </>
                                   )}
@@ -1990,7 +1991,17 @@ const confirmTransferUnit = async () => {
             {isTerminatedView ? "terminated tenants" : "tenants"}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
+              <span className="font-semibold text-slate-500 text-xs">Per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+              >
+                {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
             <button
               onClick={() => setCurrentPage(safeCurrentPage - 1)}
               disabled={safeCurrentPage === 1}
@@ -2200,20 +2211,20 @@ const confirmTransferUnit = async () => {
       )}
       {showDepositSettlementModal && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
-          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-[#0B3B2E] px-6 py-5">
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="bg-[#0B3B2E] px-6 py-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-white/80">Deposit Settlement</p>
-                  <h3 className="mt-1 text-xl font-black text-white">Terminate Tenant Settlement Workspace</h3>
-                  <p className="mt-1 text-sm text-white/90">Apply deposit, refund the balance, or retain charges without leaving the terminated tenants page.</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">Deposit Settlement</p>
+                  <h3 className="mt-0.5 text-base font-bold text-white">Terminate Tenant Settlement Workspace</h3>
+                  <p className="mt-0.5 text-xs text-white/70">Apply deposit, refund the balance, or retain charges without leaving the terminated tenants page.</p>
                 </div>
                 <button
                   onClick={closeDepositSettlementModal}
                   disabled={isProcessingDepositSettlement}
-                  className="rounded-2xl border border-white/30 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-60"
                 >
-                  Close
+                  <FaTimes size={13} />
                 </button>
               </div>
             </div>
@@ -2222,46 +2233,46 @@ const confirmTransferUnit = async () => {
               <div className="grid gap-4 xl:grid-cols-[1.3fr,0.95fr]">
                 <div className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
-                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Tenant</p>
-                      <p className="mt-2 text-sm font-black text-slate-900">{depositSettlementTenant?.tenantName || "-"}</p>
-                      <p className="mt-1 text-xs text-slate-600">{depositSettlementTenant?.tenantCode || "-"}</p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Tenant</p>
+                      <p className="mt-1.5 text-sm font-bold text-slate-900">{depositSettlementTenant?.tenantName || "-"}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{depositSettlementTenant?.tenantCode || "-"}</p>
                     </div>
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
-                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Property / Unit</p>
-                      <p className="mt-2 text-sm font-black text-slate-900">{depositSettlementTenant?.propertyName || "-"}</p>
-                      <p className="mt-1 text-xs text-slate-600">{depositSettlementTenant?.unitNumber || "-"}</p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Property / Unit</p>
+                      <p className="mt-1.5 text-sm font-bold text-slate-900">{depositSettlementTenant?.propertyName || "-"}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{depositSettlementTenant?.unitNumber || "-"}</p>
                     </div>
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
-                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Termination Date</p>
-                      <p className="mt-2 text-sm font-black text-slate-900">{depositSettlementTenant?.terminationDate || "-"}</p>
-                      <p className="mt-1 text-xs text-slate-600">Move-out {depositSettlementTenant?.moveOutDate || "-"}</p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Termination Date</p>
+                      <p className="mt-1.5 text-sm font-bold text-slate-900">{depositSettlementTenant?.terminationDate || "-"}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Move-out {depositSettlementTenant?.moveOutDate || "-"}</p>
                     </div>
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
-                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Deposit Holder</p>
-                      <p className="mt-2 text-sm font-black text-slate-900">{depositSettlementDerived.depositHolder}</p>
-                      <p className="mt-1 text-xs text-slate-600">Refund {depositSettlementDerived.canRefund ? "allowed" : "blocked"}</p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Deposit Holder</p>
+                      <p className="mt-1.5 text-sm font-bold text-slate-900">{depositSettlementDerived.depositHolder}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Refund {depositSettlementDerived.canRefund ? "allowed" : "blocked"}</p>
                     </div>
                   </div>
 
                   <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4">
-                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-700">Deposit Held</p>
-                      <p className="mt-2 text-2xl font-black text-amber-950">Ksh {depositSettlementDerived.depositHeld.toLocaleString()}</p>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Deposit Held</p>
+                      <p className="mt-1.5 text-xl font-black text-amber-950">Ksh {depositSettlementDerived.depositHeld.toLocaleString()}</p>
                     </div>
-                    <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-4">
-                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-red-700">Outstanding Balance</p>
-                      <p className="mt-2 text-2xl font-black text-red-900">Ksh {depositSettlementDerived.outstandingBalance.toLocaleString()}</p>
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-red-700">Outstanding Balance</p>
+                      <p className="mt-1.5 text-xl font-black text-red-900">Ksh {depositSettlementDerived.outstandingBalance.toLocaleString()}</p>
                     </div>
-                    <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-4">
-                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Remaining After Apply</p>
-                      <p className="mt-2 text-2xl font-black text-emerald-900">Ksh {depositSettlementDerived.remainingAfterApply.toLocaleString()}</p>
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">Remaining After Apply</p>
+                      <p className="mt-1.5 text-xl font-black text-emerald-900">Ksh {depositSettlementDerived.remainingAfterApply.toLocaleString()}</p>
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Choose settlement action</p>
-                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Choose settlement action</p>
+                    <div className="mt-3 grid gap-2 md:grid-cols-3">
                       {[
                         { key: "apply", title: "Apply Deposit to Balance", caption: "Use the deposit to clear open arrears first." },
                         { key: "refund", title: "Refund Remaining Deposit", caption: depositSettlementDerived.canRefund ? "Post a manager-held refund to cash or bank." : "Blocked for landlord-held deposits." },
@@ -2275,53 +2286,53 @@ const confirmTransferUnit = async () => {
                             type="button"
                             disabled={disabled || isProcessingDepositSettlement}
                             onClick={() => setDepositSettlementAction(option.key)}
-                            className={`rounded-3xl border px-4 py-4 text-left transition ${
+                            className={`rounded-lg border px-3 py-3 text-left transition ${
                               active
-                                ? "border-[#0B3B2E] bg-[#0B3B2E] text-white shadow-lg"
+                                ? "border-[#0B3B2E] bg-[#0B3B2E] text-white shadow-md"
                                 : disabled
                                 ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                                : "border-slate-200 bg-slate-50 text-slate-900 hover:border-amber-300 hover:bg-amber-50"
+                                : "border-slate-200 bg-slate-50 text-slate-900 hover:border-[#0B3B2E]/30 hover:bg-[#0B3B2E]/5"
                             }`}
                           >
-                            <p className="text-sm font-black">{option.title}</p>
-                            <p className={`mt-2 text-xs ${active ? "text-white/80" : "text-slate-500"}`}>{option.caption}</p>
+                            <p className="text-xs font-bold">{option.title}</p>
+                            <p className={`mt-1 text-[11px] ${active ? "text-white/75" : "text-slate-500"}`}>{option.caption}</p>
                           </button>
                         );
                       })}
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Smart calculation</p>
-                        <h4 className="mt-1 text-base font-black text-slate-900">Settlement preview</h4>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Smart calculation</p>
+                        <h4 className="mt-0.5 text-sm font-bold text-slate-900">Settlement preview</h4>
                       </div>
-                      {depositSettlementContext.loading && <span className="text-xs font-semibold text-slate-500">Loading invoice and account context...</span>}
+                      {depositSettlementContext.loading && <span className="text-xs text-slate-500">Loading...</span>}
                     </div>
 
-                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Apply To Arrears</p>
-                        <p className="mt-2 text-lg font-black text-slate-900">Ksh {depositSettlementDerived.baseApplyAmount.toLocaleString()}</p>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Apply To Arrears</p>
+                        <p className="mt-1 text-base font-black text-slate-900">Ksh {depositSettlementDerived.baseApplyAmount.toLocaleString()}</p>
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Refund Amount</p>
-                        <p className="mt-2 text-lg font-black text-slate-900">Ksh {depositSettlementDerived.safeRefundAmount.toLocaleString()}</p>
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Refund Amount</p>
+                        <p className="mt-1 text-base font-black text-slate-900">Ksh {depositSettlementDerived.safeRefundAmount.toLocaleString()}</p>
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Retain Amount</p>
-                        <p className="mt-2 text-lg font-black text-slate-900">Ksh {depositSettlementDerived.safeRetainAmount.toLocaleString()}</p>
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Retain Amount</p>
+                        <p className="mt-1 text-base font-black text-slate-900">Ksh {depositSettlementDerived.safeRetainAmount.toLocaleString()}</p>
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Final Balance</p>
-                        <p className="mt-2 text-lg font-black text-slate-900">Ksh {depositSettlementDerived.finalBalance.toLocaleString()}</p>
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Final Balance</p>
+                        <p className="mt-1 text-base font-black text-slate-900">Ksh {depositSettlementDerived.finalBalance.toLocaleString()}</p>
                       </div>
                     </div>
 
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700">Refund amount</label>
+                        <label className="block text-xs font-semibold text-slate-700">Refund amount</label>
                         <input
                           type="number"
                           min="0"
@@ -2329,13 +2340,13 @@ const confirmTransferUnit = async () => {
                           disabled={depositSettlementAction !== "refund" || !depositSettlementDerived.canRefund}
                           value={depositSettlementForm.refundAmount}
                           onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, refundAmount: e.target.value }))}
-                          className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm disabled:bg-slate-100"
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
                           placeholder="0.00"
                         />
-                        <p className="mt-1 text-[11px] text-slate-500">Refund is capped at the deposit left after arrears have been applied.</p>
+                        <p className="mt-1 text-[10px] text-slate-500">Capped at the deposit left after arrears are applied.</p>
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700">Retain amount</label>
+                        <label className="block text-xs font-semibold text-slate-700">Retain amount</label>
                         <input
                           type="number"
                           min="0"
@@ -2343,21 +2354,21 @@ const confirmTransferUnit = async () => {
                           disabled={depositSettlementAction !== "retain"}
                           value={depositSettlementForm.retainAmount}
                           onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, retainAmount: e.target.value }))}
-                          className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm disabled:bg-slate-100"
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
                           placeholder="0.00"
                         />
-                        <p className="mt-1 text-[11px] text-slate-500">Retention is supported through a charge invoice and immediate deposit settlement trail.</p>
+                        <p className="mt-1 text-[10px] text-slate-500">Retained via a charge invoice and deposit settlement trail.</p>
                       </div>
                     </div>
 
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700">Cash / bank account for refund</label>
+                        <label className="block text-xs font-semibold text-slate-700">Cash / bank account for refund</label>
                         <select
                           value={depositSettlementForm.cashbookAccountId}
                           disabled={depositSettlementAction !== "refund" || !depositSettlementDerived.canRefund}
                           onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, cashbookAccountId: e.target.value }))}
-                          className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm disabled:bg-slate-100"
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
                         >
                           <option value="">Select cash or bank account</option>
                           {cashbookAccounts.map((account) => (
@@ -2368,13 +2379,13 @@ const confirmTransferUnit = async () => {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700">Reason / narration</label>
+                        <label className="block text-xs font-semibold text-slate-700">Reason / narration</label>
                         <textarea
                           rows={3}
                           value={depositSettlementForm.reason}
                           onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, reason: e.target.value }))}
                           placeholder="Move-out arrears cleared, damage retention, tenant refund reference..."
-                          className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
                         />
                       </div>
                     </div>
@@ -2382,50 +2393,50 @@ const confirmTransferUnit = async () => {
                 </div>
 
                 <div className="space-y-4">
-                  <div className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Accounting preview</p>
-                    <div className="mt-4 space-y-3 text-sm text-slate-700">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <p className="font-black text-slate-900">Apply deposit</p>
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Accounting preview</p>
+                    <div className="mt-3 space-y-2 text-xs text-slate-700">
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                        <p className="font-bold text-slate-900">Apply deposit</p>
                         <p className="mt-1">DR Deposit Liability</p>
                         <p>CR Tenant Receivable</p>
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <p className="font-black text-slate-900">Refund (manager-held only)</p>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                        <p className="font-bold text-slate-900">Refund (manager-held only)</p>
                         <p className="mt-1">DR Deposit Liability</p>
                         <p>CR Cash / Bank</p>
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <p className="font-black text-slate-900">Retention</p>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                        <p className="font-bold text-slate-900">Retention</p>
                         <p className="mt-1">Create charge invoice first, then clear it from the deposit trail.</p>
                       </div>
                       {!depositSettlementDerived.canRefund && (
-                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
-                          <p className="font-black">Landlord-held deposit rule</p>
-                          <p className="mt-1 text-xs">This workspace will not post cash or bank refunds when the deposit is held by the landlord.</p>
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-900">
+                          <p className="font-bold">Landlord-held deposit rule</p>
+                          <p className="mt-1">This workspace will not post cash or bank refunds when the deposit is held by the landlord.</p>
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Open invoices available for settlement</p>
-                        <h4 className="mt-1 text-base font-black text-slate-900">Automatic deposit allocation</h4>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Open invoices for settlement</p>
+                        <h4 className="mt-0.5 text-sm font-bold text-slate-900">Automatic deposit allocation</h4>
                       </div>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">
                         {depositSettlementContext.creditableInvoices.length} open
                       </span>
                     </div>
-                    <div className="mt-4 max-h-[260px] overflow-y-auto rounded-2xl border border-slate-200">
+                    <div className="mt-3 max-h-[220px] overflow-y-auto rounded-lg border border-slate-200">
                       {depositSettlementContext.creditableInvoices.length > 0 ? (
                         <table className="min-w-full divide-y divide-slate-200 text-xs">
                           <thead className="bg-slate-50 text-slate-600">
                             <tr>
-                              <th className="px-3 py-1.5 text-left font-black uppercase tracking-[0.14em]">Invoice</th>
-                              <th className="px-3 py-1.5 text-left font-black uppercase tracking-[0.14em]">Category</th>
-                              <th className="px-3 py-1.5 text-right font-black uppercase tracking-[0.14em]">Open</th>
+                              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-[0.14em]">Invoice</th>
+                              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-[0.14em]">Category</th>
+                              <th className="px-3 py-1.5 text-right font-bold uppercase tracking-[0.14em]">Open</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 bg-white">
@@ -2433,42 +2444,42 @@ const confirmTransferUnit = async () => {
                               <tr key={normalizeId(invoice?._id)}>
                                 <td className="px-3 py-1.5 font-semibold text-slate-900">{invoice?.invoiceNumber || "-"}</td>
                                 <td className="px-3 py-1.5 text-slate-600">{String(invoice?.category || "-").replace(/_/g, " ")}</td>
-                                <td className="px-3 py-1.5 text-right font-black text-slate-900">Ksh {roundMoney(invoice?.remainingCreditableAmount ?? invoice?.remainingBalance ?? 0).toLocaleString()}</td>
+                                <td className="px-3 py-1.5 text-right font-bold text-slate-900">Ksh {roundMoney(invoice?.remainingCreditableAmount ?? invoice?.remainingBalance ?? 0).toLocaleString()}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       ) : (
-                        <div className="px-4 py-8 text-center text-sm text-slate-500">No open posted invoices are currently available for automatic crediting.</div>
+                        <div className="px-4 py-6 text-center text-xs text-slate-500">No open posted invoices available for automatic crediting.</div>
                       )}
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-[#0B3B2E]/15 bg-[#0B3B2E]/5 px-5 py-5">
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0B3B2E]">Final confirmation</p>
-                    <div className="mt-4 space-y-2 text-sm text-slate-700">
-                      <p><span className="font-black text-slate-900">Action:</span> {depositSettlementAction.replace(/_/g, " ")}</p>
-                      <p><span className="font-black text-slate-900">Apply amount:</span> Ksh {depositSettlementDerived.baseApplyAmount.toLocaleString()}</p>
-                      <p><span className="font-black text-slate-900">Refund amount:</span> Ksh {depositSettlementDerived.safeRefundAmount.toLocaleString()}</p>
-                      <p><span className="font-black text-slate-900">Retain amount:</span> Ksh {depositSettlementDerived.safeRetainAmount.toLocaleString()}</p>
-                      <p><span className="font-black text-slate-900">Deposit left after settlement:</span> Ksh {roundMoney(
+                  <div className="rounded-xl border border-[#0B3B2E]/15 bg-[#0B3B2E]/5 px-4 py-4">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#0B3B2E]">Final confirmation</p>
+                    <div className="mt-3 space-y-1.5 text-xs text-slate-700">
+                      <p><span className="font-bold text-slate-900">Action:</span> {depositSettlementAction.replace(/_/g, " ")}</p>
+                      <p><span className="font-bold text-slate-900">Apply amount:</span> Ksh {depositSettlementDerived.baseApplyAmount.toLocaleString()}</p>
+                      <p><span className="font-bold text-slate-900">Refund amount:</span> Ksh {depositSettlementDerived.safeRefundAmount.toLocaleString()}</p>
+                      <p><span className="font-bold text-slate-900">Retain amount:</span> Ksh {depositSettlementDerived.safeRetainAmount.toLocaleString()}</p>
+                      <p><span className="font-bold text-slate-900">Deposit left after settlement:</span> Ksh {roundMoney(
                         depositSettlementDerived.depositHeld - depositSettlementDerived.baseApplyAmount - (depositSettlementAction === "refund" ? depositSettlementDerived.safeRefundAmount : 0) - (depositSettlementAction === "retain" ? depositSettlementDerived.safeRetainAmount : 0)
                       ).toLocaleString()}</p>
                     </div>
-                    <div className="mt-5 flex flex-wrap justify-end gap-3">
+                    <div className="mt-4 flex flex-wrap justify-end gap-2">
                       <button
                         onClick={closeDepositSettlementModal}
                         disabled={isProcessingDepositSettlement}
-                        className="rounded-2xl border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-60"
+                        className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={processDepositSettlement}
                         disabled={isProcessingDepositSettlement || depositSettlementContext.loading}
-                        className="rounded-2xl bg-[#0B3B2E] px-5 py-2.5 text-sm font-black text-white shadow-lg transition hover:bg-[#0a2f25] disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white shadow-md transition hover:bg-[#0a2f25] disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {isProcessingDepositSettlement ? "Processing settlement..." : "Confirm Settlement"}
+                        {isProcessingDepositSettlement ? "Processing..." : "Confirm Settlement"}
                       </button>
                     </div>
                   </div>

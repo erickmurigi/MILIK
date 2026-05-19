@@ -31,7 +31,7 @@ import {
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 
-const ITEMS_PER_PAGE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 const BASE_CATEGORIES = [
   { value: "landlord_maintenance", label: "Landlord Expense - Maintenance", landlordLabel: "Owner Expense - Maintenance", propertyRequired: true, explicitDebitAccount: false },
@@ -117,6 +117,7 @@ const PaymentVouchers = () => {
   const [debitAccounts, setDebitAccounts] = useState([]);
   const [settlementAccounts, setSettlementAccounts] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
   const [pendingPayVoucher, setPendingPayVoucher] = useState(null);
   const [pendingPaySettlementId, setPendingPaySettlementId] = useState("");
@@ -222,15 +223,15 @@ const PaymentVouchers = () => {
 
   const selectedRows = useMemo(() => filtered.filter((voucher) => selectedIds.includes(voucher._id)), [filtered, selectedIds]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = filtered.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = filtered.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const currentPageRows = filtered.slice(startIndex, endIndex);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, filters.category, filters.status, filters.propertyId, filtered.length]);
+  }, [debouncedSearch, filters.category, filters.status, filters.propertyId, filtered.length, pageSize]);
 
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
@@ -634,8 +635,17 @@ const PaymentVouchers = () => {
               <div className="font-semibold">
                 Showing <span className="font-bold text-slate-900">{filtered.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filtered.length)}</span> of <span className="font-bold text-slate-900">{filtered.length}</span> voucher(s)
               </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-slate-500">Per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                    className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                  >
+                    {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
                 <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
                 <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
                 <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>

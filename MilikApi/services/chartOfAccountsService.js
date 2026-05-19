@@ -42,14 +42,28 @@ const SYSTEM_CHART_TEMPLATE = [
   { code: "5310", name: "Car Wash Supplies Expense", type: "expense", group: "expenses", subGroup: "Car Wash Expenses", isSystem: true, isHeader: false, isPosting: true },
   { code: "5311", name: "Car Wash Staff Wages", type: "expense", group: "expenses", subGroup: "Car Wash Expenses", isSystem: true, isHeader: false, isPosting: true },
   { code: "5312", name: "Car Wash Water and Utilities", type: "expense", group: "expenses", subGroup: "Car Wash Expenses", isSystem: true, isHeader: false, isPosting: true },
+
+  // HR / Payroll accounts
+  { code: "2170", name: "PAYE Tax Payable", type: "liability", group: "liabilities", subGroup: "HR & Payroll Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "2171", name: "NHIF Contributions Payable", type: "liability", group: "liabilities", subGroup: "HR & Payroll Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "2172", name: "NSSF Contributions Payable", type: "liability", group: "liabilities", subGroup: "HR & Payroll Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "2173", name: "AHL Levy Payable", type: "liability", group: "liabilities", subGroup: "HR & Payroll Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "2174", name: "Other Payroll Deductions Payable", type: "liability", group: "liabilities", subGroup: "HR & Payroll Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "2175", name: "Net Salaries Payable", type: "liability", group: "liabilities", subGroup: "HR & Payroll Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "5400", name: "Salaries and Wages Expense", type: "expense", group: "expenses", subGroup: "HR & Payroll Expenses", isSystem: true, isHeader: false, isPosting: true },
+  { code: "5401", name: "Employer NHIF Contribution", type: "expense", group: "expenses", subGroup: "HR & Payroll Expenses", isSystem: true, isHeader: false, isPosting: true },
+  { code: "5402", name: "Employer NSSF Contribution", type: "expense", group: "expenses", subGroup: "HR & Payroll Expenses", isSystem: true, isHeader: false, isPosting: true },
+  { code: "5403", name: "Employer AHL Levy", type: "expense", group: "expenses", subGroup: "HR & Payroll Expenses", isSystem: true, isHeader: false, isPosting: true },
 ];
 
 const SYSTEM_CHART_CODES = SYSTEM_CHART_TEMPLATE.map((account) => account.code);
 const ensureCache = new Map();
 const ENSURE_CACHE_TTL_MS = 5 * 60 * 1000;
-const VALID_MODULE_SCOPES = new Set(["general", "propertyManagement", "carwash"]);
+const VALID_MODULE_SCOPES = new Set(["general", "propertyManagement", "carwash", "hr"]);
 const CARWASH_ACCOUNT_CODES = new Set(["2160", "4400", "5310", "5311", "5312"]);
 const SHARED_CASHBOOK_CODES = new Set(["1100", "1110", "1130"]);
+
+const HR_ACCOUNT_CODES = new Set(["2170", "2171", "2172", "2173", "2174", "2175", "5400", "5401", "5402", "5403"]);
 
 const moduleScopesForAccount = (account = {}) => {
   const code = String(account.code || "").trim().toUpperCase();
@@ -58,6 +72,7 @@ const moduleScopesForAccount = (account = {}) => {
 
   if (SHARED_CASHBOOK_CODES.has(code)) return ["propertyManagement", "carwash"];
   if (CARWASH_ACCOUNT_CODES.has(code) || name.includes("car wash") || subGroup.includes("car wash")) return ["carwash"];
+  if (HR_ACCOUNT_CODES.has(code) || subGroup.includes("hr & payroll") || name.includes("payroll") || name.includes("paye") || name.includes("nhif") || name.includes("nssf") || name.includes("ahl levy")) return ["hr"];
   if (["3100", "3200"].includes(code)) return ["general"];
   return ["propertyManagement"];
 };
@@ -149,7 +164,7 @@ export const findChartOfAccounts = async ({
   }
 
   const scopes = normalizeModuleScopes(moduleScope);
-  await ensureSystemChartOfAccounts(normalizedBusinessId, { force: scopes.includes("carwash") });
+  await ensureSystemChartOfAccounts(normalizedBusinessId, { force: scopes.includes("carwash") || scopes.includes("hr") });
 
   const query = { business: normalizedBusinessId };
 
@@ -167,6 +182,16 @@ export const findChartOfAccounts = async ({
             scopedMatch,
             { subGroup: { $regex: "car wash|cashbook", $options: "i" } },
             { name: { $regex: "car wash", $options: "i" } },
+          ],
+        },
+      ];
+    } else if (scopes.includes("hr")) {
+      query.$and = [
+        ...(query.$and || []),
+        {
+          $or: [
+            scopedMatch,
+            { subGroup: { $regex: "hr.*payroll|payroll.*hr", $options: "i" } },
           ],
         },
       ];

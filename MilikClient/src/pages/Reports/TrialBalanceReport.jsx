@@ -663,5 +663,5 @@ const TrialBalanceReport = () => {
     </DashboardLayout>
   );
 };
-
+   
 export default TrialBalanceReport;

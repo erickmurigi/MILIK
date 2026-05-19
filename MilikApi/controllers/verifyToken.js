@@ -189,7 +189,15 @@ export const verifyCompanyScope = (req, res, next) => {
   });
 };
 
-export const requireCompanyModule = (moduleKey, options = {}) => {
+// Modules that grant access to the shared accounting layer (Chart of Accounts + Journal Entries).
+// Any company with at least one of these modules enabled can read GL data.
+// Only the "accounts" module grants write/admin access to the COA.
+export const GL_ACCESS_MODULES = ["accounts", "propertyManagement", "hr", "carwash"];
+
+export const requireCompanyModule = (moduleKeyOrKeys, options = {}) => {
+  // Accept a string or array. Array = OR semantics: company must have at least one.
+  const moduleKeys = Array.isArray(moduleKeyOrKeys) ? moduleKeyOrKeys : [moduleKeyOrKeys];
+
   return async (req, res, next) => {
     try {
       if (isSystemAdminUser(req.user)) {
@@ -205,8 +213,10 @@ export const requireCompanyModule = (moduleKey, options = {}) => {
         return next(createError(404, "Company not found"));
       }
 
-      if (!hasModuleAccess(req.user, company, moduleKey, options)) {
-        return next(createError(403, `${moduleKey} module is not enabled for this company or user`));
+      const hasAccess = moduleKeys.some((key) => hasModuleAccess(req.user, company, key, options));
+      if (!hasAccess) {
+        const label = moduleKeys.length === 1 ? moduleKeys[0] : `one of [${moduleKeys.join(", ")}]`;
+        return next(createError(403, `${label} module is not enabled for this company or user`));
       }
 
       next();

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FaUsers, FaUserCheck, FaUserClock, FaUserTimes, FaBuilding,
-  FaRedoAlt, FaUserPlus, FaCog, FaChartBar,
+  FaRedoAlt, FaUserPlus, FaCog, FaChartBar, FaMoneyBillWave,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { adminRequests } from '../../utils/requestMethods';
@@ -194,6 +194,8 @@ export default function HRDashboard() {
                   {[
                     { label: 'All Employees', route: '/hr/employees', icon: FaUsers },
                     { label: 'Add Employee', route: '/hr/employees/new', icon: FaUserPlus },
+                    { label: 'Payroll', route: '/hr/payroll', icon: FaChartBar },
+                    { label: 'Financials', route: '/hr/financials', icon: FaMoneyBillWave },
                     { label: 'Departments & Designations', route: '/hr/setup', icon: FaCog },
                   ].map(({ label, route, icon: Icon }) => (
                     <button

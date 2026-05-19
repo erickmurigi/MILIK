@@ -40,7 +40,7 @@ import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/
 import { hasCompanyPermission } from "../../utils/permissions";
 
 const STORAGE_KEY = "milik_landlords_v1";
-const ITEMS_PER_PAGE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 const MILIK_GREEN = "bg-[#0B3B2E]"; // deep MILIK-ish green
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -64,6 +64,7 @@ const Landlords = () => {
   // Table + UI state
   const [selectedLandlords, setSelectedLandlords] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -278,11 +279,11 @@ const Landlords = () => {
   }, [landlords, appliedFilters]);
 
   // Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredLandlords.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredLandlords.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
 
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const currentLandlords = filteredLandlords.slice(startIndex, endIndex);
 
   const countLinkedProperties = (landlord = {}) =>
@@ -1164,6 +1165,16 @@ const Landlords = () => {
 
                 {/* Pagination */}
                 <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <span className="font-semibold text-slate-500 text-xs">Per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                      className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                    >
+                      {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
                   <button
                     onClick={() => goToPage(safeCurrentPage - 1)}
                     disabled={safeCurrentPage === 1}

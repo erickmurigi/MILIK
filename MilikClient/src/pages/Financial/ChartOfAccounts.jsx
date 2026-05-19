@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   FaBook,
   FaSearch,
@@ -148,9 +148,18 @@ const formatMoney = (value) => {
   }).format(amount);
 };
 
+const MODULE_SCOPE_OPTIONS = [
+  { value: "",                 label: "All Modules" },
+  { value: "hr",               label: "HR & Payroll" },
+  { value: "propertyManagement", label: "Property Management" },
+  { value: "carwash",          label: "Car Wash" },
+  { value: "general",          label: "General" },
+];
+
 const ChartOfAccounts = () => {
   const confirm = useConfirm();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const canCreateCOA = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "create", "accounts");
@@ -159,6 +168,7 @@ const ChartOfAccounts = () => {
 
   const [accounts, setAccounts] = useState([]);
   const [search, setSearch] = useState("");
+  const [moduleScope, setModuleScope] = useState(() => searchParams.get("scope") || "");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showControlAccounts, setShowControlAccounts] = useState(false);
@@ -205,7 +215,9 @@ const ChartOfAccounts = () => {
 
     setLoading(true);
     try {
-      const rows = await getChartOfAccounts({ business: businessId });
+      const params = { business: businessId };
+      if (moduleScope) params.moduleScope = moduleScope;
+      const rows = await getChartOfAccounts(params);
       if (requestSequenceRef.current !== requestId) return;
       setAccounts(Array.isArray(rows) ? rows : []);
     } catch (error) {
@@ -227,7 +239,7 @@ const ChartOfAccounts = () => {
 
   useEffect(() => {
     loadAccounts();
-  }, [businessId]);
+  }, [businessId, moduleScope]);
 
   useEffect(() => {
     const handleRefresh = () => loadAccounts();
@@ -480,6 +492,16 @@ const ChartOfAccounts = () => {
                   className="h-7 w-56 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
               </div>
+              <select
+                value={moduleScope}
+                onChange={(e) => setModuleScope(e.target.value)}
+                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                title="Filter by module"
+              >
+                {MODULE_SCOPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
               <label className="h-7 shrink-0 flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600">
                 <input
                   type="checkbox"

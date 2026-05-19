@@ -17,6 +17,7 @@ import {
   updateDepositType,
   deleteDepositType,
   updateAccountingDefaults,
+  updateHrAccountingDefaults,
   updateTaxConfiguration,
 } from "../controllers/propertyController/companySettings.js";
 import { verifyUser } from "../controllers/verifyToken.js";
@@ -46,6 +47,9 @@ router.put("/:businessId/tax-configuration", verifyUser, updateTaxConfiguration)
 
 // Accounting Defaults
 router.put("/:businessId/accounting-defaults", verifyUser, updateAccountingDefaults);
+
+// HR Accounting Defaults
+router.put("/:businessId/hr-accounting-defaults", verifyUser, updateHrAccountingDefaults);
 
 // Expense Items
 router.post("/:businessId/expenses", verifyUser, addExpenseItem);

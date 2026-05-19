@@ -25,13 +25,14 @@ import {
   FaLock,
   FaCog,
   FaCar,
+  FaUserTie,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { clearClientSessionStorage } from "../../utils/sessionCleanup";
 import { getAccessibleCompanies, switchCompany } from "../../redux/apiCalls";
-import { getCompanyOperatingModeLabel, hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { getCompanyOperatingModeLabel, hasCompanyModule, hasAnyCompanyModule, GL_ACCESS_MODULES, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 
 const initialsFromName = (value = "") =>
   String(value || "")
@@ -110,6 +111,14 @@ const moduleRegistry = [
     status: "active",
   },
   {
+    id: "hr",
+    moduleKey: "hr",
+    label: "Human Resources",
+    icon: <FaUserTie />,
+    to: "/hr/dashboard",
+    status: "active",
+  },
+  {
     id: "dms",
     moduleKey: "dms",
     label: "Document Management",
@@ -177,7 +186,14 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
           label: isLandlordMode ? "MILIK Landlord Workspace" : item.label,
         };
       })
-      .filter((item) => hasCompanyModule(activeCompanyContext, item.moduleKey));
+      .filter((item) => {
+        // Accounts entry is visible to any company with a GL-posting module enabled,
+        // not just companies with the dedicated "accounts" module.
+        if (item.id === "accounts") {
+          return hasAnyCompanyModule(activeCompanyContext, GL_ACCESS_MODULES);
+        }
+        return hasCompanyModule(activeCompanyContext, item.moduleKey);
+      });
   }, [activeCompanyContext, isLandlordMode]);
 
   const secondaryTop = useMemo(() => [], []);

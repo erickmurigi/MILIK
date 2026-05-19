@@ -40,6 +40,11 @@ const countSmsInfo = (text = '') => {
   return { chars: len, segments, remaining, encoding: isUnicode ? 'Unicode' : 'GSM-7' };
 };
 
+const smsSegmentProgress = (info) => {
+  const maxPerSeg = info.segments === 1 ? (info.encoding === 'Unicode' ? 70 : 160) : (info.encoding === 'Unicode' ? 67 : 153);
+  return Math.min(100, Math.round(((maxPerSeg - info.remaining) / maxPerSeg) * 100));
+};
+
 const fmtDateTime = (value) => {
   if (!value) return '—';
   return new Date(value).toLocaleString('en-KE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -337,8 +342,13 @@ const CommunicationComposerModal = ({
 
               {/* recipients */}
               <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Recipients Selected</p>
-                <p className="mt-1 text-3xl font-black text-slate-900">{normalizedIds.length}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Recipients</p>
+                <div className="mt-2 flex items-end gap-2">
+                  <span className="text-3xl font-black text-slate-900">{normalizedIds.length}</span>
+                  <span className={`mb-0.5 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${normalizedIds.length > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-400'}`}>
+                    {normalizedIds.length > 0 ? `${normalizedIds.length === 1 ? 'recipient' : 'recipients'} selected` : 'none selected'}
+                  </span>
+                </div>
               </div>
 
               {/* channel */}
@@ -372,20 +382,58 @@ const CommunicationComposerModal = ({
 
               {/* template */}
               <div>
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Template</p>
-                <select
-                  value={selectedTemplateKey}
-                  onChange={(e) => { setSelectedTemplateKey(e.target.value); setPreview(null); prevPreviewKey.current = ''; }}
-                  disabled={loadingTemplates || !templatesForChannel.length}
-                  className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-[12px] text-slate-800 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-100"
-                >
-                  {!templatesForChannel.length && <option value="">No templates available</option>}
-                  {templatesForChannel.map((t) => (
-                    <option key={t.key} value={t.key}>{t.name}</option>
-                  ))}
-                </select>
-                {selectedTemplate?.description && (
-                  <p className="mt-1.5 text-[11px] text-slate-500">{selectedTemplate.description}</p>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Template</p>
+                  {templatesForChannel.length > 0 && (
+                    <span className="text-[10px] text-slate-400">{templatesForChannel.length} available</span>
+                  )}
+                </div>
+                {loadingTemplates && (
+                  <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 py-4 text-[11px] text-slate-400">
+                    Loading templates…
+                  </div>
+                )}
+                {!loadingTemplates && !templatesForChannel.length && (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-center text-[11px] text-slate-400">
+                    No templates available for this context.
+                  </div>
+                )}
+                {!loadingTemplates && templatesForChannel.length > 0 && (
+                  <div className="max-h-[200px] space-y-1 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-1.5">
+                    {templatesForChannel.map((t) => {
+                      const isSelected = selectedTemplateKey === t.key;
+                      return (
+                        <button
+                          key={t.key}
+                          onClick={() => { setSelectedTemplateKey(t.key); setPreview(null); prevPreviewKey.current = ''; }}
+                          className={`w-full rounded-xl border px-3 py-2 text-left transition ${
+                            isSelected
+                              ? 'border-emerald-300 bg-emerald-50 shadow-sm'
+                              : 'border-transparent bg-white hover:border-slate-200 hover:bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`min-w-0 flex-1 truncate text-[11px] font-semibold ${isSelected ? 'text-emerald-800' : 'text-slate-800'}`}>
+                              {t.name}
+                            </span>
+                            <div className="flex shrink-0 items-center gap-1">
+                              {t.sendMode && (
+                                <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase ${isSelected ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                                  {t.sendMode}
+                                </span>
+                              )}
+                              {isSelected && <FaCheckCircle className="text-[10px] text-emerald-500" />}
+                            </div>
+                          </div>
+                          {t.description && (
+                            <p className={`mt-0.5 text-[10px] leading-snug ${isSelected ? 'text-emerald-600' : 'text-slate-400'}`}>
+                              {t.description}
+                            </p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 
@@ -407,9 +455,22 @@ const CommunicationComposerModal = ({
                   className="w-full resize-none rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-[12px] text-slate-800 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
                 />
                 {activeChannel === 'sms' && customBody && (
-                  <div className="mt-1 flex items-center justify-between px-1">
-                    <span className="text-[10px] text-slate-400">{smsInfo.encoding}</span>
-                    <span className="text-[10px] text-slate-400">{smsInfo.remaining} chars remaining in segment {smsInfo.segments}</span>
+                  <div className="mt-2 space-y-1.5">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                      <div
+                        className={`h-1.5 rounded-full transition-all duration-300 ${smsInfo.segments > 2 ? 'bg-red-400' : smsInfo.segments > 1 ? 'bg-orange-400' : 'bg-emerald-400'}`}
+                        style={{ width: `${smsSegmentProgress(smsInfo)}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between px-0.5">
+                      <span className="text-[10px] text-slate-400">{smsInfo.encoding}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold ${smsInfo.segments > 1 ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}>
+                          {smsInfo.segments} SMS
+                        </span>
+                        <span className="text-[10px] text-slate-400">{smsInfo.remaining} left</span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -515,6 +576,14 @@ const CommunicationComposerModal = ({
                 )}
                 {previewLoading && (
                   <EmptyState text="Preparing preview…" />
+                )}
+                {!previewLoading && activeChannel === 'sms' && (preview?.previews || []).length > 0 && (
+                  <SmsPhoneMockup item={preview.previews[0]} />
+                )}
+                {!previewLoading && (preview?.previews || []).length > 0 && (
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                    All Recipients ({(preview?.previews || []).length})
+                  </p>
                 )}
                 {!previewLoading && (preview?.previews || []).map((item) => {
                   const result = hasSendResults
@@ -626,6 +695,64 @@ const CommunicationComposerModal = ({
 
 // ─── sub-components ──────────────────────────────────────────────────────────
 
+const SmsPhoneMockup = ({ item }) => {
+  const info = countSmsInfo(item?.body);
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sample Message Preview</p>
+      <div className="flex items-start gap-4">
+        {/* phone mockup */}
+        <div className="shrink-0">
+          <div className="relative w-[118px] rounded-[20px] border-[3px] border-slate-700 bg-slate-900 px-1.5 pb-3 pt-1.5 shadow-xl">
+            <div className="mx-auto mb-1.5 h-[3px] w-7 rounded-full bg-slate-600" />
+            <div className="overflow-hidden rounded-[12px] bg-white">
+              <div className="bg-[#4A90D9] px-2 py-1.5 text-center">
+                <p className="truncate text-[7px] font-bold text-white">{item?.recipientName || 'Recipient'}</p>
+                <p className="text-[6px] text-blue-100">{item?.recipientPhone || ''}</p>
+              </div>
+              <div className="min-h-[140px] bg-white p-2">
+                <div className="flex justify-start">
+                  <div className="max-w-[95%] rounded-xl rounded-tl-none bg-[#E5E5EA] px-2 py-1.5 text-[7px] leading-[1.4] text-slate-800">
+                    {item?.body || ''}
+                  </div>
+                </div>
+              </div>
+              <div className="border-t border-slate-100 bg-slate-50 px-2 py-1 text-center">
+                <span className={`text-[6.5px] font-semibold ${info.segments > 1 ? 'text-orange-500' : 'text-slate-400'}`}>
+                  {info.chars} chars · {info.segments} SMS
+                </span>
+              </div>
+            </div>
+            <div className="mx-auto mt-1.5 h-3.5 w-3.5 rounded-full border border-slate-600" />
+          </div>
+        </div>
+        {/* message detail */}
+        <div className="min-w-0 flex-1 pt-1">
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
+            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-bold ${item?.canSend ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+              {item?.canSend ? 'Ready' : 'Blocked'}
+            </span>
+            <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold ${info.segments > 1 ? 'bg-orange-100 text-orange-600' : 'bg-emerald-100 text-emerald-600'}`}>
+              {info.segments} SMS
+            </span>
+            <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-500">
+              {info.encoding}
+            </span>
+          </div>
+          <p className="mb-0.5 text-[11px] font-bold text-slate-800">{item?.recipientName}</p>
+          <p className="mb-2 text-[10px] text-slate-400">{item?.recipientPhone}</p>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-700 whitespace-pre-wrap">
+            {item?.body || '—'}
+          </div>
+          {item?.missingPlaceholders?.length > 0 && (
+            <p className="mt-1.5 text-[10px] font-semibold text-red-600">Missing: {item.missingPlaceholders.join(', ')}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Pill = ({ label, value, tone }) => {
   const tones = {
     emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800',
@@ -693,9 +820,24 @@ const PreviewCard = ({ item, result, channel, expanded, onToggle }) => {
               <span className="font-semibold text-slate-900">Subject: </span>{item.subject}
             </div>
           )}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] whitespace-pre-wrap text-slate-800">
-            {item.body || 'No message body.'}
-          </div>
+          {channel === 'sms' ? (
+            <div className="rounded-2xl bg-slate-100 px-3 py-3">
+              <div className="flex justify-start">
+                <div className="max-w-[85%] rounded-2xl rounded-tl-none bg-[#E5E5EA] px-3 py-2.5 text-[11px] leading-relaxed text-slate-800 whitespace-pre-wrap shadow-sm">
+                  {item.body || 'No message body.'}
+                </div>
+              </div>
+              {item.body && (
+                <p className="mt-2 text-right text-[9px] text-slate-400">
+                  {countSmsInfo(item.body).chars} chars · {countSmsInfo(item.body).segments} SMS · {countSmsInfo(item.body).encoding}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] whitespace-pre-wrap text-slate-800">
+              {item.body || 'No message body.'}
+            </div>
+          )}
           {item.missingPlaceholders?.length > 0 && (
             <p className="text-[11px] text-red-600">Missing values: {item.missingPlaceholders.join(', ')}</p>
           )}

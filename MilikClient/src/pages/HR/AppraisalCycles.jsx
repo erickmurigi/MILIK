@@ -7,7 +7,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 25;
 const PERIOD_TYPES = ['Annual', 'Semi-Annual', 'Quarterly', 'Custom'];
 const STATUS_PILL = {
   Draft:  'border-slate-300 bg-slate-50 text-slate-600',
@@ -43,6 +43,7 @@ export default function AppraisalCycles() {
   const [loading, setLoading]       = useState(false);
   const [yearFilter, setYearFilter] = useState('');
   const [statusFilter, setStatus]   = useState('');
+  const [pageSize, setPageSize]      = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage]             = useState(1);
   const [modal, setModal]           = useState(null);
   const [form, setForm]             = useState(EMPTY);
@@ -61,7 +62,7 @@ export default function AppraisalCycles() {
     finally { setLoading(false); }
   }, [yearFilter, statusFilter]);
 
-  useEffect(() => { setPage(1); }, [yearFilter, statusFilter]);
+  useEffect(() => { setPage(1); }, [yearFilter, statusFilter, pageSize]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     adminRequests.get('/hr/kpis', { params: { isActive: 'true' } })
@@ -126,10 +127,10 @@ export default function AppraisalCycles() {
   const nOpen  = cycles.filter((c) => c.status === 'Open').length;
   const nClosed= cycles.filter((c) => c.status === 'Closed').length;
 
-  const totalPages   = Math.ceil(cycles.length / PAGE_SIZE) || 1;
-  const pagedCycles  = cycles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const fromRow      = cycles.length ? (page - 1) * PAGE_SIZE + 1 : 0;
-  const toRow        = Math.min(page * PAGE_SIZE, cycles.length);
+  const totalPages   = Math.ceil(cycles.length / pageSize) || 1;
+  const pagedCycles  = cycles.slice((page - 1) * pageSize, page * pageSize);
+  const fromRow      = cycles.length ? (page - 1) * pageSize + 1 : 0;
+  const toRow        = Math.min(page * pageSize, cycles.length);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -203,7 +204,7 @@ export default function AppraisalCycles() {
               )}
               {!loading && pagedCycles.map((c, idx) => (
                 <tr key={c._id} className="hover:bg-[#0B3B2E]/[0.03]">
-                  <td className="px-3 py-1.5 text-slate-400 tabular-nums">{(page - 1) * PAGE_SIZE + idx + 1}</td>
+                  <td className="px-3 py-1.5 text-slate-400 tabular-nums">{(page - 1) * pageSize + idx + 1}</td>
                   <td className="px-3 py-1.5">
                     <span className="font-semibold text-slate-800">{c.name}</span>
                     {c.notes && <span className="ml-2 text-[10px] text-slate-400 italic">{c.notes}</span>}
@@ -258,7 +259,17 @@ export default function AppraisalCycles() {
         {/* ── Pagination ── */}
         <div className="flex flex-none items-center justify-between border-t border-slate-200 bg-white px-4 py-1.5 text-[11px] text-slate-500">
           <span>Showing {fromRow}–{toRow} of {cycles.length} cycle{cycles.length !== 1 ? 's' : ''}</span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
+              <span className="font-semibold text-slate-500 text-[10px]">Per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                className="h-6 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+              >
+                {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
             <button disabled={page === 1} onClick={() => setPage(1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">«</button>
             <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">‹</button>
             {Array.from({ length: totalPages }, (_, i) => i + 1)

@@ -175,10 +175,11 @@ const ensureSharedCompanyAccess = async (requestUser, targetUser) => {
 
 router.get('/', verifyUser, async (req, res) => {
   try {
-    const { companyId, page = 1, limit = 10, search: rawSearch, status = 'all', moduleKey = '' } = req.query;
+    const { companyId, search: rawSearch, status = 'all', moduleKey = '' } = req.query;
     const search = escapeRegex(rawSearch);
-    const safePage = Math.max(Number(page) || 1, 1);
-    const safeLimit = Math.max(Number(limit) || 10, 1);
+    const safePage = Math.max(Number(req.query.page) || 1, 1);
+    const maxLimit = isSystemAdmin(req.user) ? 1000 : 200;
+    const safeLimit = Math.min(Math.max(Number(req.query.limit) || 100, 1), maxLimit);
 
     let accessibleIds = [];
     if (!isSystemAdmin(req.user)) {
@@ -231,16 +232,45 @@ router.get('/', verifyUser, async (req, res) => {
 
     if (andFilters.length) query.$and = andFilters;
 
-    const users = await User.find(query)
-      .limit(safeLimit)
-      .skip((safePage - 1) * safeLimit)
-      .sort({ createdAt: -1 });
+    const [users, total] = await Promise.all([
+      User.find(query).sort({ createdAt: -1 }).skip((safePage - 1) * safeLimit).limit(safeLimit).lean(),
+      User.countDocuments(query),
+    ]);
 
-    const total = await User.countDocuments(query);
-    const serializedUsers = await Promise.all(users.map(async (user) => {
-      const serialized = await serializeUser(user);
-      return { ...serialized, accessSummary: buildAccessSummary(serialized) };
-    }));
+    // Collect all company IDs referenced across all users in one pass — batch to avoid N+1
+    const flatIds = users.flatMap((u) => {
+      const ids = [u.company?._id || u.company, u.primaryCompany?._id || u.primaryCompany];
+      if (Array.isArray(u.accessibleCompanies)) u.accessibleCompanies.forEach((c) => ids.push(c?._id || c));
+      if (Array.isArray(u.companyAssignments)) u.companyAssignments.forEach((a) => ids.push(a?.company?._id || a?.company));
+      return ids.filter(Boolean).map(String);
+    });
+    const allCompanyIds = Array.from(new Set(flatIds));
+
+    const companyDocs = allCompanyIds.length
+      ? await Company.find({ _id: { $in: allCompanyIds } }).select(COMPANY_SELECT).lean()
+      : [];
+    const companyById = new Map(companyDocs.map((c) => [String(c._id), c]));
+
+    const serializedUsers = users.map((plain) => {
+      const resolveCompany = (ref) => {
+        const id = String(ref?._id || ref || '');
+        const doc = companyById.get(id);
+        return doc ? serializeCompanyForClient(doc, plain) : null;
+      };
+      const result = { ...plain };
+      result.company = resolveCompany(plain.company);
+      result.primaryCompany = resolveCompany(plain.primaryCompany) || result.company;
+      result.accessibleCompanies = (Array.isArray(plain.accessibleCompanies) ? plain.accessibleCompanies : []).map(resolveCompany).filter(Boolean);
+      result.companyAssignments = (Array.isArray(plain.companyAssignments) ? plain.companyAssignments : []).map((a) => ({
+        ...a,
+        company: resolveCompany(a?.company),
+        permissions: sanitizePermissionMap(a?.permissions || {}),
+      }));
+      delete result.password;
+      delete result.resetPasswordToken;
+      delete result.resetPasswordExpire;
+      return { ...result, accessSummary: buildAccessSummary(result) };
+    });
 
     res.json({ users: serializedUsers, totalPages: Math.ceil(total / safeLimit), currentPage: safePage, total });
   } catch (error) {

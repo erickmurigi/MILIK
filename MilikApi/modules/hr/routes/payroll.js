@@ -6,6 +6,7 @@ import HREmployee from '../models/HREmployee.js';
 import { resolveCompanyId, currentUserId, parsePage, parseLimit } from '../services/hrScope.js';
 import { computeStatutory, cfgFromDoc } from '../services/hrStatutory.js';
 import HRStatutoryConfig from '../models/HRStatutoryConfig.js';
+import { postPayrollGLJournals } from '../services/hrPayrollGLService.js';
 
 const router = express.Router();
 
@@ -205,7 +206,25 @@ router.patch('/periods/:id/approve', verifyUser, async (req, res) => {
     // Update all Draft payslips to Approved
     await HRPayslip.updateMany({ payrollPeriod: period._id, status: 'Draft' }, { $set: { status: 'Approved', updatedBy: userId } });
 
-    res.json({ message: 'Payroll period approved', period });
+    // Post GL journals — non-blocking; errors are captured on the period record
+    try {
+      const { journalGroupId, entryCount } = await postPayrollGLJournals(period, companyId, userId);
+      period.glPosted = true;
+      period.glJournalGroupId = journalGroupId;
+      period.glPostedAt = new Date();
+      period.glError = '';
+      await period.save();
+      return res.json({ message: `Payroll period approved and ${entryCount} GL journal(s) posted`, period });
+    } catch (glErr) {
+      period.glPosted = false;
+      period.glError = glErr.message || 'GL posting failed';
+      await period.save();
+      return res.json({
+        message: 'Payroll period approved. GL posting could not be completed — configure HR accounting defaults in Company Settings.',
+        glError: period.glError,
+        period,
+      });
+    }
   } catch (err) {
     res.status(err.status || 500).json({ message: err.message });
   }

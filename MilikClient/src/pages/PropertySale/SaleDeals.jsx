@@ -7,7 +7,7 @@ import { saleApi, fmtKES, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 
-const ITEMS_PER_PAGE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 const statusColors = {
   active: "bg-blue-100 border-blue-200 text-blue-700",
@@ -42,6 +42,7 @@ const SaleDeals = () => {
   const [form, setForm] = useState(blankForm);
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
 
   const biz = currentCompany?._id;
@@ -65,7 +66,7 @@ const SaleDeals = () => {
   };
 
   useEffect(() => { load(); }, [biz, statusFilter]);
-  useEffect(() => setPage(1), [statusFilter, search]);
+  useEffect(() => setPage(1), [statusFilter, search, pageSize]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return deals;
@@ -73,9 +74,9 @@ const SaleDeals = () => {
     return deals.filter((d) => rx.test(d.dealNumber) || rx.test(d.listing?.title) || rx.test(d.buyer?.fullName));
   }, [deals, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+  const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const stats = useMemo(() => ({
     active: deals.filter((d) => d.status === "active").length,
@@ -380,8 +381,18 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
             </table>
           </div>
           <div className="flex items-center justify-between border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-500">
-            <span>Showing <strong className="text-slate-900">{filtered.length === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1}</strong>–<strong className="text-slate-900">{Math.min(safePage * ITEMS_PER_PAGE, filtered.length)}</strong> of <strong className="text-slate-900">{filtered.length}</strong></span>
-            <div className="flex gap-2">
+            <span>Showing <strong className="text-slate-900">{filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1}</strong>–<strong className="text-slate-900">{Math.min(safePage * pageSize, filtered.length)}</strong> of <strong className="text-slate-900">{filtered.length}</strong></span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-slate-500">Per page:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                >
+                  {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Prev</button>
               <span>Page {safePage} of {totalPages}</span>
               <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Next</button>

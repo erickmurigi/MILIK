@@ -104,3 +104,8 @@ export const updateAccountingDefaults = async (dispatch, businessId, payload) =>
   runMutation(dispatch, businessId, () =>
     adminRequests.put(`/company-settings/${businessId}/accounting-defaults`, payload)
   );
+
+export const updateHrAccountingDefaults = async (dispatch, businessId, payload) =>
+  runMutation(dispatch, businessId, () =>
+    adminRequests.put(`/company-settings/${businessId}/hr-accounting-defaults`, payload)
+  );

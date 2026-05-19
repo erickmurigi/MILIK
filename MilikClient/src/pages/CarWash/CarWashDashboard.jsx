@@ -263,6 +263,13 @@ const CarWashDashboard = () => {
             >
               Reports
             </button>
+            <button
+              type="button"
+              onClick={() => navigate("/carwash/financials")}
+              className="border border-[#B7C9C0] bg-white px-3 py-2 text-left text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+            >
+              Financials
+            </button>
           </div>
         </Section>
       </div>

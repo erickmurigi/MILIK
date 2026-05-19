@@ -256,7 +256,8 @@ const propertySlice = createSlice({
       })
       .addCase(getPropertyById.fulfilled, (state, action) => {
         state.loading = false;
-        state.currentProperty = action.payload.data;
+        // Handle both { data: property } and direct property object responses
+        state.currentProperty = action.payload?.data || action.payload;
       })
       .addCase(getPropertyById.rejected, (state, action) => {
         state.loading = false;

@@ -52,7 +52,7 @@ const Properties = () => {
   const { currentCompany } = useSelector((state) => state.company);
 
   // Pagination
-  const itemsPerPage = 50;
+  const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
 
   // Selection + table UI
@@ -64,7 +64,9 @@ const Properties = () => {
 
   // Dropdown (Archive/Restore placeholder)
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [actionMenuPos, setActionMenuPos] = useState({ top: 0, right: 0 });
   const actionMenuRef = useRef(null);
+  const actionMenuBtnRef = useRef(null);
 
   // Import modal
   const [showImportModal, setShowImportModal] = useState(false);
@@ -125,8 +127,9 @@ const Properties = () => {
 
   useEffect(() => {
     const onDocClick = (e) => {
-      if (!actionMenuRef.current) return;
-      if (!actionMenuRef.current.contains(e.target)) setActionMenuOpen(false);
+      if (actionMenuBtnRef.current?.contains(e.target)) return;
+      if (actionMenuRef.current?.contains(e.target)) return;
+      setActionMenuOpen(false);
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
@@ -177,7 +180,7 @@ const Properties = () => {
 
     const params = {
       page: currentPage,
-      limit: itemsPerPage,
+      limit: pageSize,
       search: "",
       status: appliedFilters.status,
       zone: appliedFilters.zone,
@@ -190,7 +193,7 @@ const Properties = () => {
     };
 
     dispatch(getProperties(params));
-  }, [dispatch, currentPage, itemsPerPage, appliedFilters, currentCompany]);
+  }, [dispatch, currentPage, pageSize, appliedFilters, currentCompany]);
 
   // Show error toast
   useEffect(() => {
@@ -253,7 +256,7 @@ const Properties = () => {
       // refresh
       const params = {
         page: currentPage,
-        limit: itemsPerPage,
+        limit: pageSize,
         search: "",
         status: appliedFilters.status,
         zone: appliedFilters.zone,
@@ -323,7 +326,7 @@ const Properties = () => {
           // refresh
           const params = {
             page: currentPage,
-            limit: itemsPerPage,
+            limit: pageSize,
             search: "",
             status: appliedFilters.status,
             zone: appliedFilters.zone,
@@ -359,7 +362,7 @@ const Properties = () => {
       // Refresh properties list
       const params = {
         page: currentPage,
-        limit: itemsPerPage,
+        limit: pageSize,
         search: "",
         status: appliedFilters.status,
         zone: appliedFilters.zone,
@@ -472,7 +475,7 @@ const Properties = () => {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil((pagination?.total || 0) / itemsPerPage));
+  const totalPages = Math.max(1, Math.ceil((pagination?.total || 0) / pageSize));
 
   // Archive/Restore properties
   const archiveSelected = () => {
@@ -502,7 +505,7 @@ const Properties = () => {
           // refresh
           const params = {
             page: currentPage,
-            limit: itemsPerPage,
+            limit: pageSize,
             search: "",
             status: appliedFilters.status,
             zone: appliedFilters.zone,
@@ -550,7 +553,7 @@ const Properties = () => {
           // refresh
           const params = {
             page: currentPage,
-            limit: itemsPerPage,
+            limit: pageSize,
             search: "",
             status: appliedFilters.status,
             zone: appliedFilters.zone,
@@ -646,13 +649,27 @@ const Properties = () => {
               <FaEdit size={9} /> Edit
             </button>
 
-            <div className="relative shrink-0" ref={actionMenuRef}>
-              <button onClick={() => setActionMenuOpen((v) => !v)} disabled={selectedProperties.length === 0}
-                className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+            <div className="shrink-0">
+              <button
+                ref={actionMenuBtnRef}
+                onClick={() => {
+                  if (!actionMenuOpen) {
+                    const rect = actionMenuBtnRef.current?.getBoundingClientRect();
+                    if (rect) setActionMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                  }
+                  setActionMenuOpen((v) => !v);
+                }}
+                disabled={selectedProperties.length === 0}
+                className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}
+              >
                 <FaArchive size={9} /> Actions <FaChevronDown size={8} />
               </button>
               {actionMenuOpen && selectedProperties.length > 0 && (
-                <div className="absolute mt-1 right-0 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                <div
+                  ref={actionMenuRef}
+                  style={{ position: "fixed", top: actionMenuPos.top, right: actionMenuPos.right, zIndex: 9999 }}
+                  className="w-40 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+                >
                   <button onClick={archiveSelected} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2">
                     <FaArchive className="text-xs text-gray-700" /> Archive
                   </button>
@@ -958,10 +975,10 @@ const Properties = () => {
                       <div className="flex items-center gap-4">
                         <span className="font-bold">
                           Showing{" "}
-                          <span className="font-bold">{properties?.length ? (currentPage - 1) * itemsPerPage + 1 : 0}</span>{" "}
+                          <span className="font-bold">{properties?.length ? (currentPage - 1) * pageSize + 1 : 0}</span>{" "}
                           to{" "}
                           <span className="font-bold">
-                            {properties?.length ? Math.min(currentPage * itemsPerPage, pagination?.total || 0) : 0}
+                            {properties?.length ? Math.min(currentPage * pageSize, pagination?.total || 0) : 0}
                           </span>{" "}
                           of <span className="font-bold">{pagination?.total || 0}</span> properties
                         </span>
@@ -975,6 +992,16 @@ const Properties = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <span className="font-semibold text-slate-500 text-xs">Per page:</span>
+                        <select
+                          value={pageSize}
+                          onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                          className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                        >
+                          {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </div>
                       <button
                         onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                         disabled={currentPage === 1}

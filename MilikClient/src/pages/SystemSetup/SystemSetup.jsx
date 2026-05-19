@@ -26,6 +26,9 @@ import {
   FaUserCog,
   FaUserPlus,
   FaUsers,
+  FaChevronDown,
+  FaTimes,
+  FaCheckDouble,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -44,7 +47,8 @@ import {
   getEnabledCompanyModuleKeys,
 } from "../../utils/companyModules";
 
-const ITEMS_PER_PAGE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const DEFAULT_PAGE_SIZE = 25;
 const SECTION_ALIASES = { rights: "users", database: "overview", sessions: "trials" };
 const VALID_SECTIONS = ["overview", "companies", "users", "trials", "audit"];
 
@@ -81,16 +85,22 @@ const getCompanyStatusLabel = (company = {}) => {
 
 const getStatusTone = (status = "") => {
   const s = normalizeText(status);
-  if (["active", "live"].includes(s)) return "bg-emerald-100 text-emerald-700";
-  if (["demo", "trial"].includes(s)) return "bg-violet-100 text-violet-700";
-  if (["inactive", "suspended", "disabled", "archived"].includes(s)) return "bg-slate-100 text-slate-600";
-  return "bg-amber-100 text-amber-700";
+  if (["active", "live"].includes(s)) return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  if (["demo", "trial"].includes(s)) return "bg-violet-100 text-violet-700 border-violet-200";
+  if (["inactive", "suspended", "disabled", "archived"].includes(s)) return "bg-slate-100 text-slate-500 border-slate-200";
+  return "bg-amber-100 text-amber-700 border-amber-200";
 };
 
 const getReadinessTone = (score) => {
-  if (score >= 80) return "bg-emerald-100 text-emerald-700";
-  if (score >= 50) return "bg-amber-100 text-amber-700";
-  return "bg-rose-100 text-rose-700";
+  if (score >= 80) return "text-emerald-700";
+  if (score >= 50) return "text-amber-600";
+  return "text-rose-600";
+};
+
+const getReadinessBarColor = (score) => {
+  if (score >= 80) return "bg-emerald-500";
+  if (score >= 50) return "bg-amber-400";
+  return "bg-rose-500";
 };
 
 const getUserAssignedCompanyIds = (user = {}) => {
@@ -126,6 +136,20 @@ const getUserRoleLabel = (user = {}) => {
   return "User";
 };
 
+const getRoleColors = (user = {}) => {
+  if (user?.superAdminAccess || user?.isSystemAdmin) return "bg-emerald-700 text-white";
+  if (user?.adminAccess) return "bg-blue-600 text-white";
+  if (user?.setupAccess || user?.companySetupAccess) return "bg-violet-600 text-white";
+  return "bg-slate-500 text-white";
+};
+
+const getRoleBadgeColors = (user = {}) => {
+  if (user?.superAdminAccess || user?.isSystemAdmin) return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  if (user?.adminAccess) return "bg-blue-100 text-blue-700 border-blue-200";
+  if (user?.setupAccess || user?.companySetupAccess) return "bg-violet-100 text-violet-700 border-violet-200";
+  return "bg-slate-100 text-slate-600 border-slate-200";
+};
+
 const evaluateCompanySetup = (company = {}, userCount = 0) => {
   const enabledModules = getEnabledCompanyModuleKeys(company);
   const emailProfiles = company?.communication?.emailProfiles || [];
@@ -149,41 +173,138 @@ const evaluateCompanySetup = (company = {}, userCount = 0) => {
   return { score, label, missing, enabledModules, hasPaymentSetup, hasCommunicationSetup: emailProfiles.length > 0 || smsProfiles.length > 0 };
 };
 
-const CompanyAvatar = ({ company }) => {
+// ─── Shared sub-components ────────────────────────────────────────────────────
+const CompanyAvatar = ({ company, size = "md" }) => {
   const logo = company?.logo;
   const name = company?.companyName || "Company";
-  if (logo) return <img src={logo} alt={name} className="h-7 w-7 rounded-lg border border-slate-200 bg-white object-cover" />;
+  const dim = size === "lg" ? "h-9 w-9 rounded-xl text-xs" : "h-7 w-7 rounded-lg text-[10px]";
+  if (logo) return <img src={logo} alt={name} className={`${dim} border border-slate-200 bg-white object-cover shrink-0`} />;
   return (
-    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-[10px] font-black text-emerald-700 shrink-0">
+    <div className={`flex ${dim} items-center justify-center bg-gradient-to-br from-emerald-700 to-emerald-900 font-black text-white shrink-0`}>
       {initialsFromName(name)}
     </div>
   );
 };
 
-const StatCard = ({ label, value, icon: Icon }) => (
-  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm flex items-center gap-3">
-    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 shrink-0"><Icon className="text-sm" /></div>
-    <div>
-      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</div>
-      <div className="text-xl font-black text-slate-900 leading-none mt-0.5">{value}</div>
+const UserAvatar = ({ user, size = "md" }) => {
+  const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim() || user?.email || "User";
+  const colorClass = getRoleColors(user);
+  const dim = size === "lg" ? "h-9 w-9 rounded-xl text-xs" : "h-7 w-7 rounded-lg text-[10px]";
+  return (
+    <div className={`flex ${dim} items-center justify-center ${colorClass} font-black shrink-0`}>
+      {initialsFromName(name)}
     </div>
+  );
+};
+
+const ReadinessBar = ({ score, showLabel = false }) => (
+  <div className="flex items-center gap-2">
+    <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-200">
+      <div className={`h-full rounded-full transition-all ${getReadinessBarColor(score)}`} style={{ width: `${score}%` }} />
+    </div>
+    <span className={`text-[11px] font-black ${getReadinessTone(score)}`}>{score}%</span>
+    {showLabel && score >= 80 && <FaCheckDouble className="text-[10px] text-emerald-600" />}
   </div>
 );
 
-const Pagination = ({ page, totalPages, total, pageSize, onPage }) => {
-  if (totalPages <= 1) return null;
+const StatusBadge = ({ label }) => (
+  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black ${getStatusTone(label)}`}>{label}</span>
+);
+
+const StatCard = ({ label, value, icon: Icon, accent = "emerald", sub }) => {
+  const accents = {
+    emerald: { bg: "bg-emerald-50", icon: "text-emerald-700", border: "border-emerald-100", val: "text-slate-900" },
+    green:   { bg: "bg-green-50",   icon: "text-green-700",   border: "border-green-100",   val: "text-slate-900" },
+    violet:  { bg: "bg-violet-50",  icon: "text-violet-700",  border: "border-violet-100",  val: "text-slate-900" },
+    orange:  { bg: "bg-orange-50",  icon: "text-orange-700",  border: "border-orange-100",  val: "text-slate-900" },
+    rose:    { bg: "bg-rose-50",    icon: "text-rose-700",    border: "border-rose-100",    val: "text-rose-700"  },
+  };
+  const c = accents[accent] || accents.emerald;
+  return (
+    <div className={`flex items-center gap-3 rounded-xl border ${c.border} bg-white px-4 py-3 shadow-sm`}>
+      <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${c.bg} shrink-0`}>
+        <Icon className={`text-base ${c.icon}`} />
+      </div>
+      <div>
+        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</div>
+        <div className={`text-2xl font-black leading-none ${c.val}`}>{value}</div>
+        {sub && <div className="mt-0.5 text-[10px] text-slate-400">{sub}</div>}
+      </div>
+    </div>
+  );
+};
+
+const Pagination = ({ page, totalPages, total, pageSize, onPage, onPageSize }) => {
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
   return (
-    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-600">
       <span className="font-semibold">
-        Showing <span className="font-black text-slate-900">{start}</span>–<span className="font-black text-slate-900">{end}</span> of <span className="font-black text-slate-900">{total}</span>
+        Showing <span className="font-bold text-slate-900">{start}</span> to <span className="font-bold text-slate-900">{end}</span> of <span className="font-bold text-slate-900">{total}</span>
       </span>
-      <div className="flex items-center gap-2">
-        <button onClick={() => onPage(page - 1)} disabled={page === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-        <span className="font-semibold text-slate-700">Page {page} of {totalPages}</span>
-        <button onClick={() => onPage(page + 1)} disabled={page >= totalPages} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <span className="font-semibold text-slate-500">Per page:</span>
+          <select
+            value={pageSize}
+            onChange={(e) => onPageSize(Number(e.target.value))}
+            className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => onPage(page - 1)} disabled={page === 1} className="rounded-lg border border-slate-200 bg-white px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition">Previous</button>
+            <span className="font-semibold text-slate-700">Page {page} of {totalPages}</span>
+            <button onClick={() => onPage(page + 1)} disabled={page >= totalPages} className="rounded-lg border border-slate-200 bg-white px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition">Next</button>
+          </div>
+        )}
       </div>
+    </div>
+  );
+};
+
+const EmptyState = ({ icon: Icon, title, body }) => (
+  <div className="flex flex-col items-center justify-center gap-2 py-16 text-slate-400">
+    <Icon className="text-3xl text-slate-300" />
+    <div className="text-sm font-black text-slate-500">{title}</div>
+    {body && <div className="text-xs text-slate-400">{body}</div>}
+  </div>
+);
+
+// ─── Inline action dropdown ───────────────────────────────────────────────────
+const ActionMenu = ({ items }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow-sm hover:bg-slate-50 transition"
+      >
+        Actions <FaChevronDown className="text-[9px] opacity-60" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-40 mt-1 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+            {items.map((item, i) =>
+              item.separator ? (
+                <div key={i} className="my-1 border-t border-slate-100" />
+              ) : (
+                <button
+                  key={i}
+                  onClick={() => { setOpen(false); item.onClick(); }}
+                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-xs font-semibold transition hover:bg-slate-50 ${item.danger ? "text-rose-600 hover:bg-rose-50" : "text-slate-700"}`}
+                >
+                  {item.icon && <item.icon className="text-[11px] shrink-0 opacity-70" />}
+                  {item.label}
+                </button>
+              )
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -192,80 +313,102 @@ const Pagination = ({ page, totalPages, total, pageSize, onPage }) => {
 const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, onAddCompany, onAddUser, onOpenCompanySetup, onOpenWorkspace }) => {
   const activeCompanies = companies.filter((c) => isCompanyActive(c) && !c?.isDemoWorkspace);
   const demoCompanies = companies.filter((c) => c?.isDemoWorkspace);
-  const attentionCompanies = companies.filter((c) => (companyReadiness.get(normalizeId(c))?.score || 0) < 80).slice(0, 5);
+  const attentionCompanies = companies.filter((c) => (companyReadiness.get(normalizeId(c))?.score || 0) < 80).slice(0, 6);
   const recentCompanies = [...companies].sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0)).slice(0, 6);
   const recentUsers = [...users].sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0)).slice(0, 6);
 
   return (
-    <div className="p-3 space-y-3">
+    <div className="p-4 space-y-4">
       <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
-        <StatCard label="Companies" value={companies.length} icon={FaBuilding} />
-        <StatCard label="Active" value={activeCompanies.length} icon={FaCheckCircle} />
-        <StatCard label="Demo" value={demoCompanies.length} icon={FaStore} />
-        <StatCard label="Users" value={users.length} icon={FaUsers} />
-        <StatCard label="Needs Attention" value={attentionCompanies.length} icon={FaExclamationTriangle} />
+        <StatCard label="Companies" value={companies.length} icon={FaBuilding} accent="emerald" />
+        <StatCard label="Active" value={activeCompanies.length} icon={FaCheckCircle} accent="green" />
+        <StatCard label="Demo" value={demoCompanies.length} icon={FaStore} accent="violet" />
+        <StatCard label="Users" value={users.length} icon={FaUsers} accent="orange" />
+        <StatCard label="Needs Attention" value={attentionCompanies.length} icon={FaExclamationTriangle} accent="rose" />
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-3">
-        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 bg-slate-50/60 px-3 py-2">
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-600">Attention Queue</div>
-            <div className="text-sm font-black text-slate-900 mt-0.5">Companies needing setup</div>
+      <div className="grid gap-4 xl:grid-cols-3">
+        {/* Attention Queue */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2.5 border-b border-slate-100 bg-rose-50/60 px-4 py-2.5">
+            <div className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-600">Attention Queue</div>
+              <div className="text-xs font-black text-slate-800 mt-0.5">Companies needing setup</div>
+            </div>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-50">
             {attentionCompanies.length ? attentionCompanies.map((company) => {
               const readiness = companyReadiness.get(normalizeId(company));
               const userCount = companyUserCounts.get(normalizeId(company)) || 0;
               return (
-                <div key={company._id} className="flex items-center gap-3 px-3 py-2">
+                <div key={company._id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/80 transition">
                   <CompanyAvatar company={company} />
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-black text-slate-900 truncate">{company.companyName}</div>
-                    <div className="text-[11px] text-slate-500">{userCount} users · {readiness?.score || 0}% ready</div>
+                    <div className="truncate text-xs font-black text-slate-900">{company.companyName}</div>
+                    <ReadinessBar score={readiness?.score || 0} />
                   </div>
-                  <button onClick={() => onOpenCompanySetup(company)} className="shrink-0 text-[11px] font-bold text-emerald-700 hover:underline">Setup</button>
+                  <div className="text-right shrink-0">
+                    <div className="text-[10px] text-slate-400">{userCount} user{userCount !== 1 ? "s" : ""}</div>
+                    <button onClick={() => onOpenCompanySetup(company)} className="text-[11px] font-bold text-emerald-700 hover:underline">Setup →</button>
+                  </div>
                 </div>
               );
             }) : (
-              <div className="px-3 py-4 text-xs text-emerald-700 text-center">All companies are ready</div>
+              <div className="flex flex-col items-center gap-1 py-8 text-center">
+                <FaCheckDouble className="text-xl text-emerald-400" />
+                <div className="text-xs font-bold text-emerald-600">All companies are ready</div>
+              </div>
             )}
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 bg-slate-50/60 px-3 py-2">
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Recent Onboarding</div>
-            <div className="text-sm font-black text-slate-900 mt-0.5">Latest companies</div>
+        {/* Recent Onboarding */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2.5 border-b border-slate-100 bg-emerald-50/60 px-4 py-2.5">
+            <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Recent Onboarding</div>
+              <div className="text-xs font-black text-slate-800 mt-0.5">Latest companies</div>
+            </div>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-50">
             {recentCompanies.map((company) => (
-              <div key={company._id} className="flex items-center gap-3 px-3 py-2">
+              <div key={company._id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/80 transition">
                 <CompanyAvatar company={company} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-black text-slate-900 truncate">{company.companyName}</div>
-                  <div className="text-[11px] text-slate-500">{formatDate(company.createdAt)}</div>
+                  <div className="truncate text-xs font-black text-slate-900">{company.companyName}</div>
+                  <div className="text-[11px] text-slate-400">{formatDate(company.createdAt)}</div>
                 </div>
-                <button onClick={() => onOpenWorkspace(company)} className="shrink-0 text-[11px] font-bold text-emerald-700 hover:underline">Open</button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <StatusBadge label={getCompanyStatusLabel(company)} />
+                  <button onClick={() => onOpenWorkspace(company)} className="text-[11px] font-bold text-emerald-700 hover:underline">Open →</button>
+                </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 bg-slate-50/60 px-3 py-2">
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-600">Recent User Access</div>
-            <div className="text-sm font-black text-slate-900 mt-0.5">Latest users</div>
+        {/* Recent Users */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2.5 border-b border-slate-100 bg-orange-50/60 px-4 py-2.5">
+            <div className="h-2 w-2 rounded-full bg-orange-500 shrink-0" />
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-600">Recent User Access</div>
+              <div className="text-xs font-black text-slate-800 mt-0.5">Latest users</div>
+            </div>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-50">
             {recentUsers.map((user) => {
               const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim() || user?.email || "User";
               return (
-                <div key={user._id} className="flex items-center gap-3 px-3 py-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[10px] font-black text-orange-700 shrink-0">{initialsFromName(name)}</div>
+                <div key={user._id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/80 transition">
+                  <UserAvatar user={user} />
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-black text-slate-900 truncate">{name}</div>
-                    <div className="text-[11px] text-slate-500">{getUserRoleLabel(user)} · {formatDate(user?.createdAt)}</div>
+                    <div className="truncate text-xs font-black text-slate-900">{name}</div>
+                    <div className="text-[11px] text-slate-400">{formatDate(user?.createdAt)}</div>
                   </div>
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${getRoleBadgeColors(user)}`}>{getUserRoleLabel(user)}</span>
                 </div>
               );
             })}
@@ -273,13 +416,18 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
         </div>
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 bg-slate-50/60 px-3 py-2">
-          <div className="text-sm font-black text-slate-900">Quick actions</div>
+      {/* Quick Actions */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-100 px-4 py-2.5">
+          <div className="text-xs font-black text-slate-800">Quick Actions</div>
         </div>
-        <div className="flex flex-wrap gap-3 p-3">
-          <button onClick={onAddCompany} className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"><FaPlus /> Register Company</button>
-          <button onClick={onAddUser} className="inline-flex items-center gap-2 rounded-lg bg-[#FF8C00] px-4 py-2 text-xs font-bold text-white hover:bg-[#e67e00]"><FaUserPlus /> Add User</button>
+        <div className="flex flex-wrap gap-3 p-4">
+          <button onClick={onAddCompany} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0A3127] transition shadow-sm">
+            <FaPlus /> Register Company
+          </button>
+          <button onClick={onAddUser} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-2.5 text-xs font-bold text-white hover:bg-orange-600 transition shadow-sm">
+            <FaUserPlus /> Add User
+          </button>
         </div>
       </div>
     </div>
@@ -292,6 +440,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
   const [statusFilter, setStatusFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const filtered = useMemo(() => {
     return companies.filter((company) => {
@@ -306,104 +455,113 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
     });
   }, [companies, companyReadiness, modeFilter, search, statusFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+  const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
-  useEffect(() => { setPage(1); }, [search, statusFilter, modeFilter]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, modeFilter, pageSize]);
 
   return (
-    <>
-      <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2">
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Filters bar */}
+      <div className="flex-shrink-0 border-b border-slate-100 bg-white px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[240px] flex-1">
-            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search company, code, email, town..." className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] pl-9 pr-3 text-xs text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search company, code, email, town..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-200 transition" />
           </div>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-emerald-400 focus:outline-none transition">
             <option value="all">All statuses</option>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
             <option value="Demo">Demo</option>
             <option value="attention">Needs attention</option>
           </select>
-          <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value)} className="h-8 rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
+          <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-emerald-400 focus:outline-none transition">
             <option value="all">All operating models</option>
             <option value="property manager">Property Manager</option>
             <option value="self-managing landlord">Self-Managing Landlord</option>
+            <option value="other">Other</option>
           </select>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-[11px] font-semibold text-slate-500">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
-            <button onClick={onAddCompany} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"><FaPlus /> Register Company</button>
+            <span className="text-[11px] font-semibold text-slate-400">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+            <button onClick={onAddCompany} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] transition">
+              <FaPlus className="text-[9px]" /> Register Company
+            </button>
           </div>
         </div>
       </div>
 
+      {/* Table */}
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-xs">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Company</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Mode</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Status</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Readiness</th>
-              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Users</th>
-              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Modules</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Contact</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Updated</th>
-              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Actions</th>
+            <tr className="bg-slate-900 text-white">
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Company</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Mode</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Status</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Readiness</th>
+              <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-[0.18em]">Users</th>
+              <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-[0.18em]">Modules</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Contact</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Updated</th>
+              <th className="px-4 py-2.5 text-right text-[10px] font-black uppercase tracking-[0.18em]">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {pageRows.length === 0 ? (
-              <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-500">No companies match the current filters.</td></tr>
-            ) : pageRows.map((company, idx) => {
+              <tr><td colSpan={9}><EmptyState icon={FaBuilding} title="No companies match" body="Try adjusting your search or filter criteria" /></td></tr>
+            ) : pageRows.map((company) => {
               const companyId = normalizeId(company);
               const readiness = companyReadiness.get(companyId) || evaluateCompanySetup(company, 0);
               const userCount = companyUserCounts.get(companyId) || 0;
               const statusLabel = getCompanyStatusLabel(company);
               return (
-                <tr key={companyId} className={`border-t border-slate-100 hover:bg-slate-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
+                <tr key={companyId} className="group bg-white hover:bg-slate-50/80 transition">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
                       <CompanyAvatar company={company} />
                       <div>
-                        <div className="font-black text-slate-900">{company.companyName}</div>
-                        <div className="text-[11px] text-slate-500">{company.companyCode || company.registrationNo || "-"}</div>
+                        <div className="font-black text-slate-900 leading-tight">{company.companyName}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{company.companyCode || company.registrationNo || "—"}</div>
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{getCompanyOperatingModeLabel(company?.companyMode)}</td>
-                  <td className="px-3 py-2">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${getStatusTone(statusLabel)}`}>{statusLabel}</span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-200">
-                        <div className={`h-full rounded-full ${readiness.score >= 80 ? "bg-emerald-600" : readiness.score >= 50 ? "bg-amber-500" : "bg-rose-500"}`} style={{ width: `${readiness.score}%` }} />
-                      </div>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${getReadinessTone(readiness.score)}`}>{readiness.score}%</span>
-                    </div>
+                  <td className="px-4 py-3 text-[11px] text-slate-600">{getCompanyOperatingModeLabel(company?.companyMode)}</td>
+                  <td className="px-4 py-3"><StatusBadge label={statusLabel} /></td>
+                  <td className="px-4 py-3">
+                    <ReadinessBar score={readiness.score} />
                     {readiness.missing.length > 0 && (
-                      <div className="mt-1 text-[10px] text-rose-600 leading-tight">Missing: {readiness.missing.slice(0, 2).join(", ")}{readiness.missing.length > 2 ? ` +${readiness.missing.length - 2}` : ""}</div>
+                      <div className="mt-1 text-[10px] text-rose-500 leading-tight">Missing: {readiness.missing.slice(0, 2).join(", ")}{readiness.missing.length > 2 ? ` +${readiness.missing.length - 2}` : ""}</div>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right font-bold text-slate-900">{userCount}</td>
-                  <td className="px-3 py-2 text-right font-bold text-slate-900">{readiness.enabledModules.length}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-1 text-slate-500"><FaEnvelope className="shrink-0 text-emerald-700" /><span className="truncate max-w-[140px]">{company.email || "—"}</span></div>
-                    <div className="flex items-center gap-1 text-slate-500 mt-0.5"><FaMapMarkerAlt className="shrink-0 text-emerald-700" /><span>{[company.town, company.country].filter(Boolean).join(", ") || "—"}</span></div>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-black text-slate-700">{userCount}</span>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{formatDate(company.updatedAt || company.createdAt)}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap justify-end gap-1">
-                      <button onClick={() => onOpenCompanySetup(company)} className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100"><FaCog size={9} /> Setup</button>
-                      <button onClick={() => onOpenOperationalSettings(company)} className="inline-flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 hover:bg-blue-100"><FaGlobeAfrica size={9} /> Settings</button>
-                      <button onClick={() => onOpenWorkspace(company)} className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-100"><FaEye size={9} /> Workspace</button>
-                      <button onClick={() => onManageUsers(company)} className="inline-flex items-center gap-1 rounded border border-orange-300 bg-orange-50 px-2 py-1 text-[10px] font-black text-orange-700 hover:bg-orange-100"><FaUsers size={9} /> Users</button>
-                      <button onClick={() => onEditCompany(company)} className="inline-flex items-center gap-1 rounded border border-indigo-300 bg-indigo-50 px-2 py-1 text-[10px] font-black text-indigo-700 hover:bg-indigo-100"><FaEdit size={9} /> Edit</button>
-                      <button onClick={() => onDeleteCompany(company)} className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-100"><FaTrash size={9} /> Delete</button>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-black text-emerald-700">{readiness.enabledModules.length}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1 text-[11px] text-slate-500">
+                      <FaEnvelope className="shrink-0 text-emerald-600 text-[10px]" />
+                      <span className="truncate max-w-[130px]">{company.email || "—"}</span>
                     </div>
+                    <div className="flex items-center gap-1 mt-0.5 text-[11px] text-slate-500">
+                      <FaMapMarkerAlt className="shrink-0 text-emerald-600 text-[10px]" />
+                      <span>{[company.town, company.country].filter(Boolean).join(", ") || "—"}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(company.updatedAt || company.createdAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <ActionMenu items={[
+                      { label: "Setup", icon: FaCog, onClick: () => onOpenCompanySetup(company) },
+                      { label: "Operational Settings", icon: FaGlobeAfrica, onClick: () => onOpenOperationalSettings(company) },
+                      { label: "Open Workspace", icon: FaEye, onClick: () => onOpenWorkspace(company) },
+                      { label: "Manage Users", icon: FaUsers, onClick: () => onManageUsers(company) },
+                      { separator: true },
+                      { label: "Edit", icon: FaEdit, onClick: () => onEditCompany(company) },
+                      { label: "Delete", icon: FaTrash, onClick: () => onDeleteCompany(company), danger: true },
+                    ]} />
                   </td>
                 </tr>
               );
@@ -412,8 +570,8 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
         </table>
       </div>
 
-      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={ITEMS_PER_PAGE} onPage={setPage} />
-    </>
+      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(1); }} />
+    </div>
   );
 };
 
@@ -422,6 +580,7 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const filtered = useMemo(() => {
     return users.filter((user) => {
@@ -436,33 +595,35 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
     });
   }, [search, selectedCompanyId, statusFilter, users]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+  const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
-  useEffect(() => { setPage(1); }, [search, statusFilter, selectedCompanyId]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, selectedCompanyId, pageSize]);
 
   return (
-    <>
-      <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex-shrink-0 border-b border-slate-100 bg-white px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[240px] flex-1">
-            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search user, email, phone, role..." className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] pl-9 pr-3 text-xs text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search user, email, phone, role..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-200 transition" />
           </div>
-          <select value={selectedCompanyId} onChange={(e) => onSelectedCompanyIdChange(e.target.value)} className="h-8 rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
+          <select value={selectedCompanyId} onChange={(e) => onSelectedCompanyIdChange(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-emerald-400 focus:outline-none transition">
             <option value="">All companies</option>
             {companies.map((c) => <option key={c._id} value={c._id}>{c.companyName}</option>)}
           </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-emerald-400 focus:outline-none transition">
             <option value="all">All statuses</option>
             <option value="active">Active</option>
             <option value="locked">Locked</option>
             <option value="inactive">Inactive</option>
           </select>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-[11px] font-semibold text-slate-500">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
-            <button onClick={onAddUser} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00]"><FaUserPlus /> Add User</button>
+            <span className="text-[11px] font-semibold text-slate-400">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+            <button onClick={onAddUser} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-orange-500 px-3 text-[11px] font-bold text-white hover:bg-orange-600 transition">
+              <FaUserPlus className="text-[9px]" /> Add User
+            </button>
           </div>
         </div>
       </div>
@@ -470,52 +631,51 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-xs">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">User</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Email</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Role</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Primary Company</th>
-              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Companies</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Status</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Created</th>
-              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Actions</th>
+            <tr className="bg-slate-900 text-white">
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">User</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Email</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Role</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Primary Company</th>
+              <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-[0.18em]">Companies</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Status</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Created</th>
+              <th className="px-4 py-2.5 text-right text-[10px] font-black uppercase tracking-[0.18em]">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {pageRows.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">No users match the current filters.</td></tr>
-            ) : pageRows.map((user, idx) => {
+              <tr><td colSpan={8}><EmptyState icon={FaUsers} title="No users match" body="Try adjusting your search or filter criteria" /></td></tr>
+            ) : pageRows.map((user) => {
               const userId = normalizeId(user);
               const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim() || user?.email || "User";
               const assignedCompanyIds = getUserAssignedCompanyIds(user);
               const lockState = user?.locked ? "Locked" : user?.isActive === false ? "Inactive" : "Active";
               return (
-                <tr key={userId} className={`border-t border-slate-100 hover:bg-slate-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[10px] font-black text-orange-700 shrink-0">{initialsFromName(name)}</div>
+                <tr key={userId} className="group bg-white hover:bg-slate-50/80 transition">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <UserAvatar user={user} />
                       <span className="font-black text-slate-900">{name}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{user?.email || "—"}</td>
-                  <td className="px-3 py-2">
-                    <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">{getUserRoleLabel(user)}</span>
+                  <td className="px-4 py-3 text-[11px] text-slate-500">{user?.email || "—"}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${getRoleBadgeColors(user)}`}>{getUserRoleLabel(user)}</span>
                   </td>
-                  <td className="px-3 py-2 text-slate-700">{getPrimaryCompanyName(user, companyMap)}</td>
-                  <td className="px-3 py-2 text-right font-bold text-slate-900">{assignedCompanyIds.length}</td>
-                  <td className="px-3 py-2">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${getStatusTone(lockState)}`}>{lockState}</span>
+                  <td className="px-4 py-3 text-[11px] text-slate-600">{getPrimaryCompanyName(user, companyMap)}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-black text-slate-700">{assignedCompanyIds.length}</span>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{formatDate(user?.createdAt)}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap justify-end gap-1">
-                      <button onClick={() => onEditUser(user)} className="inline-flex items-center gap-1 rounded border border-indigo-300 bg-indigo-50 px-2 py-1 text-[10px] font-black text-indigo-700 hover:bg-indigo-100"><FaEdit size={9} /> Edit</button>
-                      <button onClick={() => onToggleUserLock(user)} className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-black hover:opacity-90 ${user?.locked ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-amber-300 bg-amber-50 text-amber-700"}`}>
-                        {user?.locked ? <><FaLockOpen size={9} /> Unlock</> : <><FaLock size={9} /> Lock</>}
-                      </button>
-                      <button onClick={() => onResetPassword(user)} className="inline-flex items-center gap-1 rounded border border-violet-300 bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700 hover:bg-violet-100"><FaKey size={9} /> Reset Password</button>
-                      <button onClick={() => onDeleteUser(user)} className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-100"><FaTrash size={9} /> Delete</button>
-                    </div>
+                  <td className="px-4 py-3"><StatusBadge label={lockState} /></td>
+                  <td className="px-4 py-3 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(user?.createdAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <ActionMenu items={[
+                      { label: "Edit", icon: FaEdit, onClick: () => onEditUser(user) },
+                      { label: user?.locked ? "Unlock" : "Lock", icon: user?.locked ? FaLockOpen : FaLock, onClick: () => onToggleUserLock(user) },
+                      { label: "Reset Password", icon: FaKey, onClick: () => onResetPassword(user) },
+                      { separator: true },
+                      { label: "Delete", icon: FaTrash, onClick: () => onDeleteUser(user), danger: true },
+                    ]} />
                   </td>
                 </tr>
               );
@@ -524,14 +684,15 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
         </table>
       </div>
 
-      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={ITEMS_PER_PAGE} onPage={setPage} />
-    </>
+      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(1); }} />
+    </div>
   );
 };
 
 // ─── Trials Panel ──────────────────────────────────────────────────────────────
 const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWorkspace, onOpenCompanySetup }) => {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const spotlightCompanies = useMemo(() => {
     const demoCompanies = companies.filter((c) => c?.isDemoWorkspace);
@@ -540,76 +701,79 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
     return [...new Map([...demoCompanies, ...inactiveCompanies, ...attentionCompanies].map((c) => [normalizeId(c), c])).values()];
   }, [companies, companyReadiness]);
 
-  const totalPages = Math.max(1, Math.ceil(spotlightCompanies.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(spotlightCompanies.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pageRows = spotlightCompanies.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+  const pageRows = spotlightCompanies.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const demoCount = companies.filter((c) => c?.isDemoWorkspace).length;
   const inactiveCount = companies.filter((c) => !c?.isDemoWorkspace && !isCompanyActive(c)).length;
   const attentionCount = companies.filter((c) => (companyReadiness.get(normalizeId(c))?.score || 0) < 80).length;
 
   return (
-    <>
-      <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700"><FaStore size={10} /> {demoCount} Demo workspaces</div>
-          <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700"><FaLock size={10} /> {inactiveCount} Inactive companies</div>
-          <div className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700"><FaExclamationTriangle size={10} /> {attentionCount} Needs activation work</div>
-          <div className="ml-auto text-[11px] font-semibold text-slate-500">{spotlightCompanies.length} total</div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex-shrink-0 border-b border-slate-100 bg-white px-4 py-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-[11px] font-bold text-violet-700">
+            <FaStore className="text-[10px]" /> {demoCount} Demo workspace{demoCount !== 1 ? "s" : ""}
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-600">
+            <FaLock className="text-[10px]" /> {inactiveCount} Inactive
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-bold text-rose-700">
+            <FaExclamationTriangle className="text-[10px]" /> {attentionCount} Needs activation work
+          </div>
+          <div className="ml-auto text-[11px] font-semibold text-slate-400">{spotlightCompanies.length} total</div>
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-xs">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Company</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Type</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Mode</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Readiness</th>
-              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Users</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Missing setup</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Updated</th>
-              <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Actions</th>
+            <tr className="bg-slate-900 text-white">
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Company</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Type</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Mode</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Readiness</th>
+              <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-[0.18em]">Users</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Missing Setup</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Updated</th>
+              <th className="px-4 py-2.5 text-right text-[10px] font-black uppercase tracking-[0.18em]">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {pageRows.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">No demo or activation-watch companies found.</td></tr>
-            ) : pageRows.map((company, idx) => {
+              <tr><td colSpan={8}><EmptyState icon={FaCheckDouble} title="No spotlight companies" body="All companies are active and fully set up" /></td></tr>
+            ) : pageRows.map((company) => {
               const companyId = normalizeId(company);
               const readiness = companyReadiness.get(companyId) || evaluateCompanySetup(company, 0);
               const userCount = companyUserCounts.get(companyId) || 0;
               const spotlightLabel = company?.isDemoWorkspace ? "Demo" : !isCompanyActive(company) ? "Inactive" : "Needs Attention";
               return (
-                <tr key={companyId} className={`border-t border-slate-100 hover:bg-slate-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
+                <tr key={companyId} className="group bg-white hover:bg-slate-50/80 transition">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
                       <CompanyAvatar company={company} />
-                      <div className="font-black text-slate-900">{company.companyName}</div>
+                      <div className="font-black text-slate-900 leading-tight">{company.companyName}</div>
                     </div>
                   </td>
-                  <td className="px-3 py-2">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${getStatusTone(spotlightLabel)}`}>{spotlightLabel}</span>
+                  <td className="px-4 py-3"><StatusBadge label={spotlightLabel} /></td>
+                  <td className="px-4 py-3 text-[11px] text-slate-600">{getCompanyOperatingModeLabel(company.companyMode)}</td>
+                  <td className="px-4 py-3"><ReadinessBar score={readiness.score} showLabel /></td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-black text-slate-700">{userCount}</span>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{getCompanyOperatingModeLabel(company.companyMode)}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-14 overflow-hidden rounded-full bg-slate-200">
-                        <div className={`h-full rounded-full ${readiness.score >= 80 ? "bg-emerald-600" : readiness.score >= 50 ? "bg-amber-500" : "bg-rose-500"}`} style={{ width: `${readiness.score}%` }} />
-                      </div>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${getReadinessTone(readiness.score)}`}>{readiness.score}%</span>
-                    </div>
+                  <td className="px-4 py-3 text-[11px] text-slate-500">
+                    {readiness.missing.length ? readiness.missing.slice(0, 3).join(", ") + (readiness.missing.length > 3 ? ` +${readiness.missing.length - 3}` : "") : <span className="text-emerald-600 font-semibold">No gaps</span>}
                   </td>
-                  <td className="px-3 py-2 text-right font-bold text-slate-900">{userCount}</td>
-                  <td className="px-3 py-2 text-slate-600">
-                    {readiness.missing.length ? readiness.missing.slice(0, 3).join(", ") + (readiness.missing.length > 3 ? ` +${readiness.missing.length - 3}` : "") : <span className="text-emerald-600">No gaps</span>}
-                  </td>
-                  <td className="px-3 py-2 text-slate-600">{formatDate(company.updatedAt || company.createdAt)}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap justify-end gap-1">
-                      <button onClick={() => onOpenWorkspace(company)} className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100"><FaEye size={9} /> Workspace</button>
-                      <button onClick={() => onOpenCompanySetup(company)} className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-100"><FaCog size={9} /> Setup</button>
+                  <td className="px-4 py-3 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(company.updatedAt || company.createdAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-1.5">
+                      <button onClick={() => onOpenWorkspace(company)} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 transition">
+                        <FaEye className="text-[10px]" /> Workspace
+                      </button>
+                      <button onClick={() => onOpenCompanySetup(company)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50 transition">
+                        <FaCog className="text-[10px]" /> Setup
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -619,8 +783,8 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
         </table>
       </div>
 
-      <Pagination page={safePage} totalPages={totalPages} total={spotlightCompanies.length} pageSize={ITEMS_PER_PAGE} onPage={setPage} />
-    </>
+      <Pagination page={safePage} totalPages={totalPages} total={spotlightCompanies.length} pageSize={pageSize} onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(1); }} />
+    </div>
   );
 };
 
@@ -629,6 +793,7 @@ const AuditPanel = ({ companies, users, companyMap }) => {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const allEvents = useMemo(() => {
     const rows = [];
@@ -653,58 +818,61 @@ const AuditPanel = ({ companies, users, companyMap }) => {
     });
   }, [allEvents, typeFilter, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+  const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
-  useEffect(() => { setPage(1); }, [search, typeFilter]);
+  useEffect(() => { setPage(1); }, [search, typeFilter, pageSize]);
 
   return (
-    <>
-      <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex-shrink-0 border-b border-slate-100 bg-white px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[240px] flex-1">
-            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search events..." className="h-8 w-full rounded border border-gray-300 bg-[#DDEFE1] pl-9 pr-3 text-xs text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search events..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-200 transition" />
           </div>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-8 rounded border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#FF8C00]">
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-emerald-400 focus:outline-none transition">
             <option value="all">All types</option>
             <option value="Company">Company</option>
             <option value="User">User</option>
           </select>
-          <span className="ml-auto text-[11px] font-semibold text-slate-500">{filtered.length} event{filtered.length !== 1 ? "s" : ""}</span>
+          <span className="ml-auto text-[11px] font-semibold text-slate-400">{filtered.length} event{filtered.length !== 1 ? "s" : ""}</span>
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-xs">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Date</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Event</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Type</th>
-              <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Detail</th>
+            <tr className="bg-slate-900 text-white">
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Date</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Event</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Type</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Detail</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {pageRows.length === 0 ? (
-              <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-500">No recent platform activity found.</td></tr>
-            ) : pageRows.map((event, idx) => (
-              <tr key={event.id} className={`border-t border-slate-100 hover:bg-slate-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{formatDate(event.timestamp)}</td>
-                <td className="px-3 py-2 font-black text-slate-900">{event.title}</td>
-                <td className="px-3 py-2">
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${event.type === "Company" ? "bg-emerald-100 text-emerald-700" : "bg-orange-100 text-orange-700"}`}>{event.type}</span>
+              <tr><td colSpan={4}><EmptyState icon={FaHistory} title="No platform activity found" body="Events will appear here as the system is used" /></td></tr>
+            ) : pageRows.map((event) => (
+              <tr key={event.id} className="group bg-white hover:bg-slate-50/80 transition">
+                <td className="px-4 py-3 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(event.timestamp)}</td>
+                <td className="px-4 py-3 font-black text-slate-900">{event.title}</td>
+                <td className="px-4 py-3">
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${event.type === "Company" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-orange-100 text-orange-700 border-orange-200"}`}>
+                    {event.type === "Company" ? <FaBuilding className="mr-1 text-[9px]" /> : <FaUsers className="mr-1 text-[9px]" />}
+                    {event.type}
+                  </span>
                 </td>
-                <td className="px-3 py-2 text-slate-600">{event.detail}</td>
+                <td className="px-4 py-3 text-[11px] text-slate-500">{event.detail}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={ITEMS_PER_PAGE} onPage={setPage} />
-    </>
+      <Pagination page={safePage} totalPages={totalPages} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(1); }} />
+    </div>
   );
 };
 
@@ -746,8 +914,9 @@ export default function SystemSetupPage() {
     if (!VALID_SECTIONS.includes(activeSection)) navigate("/system-setup/overview", { replace: true });
   }, [activeSection, navigate]);
 
-  useEffect(() => { dispatch(getCompanies({ includeDemo: true })); }, [dispatch]);
-  useEffect(() => { dispatch(getUsers(selectedCompanyId || undefined)); }, [dispatch, selectedCompanyId]);
+  // Pass high limits so system admin always sees all records, not the default 10
+  useEffect(() => { dispatch(getCompanies({ includeDemo: true, limit: 200 })); }, [dispatch]);
+  useEffect(() => { dispatch(getUsers(selectedCompanyId || undefined, { limit: 500 })); }, [dispatch, selectedCompanyId]);
   useEffect(() => { setSelectedCompanyId(companyFilterFromQuery); }, [companyFilterFromQuery]);
 
   const isSystemAdmin = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
@@ -833,6 +1002,11 @@ export default function SystemSetupPage() {
     });
   };
 
+  const handleRefresh = () => {
+    dispatch(getCompanies({ includeDemo: true, limit: 200 }));
+    dispatch(getUsers(selectedCompanyId || undefined, { limit: 500 }));
+  };
+
   const sections = [
     { key: "overview",   label: "Overview",   icon: FaChartBar },
     { key: "companies",  label: "Companies",  icon: FaBuilding },
@@ -845,33 +1019,45 @@ export default function SystemSetupPage() {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/60 p-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
           {/* ── Sticky header ─────────────────────────────────────────────── */}
-          <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 shadow-sm backdrop-blur">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+          <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">System Administration</div>
                 <h1 className="text-sm font-black text-slate-900 leading-none mt-0.5">Control Centre</h1>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] font-black text-slate-700">
-                <span className="rounded border border-slate-200 bg-white px-2 py-0.5">{companyList.length} companies</span>
-                <span className="rounded border border-slate-200 bg-white px-2 py-0.5">{userList.length} users</span>
-                <button onClick={() => { dispatch(getCompanies({ includeDemo: true })); dispatch(getUsers(selectedCompanyId || undefined)); }} className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 hover:bg-slate-100"><FaRedoAlt size={9} /> Refresh</button>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-black text-slate-700">
+                  <FaBuilding className="text-emerald-600 text-[10px]" />
+                  {companyList.length} companies
+                </div>
+                <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-black text-slate-700">
+                  <FaUsers className="text-orange-500 text-[10px]" />
+                  {userList.length} users
+                </div>
+                <button
+                  onClick={handleRefresh}
+                  disabled={companiesFetching || usersFetching}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
+                >
+                  <FaRedoAlt className={`text-[9px] ${(companiesFetching || usersFetching) ? "animate-spin" : ""}`} /> Refresh
+                </button>
               </div>
             </div>
 
             {/* Tab bar */}
-            <div className="flex items-center gap-0 border-t border-slate-200 px-3">
+            <div className="flex items-center gap-1 border-t border-slate-100 px-3 py-1.5">
               {sections.map((section) => (
                 <button
                   key={section.key}
                   onClick={() => goToSection(section.key, section.key === "users" && selectedCompanyId ? `?company=${selectedCompanyId}` : "")}
-                  className={`relative inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold transition-colors ${
+                  className={`relative inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${
                     activeSection === section.key
-                      ? "border-b-2 border-[#0B3B2E] text-[#0B3B2E]"
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-emerald-900 text-white shadow-sm"
+                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
                   }`}
                 >
                   <section.icon className="text-[11px]" />
@@ -883,16 +1069,23 @@ export default function SystemSetupPage() {
 
           {/* ── Non-admin warning ─────────────────────────────────────────── */}
           {!isSystemAdmin && (
-            <div className="p-4">
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                System Administration is restricted to Milik Admin users.
+            <div className="p-6">
+              <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+                <FaShieldAlt className="shrink-0 text-xl text-amber-500" />
+                <div>
+                  <div className="font-black">Access Restricted</div>
+                  <div className="mt-0.5 text-xs">System Administration is restricted to Milik Admin users only.</div>
+                </div>
               </div>
             </div>
           )}
 
           {/* ── Loading state ─────────────────────────────────────────────── */}
           {isSystemAdmin && isLoading && (
-            <div className="flex flex-1 items-center justify-center text-sm text-slate-500">Loading companies...</div>
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-slate-400">
+              <FaRedoAlt className="animate-spin text-2xl text-emerald-600" />
+              <div className="text-sm font-semibold">Loading system data...</div>
+            </div>
           )}
 
           {/* ── Panel content ─────────────────────────────────────────────── */}
@@ -914,47 +1107,55 @@ export default function SystemSetupPage() {
               )}
 
               {activeSection === "companies" && (
-                <CompaniesPanel
-                  companies={companyList}
-                  companyReadiness={companyReadiness}
-                  companyUserCounts={companyUserCounts}
-                  onAddCompany={() => navigate("/add-company", { state: { tabTitle: "New Company" } })}
-                  onEditCompany={handleEditCompany}
-                  onDeleteCompany={handleDeleteCompany}
-                  onOpenCompanySetup={handleOpenCompanySetup}
-                  onOpenOperationalSettings={handleOpenOperationalSettings}
-                  onOpenWorkspace={handleOpenWorkspace}
-                  onManageUsers={handleManageUsers}
-                />
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <CompaniesPanel
+                    companies={companyList}
+                    companyReadiness={companyReadiness}
+                    companyUserCounts={companyUserCounts}
+                    onAddCompany={() => navigate("/add-company", { state: { tabTitle: "New Company" } })}
+                    onEditCompany={handleEditCompany}
+                    onDeleteCompany={handleDeleteCompany}
+                    onOpenCompanySetup={handleOpenCompanySetup}
+                    onOpenOperationalSettings={handleOpenOperationalSettings}
+                    onOpenWorkspace={handleOpenWorkspace}
+                    onManageUsers={handleManageUsers}
+                  />
+                </div>
               )}
 
               {activeSection === "users" && (
-                <UsersPanel
-                  users={userList}
-                  companies={companyList}
-                  companyMap={companyMap}
-                  selectedCompanyId={selectedCompanyId}
-                  onSelectedCompanyIdChange={handleCompanyFilterChange}
-                  onAddUser={() => navigate("/add-user", { state: { tabTitle: "New User" } })}
-                  onEditUser={handleEditUser}
-                  onToggleUserLock={handleToggleUserLock}
-                  onDeleteUser={handleDeleteUser}
-                  onResetPassword={handleResetPassword}
-                />
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <UsersPanel
+                    users={userList}
+                    companies={companyList}
+                    companyMap={companyMap}
+                    selectedCompanyId={selectedCompanyId}
+                    onSelectedCompanyIdChange={handleCompanyFilterChange}
+                    onAddUser={() => navigate("/add-user", { state: { tabTitle: "New User" } })}
+                    onEditUser={handleEditUser}
+                    onToggleUserLock={handleToggleUserLock}
+                    onDeleteUser={handleDeleteUser}
+                    onResetPassword={handleResetPassword}
+                  />
+                </div>
               )}
 
               {activeSection === "trials" && (
-                <TrialsPanel
-                  companies={companyList}
-                  companyReadiness={companyReadiness}
-                  companyUserCounts={companyUserCounts}
-                  onOpenWorkspace={handleOpenWorkspace}
-                  onOpenCompanySetup={handleOpenCompanySetup}
-                />
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <TrialsPanel
+                    companies={companyList}
+                    companyReadiness={companyReadiness}
+                    companyUserCounts={companyUserCounts}
+                    onOpenWorkspace={handleOpenWorkspace}
+                    onOpenCompanySetup={handleOpenCompanySetup}
+                  />
+                </div>
               )}
 
               {activeSection === "audit" && (
-                <AuditPanel companies={companyList} users={userList} companyMap={companyMap} />
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <AuditPanel companies={companyList} users={userList} companyMap={companyMap} />
+                </div>
               )}
             </>
           )}

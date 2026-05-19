@@ -23,9 +23,30 @@ const JournalEntrySchema = new mongoose.Schema(
         "internal_account_transfer",
         "general_manual_journal",
         "company_journal",
+        "payroll_posting",
+        "statutory_payment",
       ],
       required: true,
       default: "general_manual_journal",
+    },
+
+    sourceModule: {
+      type: String,
+      enum: ["propertyManagement", "hr", "carwash", "general", "accounts"],
+      default: "general",
+      index: true,
+    },
+
+    sourceDocumentType: {
+      type: String,
+      enum: { values: ["Invoice", "Receipt", "Payslip", "Expense", "Manual"], message: "Invalid source document type" },
+      default: null,
+    },
+
+    sourceDocumentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+      index: true,
     },
 
     property: {
@@ -149,5 +170,7 @@ JournalEntrySchema.index({ business: 1, date: -1 });
 JournalEntrySchema.index({ business: 1, journalType: 1, date: -1 });
 JournalEntrySchema.index({ business: 1, property: 1, date: -1 });
 JournalEntrySchema.index({ business: 1, landlord: 1, date: -1 });
+JournalEntrySchema.index({ business: 1, sourceModule: 1, date: -1 });
+JournalEntrySchema.index({ business: 1, sourceDocumentId: 1 }, { sparse: true });
 
 export default mongoose.model("JournalEntry", JournalEntrySchema);

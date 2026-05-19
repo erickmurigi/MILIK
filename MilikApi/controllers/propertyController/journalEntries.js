@@ -530,13 +530,20 @@ export const getJournalEntries = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "User must have a company context" });
     }
 
-    const { status, journalType, property, landlord, search, page = 1, limit = 5000 } = req.query;
+    const { status, journalType, property, landlord, sourceModule, startDate, endDate, search, page = 1, limit = 5000 } = req.query;
     const filter = { business };
 
     if (status && status !== "all") filter.status = status;
     if (journalType && journalType !== "all") filter.journalType = journalType;
     if (property && property !== "all") filter.property = property;
     if (landlord && landlord !== "all") filter.landlord = landlord;
+    if (sourceModule && sourceModule !== "all") filter.sourceModule = sourceModule;
+
+    if (startDate || endDate) {
+      filter.date = {};
+      if (startDate) filter.date.$gte = new Date(new Date(startDate).setHours(0, 0, 0, 0));
+      if (endDate) filter.date.$lte = new Date(new Date(endDate).setHours(23, 59, 59, 999));
+    }
 
     if (search) {
       const term = escapeRegex(String(search).trim());

@@ -156,6 +156,16 @@ export const hasCompanyModule = (company, moduleKey) => {
   return Boolean(modules[moduleKey]);
 };
 
+// Modules that grant access to the shared accounting layer (Chart of Accounts, journals, reports).
+// Any company with at least one of these enabled can view GL data.
+// Only "accounts" grants write/admin access to COA structure.
+export const GL_ACCESS_MODULES = ["accounts", "propertyManagement", "hr", "carwash", "propertySale"];
+
+export const hasAnyCompanyModule = (company, moduleKeys = []) => {
+  if (!company) return false;
+  return moduleKeys.some((key) => hasCompanyModule(company, key));
+};
+
 export const getEnabledCompanyModuleKeys = (companyOrModules = {}) =>
   Object.entries(normalizeCompanyModules(companyOrModules))
     .filter(([, enabled]) => Boolean(enabled))

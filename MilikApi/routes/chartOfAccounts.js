@@ -1,6 +1,6 @@
 import express from "express";
 import mongoose from "mongoose";
-import { requireCompanyModule, verifyUser } from "../controllers/verifyToken.js";
+import { requireCompanyModule, verifyUser, GL_ACCESS_MODULES } from "../controllers/verifyToken.js";
 import ChartOfAccount from "../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import TenantInvoice from "../models/TenantInvoice.js";
@@ -104,7 +104,7 @@ const serializeAccount = (account = {}) => ({
   accountClass: String(account.subGroup || "").trim() || "",
 });
 
-router.get("/", verifyUser, requireCompanyModule("accounts"), async (req, res) => {
+router.get("/", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), async (req, res) => {
   try {
     const business = resolveBusiness(req);
 
@@ -135,7 +135,7 @@ router.get("/", verifyUser, requireCompanyModule("accounts"), async (req, res) =
   }
 });
 
-router.get("/:id/activity", verifyUser, requireCompanyModule("accounts"), async (req, res) => {
+router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), async (req, res) => {
   try {
     const business = resolveBusiness(req);
     const { id } = req.params;

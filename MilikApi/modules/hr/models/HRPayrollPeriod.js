@@ -34,6 +34,11 @@ const periodSchema = new mongoose.Schema({
   paidAt:     { type: Date, default: null },
   notes:      { type: String, trim: true, default: '' },
 
+  glPosted:         { type: Boolean, default: false },
+  glJournalGroupId: { type: mongoose.Schema.Types.ObjectId, default: null },
+  glPostedAt:       { type: Date, default: null },
+  glError:          { type: String, default: '' },
+
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true });

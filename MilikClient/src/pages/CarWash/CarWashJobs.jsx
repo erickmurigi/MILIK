@@ -39,7 +39,7 @@ const defaultFilters = {
 
 const statuses = ["waiting", "washing", "done", "paid", "cancelled"];
 const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
-const PAGE_SIZE = 30;
+const DEFAULT_PAGE_SIZE = 25;
 
 const statusLabels = {
   waiting: "Waiting",
@@ -107,8 +107,9 @@ const CarWashJobs = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
+  const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 });
   const [loading, setLoading] = useState(false);
 
   const unpaidJobs = useMemo(() => jobs.filter((job) => job.paymentStatus !== "paid"), [jobs]);
@@ -132,7 +133,7 @@ const CarWashJobs = () => {
           staff: appliedFilters.staff || undefined,
           status: appliedFilters.status || undefined,
           paymentStatus: appliedFilters.paymentStatus || undefined,
-          limit: PAGE_SIZE,
+          limit: pageSize,
           page,
         }),
         carWashApi.listServices({ active: true }),
@@ -142,7 +143,7 @@ const CarWashJobs = () => {
           : Promise.resolve([]),
       ]);
       setJobs(normalizeListPayload(jobPayload, "jobs"));
-      setPagination(jobPayload?.pagination || { page, limit: PAGE_SIZE, total: normalizeListPayload(jobPayload, "jobs").length, pages: 1 });
+      setPagination(jobPayload?.pagination || { page, limit: pageSize, total: normalizeListPayload(jobPayload, "jobs").length, pages: 1 });
       setSelectedIds([]);
       setExpandedIds([]);
       setServices(normalizeListPayload(servicePayload, "services"));
@@ -157,7 +158,7 @@ const CarWashJobs = () => {
 
   useEffect(() => {
     load();
-  }, [appliedFilters, page]);
+  }, [appliedFilters, page, pageSize]);
 
   useEffect(() => {
     if (!selectedService) return;
@@ -524,7 +525,16 @@ const CarWashJobs = () => {
           </tbody>
         </table>
         <div className="flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span>Rows per page: {PAGE_SIZE}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-slate-500 normal-case">Per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+              className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition normal-case"
+            >
+              {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="button"

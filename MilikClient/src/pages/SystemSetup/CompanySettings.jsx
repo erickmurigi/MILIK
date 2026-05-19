@@ -4,6 +4,7 @@ import { useSelector } from "react-redux";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { useConfirm } from "../../context/ConfirmContext";
 import { adminRequests } from "../../utils/requestMethods";
+import { hasCompanyModule } from "../../utils/companyModules";
 import { toast } from "react-toastify";
 import {
   FaArchive,
@@ -25,6 +26,8 @@ import {
 
 const MILIK_GREEN = "#0B3B2E";
 
+// requiredModules: OR semantics — tab visible if company has ANY of the listed modules.
+// Omit or set null to always show the tab.
 const TAB_CONFIG = {
   utilities: {
     label: "Utility Types",
@@ -33,6 +36,7 @@ const TAB_CONFIG = {
     empty: "No utility types saved yet.",
     subtitle:
       "Maintain reusable utility and service charge labels for future tenant, unit and meter-reading flows.",
+    requiredModules: ["propertyManagement"],
   },
   periods: {
     label: "Billing Periods",
@@ -41,6 +45,7 @@ const TAB_CONFIG = {
     empty: "No billing periods saved yet.",
     subtitle:
       "Maintain reusable billing cycle defaults for future schedules and operational setup. Historical postings stay untouched.",
+    requiredModules: ["propertyManagement"],
   },
   commissions: {
     label: "Commissions",
@@ -49,6 +54,7 @@ const TAB_CONFIG = {
     empty: "No commission defaults saved yet.",
     subtitle:
       "Company-level commission defaults are future-facing policy references. Property-level commission setup remains the source of truth per property.",
+    requiredModules: ["propertyManagement", "propertySale"],
   },
   expenses: {
     label: "Expense Items",
@@ -57,6 +63,7 @@ const TAB_CONFIG = {
     empty: "No reusable expense items saved yet.",
     subtitle:
       "Maintain reusable deduction and expense labels for future voucher and operational workflows.",
+    // No requiredModules — visible to all companies
   },
   deposits: {
     label: "Deposit Types",
@@ -65,14 +72,17 @@ const TAB_CONFIG = {
     empty: "No deposit types saved yet.",
     subtitle:
       "Maintain reusable tenant deposit invoice types for future security, utility and custom deposit charges.",
+    requiredModules: ["propertyManagement"],
   },
   tax: {
     label: "Tax Configuration",
     icon: FaCog,
+    requiredModules: ["propertyManagement"],
   },
   accounting: {
     label: "Accounting Defaults",
     icon: FaCheck,
+    requiredModules: ["propertyManagement", "hr"],
   },
 };
 
@@ -196,6 +206,82 @@ const normalizeAccountingDefaults = (settings = {}) => ({
   leaseAgreementFeeIncomeAccount:
     settings?.accountingDefaults?.leaseAgreementFeeIncomeAccount || "",
 });
+
+const normalizeHrAccountingDefaults = (settings = {}) => ({
+  salaryExpenseAccount: settings?.hrAccountingDefaults?.salaryExpenseAccount || "",
+  netPayableAccount: settings?.hrAccountingDefaults?.netPayableAccount || "",
+  payePayableAccount: settings?.hrAccountingDefaults?.payePayableAccount || "",
+  nhifPayableAccount: settings?.hrAccountingDefaults?.nhifPayableAccount || "",
+  nssfPayableAccount: settings?.hrAccountingDefaults?.nssfPayableAccount || "",
+  ahlPayableAccount: settings?.hrAccountingDefaults?.ahlPayableAccount || "",
+  otherDeductionsPayableAccount: settings?.hrAccountingDefaults?.otherDeductionsPayableAccount || "",
+  employerNhifExpenseAccount: settings?.hrAccountingDefaults?.employerNhifExpenseAccount || "",
+  employerNssfExpenseAccount: settings?.hrAccountingDefaults?.employerNssfExpenseAccount || "",
+  employerAhlExpenseAccount: settings?.hrAccountingDefaults?.employerAhlExpenseAccount || "",
+});
+
+const HR_ACCOUNTING_DEFAULT_FIELDS = [
+  {
+    key: "salaryExpenseAccount",
+    label: "Salaries & Wages Expense",
+    description: "Gross payroll expense account. Debited on payslip approval.",
+    type: "expense",
+  },
+  {
+    key: "netPayableAccount",
+    label: "Net Salaries Payable",
+    description: "Liability account for net pay owed to employees after all deductions.",
+    type: "liability",
+  },
+  {
+    key: "payePayableAccount",
+    label: "PAYE Tax Payable",
+    description: "Liability account for employee PAYE withheld and payable to KRA.",
+    type: "liability",
+  },
+  {
+    key: "nhifPayableAccount",
+    label: "NHIF / SHA Contributions Payable",
+    description: "Liability account for employee NHIF/SHA deductions payable.",
+    type: "liability",
+  },
+  {
+    key: "nssfPayableAccount",
+    label: "NSSF Contributions Payable",
+    description: "Liability account for employee NSSF deductions payable.",
+    type: "liability",
+  },
+  {
+    key: "ahlPayableAccount",
+    label: "AHL Levy Payable",
+    description: "Liability account for Affordable Housing Levy withheld from employees.",
+    type: "liability",
+  },
+  {
+    key: "otherDeductionsPayableAccount",
+    label: "Other Deductions Payable",
+    description: "Liability account for HELB, SACCO, loan repayments and other payroll deductions.",
+    type: "liability",
+  },
+  {
+    key: "employerNhifExpenseAccount",
+    label: "Employer NHIF/SHA Expense",
+    description: "Expense account for employer-side NHIF/SHA contributions.",
+    type: "expense",
+  },
+  {
+    key: "employerNssfExpenseAccount",
+    label: "Employer NSSF Expense",
+    description: "Expense account for employer-side NSSF contributions.",
+    type: "expense",
+  },
+  {
+    key: "employerAhlExpenseAccount",
+    label: "Employer AHL Expense",
+    description: "Expense account for employer-side Affordable Housing Levy.",
+    type: "expense",
+  },
+];
 
 const ACCOUNTING_DEFAULT_FIELDS = [
   {
@@ -365,12 +451,35 @@ const CompanySettings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentCompany } = useSelector((state) => state.company || {});
 
+  // ── Module flags ──────────────────────────────────────────────────────────
+  const hasPM   = hasCompanyModule(currentCompany, "propertyManagement");
+  const hasHR   = hasCompanyModule(currentCompany, "hr");
+  const hasSale = hasCompanyModule(currentCompany, "propertySale");
+
+  const visibleTabEntries = useMemo(() =>
+    Object.entries(TAB_CONFIG).filter(([, cfg]) => {
+      if (!cfg.requiredModules) return true;
+      return cfg.requiredModules.some((mod) => hasCompanyModule(currentCompany, mod));
+    }),
+    [currentCompany]
+  );
+
+  const visibleTabKeys = useMemo(
+    () => new Set(visibleTabEntries.map(([k]) => k)),
+    [visibleTabEntries]
+  );
+
+  const firstVisibleTab = visibleTabEntries[0]?.[0] || "expenses";
+
   const [settings, setSettings] = useState(null);
   const [taxConfig, setTaxConfig] = useState(normalizeTaxConfiguration());
   const [accountingDefaults, setAccountingDefaults] = useState(normalizeAccountingDefaults());
+  const [hrAccountingDefaults, setHrAccountingDefaults] = useState(normalizeHrAccountingDefaults());
+  const [savingHrAccounting, setSavingHrAccounting] = useState(false);
   const [chartAccounts, setChartAccounts] = useState([]);
   const [loadedChartAccountCompanyId, setLoadedChartAccountCompanyId] = useState("");
-  const activeTab = Object.prototype.hasOwnProperty.call(TAB_CONFIG, searchParams.get("tab")) ? searchParams.get("tab") : "utilities";
+  const requestedTab = searchParams.get("tab");
+  const activeTab = (requestedTab && visibleTabKeys.has(requestedTab)) ? requestedTab : firstVisibleTab;
   const [showInactive, setShowInactive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
@@ -383,12 +492,14 @@ const CompanySettings = () => {
   const [formData, setFormData] = useState(emptyForms.utilities);
 
   useEffect(() => {
-    if (!Object.prototype.hasOwnProperty.call(TAB_CONFIG, searchParams.get("tab"))) {
+    if (!visibleTabKeys.size) return;
+    const requested = searchParams.get("tab");
+    if (!requested || !visibleTabKeys.has(requested)) {
       const nextParams = new URLSearchParams(searchParams);
-      nextParams.set("tab", "utilities");
+      nextParams.set("tab", firstVisibleTab);
       setSearchParams(nextParams, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [visibleTabKeys, firstVisibleTab, searchParams, setSearchParams]);
 
   const switchTab = (tabKey) => {
     if (!Object.prototype.hasOwnProperty.call(TAB_CONFIG, tabKey)) return;
@@ -402,6 +513,7 @@ const CompanySettings = () => {
       setSettings(null);
       setTaxConfig(normalizeTaxConfiguration());
       setAccountingDefaults(normalizeAccountingDefaults());
+      setHrAccountingDefaults(normalizeHrAccountingDefaults());
       return;
     }
 
@@ -411,6 +523,7 @@ const CompanySettings = () => {
       setSettings(response.data);
       setTaxConfig(normalizeTaxConfiguration(response.data || {}));
       setAccountingDefaults(normalizeAccountingDefaults(response.data || {}));
+      setHrAccountingDefaults(normalizeHrAccountingDefaults(response.data || {}));
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
@@ -451,7 +564,7 @@ const CompanySettings = () => {
   }, [currentCompany?._id]);
 
   useEffect(() => {
-    if (activeTab !== "accounting") return;
+    if (activeTab !== "accounting" && activeTab !== "hrAccounting") return;
     loadChartAccounts();
   }, [activeTab, currentCompany?._id, loadedChartAccountCompanyId]);
 
@@ -478,6 +591,13 @@ const CompanySettings = () => {
 
   const setAccountingDefaultField = (field, value) => {
     setAccountingDefaults((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const setHrAccountingDefaultField = (field, value) => {
+    setHrAccountingDefaults((prev) => ({
       ...prev,
       [field]: value,
     }));
@@ -714,6 +834,23 @@ const CompanySettings = () => {
       toast.error(extractErrorMessage(error));
     } finally {
       setSavingAccounting(false);
+    }
+  };
+
+  const saveHrAccountingDefaults = async () => {
+    if (!currentCompany?._id) return;
+
+    setSavingHrAccounting(true);
+    try {
+      await adminRequests.put(`/company-settings/${currentCompany._id}/hr-accounting-defaults`, {
+        hrAccountingDefaults,
+      });
+      toast.success("HR accounting defaults saved. New payroll posting flows will use these accounts.");
+      await loadSettings({ silent: true });
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSavingHrAccounting(false);
     }
   };
 
@@ -1046,67 +1183,103 @@ const CompanySettings = () => {
     </div>
   );
 
+  const renderAccountingDefaultsGrid = (fields, defaults, setField) => (
+    <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {fields.map((field) => {
+        const options = chartAccountOptionsByType[field.type] || [];
+        const selectedAccount = options.find((account) => String(account?._id || "") === String(defaults[field.key] || ""));
+
+        return (
+          <div key={field.key} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+            <div className="text-sm font-extrabold text-slate-900">{field.label}</div>
+            <div className="mt-1 text-xs leading-5 text-slate-600">{field.description}</div>
+
+            <div className="mt-3">
+              <Select
+                value={defaults[field.key] || ""}
+                onChange={(e) => setField(field.key, e.target.value)}
+              >
+                <option value="">Use automatic fallback</option>
+                {options.map((account) => (
+                  <option key={account._id} value={account._id}>
+                    {account.code ? `${account.code} — ` : ""}
+                    {account.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Allowed type: {field.type}</div>
+              <ActionButton variant="subtle" onClick={() => setField(field.key, "")}>Clear</ActionButton>
+            </div>
+
+            <div className="mt-2 text-xs leading-5 text-slate-600">
+              {selectedAccount
+                ? `Selected: ${selectedAccount.code ? `${selectedAccount.code} • ` : ""}${selectedAccount.name}`
+                : "No explicit company default selected."}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   const renderAccountingTab = () => (
-    <div className="space-y-4">
-      <Card
-        title="Accounting Defaults"
-        subtitle="Select company-level default posting accounts for future operational flows. Leaving a field blank keeps the built-in MILIK fallback behavior. Historical entries remain untouched."
-        action={
-          <ActionButton variant="primary" onClick={saveAccountingDefaults} disabled={savingAccounting || loadingAccounts}>
-            {savingAccounting ? <FaSpinner className="animate-spin" /> : <FaSave />} Save Accounting Defaults
-          </ActionButton>
-        }
-      >
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
-          Choose real Chart of Accounts rows instead of typing free-form codes. These defaults only guide future posting where no more specific account has been selected.
+    <div className="space-y-6">
+      {hasPM && (
+        <Card
+          title="Property Management Accounting Defaults"
+          subtitle="Default posting accounts for rent, utilities, deposits and commissions. Leaving a field blank keeps the built-in MILIK fallback behavior. Historical entries remain untouched."
+          action={
+            <ActionButton variant="primary" onClick={saveAccountingDefaults} disabled={savingAccounting || loadingAccounts}>
+              {savingAccounting ? <FaSpinner className="animate-spin" /> : <FaSave />} Save PMS Defaults
+            </ActionButton>
+          }
+        >
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+            Choose real Chart of Accounts rows. These defaults only guide future posting where no more specific account has been selected.
+          </div>
+
+          {loadingAccounts ? (
+            <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
+              <FaSpinner className="animate-spin" /> Loading Chart of Accounts...
+            </div>
+          ) : (
+            renderAccountingDefaultsGrid(ACCOUNTING_DEFAULT_FIELDS, accountingDefaults, setAccountingDefaultField)
+          )}
+        </Card>
+      )}
+
+      {hasHR && (
+        <Card
+          title="HR & Payroll Accounting Defaults"
+          subtitle="Default posting accounts for payroll journals. When a payslip is approved these accounts determine where gross pay, statutory deductions and employer contributions are posted."
+          action={
+            <ActionButton variant="primary" onClick={saveHrAccountingDefaults} disabled={savingHrAccounting || loadingAccounts}>
+              {savingHrAccounting ? <FaSpinner className="animate-spin" /> : <FaSave />} Save HR Defaults
+            </ActionButton>
+          }
+        >
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-800">
+            These accounts are used when the HR module posts payroll journals. PAYE, NHIF/SHA, NSSF, AHL and net pay each post to their respective liability accounts. Gross salary expense is debited to the salary expense account.
+          </div>
+
+          {loadingAccounts ? (
+            <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
+              <FaSpinner className="animate-spin" /> Loading Chart of Accounts...
+            </div>
+          ) : (
+            renderAccountingDefaultsGrid(HR_ACCOUNTING_DEFAULT_FIELDS, hrAccountingDefaults, setHrAccountingDefaultField)
+          )}
+        </Card>
+      )}
+
+      {!hasPM && !hasHR && (
+        <div className="flex h-40 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm text-slate-400">
+          No accounting defaults are configured for your active modules.
         </div>
-
-        {loadingAccounts ? (
-          <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
-            <FaSpinner className="animate-spin" /> Loading Chart of Accounts...
-          </div>
-        ) : (
-          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {ACCOUNTING_DEFAULT_FIELDS.map((field) => {
-              const options = chartAccountOptionsByType[field.type] || [];
-              const selectedAccount = options.find((account) => String(account?._id || "") === String(accountingDefaults[field.key] || ""));
-
-              return (
-                <div key={field.key} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                  <div className="text-sm font-extrabold text-slate-900">{field.label}</div>
-                  <div className="mt-1 text-xs leading-5 text-slate-600">{field.description}</div>
-
-                  <div className="mt-3">
-                    <Select
-                      value={accountingDefaults[field.key] || ""}
-                      onChange={(e) => setAccountingDefaultField(field.key, e.target.value)}
-                    >
-                      <option value="">Use automatic fallback</option>
-                      {options.map((account) => (
-                        <option key={account._id} value={account._id}>
-                          {account.code ? `${account.code} — ` : ""}
-                          {account.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Allowed type: {field.type}</div>
-                    <ActionButton variant="subtle" onClick={() => setAccountingDefaultField(field.key, "")}>Clear</ActionButton>
-                  </div>
-
-                  <div className="mt-2 text-xs leading-5 text-slate-600">
-                    {selectedAccount
-                      ? `Selected: ${selectedAccount.code ? `${selectedAccount.code} • ` : ""}${selectedAccount.name}`
-                      : "No explicit company default selected."}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
+      )}
     </div>
   );
 
@@ -1278,9 +1451,9 @@ const CompanySettings = () => {
             </div>
           </div>
 
-          {/* Tab bar — underline style */}
+          {/* Tab bar — underline style, filtered to company modules */}
           <div className="flex flex-shrink-0 gap-0 overflow-x-auto border-b border-slate-200 px-2">
-            {Object.entries(TAB_CONFIG).map(([key, tab]) => {
+            {visibleTabEntries.map(([key, tab]) => {
               const Icon = tab.icon;
               const isActive = key === activeTab;
               return (

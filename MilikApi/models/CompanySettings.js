@@ -121,6 +121,62 @@ const taxSettingsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const hrAccountingDefaultsSchema = new mongoose.Schema(
+  {
+    salaryExpenseAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    netPayableAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    payePayableAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    nhifPayableAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    nssfPayableAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    ahlPayableAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    otherDeductionsPayableAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    employerNhifExpenseAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    employerNssfExpenseAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    employerAhlExpenseAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+  },
+  { _id: false }
+);
+
 const accountingDefaultsSchema = new mongoose.Schema(
   {
     tenantReceivableAccount: {
@@ -200,6 +256,10 @@ const CompanySettingsSchema = new mongoose.Schema(
     },
     accountingDefaults: {
       type: accountingDefaultsSchema,
+      default: () => ({}),
+    },
+    hrAccountingDefaults: {
+      type: hrAccountingDefaultsSchema,
       default: () => ({}),
     },
     currencyCode: { type: String, default: "KES" },

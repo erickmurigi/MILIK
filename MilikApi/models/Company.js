@@ -751,6 +751,7 @@ companySchema.pre('validate', function normalizeCompany(next) {
 // Indexes for performance / uniqueness
 companySchema.index({ companyCode: 1 }, { sparse: true });
 companySchema.index({ companyName: 1 });
+companySchema.index({ createdAt: -1 });
 companySchema.index({ isDemoWorkspace: 1, companyName: 1 });
 companySchema.index({ isDemoWorkspace: 1, updatedAt: -1 });
 companySchema.index({ 'accessKeys.keyVersion': 1 });

@@ -20,7 +20,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useConfirm } from "../../context/ConfirmContext";
 
-const ITEMS_PER_PAGE = 25;
+const DEFAULT_PAGE_SIZE = 25;
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All statuses" },
@@ -128,6 +128,7 @@ const Maintenances = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
   const [updatingId, setUpdatingId] = useState("");
 
@@ -222,11 +223,11 @@ const Maintenances = () => {
     emergency: requests.filter((r) => r?.priority === "emergency").length,
   }), [requests]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
-  const pageRows = filteredRequests.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+  const pageRows = filteredRequests.slice((safePage - 1) * pageSize, safePage * pageSize);
 
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, priorityFilter]);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, priorityFilter, pageSize]);
 
   const openCreateModal = () => {
     if (isDemoUser) { toast.info("Demo mode is read-only."); return; }
@@ -519,9 +520,19 @@ const Maintenances = () => {
             {/* Pagination */}
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
               <div className="font-semibold">
-                Showing <span className="font-bold text-slate-900">{filteredRequests.length === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safePage * ITEMS_PER_PAGE, filteredRequests.length)}</span> of <span className="font-bold text-slate-900">{filteredRequests.length}</span> request(s)
+                Showing <span className="font-bold text-slate-900">{filteredRequests.length === 0 ? 0 : (safePage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safePage * pageSize, filteredRequests.length)}</span> of <span className="font-bold text-slate-900">{filteredRequests.length}</span> request(s)
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-slate-500">Per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                    className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                  >
+                    {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
                 <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
                 <span className="font-semibold text-slate-700">Page {safePage} of {totalPages}</span>
                 <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>

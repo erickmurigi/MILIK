@@ -21,7 +21,7 @@ import {
   FaSpinner,
   FaChevronDown,
 } from "react-icons/fa";
-import { getPropertyById, updateProperty } from "../../redux/propertyRedux";
+import { getPropertyById, updateProperty, clearCurrentProperty } from "../../redux/propertyRedux";
 import { getLandlords } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
@@ -374,16 +374,21 @@ const EditProperty = () => {
   const sectionCard = "bg-white border border-slate-200 rounded-lg shadow-sm";
   const sectionHeader = "text-sm font-bold text-slate-900 tracking-tight";
 
-  // Fetch property on mount
+  // Fetch property on mount, clear on unmount
   useEffect(() => {
     if (id) {
+      dispatch(clearCurrentProperty());
       dispatch(getPropertyById(id));
     }
+    return () => {
+      dispatch(clearCurrentProperty());
+    };
   }, [dispatch, id]);
 
   // Prefill form when property data loads
   useEffect(() => {
-    if (currentProperty) {
+    if (!currentProperty) return;
+    try {
       const landlordArray = Array.isArray(currentProperty.landlords)
         ? currentProperty.landlords
         : currentProperty.landlords ? [currentProperty.landlords] : [];
@@ -412,12 +417,18 @@ const EditProperty = () => {
           }))
         : [{ landlordId: "", name: "", contact: "", isPrimary: true }];
 
+      let parsedDate = "";
+      try {
+        if (currentProperty.dateAcquired) {
+          const d = new Date(currentProperty.dateAcquired);
+          if (!isNaN(d.getTime())) parsedDate = d.toISOString().split('T')[0];
+        }
+      } catch (_) {}
+
       const transformedData = {
         ...currentProperty,
         landlords: normalizedLandlords,
-        dateAcquired: currentProperty.dateAcquired
-          ? new Date(currentProperty.dateAcquired).toISOString().split('T')[0]
-          : "",
+        dateAcquired: parsedDate,
         standingCharges: currentProperty.standingCharges || [],
         securityDeposits: currentProperty.securityDeposits || [],
         utilityRates: currentProperty.utilityRates || [],
@@ -434,7 +445,11 @@ const EditProperty = () => {
           if (savedDraft) {
             const parsedDraft = JSON.parse(savedDraft);
             if (parsedDraft?.formData && typeof parsedDraft.formData === "object") {
-              nextFormData = { ...transformedData, ...parsedDraft.formData };
+              // Only restore draft fields that are non-empty to prevent stale/empty drafts from clearing API data
+              const safeDraft = Object.fromEntries(
+                Object.entries(parsedDraft.formData).filter(([, v]) => v !== null && v !== undefined && v !== "")
+              );
+              nextFormData = { ...transformedData, ...safeDraft };
             }
             if (parsedDraft?.activeTab) {
               setActiveTab(parsedDraft.activeTab);
@@ -447,6 +462,8 @@ const EditProperty = () => {
 
       setFormData(nextFormData);
       draftRestoredRef.current = true;
+    } catch (prefillError) {
+      console.error("Failed to prefill edit property form:", prefillError);
     }
   }, [currentProperty, draftStorageKey, initialFormData]);
 
@@ -957,6 +974,77 @@ const EditProperty = () => {
             {fieldErrors.propertyType && <p className="mt-1 text-xs text-red-600">{fieldErrors.propertyType}</p>}
           </div>
 
+          <div>
+            <label className={labelClass}>No. Of Floors</label>
+            <input
+              type="number"
+              name="numberOfFloors"
+              value={formData.numberOfFloors}
+              onChange={handleChange}
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+              min="0"
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Country</label>
+            <input
+              type="text"
+              name="country"
+              value={formData.country}
+              onChange={handleChange}
+              className={`${inputClass} bg-slate-50 ${MILIK_ORANGE_BORDER_FOCUS}`}
+              readOnly
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Town/City/State</label>
+            <input
+              type="text"
+              name="townCityState"
+              value={formData.townCityState}
+              onChange={handleChange}
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+              placeholder="e.g., Nairobi"
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Estate/Area</label>
+            <input
+              type="text"
+              name="estateArea"
+              value={formData.estateArea}
+              onChange={handleChange}
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+              placeholder="e.g., Westlands"
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Road/Street</label>
+            <input
+              type="text"
+              name="roadStreet"
+              value={formData.roadStreet}
+              onChange={handleChange}
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
+              placeholder="e.g., Moi Avenue"
+            />
+          </div>
+
+          <div>
+            <MilikSelect
+              label="Zone/Region"
+              placeholder="Select Zone"
+              items={zones}
+              value={formData.zoneRegion}
+              onChange={(val) => handleChange({ target: { name: "zoneRegion", value: val } })}
+              getLabel={(x) => x}
+              getValue={(x) => x}
+            />
+          </div>
 
         </div>
 

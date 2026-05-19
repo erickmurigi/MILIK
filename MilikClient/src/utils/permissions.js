@@ -50,6 +50,32 @@ const getPermissionValue = (permissions = {}, resource, action) => {
   return undefined;
 };
 
+const MODULE_ACCESS_MAP = {
+  propertyManagement: 'propertyMgmt',
+  accounts: 'accounts',
+  hr: 'humanResource',
+  inventory: 'inventory',
+  procurement: 'procurement',
+  propertySale: 'propertySale',
+  facilityManagement: 'facilityManagement',
+  hotelManagement: 'hotelManagement',
+  telcoDealership: 'telcoDealership',
+  dms: 'dms',
+  academics: 'academics',
+  projectManagement: 'projectManagement',
+  assetValuation: 'assetValuation',
+  pos: 'inventory',
+  carwash: 'carwash',
+};
+
+const checkModuleAccess = (moduleAccess = {}, moduleKey, normalizedAction) => {
+  const accessText = String(moduleAccess?.[MODULE_ACCESS_MAP[moduleKey] || moduleKey] || '').toLowerCase();
+  if (normalizedAction === 'view' || normalizedAction === 'export') {
+    return accessText === 'view only' || accessText === 'full access';
+  }
+  return accessText === 'full access';
+};
+
 export const hasCompanyPermission = (
   user = {},
   currentCompany = null,
@@ -78,34 +104,18 @@ export const hasCompanyPermission = (
   if (explicit === false) return false;
 
   const moduleAccess = assignment?.moduleAccess || user?.moduleAccess || {};
-  const map = {
-    propertyManagement: 'propertyMgmt',
-    accounts: 'accounts',
-    hr: 'humanResource',
-    inventory: 'inventory',
-    procurement: 'procurement',
-    propertySale: 'propertySale',
-    facilityManagement: 'facilityManagement',
-    hotelManagement: 'hotelManagement',
-    telcoDealership: 'telcoDealership',
-    dms: 'dms',
-    academics: 'academics',
-    projectManagement: 'projectManagement',
-    assetValuation: 'assetValuation',
-    pos: 'inventory',
-    carwash: 'carwash',
-  };
-  const accessText = String(moduleAccess?.[map[moduleKey] || moduleKey] || '').toLowerCase();
 
+  // Accept moduleKey as string or string[].
+  // String[]: user must have access through at least one of the listed modules (OR semantics).
   if (!moduleKey) {
     return normalizedAction === 'view' || normalizedAction === 'export';
   }
 
-  if (normalizedAction === 'view' || normalizedAction === 'export') {
-    return accessText === 'view only' || accessText === 'full access';
+  if (Array.isArray(moduleKey)) {
+    return moduleKey.some((key) => checkModuleAccess(moduleAccess, key, normalizedAction));
   }
 
-  return accessText === 'full access';
+  return checkModuleAccess(moduleAccess, moduleKey, normalizedAction);
 };
 
 export const guardButtonProps = (

@@ -2,6 +2,7 @@ import CompanySettings from "../../models/CompanySettings.js";
 import mongoose from "mongoose";
 import {
   validateAccountingDefaultAccount,
+  validateHrAccountingDefaultAccount,
 } from "../../services/companyAccountingDefaultsService.js";
 import {
   DEFAULT_TAX_CODES,
@@ -168,6 +169,19 @@ const ACCOUNTING_DEFAULT_FIELDS = [
   "depositLiabilityAccount",
   "managementCommissionIncomeAccount",
   "leaseAgreementFeeIncomeAccount",
+];
+
+const HR_ACCOUNTING_DEFAULT_FIELDS = [
+  "salaryExpenseAccount",
+  "netPayableAccount",
+  "payePayableAccount",
+  "nhifPayableAccount",
+  "nssfPayableAccount",
+  "ahlPayableAccount",
+  "otherDeductionsPayableAccount",
+  "employerNhifExpenseAccount",
+  "employerNssfExpenseAccount",
+  "employerAhlExpenseAccount",
 ];
 
 const DEFAULT_DEPOSIT_TYPES = [
@@ -832,6 +846,53 @@ export const updateAccountingDefaults = async (req, res, next) => {
     return res.status(200).json({
       message: "Accounting defaults updated successfully",
       accountingDefaults: settings.accountingDefaults,
+      settings,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateHrAccountingDefaults = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    let settings = await findCompanySettings(businessId);
+    if (!settings) {
+      settings = new CompanySettings({ company: businessId });
+      ensureSettingsTaxConfiguration(settings);
+    }
+
+    const incomingDefaults = req.body?.hrAccountingDefaults || {};
+    const nextDefaults = { ...(settings.hrAccountingDefaults?.toObject?.() || settings.hrAccountingDefaults || {}) };
+
+    for (const field of HR_ACCOUNTING_DEFAULT_FIELDS) {
+      if (!(field in incomingDefaults)) continue;
+      const account = await validateHrAccountingDefaultAccount({
+        businessId,
+        field,
+        rawValue: incomingDefaults[field],
+      });
+      nextDefaults[field] = account?._id || null;
+    }
+
+    settings.hrAccountingDefaults = nextDefaults;
+    await settings.save();
+    await logAuditEvent({
+      req,
+      company: businessId,
+      action: "settings.hr_accounting_defaults.update",
+      category: "settings",
+      severity: "critical",
+      targetType: "CompanySettings",
+      targetId: settings._id,
+      targetName: "HR accounting defaults",
+      message: "Updated HR accounting defaults",
+      metadata: { fields: Object.keys(incomingDefaults || {}) },
+    });
+
+    return res.status(200).json({
+      message: "HR accounting defaults updated successfully",
+      hrAccountingDefaults: settings.hrAccountingDefaults,
       settings,
     });
   } catch (err) {

@@ -14,7 +14,8 @@ import {
   FaUser, FaUsers, FaAddressCard, FaTag, FaClipboard,
   FaHandshake, FaChartLine, FaChartPie, FaFileAlt, FaBalanceScale,
   FaToolbox, FaDatabase, FaWrench, FaHeadset, FaInfoCircle, FaList,
-  FaBuilding, FaKey, FaUserSlash, FaRedoAlt, FaCar, FaUserPlus, FaUserCheck
+  FaBuilding, FaKey, FaUserSlash, FaRedoAlt, FaCar, FaUserPlus, FaUserCheck,
+  FaLayerGroup,
 } from "react-icons/fa";
 import "./dashboard.css";
 import TabManager from "../../components/Layout/TabManager";
@@ -26,7 +27,7 @@ import {
   getWorkspaceFromRoute,
   getWorkspaceLabel,
 } from "../../utils/workspaceRoutes";
-import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { GL_ACCESS_MODULES, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 
 const MENU_PERMISSION_MAP = {
@@ -81,11 +82,15 @@ const MENU_PERMISSION_MAP = {
   "carwash-payments": { resource: "carwash-payments", action: "view", moduleKey: "carwash" },
   "carwash-deposits": { resource: "carwash-deposits", action: "view", moduleKey: "carwash" },
   "carwash-expenses": { resource: "carwash-expenses", action: "view", moduleKey: "carwash" },
-  "carwash-cashbooks": { resource: "chartOfAccounts", action: "view", moduleKey: "accounts" },
-  "carwash-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: "accounts" },
+  "carwash-cashbooks": { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
+  "carwash-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
+  "carwash-financials": { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
   "carwash-staff": { resource: "carwash-staff", action: "view", moduleKey: "carwash" },
   "carwash-reports": { resource: "carwash-reports", action: "view", moduleKey: "carwash" },
   "carwash-commissions": { resource: "carwash-commissions", action: "view", moduleKey: "carwash" },
+  "hr-financials":          { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
+  "hr-chart-of-accounts":   { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
+  "sale-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
   "sale-dashboard": { resource: "sale-dashboard", action: "view", moduleKey: "propertySale" },
   "sale-listings": { resource: "sale-listings", action: "view", moduleKey: "propertySale" },
   "sale-buyers": { resource: "sale-buyers", action: "view", moduleKey: "propertySale" },
@@ -374,7 +379,8 @@ const TopToolbar = ({
         "carwash-deposits": "/carwash/deposits",
         "carwash-expenses": "/carwash/expenses",
         "carwash-cashbooks": "/carwash/cashbooks",
-        "carwash-chart-of-accounts": "/carwash/chart-of-accounts",
+        "carwash-chart-of-accounts": "/carwash/chart-of-accounts?scope=carwash",
+        "carwash-financials": "/carwash/financials",
         "carwash-staff": "/carwash/staff",
         "carwash-reports": "/carwash/reports",
         "carwash-commissions": "/carwash/commissions",
@@ -395,6 +401,7 @@ const TopToolbar = ({
         "sale-payments": "/sale/payments",
         "sale-commissions": "/sale/commissions",
         "sale-reports": "/sale/reports",
+        "sale-chart-of-accounts": "/sale/chart-of-accounts",
         documentation: "/help/documentation",
         support: "/help/support",
         about: "/help/about",
@@ -426,6 +433,9 @@ const TopToolbar = ({
         "hr-appraisal-cycles":      "/hr/appraisals/cycles",
         "hr-appraisals":            "/hr/appraisals",
         "hr-kpis":                  "/hr/appraisals/kpis",
+        // Financials — Phase 6 (live)
+        "hr-financials":            "/hr/financials",
+        "hr-chart-of-accounts":     "/hr/chart-of-accounts?scope=hr",
         // Setup — Phase 1 + 2 (live)
         "hr-setup":                 "/hr/setup",
         "hr-setup-leave-types":     "/hr/leave/types",
@@ -509,10 +519,12 @@ const TopToolbar = ({
       "carwash-deposits": "/carwash/deposits",
       "carwash-expenses": "/carwash/expenses",
       "carwash-cashbooks": "/carwash/cashbooks",
-      "carwash-chart-of-accounts": "/carwash/chart-of-accounts",
+      "carwash-chart-of-accounts": "/carwash/chart-of-accounts?scope=carwash",
+      "carwash-financials": "/carwash/financials",
       "carwash-staff": "/carwash/staff",
       "carwash-reports": "/carwash/reports",
       "carwash-commissions": "/carwash/commissions",
+      "sale-chart-of-accounts": "/sale/chart-of-accounts",
       documentation: "/help/documentation",
       support: "/help/support",
       about: "/help/about",
@@ -600,6 +612,8 @@ const TopToolbar = ({
             { id: "sale-payments", label: "Payments", icon: FaMoneyBillWave },
             { id: "sale-commissions", label: "Commissions", icon: FaChartLine },
             { id: "sale-reports", label: "Sales Reports", icon: FaFileAlt },
+            { type: "separator" },
+            { id: "sale-chart-of-accounts", label: "Chart of Accounts", icon: FaLayerGroup },
           ],
         },
       ];
@@ -667,6 +681,16 @@ const TopToolbar = ({
           ],
         },
         {
+          id: "hr-financials",
+          label: "Financials",
+          icon: FaMoneyBillWave,
+          submenu: [
+            { id: "hr-financials",         label: "Payroll Journals & Accounts", icon: FaBook },
+            { type: "separator" },
+            { id: "hr-chart-of-accounts",  label: "Chart of Accounts",           icon: FaLayerGroup },
+          ],
+        },
+        {
           id: "hr-config",
           label: "Setup",
           icon: FaCog,
@@ -707,6 +731,8 @@ const TopToolbar = ({
             { id: "carwash-payments", label: "Payments", icon: FaMoneyBillWave },
             { id: "carwash-deposits", label: "Deposits", icon: FaMoneyBillWave },
             { id: "carwash-expenses", label: "Expenses", icon: FaFileInvoice },
+            { id: "carwash-financials", label: "Financials", icon: FaChartLine },
+            { type: "separator" },
             { id: "carwash-cashbooks", label: "Cashbooks", icon: FaWallet },
             { id: "carwash-chart-of-accounts", label: "Chart of Accounts", icon: FaBook },
             { id: "carwash-commissions", label: "Commissions", icon: FaHandshake },
@@ -1021,6 +1047,7 @@ const TopToolbar = ({
     "hr-payroll":     { color: "#7c3aed", label: "Payroll",     icon: FaMoneyBillWave },
     "hr-reports":     { color: "#059669", label: "Reports",     icon: FaChartBar },
     "hr-appraisals":  { color: "#b45309", label: "Appraisals",  icon: FaChartLine },
+    "hr-financials":  { color: "#0B3B2E", label: "Financials",  icon: FaMoneyBillWave },
     "hr-config":      { color: "#FF8C00", label: "Setup",       icon: FaCog },
   };
 

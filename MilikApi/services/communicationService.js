@@ -70,8 +70,8 @@ const escapeHtml = (value = '') =>
     .replace(/'/g, '&#39;');
 
 const SMS_ALLOWED_TEMPLATE_KEYS = {
-  landlord_bulk: ['landlord_notice_sms'],
-  tenant_bulk: ['tenant_notice_sms', 'overdue_reminder_tenant'],
+  landlord_bulk: ['landlord_notice_sms', 'landlord_statement_ready', 'landlord_payment_sms'],
+  tenant_bulk: ['tenant_notice_sms', 'overdue_reminder_tenant', 'receipt_sms_tenant', 'invoice_sms_tenant', 'penalty_notice_sms', 'meter_usage_notification_sms'],
   processed_statement: ['landlord_statement_ready'],
   receipt: ['receipt_sms_tenant'],
   invoice: ['invoice_sms_tenant'],

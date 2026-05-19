@@ -19,7 +19,7 @@ const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-const ITEMS_PER_PAGE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 const formatMoney = (value) =>
   new Intl.NumberFormat("en-KE", {
@@ -109,6 +109,7 @@ const LedgerAccountActivity = () => {
   const [closingBalance, setClosingBalance] = useState(0);
   const [loading, setLoading] = useState(false);
   const [actingKey, setActingKey] = useState("");
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
 
   const today = new Date();
@@ -247,15 +248,15 @@ const LedgerAccountActivity = () => {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
   const paginatedRows = rows.slice(startIndex, endIndex);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters, rows.length]);
+  }, [filters, rows.length, pageSize]);
 
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
@@ -521,8 +522,17 @@ const LedgerAccountActivity = () => {
                   <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of{" "}
                   <span className="font-bold text-slate-900">{rows.length}</span> ledger entries
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-500">Per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                      className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                    >
+                      {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
                   <button
                     onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                     disabled={safeCurrentPage === 1}
