@@ -21,10 +21,12 @@ import {
   FaInfoCircle,
   FaMinusCircle,
   FaPlusCircle,
+  FaSms,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
+import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import {
   getTenants,
   confirmRentPayment,
@@ -335,6 +337,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
+  const [showSmsModal, setShowSmsModal] = useState(false);
   const [showView, setShowView] = useState(false);
   const [activeReceipt, setActiveReceipt] = useState(null);
   const [journalDrawerOpen, setJournalDrawerOpen] = useState(false);
@@ -1720,6 +1723,7 @@ const visibleReceiptIds = useMemo(
               <button onClick={handleReverseSelected} disabled={!canReverseReceipt} title={canReverseReceipt ? "Reverse selected" : "No permission"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-orange-600 px-2.5 text-xs font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"><FaUndo size={10} /></button>
               <button onClick={handleDeleteSelected} disabled={!canDeleteReceipt} title={canDeleteReceipt ? "Delete selected" : "No permission"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-red-600 px-2.5 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash size={10} /></button>
               <button onClick={handlePrintList} disabled={!canExportReceipt} title={canExportReceipt ? "Print list" : "No permission"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-indigo-600 px-2.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"><FaPrint size={10} /></button>
+              <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to SMS"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-teal-600 px-2.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={10} />{selectedIds.length > 0 && <span>{selectedIds.length}</span>}</button>
               <button onClick={openCreateForm} disabled={!canCreateReceipt} title={canCreateReceipt ? pageCreateLabel : "No permission"} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canCreateReceipt ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPlus size={10} /></button>
             </div>
           </div>
@@ -2721,6 +2725,19 @@ const visibleReceiptIds = useMemo(
         sourceType="receipt"
         context={journalContext}
         lines={journalLines}
+      />
+
+      <CommunicationComposerModal
+        open={showSmsModal}
+        onClose={() => setShowSmsModal(false)}
+        businessId={currentCompany?._id || ""}
+        contextType="receipt"
+        recordIds={selectedIds}
+        title={`SMS Receipt${selectedIds.length !== 1 ? "s" : ""} (${selectedIds.length})`}
+        subtitle="Send an SMS notification to the tenants for the selected receipts."
+        allowedChannels={["sms"]}
+        defaultChannel="sms"
+        onSent={() => setShowSmsModal(false)}
       />
     </DashboardLayout>
   );

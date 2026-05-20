@@ -10,7 +10,7 @@ import { serializeCompanyForClient } from "../utils/companyModules.js";
 import { attachAuthCookie } from "../utils/authCookie.js";
 
 const router = express.Router();
-const DEMO_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
+const DEMO_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
 const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
 const DEMO_WORKSPACE_PROFILES = {
   property_manager: {
@@ -105,7 +105,8 @@ function getRemainingDemoMs(expiresAt, now = new Date()) {
 }
 
 function issueDemoToken(user, companyId, role, remainingMs) {
-  const expiresInSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+  // Minimum 5-minute session so the JWT doesn't expire before the first render
+  const expiresInSeconds = Math.max(600, Math.ceil(remainingMs / 1000));
 
   return jwt.sign(
     {
@@ -121,7 +122,7 @@ function issueDemoToken(user, companyId, role, remainingMs) {
       readOnly: true,
     },
     getJWTSecret(),
-    { expiresIn: expiresInSeconds }
+    { expiresIn: expiresInSeconds, issuer: "milik-api", audience: "milik-client" }
   );
 }
 

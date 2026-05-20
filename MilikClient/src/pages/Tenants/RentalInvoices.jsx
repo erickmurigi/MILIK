@@ -17,7 +17,9 @@ import {
   FaTimes,
   FaReceipt,
   FaMoneyBillWave,
+  FaSms,
 } from "react-icons/fa";
+import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenants } from "../../redux/tenantsRedux";
@@ -944,6 +946,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
+  const [showSmsModal, setShowSmsModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [bookingAction, setBookingAction] = useState("");
   const [showSingleBooking, setShowSingleBooking] = useState(false);
@@ -3350,6 +3353,15 @@ const createInvoiceForTenant = async (
                 <button onClick={handleEditSelected} disabled={!canUpdateInvoice || !canEdit} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${canEdit ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={10} /></button>
                 <button onClick={handleDeleteSelected} disabled={!canDeleteInvoice || selectedCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}><FaTrash size={10} /></button>
                 <button onClick={handlePrintList} disabled={!canExportInvoice || totalFilteredCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPrint size={10} /></button>
+                <button
+                  onClick={() => setShowSmsModal(true)}
+                  disabled={selectedCount === 0}
+                  title={selectedCount === 0 ? "Select invoices to SMS" : `SMS ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`}
+                  className={`h-7 shrink-0 flex items-center gap-1.5 rounded px-2.5 text-xs font-semibold text-white shadow-sm transition ${selectedCount > 0 ? "bg-emerald-600 hover:bg-emerald-700" : "cursor-not-allowed bg-gray-400"}`}
+                >
+                  <FaSms size={11} />
+                  {selectedCount > 0 ? `SMS (${selectedCount})` : "SMS"}
+                </button>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <button type="button" onClick={() => navigate("/tenants/deposits")} disabled={!canCreateInvoice} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold text-white ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}>Deposit</button>
                 <div className="flex shrink-0 items-center gap-1">
@@ -4305,6 +4317,18 @@ const createInvoiceForTenant = async (
           </div>
         </div>
       )}
+      <CommunicationComposerModal
+        open={showSmsModal}
+        onClose={() => setShowSmsModal(false)}
+        businessId={currentCompany?._id || ""}
+        contextType="invoice"
+        recordIds={selectedInvoices}
+        title={`SMS Invoice${selectedInvoices.length !== 1 ? "s" : ""} (${selectedInvoices.length})`}
+        subtitle="Send an SMS notification to the tenants for the selected invoices."
+        allowedChannels={["sms"]}
+        defaultChannel="sms"
+        onSent={() => setShowSmsModal(false)}
+      />
     </DashboardLayout>
   );
 };

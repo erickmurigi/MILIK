@@ -6,7 +6,8 @@
       "Bash(Get-ChildItem -Recurse -Directory -Name)",
       "Bash(xargs grep -l \"menu\\\\|Menu\")",
       "Bash(xargs grep -l \"audit\\\\|trial\\\\|company\\\\|user\")",
-      "Bash(xargs -I {} basename {})"
+      "Bash(xargs -I {} basename {})",
+      "Bash(findstr /R /S \"ensureDemoWorkspaceSeed\\\\|demoSeedService\" \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\")"
     ]
   }
 }

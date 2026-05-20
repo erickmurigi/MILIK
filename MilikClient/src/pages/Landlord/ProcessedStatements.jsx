@@ -886,7 +886,7 @@ const ProcessedStatements = () => {
           contextType="processed_statement"
           recordIds={[commModalStatement._id]}
           defaultChannel="email"
-          allowedChannels={["email"]}
+          allowedChannels={["sms", "email"]}
           title={`Email Statement — ${commModalStatement.landlord?.landlordName || "Landlord"}`}
           subtitle={`${commModalStatement.property?.propertyCode || ""} · ${formatPeriodRange(commModalStatement)}`}
           onSent={() => setCommModalStatement(null)}

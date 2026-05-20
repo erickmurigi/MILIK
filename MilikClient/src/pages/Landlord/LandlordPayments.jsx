@@ -18,9 +18,11 @@ import {
   FaChevronRight,
   FaEdit,
   FaTrash,
+  FaSms,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getLandlords, getRentPayments, getLandlordPayments, createLandlordPayment, getChartOfAccounts } from "../../redux/apiCalls";
+import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
 // NOTE: getLandlords is a thunk creator — must be called via dispatch(getLandlords({...}))
@@ -54,6 +56,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedLandlords, setSelectedLandlords] = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showSmsModal, setShowSmsModal] = useState(false);
   const [activeDetail, setActiveDetail] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
@@ -712,6 +715,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
               <span className="shrink-0 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">Paid: Ksh {stats.totalPaid.toLocaleString()}</span>
               <span className="shrink-0 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">Balance: Ksh {stats.totalOwed.toLocaleString()}</span>
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <button onClick={() => setShowSmsModal(true)} disabled={selectedLandlords.length === 0} title={selectedLandlords.length > 0 ? `SMS ${selectedLandlords.length} landlord${selectedLandlords.length !== 1 ? "s" : ""}` : "Select landlords to SMS"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-teal-600 px-2.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={10} />{selectedLandlords.length > 0 && <span>{selectedLandlords.length}</span>}</button>
               <button onClick={() => dispatch(getLandlords({ business: currentCompany._id }))} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-[#0B3B2E] hover:bg-[#0A3127]"><FaRedoAlt /></button>
             </div>
           </div>
@@ -1229,6 +1233,19 @@ const LandlordPayments = ({ mode = "payments" }) => {
           </div>
         </div>
       )}
+
+      <CommunicationComposerModal
+        open={showSmsModal}
+        onClose={() => setShowSmsModal(false)}
+        businessId={currentCompany?._id || ""}
+        contextType="landlord_bulk"
+        recordIds={selectedLandlords}
+        title={`SMS Landlord${selectedLandlords.length !== 1 ? "s" : ""} (${selectedLandlords.length})`}
+        subtitle="Send an SMS notification to the selected landlords."
+        allowedChannels={["sms"]}
+        defaultChannel="sms"
+        onSent={() => setShowSmsModal(false)}
+      />
     </DashboardLayout>
   );
 };
