@@ -33,7 +33,7 @@ const getAdminCredentials = () => ({
 });
 
 const companySummarySelect =
-  "companyName companyCode baseCurrency logo unitTypes country town email phoneNo slogan companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus isDemoWorkspace";
+  "companyName companyCode baseCurrency logo unitTypes country town email phoneNo slogan companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus locked isDemoWorkspace";
 
 const DEMO_COMPANY_EMAIL = "demo.workspace@milik.local";
 const DEMO_COMPANY_NAME_REGEX = /^milik\s+demo\s+workspace$/i;
@@ -160,7 +160,7 @@ const sanitizeUserForResponse = (userPayload) => {
   return safeUser;
 };
 
-const companyReferenceSelect = "companyName companyCode country town companyMode modules isActive accountStatus isDemoWorkspace logo unitTypes";
+const companyReferenceSelect = "companyName companyCode country town companyMode modules isActive accountStatus locked isDemoWorkspace logo unitTypes";
 
 const sanitizeCompanyLogoForList = (logo) => {
   if (typeof logo !== "string") return "";
@@ -185,6 +185,7 @@ const serializeCompanyReferenceForClient = (company = {}) => {
     unitTypes: Array.isArray(company.unitTypes) ? company.unitTypes : [],
     isActive: Boolean(company.isActive),
     accountStatus: company.accountStatus || "",
+    locked: Boolean(company.locked),
     isDemoWorkspace: Boolean(company.isDemoWorkspace),
     modules,
     enabledModules: Object.keys(modules).filter((key) => modules[key]),
@@ -438,6 +439,13 @@ export const loginUser = async (req, res, next) => {
       return next(createError(401, "Invalid email or password"));
     }
 
+    if (user.company) {
+      const userCompany = await Company.findById(user.company).select('locked').lean();
+      if (userCompany?.locked) {
+        return next(createError(403, "This company account has been locked. Contact Milik/System Admin."));
+      }
+    }
+
     await User.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
 
     const token = createAuthToken(user);
@@ -674,6 +682,10 @@ export const switchCompany = async (req, res, next) => {
 
     if ((targetCompany.isActive === false || String(targetCompany.accountStatus || "").toLowerCase() === "archived") && !isSystemAdminUser(req.user)) {
       return next(createError(403, "This company is not active and cannot be selected. Contact Milik/System Admin."));
+    }
+
+    if (targetCompany.locked && !isSystemAdminUser(req.user)) {
+      return next(createError(403, "This company account has been locked. Contact Milik/System Admin."));
     }
 
     if (targetCompany.isDemoWorkspace && !req.user?.isDemoUser) {

@@ -13,6 +13,7 @@ import {
   getCompany,
   getCompanyUsers,
   testCompanyEmailProfile,
+  toggleCompanyLock,
   updateCompany,
 } from '../controllers/company.js';
 import { verifyUser } from '../controllers/verifyToken.js';
@@ -25,6 +26,7 @@ router.get('/', verifyUser, getAllCompanies);
 router.post('/:id/email-profiles/test', verifyUser, validateRequest(testCompanyEmailProfileSchema), testCompanyEmailProfile);
 router.get('/:id', verifyUser, getCompany);
 router.put('/:id', verifyUser, validateRequest(updateCompanySchema), updateCompany);
+router.patch('/:id/toggle-lock', verifyUser, toggleCompanyLock);
 router.delete('/:id', verifyUser, deleteCompany);
 router.get('/:id/users', verifyUser, getCompanyUsers);
 

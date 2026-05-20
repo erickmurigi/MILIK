@@ -42,7 +42,7 @@ import {
 } from "../utils/smtpMailer.js";
 
 const companySummarySelect =
-  "companyName companyCode baseCurrency country town email phoneNo slogan logo unitTypes isActive accountStatus isDemoWorkspace companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType paymentIntegration.mpesaPaybills paymentIntegration.mpesaPaybill communication.emailProfiles communication.defaultEmailProfileId communication.smsProfiles communication.defaultSmsProfileId communication.smsTemplates";
+  "companyName companyCode baseCurrency country town email phoneNo slogan logo unitTypes isActive accountStatus locked isDemoWorkspace companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType paymentIntegration.mpesaPaybills paymentIntegration.mpesaPaybill communication.emailProfiles communication.defaultEmailProfileId communication.smsProfiles communication.defaultSmsProfileId communication.smsTemplates";
 
 const DEMO_COMPANY_EMAIL = "demo.workspace@milik.local";
 const DEMO_COMPANY_NAME_REGEX = /^milik\s+demo\s+workspace$/i;
@@ -1689,6 +1689,36 @@ export const deleteCompany = async (req, res, next) => {
     next(err);
   }
 };
+export const toggleCompanyLock = async (req, res, next) => {
+  try {
+    if (!isSystemAdminUser(req.user)) {
+      return next(createError(403, 'Only system admins can lock or unlock companies'));
+    }
+    const company = await Company.findById(req.params.id);
+    if (!company) return next(createError(404, 'Company not found'));
+
+    company.locked = !company.locked;
+    await company.save();
+
+    await logAuditEvent({
+      req,
+      company: company._id,
+      action: 'company.lock_toggle',
+      category: 'companies',
+      severity: 'critical',
+      targetType: 'Company',
+      targetId: company._id,
+      targetName: company.companyName,
+      message: `${company.locked ? 'Locked' : 'Unlocked'} company ${company.companyName}`,
+      metadata: { locked: company.locked },
+    });
+
+    res.json({ _id: company._id, locked: company.locked, companyName: company.companyName });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getCompanyUsers = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search: rawSearch2 } = req.query;

@@ -297,6 +297,7 @@ import {
   deleteCompanyStart,
   deleteCompanySuccess,
   deleteCompanyFailure,
+  toggleCompanyLockSuccess,
   setCurrentCompany,
   clearCompanyState,
   startCompanySwitch,
@@ -882,6 +883,17 @@ export const deleteCompany = (id) => async (dispatch) => {
     dispatch(deleteCompanySuccess(id));
   } catch (err) {
     dispatch(deleteCompanyFailure());
+    throw err;
+  }
+};
+
+// TOGGLE company lock
+export const toggleCompanyLock = (id) => async (dispatch) => {
+  try {
+    const res = await adminRequests.patch(`/companies/${id}/toggle-lock`);
+    dispatch(toggleCompanyLockSuccess({ id, locked: res.data.locked }));
+    return res.data;
+  } catch (err) {
     throw err;
   }
 };

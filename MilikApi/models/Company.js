@@ -583,6 +583,7 @@ const companySchema = new mongoose.Schema(
     isActive: { type: Boolean, default: false },
     accountActive: { type: Boolean, default: true },
     accountStatus: { type: String, default: 'Active' },
+    locked: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

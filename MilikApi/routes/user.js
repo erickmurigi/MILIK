@@ -510,6 +510,7 @@ router.delete('/:id', verifyUser, async (req, res) => {
     if (!shared) return res.status(403).json({ message: 'You do not have access to this user' });
 
     await User.findByIdAndDelete(req.params.id);
+    const name = `${user.surname || ''} ${user.otherNames || ''}`.trim() || user.email;
     await logAuditEvent({
       req,
       company: user.primaryCompany || user.company,

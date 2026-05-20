@@ -40,6 +40,7 @@ import {
   getUsers,
   resetUserPassword,
   switchCompany,
+  toggleCompanyLock,
   toggleUserLock,
 } from "../../redux/apiCalls";
 import {
@@ -71,6 +72,7 @@ const formatDate = (value, opts = { year: "numeric", month: "short", day: "numer
 const normalizeText = (value) => String(value ?? "").trim().toLowerCase();
 
 const isCompanyActive = (company = {}) => {
+  if (company?.locked) return false;
   const s = normalizeText(company?.accountStatus);
   if (["inactive", "disabled", "suspended", "archived"].includes(s)) return false;
   if (typeof company?.isActive === "boolean") return company.isActive;
@@ -78,6 +80,7 @@ const isCompanyActive = (company = {}) => {
 };
 
 const getCompanyStatusLabel = (company = {}) => {
+  if (company?.locked) return "Locked";
   if (company?.isDemoWorkspace) return "Demo";
   if (!isCompanyActive(company)) return "Inactive";
   return company?.accountStatus || "Active";
@@ -87,6 +90,7 @@ const getStatusTone = (status = "") => {
   const s = normalizeText(status);
   if (["active", "live"].includes(s)) return "bg-emerald-100 text-emerald-700 border-emerald-200";
   if (["demo", "trial"].includes(s)) return "bg-violet-100 text-violet-700 border-violet-200";
+  if (s === "locked") return "bg-rose-100 text-rose-700 border-rose-200";
   if (["inactive", "suspended", "disabled", "archived"].includes(s)) return "bg-slate-100 text-slate-500 border-slate-200";
   return "bg-amber-100 text-amber-700 border-amber-200";
 };
@@ -435,7 +439,7 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
 };
 
 // ─── Companies Panel ───────────────────────────────────────────────────────────
-const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddCompany, onEditCompany, onDeleteCompany, onOpenCompanySetup, onOpenOperationalSettings, onOpenWorkspace, onManageUsers }) => {
+const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddCompany, onEditCompany, onDeleteCompany, onToggleCompanyLock, onOpenCompanySetup, onOpenOperationalSettings, onOpenWorkspace, onManageUsers }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
@@ -474,6 +478,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
             <option value="all">All statuses</option>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
+            <option value="Locked">Locked</option>
             <option value="Demo">Demo</option>
             <option value="attention">Needs attention</option>
           </select>
@@ -560,6 +565,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
                       { label: "Manage Users", icon: FaUsers, onClick: () => onManageUsers(company) },
                       { separator: true },
                       { label: "Edit", icon: FaEdit, onClick: () => onEditCompany(company) },
+                      { label: company?.locked ? "Unlock" : "Lock", icon: company?.locked ? FaLockOpen : FaLock, onClick: () => onToggleCompanyLock(company) },
                       { label: "Delete", icon: FaTrash, onClick: () => onDeleteCompany(company), danger: true },
                     ]} />
                   </td>
@@ -946,6 +952,31 @@ export default function SystemSetupPage() {
   const handleManageUsers = (company) => { const id = normalizeId(company); if (!id) return; handleCompanyFilterChange(id); goToSection("users", `?company=${id}`); };
   const handleEditCompany = (company) => { const id = normalizeId(company); if (!id) { toast.error("Unable to open this company record."); return; } navigate(`/add-company/${id}`, { state: { tabTitle: company?.companyName || "Company" } }); };
 
+  const handleToggleCompanyLock = (company) => {
+    const id = normalizeId(company);
+    if (!id) return;
+    const isLocked = Boolean(company?.locked);
+    setConfirmDialog({
+      isOpen: true,
+      title: isLocked ? "Unlock company" : "Lock company",
+      message: isLocked
+        ? `Unlock ${company?.companyName || "this company"}? Users will be able to log in again.`
+        : `Lock ${company?.companyName || "this company"}? All users of this company will be blocked from logging in.`,
+      isDangerous: !isLocked,
+      confirmText: isLocked ? "Unlock" : "Lock",
+      onConfirm: async () => {
+        try {
+          await dispatch(toggleCompanyLock(id));
+          toast.success(isLocked ? "Company unlocked successfully." : "Company locked successfully.");
+        } catch (error) {
+          toast.error(error?.response?.data?.message || error?.message || "Failed to update company lock status.");
+        } finally {
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
   const handleDeleteCompany = (company) => {
     const id = normalizeId(company);
     if (!id) return;
@@ -1115,6 +1146,7 @@ export default function SystemSetupPage() {
                     onAddCompany={() => navigate("/add-company", { state: { tabTitle: "New Company" } })}
                     onEditCompany={handleEditCompany}
                     onDeleteCompany={handleDeleteCompany}
+                    onToggleCompanyLock={handleToggleCompanyLock}
                     onOpenCompanySetup={handleOpenCompanySetup}
                     onOpenOperationalSettings={handleOpenOperationalSettings}
                     onOpenWorkspace={handleOpenWorkspace}
