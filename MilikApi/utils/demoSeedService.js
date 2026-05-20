@@ -804,18 +804,21 @@ function buildCompanyScopedSampleData(companyId, demoProfile = DEMO_PROFILES.PRO
   const seedKey = getCompanySeedKey(companyId);
   const calendar = buildDemoCalendar();
 
-  const landlords = SAMPLE_DATA.landlords.map((item, index) => {
-    const landlordNo = String(index + 1).padStart(3, "0");
-    return {
-      ...item,
-      landlordCode: suffixValue(item.landlordCode, seedKey),
-      regId: `DMO-LD-${seedKey}-${landlordNo}`,
-      idNumber: `DMO-LD-${seedKey}-${landlordNo}`,
-      taxPin: `DMOTAX${seedKey}${landlordNo}`.slice(0, 20),
-      email: `demo.landlord.${landlordNo.toLowerCase()}.${seedKey.toLowerCase()}@milik.local`,
-      phoneNumber: `+254700${seedKey.replace(/[^0-9]/g, "").padEnd(6, "0").slice(0, 6)}${String(index + 1)}`,
-    };
-  });
+  // Self-managing landlord is the business owner — no separate client landlord records needed
+  const landlords = resolvedProfile === DEMO_PROFILES.SELF_MANAGING_LANDLORD
+    ? []
+    : SAMPLE_DATA.landlords.map((item, index) => {
+        const landlordNo = String(index + 1).padStart(3, "0");
+        return {
+          ...item,
+          landlordCode: suffixValue(item.landlordCode, seedKey),
+          regId: `DMO-LD-${seedKey}-${landlordNo}`,
+          idNumber: `DMO-LD-${seedKey}-${landlordNo}`,
+          taxPin: `DMOTAX${seedKey}${landlordNo}`.slice(0, 20),
+          email: `demo.landlord.${landlordNo.toLowerCase()}.${seedKey.toLowerCase()}@milik.local`,
+          phoneNumber: `+254700${seedKey.replace(/[^0-9]/g, "").padEnd(6, "0").slice(0, 6)}${String(index + 1)}`,
+        };
+      });
 
   const properties = SAMPLE_DATA.properties.map((item, propertyIndex) => {
     const propertyNo = String(propertyIndex + 1).padStart(2, "0");
@@ -1045,14 +1048,10 @@ async function upsertProperty(companyId, userId, landlord, payload) {
     commissionPaymentMode: payload.commissionPaymentMode,
     tenantsPaysTo: payload.tenantsPaysTo,
     depositHeldBy: payload.depositHeldBy,
-    landlords: [
-      {
-        landlordId: landlord._id,
-        name: landlord.landlordName,
-        contact: landlord.phoneNumber,
-        isPrimary: true,
-      },
-    ],
+    landlords: landlord
+      ? [{ landlordId: landlord._id, name: landlord.landlordName, contact: landlord.phoneNumber, isPrimary: true }]
+      : [],
+    notes: `${DEMO_TAG} - curated sample property for demo users`,
     createdBy: userId,
     updatedBy: userId,
   };
@@ -1086,7 +1085,7 @@ async function upsertUnit(companyId, property, payload) {
   );
 }
 
-async function upsertTenant(companyId, property, unit, payload, calendar) {
+async function upsertTenant(companyId, property, unit, payload, calendar, landlordId) {
   const tenant = await Tenant.findOneAndUpdate(
     { business: companyId, tenantCode: payload.tenantCode },
     {
@@ -1096,6 +1095,7 @@ async function upsertTenant(companyId, property, unit, payload, calendar) {
         phone: payload.phone,
         idNumber: payload.idNumber,
         unit: unit._id,
+        landlord: landlordId || null,
         rent: payload.rent,
         balance: payload.balance,
         status: "active",
@@ -1559,7 +1559,7 @@ async function createLedgerEntry({
   });
 }
 
-async function seedReportLedgerEntries({ companyId, property, landlord, userId, calendar }) {
+async function seedReportLedgerEntries({ companyId, property, landlord, userId, calendar, demoProfile }) {
   const accountCodes = ["1110", "1200", "1230", "2100", "2110", "3100", "4200", "4210", "5200", "5201", "5202"];
   const accounts = {};
 
@@ -1700,7 +1700,12 @@ async function seedReportLedgerEntries({ companyId, property, landlord, userId, 
     },
   ];
 
-  for (const sequence of sequences) {
+  const COMMISSION_PREFIXES = ["FEB-COMM-1", "FEB-COMM-2", "MAR-COMM-1", "MAR-COMM-2", "APR-COMM-1", "APR-COMM-2"];
+  const filteredSequences = demoProfile === DEMO_PROFILES.SELF_MANAGING_LANDLORD
+    ? sequences.filter((seq) => !COMMISSION_PREFIXES.includes(seq.prefix))
+    : sequences;
+
+  for (const sequence of filteredSequences) {
     for (let index = 0; index < sequence.lines.length; index += 1) {
       const line = sequence.lines[index];
       const account = accounts[line.code];
@@ -1931,18 +1936,21 @@ async function getDemoWorkspaceSeedValidation(companyId, demoProfile = DEMO_PROF
     };
   }
 
-  if (seededStatementsCount < expectedProperties) {
-    return {
-      valid: false,
-      reason: `Expected ${expectedProperties} landlord statements, found ${seededStatementsCount}.`,
-    };
-  }
+  // Self-managing landlord demo has no client landlords and therefore no statements or vouchers
+  if (resolvedProfile !== DEMO_PROFILES.SELF_MANAGING_LANDLORD) {
+    if (seededStatementsCount < expectedProperties) {
+      return {
+        valid: false,
+        reason: `Expected ${expectedProperties} landlord statements, found ${seededStatementsCount}.`,
+      };
+    }
 
-  if (seededLandlordsCount <= 0) {
-    return {
-      valid: false,
-      reason: "No demo landlords found in the demo workspace.",
-    };
+    if (seededLandlordsCount <= 0) {
+      return {
+        valid: false,
+        reason: "No demo landlords found in the demo workspace.",
+      };
+    }
   }
 
   return {
@@ -1953,15 +1961,29 @@ async function getDemoWorkspaceSeedValidation(companyId, demoProfile = DEMO_PROF
 
 async function getExistingDemoSeedSummary(companyId, demoProfile = DEMO_PROFILES.PROPERTY_MANAGER) {
   const resolvedProfile = resolveDemoProfile(demoProfile);
-  const existingSeed = await LandlordStatement.findOne({
-    business: companyId,
-    "metadata.seedTag": DEMO_TAG,
-    "metadata.demoProfile": resolvedProfile,
-  })
-    .select("_id")
-    .lean();
 
-  if (!existingSeed) return null;
+  // Self-managing landlord demo has no statements — detect via seeded invoices instead
+  if (resolvedProfile === DEMO_PROFILES.SELF_MANAGING_LANDLORD) {
+    const existingInvoice = await TenantInvoice.findOne({
+      business: companyId,
+      "metadata.demoSeedTag": DEMO_TAG,
+      "metadata.demoProfile": resolvedProfile,
+    })
+      .select("_id invoiceDate createdAt")
+      .lean();
+
+    if (!existingInvoice?._id) return null;
+  } else {
+    const existingSeed = await LandlordStatement.findOne({
+      business: companyId,
+      "metadata.seedTag": DEMO_TAG,
+      "metadata.demoProfile": resolvedProfile,
+    })
+      .select("_id")
+      .lean();
+
+    if (!existingSeed) return null;
+  }
 
   const seededInvoice = await TenantInvoice.findOne({
     business: companyId,
@@ -2107,7 +2129,7 @@ async function runDemoWorkspaceSeed({ companyId, userId, resolvedProfile }) {
     const tenantsByUnit = {};
     for (const tenantData of propertyData.tenants) {
       const unit = unitsByNumber[tenantData.unitNumber];
-      const tenant = await upsertTenant(companyId, property, unit, tenantData, scopedSampleData.calendar);
+      const tenant = await upsertTenant(companyId, property, unit, tenantData, scopedSampleData.calendar, landlord._id);
       tenantsByUnit[tenantData.unitNumber] = tenant;
       allTenants.push(tenant);
     }
@@ -2139,53 +2161,62 @@ async function runDemoWorkspaceSeed({ companyId, userId, resolvedProfile }) {
       maintenancePlans: propertyData.maintenancePlans,
     });
 
-    const sourceStatement = await createStatementSnapshot({
-      companyId,
-      property,
-      landlord,
-      statement: propertyData.statement,
-      userId,
-      demoProfile: resolvedProfile,
-    });
+    // Statements, vouchers, standing orders, and advancements all require a landlord reference.
+    // For the self-managing landlord profile no client landlords are seeded, so skip these.
+    let sourceStatement = null;
+    let processedStatement = null;
+    let approvedVoucher = null;
+    let draftVoucher = null;
 
-    const processedStatement = await upsertProcessedStatement({
-      companyId,
-      property,
-      landlord,
-      statement: propertyData.statement,
-      sourceStatement,
-      userId,
-    });
+    if (landlord) {
+      sourceStatement = await createStatementSnapshot({
+        companyId,
+        property,
+        landlord,
+        statement: propertyData.statement,
+        userId,
+        demoProfile: resolvedProfile,
+      });
 
-    const approvedVoucher = await upsertApprovedVoucher({
-      companyId,
-      property,
-      landlord,
-      userId,
-      dueDate: addDays(propertyData.statement.periodEnd, 10),
-    });
+      processedStatement = await upsertProcessedStatement({
+        companyId,
+        property,
+        landlord,
+        statement: propertyData.statement,
+        sourceStatement,
+        userId,
+      });
 
-    const draftVoucher = await upsertDraftVoucher({
-      companyId,
-      property,
-      landlord,
-      dueDate: scopedSampleData.calendar.voucherDueSoon,
-    });
+      approvedVoucher = await upsertApprovedVoucher({
+        companyId,
+        property,
+        landlord,
+        userId,
+        dueDate: addDays(propertyData.statement.periodEnd, 10),
+      });
+
+      draftVoucher = await upsertDraftVoucher({
+        companyId,
+        property,
+        landlord,
+        dueDate: scopedSampleData.calendar.voucherDueSoon,
+      });
+    }
 
     const standingOrders = await seedLandlordStandingOrders({
       companyId,
       property,
-      landlord,
+      landlord: landlord || {},
       userId,
-      standingOrderPlans: propertyData.standingOrderPlans,
+      standingOrderPlans: landlord ? propertyData.standingOrderPlans : [],
     });
 
     const advancements = await seedLandlordAdvancements({
       companyId,
       property,
-      landlord,
+      landlord: landlord || {},
       userId,
-      advancementPlans: propertyData.advancementPlans,
+      advancementPlans: landlord ? propertyData.advancementPlans : [],
     });
 
     const propertyLeases = await Lease.find({ business: companyId, unit: { $in: Object.values(unitsByNumber).map((item) => item._id) } }).lean();
@@ -2221,6 +2252,7 @@ async function runDemoWorkspaceSeed({ companyId, userId, resolvedProfile }) {
       landlord: anchorLandlord,
       userId,
       calendar: scopedSampleData.calendar,
+      demoProfile: resolvedProfile,
     });
   }
 
@@ -2234,7 +2266,7 @@ async function runDemoWorkspaceSeed({ companyId, userId, resolvedProfile }) {
     tenants: allTenants.length,
     leases: allLeases.length,
     maintenanceRequests: allMaintenances.length,
-    processedStatements: scopedSampleData.properties.length,
+    processedStatements: propertyResults.filter((r) => r.processedStatementId).length,
     vouchers: allVouchers.length,
     standingOrders: allStandingOrders.length,
     advancements: allAdvancements.length,
