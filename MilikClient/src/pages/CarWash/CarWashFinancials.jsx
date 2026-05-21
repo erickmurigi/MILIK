@@ -136,8 +136,7 @@ export default function CarWashFinancials() {
     setAccountsLoading(true);
     try {
       const rows = await getChartOfAccounts({
-        business:    currentCompany._id,
-        moduleScope: "carwash",
+        business: currentCompany._id,
       });
       setAccounts(Array.isArray(rows) ? rows : []);
       setAcctLoaded(true);
@@ -183,20 +182,20 @@ export default function CarWashFinancials() {
   const headerAction = (
     <div className="flex flex-wrap items-center gap-2">
       {/* Date Range */}
-      <div className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs">
+      <div className="flex flex-wrap items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs">
         <FaCalendarAlt size={10} className="shrink-0 text-slate-400" />
         <input
           type="date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
-          className="border-0 bg-transparent text-xs text-slate-700 outline-none"
+          className="border-0 bg-transparent text-xs text-slate-700 outline-none min-w-0"
         />
         <span className="text-slate-300">—</span>
         <input
           type="date"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
-          className="border-0 bg-transparent text-xs text-slate-700 outline-none"
+          className="border-0 bg-transparent text-xs text-slate-700 outline-none min-w-0"
         />
       </div>
 
@@ -224,7 +223,7 @@ export default function CarWashFinancials() {
       <div className="flex min-h-0 flex-col gap-3">
 
         {/* ── KPI Strip ─────────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
             icon={FaBook}
             label="Total Entries"
@@ -277,7 +276,7 @@ export default function CarWashFinancials() {
           <div className="rounded border border-slate-200 bg-white shadow-sm">
             {/* Filter bar */}
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
-              <div className="relative min-w-[180px] flex-1 max-w-xs">
+              <div className="relative min-w-0 flex-1 max-w-xs sm:min-w-[180px]">
                 <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
                 <input
                   value={search}
@@ -395,7 +394,7 @@ export default function CarWashFinancials() {
             ) : accounts.length === 0 ? (
               <EmptyState
                 icon={FaLayerGroup}
-                message="No Car Wash–scoped accounts found. Accounts are provisioned automatically the first time your chart of accounts is initialised."
+                message="No accounts found. Chart of accounts is provisioned automatically the first time it is initialised for this company."
               />
             ) : (
               <div className="overflow-x-auto">
@@ -438,7 +437,7 @@ export default function CarWashFinancials() {
                         <td className="px-4 py-2.5 text-right">
                           <button
                             onClick={() =>
-                              navigate(`/financial/chart-of-accounts/${a._id}/activity`)
+                              navigate(`/carwash/chart-of-accounts/${a._id}/activity`)
                             }
                             className="inline-flex items-center gap-1 border border-slate-200 px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-[#174D3A] hover:text-[#174D3A] transition-colors"
                           >

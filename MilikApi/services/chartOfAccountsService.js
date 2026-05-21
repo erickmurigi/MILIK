@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import ChartOfAccount from "../models/ChartOfAccount.js";
+import Company from "../models/Company.js";
 
 const SYSTEM_CHART_TEMPLATE = [
   { code: "1100", name: "Cash on Hand", type: "asset", group: "assets", subGroup: "Cashbooks", isSystem: true, isHeader: false, isPosting: true },
@@ -43,6 +44,17 @@ const SYSTEM_CHART_TEMPLATE = [
   { code: "5311", name: "Car Wash Staff Wages", type: "expense", group: "expenses", subGroup: "Car Wash Expenses", isSystem: true, isHeader: false, isPosting: true },
   { code: "5312", name: "Car Wash Water and Utilities", type: "expense", group: "expenses", subGroup: "Car Wash Expenses", isSystem: true, isHeader: false, isPosting: true },
 
+  // Property Sale accounts
+  { code: "1240", name: "Sale Deposits Receivable", type: "asset", group: "assets", subGroup: "Sale Receivables", isSystem: true, isHeader: false, isPosting: true },
+  { code: "1250", name: "Sale Installments Receivable", type: "asset", group: "assets", subGroup: "Sale Receivables", isSystem: true, isHeader: false, isPosting: true },
+  { code: "2180", name: "Agent Commissions Payable", type: "liability", group: "liabilities", subGroup: "Sale Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "2181", name: "Sale Buyer Deposits Held", type: "liability", group: "liabilities", subGroup: "Sale Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "4500", name: "Property Sale Commission Income", type: "income", group: "income", subGroup: "Sale Income", isSystem: true, isHeader: false, isPosting: true },
+  { code: "4510", name: "Sale Listing Fee Income", type: "income", group: "income", subGroup: "Sale Income", isSystem: true, isHeader: false, isPosting: true },
+  { code: "5500", name: "Agent Commission Expense", type: "expense", group: "expenses", subGroup: "Sale Expenses", isSystem: true, isHeader: false, isPosting: true },
+  { code: "5501", name: "Sale Marketing Expense", type: "expense", group: "expenses", subGroup: "Sale Expenses", isSystem: true, isHeader: false, isPosting: true },
+  { code: "5502", name: "Legal & Conveyancing Expense", type: "expense", group: "expenses", subGroup: "Sale Expenses", isSystem: true, isHeader: false, isPosting: true },
+
   // HR / Payroll accounts
   { code: "2170", name: "PAYE Tax Payable", type: "liability", group: "liabilities", subGroup: "HR & Payroll Liabilities", isSystem: true, isHeader: false, isPosting: true },
   { code: "2171", name: "NHIF Contributions Payable", type: "liability", group: "liabilities", subGroup: "HR & Payroll Liabilities", isSystem: true, isHeader: false, isPosting: true },
@@ -59,20 +71,21 @@ const SYSTEM_CHART_TEMPLATE = [
 const SYSTEM_CHART_CODES = SYSTEM_CHART_TEMPLATE.map((account) => account.code);
 const ensureCache = new Map();
 const ENSURE_CACHE_TTL_MS = 5 * 60 * 1000;
-const VALID_MODULE_SCOPES = new Set(["general", "propertyManagement", "carwash", "hr"]);
+const VALID_MODULE_SCOPES = new Set(["general", "propertyManagement", "carwash", "hr", "propertySale"]);
 const CARWASH_ACCOUNT_CODES = new Set(["2160", "4400", "5310", "5311", "5312"]);
 const SHARED_CASHBOOK_CODES = new Set(["1100", "1110", "1130"]);
-
 const HR_ACCOUNT_CODES = new Set(["2170", "2171", "2172", "2173", "2174", "2175", "5400", "5401", "5402", "5403"]);
+const SALE_ACCOUNT_CODES = new Set(["1240", "1250", "2180", "2181", "4500", "4510", "5500", "5501", "5502"]);
 
 const moduleScopesForAccount = (account = {}) => {
   const code = String(account.code || "").trim().toUpperCase();
   const name = String(account.name || "").toLowerCase();
   const subGroup = String(account.subGroup || "").toLowerCase();
 
-  if (SHARED_CASHBOOK_CODES.has(code)) return ["propertyManagement", "carwash"];
+  if (SHARED_CASHBOOK_CODES.has(code)) return ["propertyManagement", "carwash", "propertySale", "hr"];
   if (CARWASH_ACCOUNT_CODES.has(code) || name.includes("car wash") || subGroup.includes("car wash")) return ["carwash"];
   if (HR_ACCOUNT_CODES.has(code) || subGroup.includes("hr & payroll") || name.includes("payroll") || name.includes("paye") || name.includes("nhif") || name.includes("nssf") || name.includes("ahl levy")) return ["hr"];
+  if (SALE_ACCOUNT_CODES.has(code) || subGroup.includes("sale ")) return ["propertySale"];
   if (["3100", "3200"].includes(code)) return ["general"];
   return ["propertyManagement"];
 };
@@ -80,6 +93,21 @@ const moduleScopesForAccount = (account = {}) => {
 const normalizeModuleScopes = (value = []) => {
   const list = Array.isArray(value) ? value : [value];
   return [...new Set(list.map((item) => String(item || "").trim()).filter((item) => VALID_MODULE_SCOPES.has(item)))];
+};
+
+const getActiveModuleScopes = (modules = {}) => {
+  const scopes = new Set(["general"]);
+  if (modules.propertyManagement) scopes.add("propertyManagement");
+  if (modules.carwash)            scopes.add("carwash");
+  if (modules.hr)                 scopes.add("hr");
+  if (modules.propertySale)       scopes.add("propertySale");
+  return [...scopes];
+};
+
+const getCompanyActiveScopes = async (businessId) => {
+  const company = await Company.findById(businessId).select("modules").lean();
+  if (!company) return ["general", "propertyManagement"];
+  return getActiveModuleScopes(company.modules || {});
 };
 
 const normalizeBusinessId = (businessId) => {
@@ -113,7 +141,12 @@ export const ensureSystemChartOfAccounts = async (businessId, options = {}) => {
     return;
   }
 
-  const ops = SYSTEM_CHART_TEMPLATE.map((account) => ({
+  const activeScopes = await getCompanyActiveScopes(normalizedBusinessId);
+  const relevantAccounts = SYSTEM_CHART_TEMPLATE.filter((account) =>
+    moduleScopesForAccount(account).some((s) => activeScopes.includes(s))
+  );
+
+  const ops = relevantAccounts.map((account) => ({
     updateOne: {
       filter: { business: normalizedBusinessId, code: account.code },
       update: {
@@ -163,7 +196,9 @@ export const findChartOfAccounts = async ({
     throw new Error("A valid business id is required to fetch chart of accounts.");
   }
 
-  const scopes = normalizeModuleScopes(moduleScope);
+  const scopes = moduleScope
+    ? normalizeModuleScopes(moduleScope)
+    : await getCompanyActiveScopes(normalizedBusinessId);
   await ensureSystemChartOfAccounts(normalizedBusinessId, { force: scopes.includes("carwash") || scopes.includes("hr") });
 
   const query = { business: normalizedBusinessId };

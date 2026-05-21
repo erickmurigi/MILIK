@@ -24,6 +24,8 @@ const Modal = ({ title, children, footer, onClose }) => (
   </div>
 );
 
+const NEW_CATEGORY_SENTINEL = "__new__";
+
 const CarWashServices = () => {
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -35,6 +37,17 @@ const CarWashServices = () => {
   const [pagination, setPagination] = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [categoryMode, setCategoryMode] = useState("select");
+
+  const loadCategories = async () => {
+    try {
+      const result = await carWashApi.listServiceCategories();
+      setCategories(Array.isArray(result) ? result : Array.isArray(result?.categories) ? result.categories : []);
+    } catch {
+      setCategories([]);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -58,20 +71,28 @@ const CarWashServices = () => {
     load().catch(() => toast.error("Failed to load services"));
   }, [appliedFilters, page]);
 
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
   const closeModal = () => {
     setShowModal(false);
     setEditingId("");
     setForm(emptyForm);
+    setCategoryMode("select");
   };
 
   const openCreate = () => {
     setEditingId("");
     setForm(emptyForm);
+    setCategoryMode("select");
     setShowModal(true);
   };
 
   const openEdit = (row) => {
     setEditingId(row._id);
+    const catExists = categories.includes(row.category || "");
+    setCategoryMode(row.category && !catExists ? "new" : "select");
     setForm({
       name: row.name || "",
       category: row.category || "",
@@ -89,7 +110,7 @@ const CarWashServices = () => {
       if (editingId) await carWashApi.updateService(editingId, payload);
       else await carWashApi.createService(payload);
       closeModal();
-      await load();
+      await Promise.all([load(), loadCategories()]);
       toast.success("Service saved");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to save service");
@@ -128,7 +149,7 @@ const CarWashServices = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-[1fr_220px_auto_auto]">
+      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 md:grid-cols-[1fr_220px_auto_auto]">
         <input
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Search service / category / vehicle"
@@ -154,8 +175,8 @@ const CarWashServices = () => {
         </button>
       </form>
 
-      <div className="min-h-[calc(100vh-14rem)] overflow-auto border border-slate-200 bg-white shadow-sm">
-        <div className="flex min-h-8 items-center gap-5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+      <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap min-h-8 items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{rows.length}</strong> / {pagination.total}</span>
           <span>Page: <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
           <span>Active: <strong className="text-[#0B3B2E]">{rows.filter((row) => row.active !== false).length}</strong></span>
@@ -249,19 +270,56 @@ const CarWashServices = () => {
         >
           <form id="carwash-service-form" onSubmit={submit} className="grid gap-3 md:grid-cols-2">
             <div>
-              <label className={labelClass}>Service Name</label>
+              <label className={labelClass}>Service Name *</label>
               <input className={inputClass} value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required autoFocus />
             </div>
             <div>
               <label className={labelClass}>Category</label>
-              <input className={inputClass} value={form.category} onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))} />
+              {categoryMode === "new" ? (
+                <div className="flex gap-1">
+                  <input
+                    className={inputClass}
+                    value={form.category}
+                    onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))}
+                    placeholder="Type new category…"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    title="Pick from existing"
+                    onClick={() => { setCategoryMode("select"); setForm((prev) => ({ ...prev, category: "" })); }}
+                    className="border border-slate-300 bg-slate-50 px-2 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                  >
+                    ↩
+                  </button>
+                </div>
+              ) : (
+                <select
+                  className={inputClass}
+                  value={categories.includes(form.category) ? form.category : form.category ? NEW_CATEGORY_SENTINEL : ""}
+                  onChange={(event) => {
+                    if (event.target.value === NEW_CATEGORY_SENTINEL) {
+                      setCategoryMode("new");
+                      setForm((prev) => ({ ...prev, category: "" }));
+                    } else {
+                      setForm((prev) => ({ ...prev, category: event.target.value }));
+                    }
+                  }}
+                >
+                  <option value="">— No category —</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                  <option value={NEW_CATEGORY_SENTINEL}>+ Add new category…</option>
+                </select>
+              )}
             </div>
             <div>
               <label className={labelClass}>Vehicle Type</label>
               <input className={inputClass} value={form.vehicleType} onChange={(event) => setForm((prev) => ({ ...prev, vehicleType: event.target.value }))} />
             </div>
             <div>
-              <label className={labelClass}>Default Price</label>
+              <label className={labelClass}>Default Price *</label>
               <input className={inputClass} type="number" min="0" value={form.defaultPrice} onChange={(event) => setForm((prev) => ({ ...prev, defaultPrice: event.target.value }))} required />
             </div>
             <label className="flex items-center gap-2 text-sm font-bold text-slate-700">

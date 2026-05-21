@@ -4,7 +4,7 @@ import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
-import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
 
 const JOB_STATUSES = new Set(["waiting", "washing", "done", "paid", "cancelled"]);
@@ -75,7 +75,9 @@ const applyPaymentStatus = (job, paidAmount) => {
 export const listJobs = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const branchId = resolveActiveBranchId(req);
     const filter = { business };
+    if (branchId) filter.branch = branchId;
     if (req.query.status) filter.status = String(req.query.status).trim().toLowerCase();
     if (req.query.paymentStatus) filter.paymentStatus = String(req.query.paymentStatus).trim().toLowerCase();
     if (req.query.service && mongoose.Types.ObjectId.isValid(req.query.service)) filter.service = req.query.service;
@@ -108,6 +110,7 @@ export const listJobs = async (req, res, next) => {
       CarWashJob.find(filter)
         .populate("service", "name category vehicleType defaultPrice")
         .populate("assignedStaff", "name phone role")
+        .populate("branch", "name")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -149,8 +152,10 @@ export const createJob = async (req, res, next) => {
 
     const assignedStaff = await assertStaffBelongsToBusiness(business, req.body.assignedStaff);
     const userId = currentUserId(req);
+    const branchId = resolveActiveBranchId(req);
     const job = await CarWashJob.create({
       business,
+      branch: branchId || null,
       jobNumber: String(req.body.jobNumber || "").trim() || (await generateJobNumber(business)),
       customerName: String(req.body.customerName || "").trim(),
       phone: String(req.body.phone || "").trim(),

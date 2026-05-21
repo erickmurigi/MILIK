@@ -11,6 +11,7 @@ const carWashDepositSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    branch: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null, index: true },
     depositNumber: { type: String, required: true, trim: true },
     depositDate: { type: Date, default: Date.now, index: true },
     amount: { type: Number, required: true, min: 0 },

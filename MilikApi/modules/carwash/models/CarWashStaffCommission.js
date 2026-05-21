@@ -5,6 +5,7 @@ const COMMISSION_STATUSES = ["earned", "payable", "paid", "cancelled"];
 const carWashStaffCommissionSchema = new mongoose.Schema(
   {
     business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
+    branch: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null, index: true },
     job: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashJob", required: true, index: true },
     staff: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashStaff", required: true, index: true },
     service: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashService", default: null, index: true },

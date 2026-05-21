@@ -5,6 +5,7 @@ const PAYOUT_METHODS = ["cash", "mpesa", "bank", "card", "other"];
 const carWashCommissionPayoutSchema = new mongoose.Schema(
   {
     business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
+    branch: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null, index: true },
     payoutNumber: { type: String, required: true, trim: true },
     staff: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashStaff", required: true, index: true },
     amount: { type: Number, required: true, min: 0 },

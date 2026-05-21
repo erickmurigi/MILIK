@@ -62,7 +62,7 @@ const StatCard = ({ label, value, icon: StatIcon, tone = "green" }) => {
 
 const Section = ({ title, right, children, className = "" }) => (
   <section className={`border border-slate-200 bg-white shadow-sm ${className}`}>
-    <div className="flex min-h-9 items-center justify-between border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
+    <div className="flex min-h-9 flex-wrap items-center justify-between gap-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
       <h2 className="text-xs font-extrabold uppercase tracking-wide text-[#0B3B2E]">{title}</h2>
       {right}
     </div>
@@ -157,7 +157,7 @@ const CarWashDashboard = () => {
         </>
       }
     >
-      <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-1.5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard label="Today Jobs" value={summary?.todayJobsCount || 0} icon={FaCar} tone="green" />
         <StatCard label="Active Queue" value={activeQueue} icon={FaClock} tone="orange" />
         <StatCard label="Today Revenue" value={formatMoney(totalRevenue)} icon={FaMoneyBillWave} tone="green" />
@@ -165,7 +165,7 @@ const CarWashDashboard = () => {
         <StatCard label="M-Pesa" value={formatMoney(summary?.mpesaTotal)} icon={FaPhone} tone="green" />
       </div>
 
-      <div className="mt-1.5 grid items-start gap-2 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="mt-1.5 grid items-start gap-2 grid-cols-1 xl:grid-cols-[1.15fr_0.85fr]">
         <Section title="Operations Queue" right={<span className="text-[11px] font-bold text-slate-500">{date}</span>}>
           <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 sm:grid-cols-5 sm:divide-y-0">
             {[
@@ -187,7 +187,8 @@ const CarWashDashboard = () => {
         </Section>
 
         <Section title="Payment Mix">
-          <table className="w-full text-xs">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[280px] text-xs">
             <thead className="bg-[#0B3B2E] text-white">
               <tr>
                 <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Method</th>
@@ -208,15 +209,17 @@ const CarWashDashboard = () => {
               })}
             </tbody>
           </table>
+          </div>
         </Section>
       </div>
 
-      <div className="mt-2 grid items-start gap-2 xl:grid-cols-[1.4fr_0.6fr]">
+      <div className="mt-2 grid items-start gap-2 grid-cols-1 xl:grid-cols-[1.4fr_0.6fr]">
         <Section
           title="Daily Control Summary"
           right={<span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Jobs and collections</span>}
         >
-          <table className="w-full text-xs">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[340px] text-xs">
             <thead className="bg-[#0B3B2E] text-white">
               <tr>
                 <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Metric</th>
@@ -239,6 +242,7 @@ const CarWashDashboard = () => {
               ))}
             </tbody>
           </table>
+          </div>
         </Section>
         <Section title="Actions">
           <div className="grid gap-2 p-3">
@@ -274,7 +278,7 @@ const CarWashDashboard = () => {
         </Section>
       </div>
 
-      <div className="mt-2 grid items-start gap-2 xl:grid-cols-[1.4fr_0.6fr]">
+      <div className="mt-2 grid items-start gap-2 grid-cols-1 xl:grid-cols-[1.4fr_0.6fr]">
         <Section
           title="Today Jobs"
           right={
@@ -287,7 +291,7 @@ const CarWashDashboard = () => {
             </button>
           }
         >
-          <div className="overflow-auto">
+          <div className="overflow-x-auto">
             <table className="w-full min-w-[920px] text-xs">
               <thead className="bg-[#0B3B2E] text-white">
                 <tr>
@@ -338,7 +342,8 @@ const CarWashDashboard = () => {
         </Section>
 
         <Section title="Recent Payments">
-          <table className="w-full text-xs">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[260px] text-xs">
             <thead className="bg-[#0B3B2E] text-white">
               <tr>
                 <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Time</th>
@@ -363,6 +368,7 @@ const CarWashDashboard = () => {
               )}
             </tbody>
           </table>
+          </div>
         </Section>
       </div>
     </CarWashShell>

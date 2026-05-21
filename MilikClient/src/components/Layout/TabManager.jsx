@@ -48,7 +48,11 @@ const getPageTitle = (pathname) => {
     '/carwash/chart-of-accounts': 'Chart of Accounts',
     '/carwash/staff': 'Staff',
     '/carwash/commissions': 'Commissions',
+    '/carwash/loyalty': 'Loyalty',
+    '/carwash/branches': 'Branches',
     '/carwash/reports': 'Reports',
+    '/carwash/reports/services': 'Service Report',
+    '/carwash/reports/staff': 'Staff Report',
     '/moduleDashboard': 'Choose Module',
     '/system-setup': 'Companies',
     '/system-setup/companies': 'Companies',
@@ -116,6 +120,12 @@ const getPageTitle = (pathname) => {
   if (/^\/hr\/payroll\/[^/]+\/payslip\/[^/]+$/.test(pathname)) return 'Payslip';
   if (/^\/hr\/payroll\/[^/]+$/.test(pathname)) return 'Payroll Period';
 
+  const saleRouteNames = {
+    '/sale/financials': 'Financials',
+    '/sale/chart-of-accounts': 'Chart of Accounts',
+  };
+  if (saleRouteNames[pathname]) return saleRouteNames[pathname];
+
   if (routeNames[pathname]) return routeNames[pathname];
 
   const parts = pathname.split('/').filter(Boolean);
@@ -127,7 +137,13 @@ const getPageTitle = (pathname) => {
   if (pathname.startsWith('/units/') && pathname !== '/units/new' && parts.length === 2) {
     return 'Unit Details';
   }
-  if (pathname.startsWith('/financial/chart-of-accounts/') && pathname.endsWith('/activity')) {
+  if (
+    (pathname.startsWith('/financial/chart-of-accounts/') ||
+     pathname.startsWith('/carwash/chart-of-accounts/') ||
+     pathname.startsWith('/hr/chart-of-accounts/') ||
+     pathname.startsWith('/sale/chart-of-accounts/')) &&
+    pathname.endsWith('/activity')
+  ) {
     return 'Ledger Activity';
   }
 

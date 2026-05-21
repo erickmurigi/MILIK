@@ -1134,6 +1134,39 @@ export const sendCommunication = async ({ businessId, contextType, channel, temp
   };
 };
 
+/**
+ * Send a one-off SMS to a specific phone number using the company's default SMS profile.
+ * Used by modules that compose their own message bodies (e.g. loyalty, alerts).
+ */
+export const sendAdHocSms = async ({ businessId, phone, body, templateKey = 'adhoc', recipientName = '' } = {}) => {
+  if (!phone || !body) return null;
+  try {
+    const company = await ensureCompany(businessId);
+    const profiles = getRawSmsProfiles(company.communication || {});
+    const profile = getPrimarySmsProfile(profiles, company.communication?.defaultSmsProfileId || null);
+    if (!profile?.enabled) return null;
+
+    const result = await dispatchSms({ profile, to: phone, body });
+
+    await SmsLog.create({
+      business: businessId,
+      channel: 'sms',
+      templateKey,
+      recipientPhone: phone,
+      recipientName,
+      body,
+      status: result?.messageId ? 'sent' : 'failed',
+      providerMessageId: result?.messageId || '',
+      providerName: profile?.provider || 'generic',
+      sentAt: new Date(),
+    }).catch(() => {});
+
+    return result;
+  } catch (_err) {
+    return null;
+  }
+};
+
 export const getSmsLogs = async ({ businessId, limit = 30, channel, contextType, status } = {}) => {
   const filter = { business: businessId };
   if (channel) filter.channel = channel;

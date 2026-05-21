@@ -52,3 +52,14 @@ export const parseDateRange = (dateValue = null) => {
 };
 
 export const escapeRegex = (value = "") => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const resolveActiveBranchId = (req) => {
+  const raw =
+    req.body?.branch ||
+    req.query?.branch ||
+    req.headers?.["x-active-branch-id"] ||
+    null;
+  if (!raw) return null;
+  const id = String(raw).trim();
+  return mongoose.Types.ObjectId.isValid(id) ? id : null;
+};

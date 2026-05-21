@@ -140,8 +140,7 @@ export default function HRFinancials() {
     setAccountsLoading(true);
     try {
       const rows = await getChartOfAccounts({
-        business:    currentCompany._id,
-        moduleScope: "hr",
+        business: currentCompany._id,
       });
       setAccounts(Array.isArray(rows) ? rows : []);
       setAcctLoaded(true);
@@ -198,7 +197,7 @@ export default function HRFinancials() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
         {/* ── Header ────────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-sm">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3 sm:px-5 py-3 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
@@ -209,20 +208,20 @@ export default function HRFinancials() {
 
             <div className="flex flex-wrap items-center gap-2">
               {/* Date Range */}
-              <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs">
                 <FaCalendarAlt size={10} className="shrink-0 text-slate-400" />
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="border-0 bg-transparent text-xs text-slate-700 outline-none"
+                  className="border-0 bg-transparent text-xs text-slate-700 outline-none min-w-0"
                 />
                 <span className="text-slate-300">—</span>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="border-0 bg-transparent text-xs text-slate-700 outline-none"
+                  className="border-0 bg-transparent text-xs text-slate-700 outline-none min-w-0"
                 />
               </div>
 
@@ -246,7 +245,7 @@ export default function HRFinancials() {
         </div>
 
         {/* ── KPI Strip ─────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 lg:grid-cols-4">
+        <div className="flex-shrink-0 grid grid-cols-1 gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
             icon={FaBook}
             label="Total Entries"
@@ -278,7 +277,7 @@ export default function HRFinancials() {
         </div>
 
         {/* ── Tabs ──────────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 flex gap-0 border-b border-slate-200 bg-white px-5">
+        <div className="flex-shrink-0 flex gap-0 border-b border-slate-200 bg-white px-3 sm:px-5">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -301,8 +300,8 @@ export default function HRFinancials() {
           {tab === "journals" && (
             <>
               {/* Filter bar */}
-              <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-white px-5 py-2.5">
-                <div className="relative min-w-[180px] flex-1 max-w-xs">
+              <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-white px-3 sm:px-5 py-2.5">
+                <div className="relative min-w-0 flex-1 max-w-xs sm:min-w-[180px]">
                   <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
                   <input
                     value={search}
@@ -436,7 +435,7 @@ export default function HRFinancials() {
               ) : accounts.length === 0 ? (
                 <EmptyState
                   icon={FaLayerGroup}
-                  message="No HR-scoped accounts found. HR payroll accounts are provisioned automatically the first time chart of accounts is loaded."
+                  message="No accounts found. Chart of accounts is provisioned automatically the first time it is initialised for this company."
                 />
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -483,7 +482,7 @@ export default function HRFinancials() {
                           <td className="px-4 py-2.5 text-right">
                             <button
                               onClick={() =>
-                                navigate(`/financial/chart-of-accounts/${a._id}/activity`)
+                                navigate(`/hr/chart-of-accounts/${a._id}/activity`)
                               }
                               className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
                             >

@@ -1,10 +1,101 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import { FaChevronDown, FaChevronRight, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaTrashAlt } from "react-icons/fa";
+import { FaCar, FaChevronDown, FaChevronRight, FaGift, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSearch, FaStar, FaTimes, FaTrashAlt, FaUser } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
+import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import { useConfirm } from "../../context/ConfirmContext";
+
+// ─── Plate lookup widget ──────────────────────────────────────────────────────
+const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound }) => {
+  const [lookupResult, setLookupResult] = useState(null);
+  const [looking, setLooking] = useState(false);
+  const timerRef = useRef(null);
+
+  const lookup = useCallback(async (value) => {
+    const p = value.trim().toUpperCase();
+    if (p.length < 3) { setLookupResult(null); return; }
+    setLooking(true);
+    try {
+      const result = await carWashApi.lookupPlate(p);
+      setLookupResult(result);
+      if (result?.customer) {
+        onCustomerFound({ name: result.customer.name, phone: result.customer.phone });
+      }
+    } catch (_) {
+      setLookupResult(null);
+    } finally {
+      setLooking(false);
+    }
+  }, [onCustomerFound]);
+
+  const handleChange = (e) => {
+    const val = e.target.value.toUpperCase();
+    onPlateChange(val);
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => lookup(val), 600);
+  };
+
+  const card = lookupResult?.loyaltyCard;
+  const customer = lookupResult?.customer;
+  const program = card?.program;
+  const pendingRewards = card?.pendingRewards ?? 0;
+
+  return (
+    <div>
+      <label className={labelClass}>Plate Number *</label>
+      <div className="relative">
+        <input
+          className={inputClass}
+          value={plate}
+          onChange={handleChange}
+          required
+          autoFocus
+          placeholder="e.g. KAA 123X"
+        />
+        {looking && (
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 animate-pulse">looking up…</span>
+        )}
+      </div>
+      {lookupResult && (
+        <div className={`mt-1.5 border px-3 py-2 text-[11px] ${customer ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+          {customer ? (
+            <div className="flex items-start gap-2">
+              <FaUser className="mt-0.5 shrink-0 text-emerald-600" />
+              <div className="flex-1">
+                <div className="font-black text-slate-800">{customer.name} <span className="font-normal text-slate-500">· {customer.phone}</span></div>
+                {card && program ? (
+                  <div className="mt-1 flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex gap-0.5">
+                        {Array.from({ length: program.stampsRequired }).map((_, i) => (
+                          <div key={i} className={`h-2 w-2 rounded-full ${i < card.currentStamps ? "bg-emerald-500" : "bg-slate-200"}`} />
+                        ))}
+                      </div>
+                      <span className="text-slate-500">{card.currentStamps}/{program.stampsRequired} stamps</span>
+                    </div>
+                    {pendingRewards > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-black text-amber-700">
+                        <FaGift className="text-[8px]" /> {pendingRewards} reward{pendingRewards !== 1 ? "s" : ""} ready!
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-0.5 text-slate-500">No loyalty card yet</div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-slate-500">
+              <FaCar className="text-[10px]" />
+              <span>Plate not registered — customer name and phone won't auto-fill. <a href="/carwash/loyalty" className="text-emerald-700 font-bold hover:underline">Register customer</a></span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const emptyJobForm = {
   customerName: "",
@@ -95,6 +186,7 @@ const EmptyRow = ({ colSpan, text }) => (
 const CarWashJobs = () => {
   const confirm = useConfirm();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const isConsolidated = !getActiveBranchId();
   const [jobs, setJobs] = useState([]);
   const [services, setServices] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -337,7 +429,7 @@ const CarWashJobs = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm xl:grid-cols-[1fr_1fr_0.9fr_0.9fr_0.8fr_0.8fr_0.85fr_auto_auto]">
+      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_0.9fr_0.9fr_0.8fr_0.8fr_0.85fr_auto_auto]">
         <input
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Job # / plate"
@@ -412,7 +504,7 @@ const CarWashJobs = () => {
         </button>
       </form>
 
-      <div className="min-h-[calc(100vh-14rem)] overflow-auto border border-slate-200 bg-white shadow-sm">
+      <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
         <div className="flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{jobs.length}</strong> / {pagination.total}</span>
           <span>Page: <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
@@ -439,6 +531,7 @@ const CarWashJobs = () => {
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Customer</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Service</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Staff</th>
+              {isConsolidated && <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Branch</th>}
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Payment</th>
               <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Price</th>
@@ -472,6 +565,7 @@ const CarWashJobs = () => {
                       <td className="px-2 py-1 font-semibold text-slate-800">{job.customerName || "-"}</td>
                       <td className="px-2 py-1 text-slate-700">{job.serviceName || "-"}</td>
                       <td className="px-2 py-1 text-slate-700">{job.assignedStaff?.name || "-"}</td>
+                      {isConsolidated && <td className="px-2 py-1 text-slate-600">{job.branch?.name || <span className="text-slate-400">—</span>}</td>}
                       <td className="px-2 py-1">
                         <select
                           className="h-6 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700"
@@ -504,7 +598,7 @@ const CarWashJobs = () => {
                     </tr>
                     {expanded && (
                       <tr className="border-b border-slate-200 bg-[#F8FBF9]">
-                        <td colSpan={11} className="px-10 py-2">
+                        <td colSpan={isConsolidated ? 12 : 11} className="px-10 py-2">
                           <div className="grid gap-3 text-[11px] text-slate-600 md:grid-cols-5">
                             <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
                             <div><span className="font-extrabold uppercase text-slate-500">Phone:</span> {job.phone || "-"}</div>
@@ -520,7 +614,7 @@ const CarWashJobs = () => {
               );
               })
             ) : (
-              <EmptyRow colSpan={11} text="No Car Wash jobs recorded for this date." />
+              <EmptyRow colSpan={isConsolidated ? 12 : 11} text="No Car Wash jobs recorded for this date." />
             )}
           </tbody>
         </table>
@@ -574,13 +668,16 @@ const CarWashJobs = () => {
           }
         >
           <form id="carwash-job-form" onSubmit={createJob} className="grid gap-3 md:grid-cols-2">
-            <div>
-              <label className={labelClass}>Plate Number</label>
-              <input className={inputClass} value={jobForm.plateNumber} onChange={(event) => setJobForm((prev) => ({ ...prev, plateNumber: event.target.value }))} required autoFocus />
+            <div className="md:col-span-2">
+              <PlateLookupWidget
+                plate={jobForm.plateNumber}
+                onPlateChange={(val) => setJobForm((prev) => ({ ...prev, plateNumber: val }))}
+                onCustomerFound={({ name, phone }) => setJobForm((prev) => ({ ...prev, customerName: prev.customerName || name, phone: prev.phone || phone }))}
+              />
             </div>
             <div>
-              <label className={labelClass}>Customer</label>
-              <input className={inputClass} value={jobForm.customerName} onChange={(event) => setJobForm((prev) => ({ ...prev, customerName: event.target.value }))} />
+              <label className={labelClass}>Customer Name</label>
+              <input className={inputClass} value={jobForm.customerName} onChange={(event) => setJobForm((prev) => ({ ...prev, customerName: event.target.value }))} placeholder="Auto-filled for registered plates" />
             </div>
             <div>
               <label className={labelClass}>Phone</label>
@@ -598,7 +695,7 @@ const CarWashJobs = () => {
               </select>
             </div>
             <div>
-              <label className={labelClass}>Service Name</label>
+              <label className={labelClass}>Service Name {!jobForm.service ? "*" : ""}</label>
               <input className={inputClass} value={jobForm.serviceName} onChange={(event) => setJobForm((prev) => ({ ...prev, serviceName: event.target.value }))} required={!jobForm.service} />
             </div>
             <div>
@@ -606,7 +703,7 @@ const CarWashJobs = () => {
               <input className={inputClass} value={jobForm.vehicleType} onChange={(event) => setJobForm((prev) => ({ ...prev, vehicleType: event.target.value }))} />
             </div>
             <div>
-              <label className={labelClass}>Price</label>
+              <label className={labelClass}>Price *</label>
               <input className={inputClass} type="number" min="0" value={jobForm.price} onChange={(event) => setJobForm((prev) => ({ ...prev, price: event.target.value }))} required />
             </div>
             <div>
@@ -646,7 +743,7 @@ const CarWashJobs = () => {
         >
           <form id="carwash-payment-form" onSubmit={recordPayment} className="grid gap-3 md:grid-cols-2">
             <div className="md:col-span-2">
-              <label className={labelClass}>Job</label>
+              <label className={labelClass}>Job *</label>
               <select className={inputClass} value={paymentForm.job} onChange={(event) => setPaymentForm((prev) => ({ ...prev, job: event.target.value, amount: "" }))} required>
                 <option value="">Select job</option>
                 {unpaidJobs.map((job) => (
@@ -657,7 +754,7 @@ const CarWashJobs = () => {
               </select>
             </div>
             <div>
-              <label className={labelClass}>Amount</label>
+              <label className={labelClass}>Amount *</label>
               <input className={inputClass} type="number" min="1" value={paymentForm.amount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))} required />
             </div>
             <div>
@@ -671,11 +768,11 @@ const CarWashJobs = () => {
               </select>
             </div>
             <div>
-              <label className={labelClass}>Payment Date</label>
+              <label className={labelClass}>Payment Date *</label>
               <input className={inputClass} type="date" value={paymentForm.paymentDate} onChange={(event) => setPaymentForm((prev) => ({ ...prev, paymentDate: event.target.value }))} required />
             </div>
             <div>
-              <label className={labelClass}>Cashbook</label>
+              <label className={labelClass}>Cashbook *</label>
               <select className={inputClass} value={paymentForm.cashbookAccount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, cashbookAccount: event.target.value }))} required>
                 <option value="">Select cashbook</option>
                 {cashbooks.map((account) => (

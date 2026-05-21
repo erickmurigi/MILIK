@@ -202,6 +202,7 @@ export const accrueCommissionForJob = async ({ req = null, job }) => {
   const actorUserId = req ? await resolveAuditActorUserId({ req, businessId: job.business }) : null;
   const commission = await CarWashStaffCommission.create({
     business: job.business,
+    branch: job.branch || null,
     job: job._id,
     staff: job.assignedStaff,
     service: job.service || null,

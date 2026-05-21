@@ -1,7 +1,7 @@
 import { createError } from "../../../utils/error.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashStaff from "../models/CarWashStaff.js";
-import { currentUserId, escapeRegex, parseBoolean, resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, escapeRegex, parseBoolean, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 
 const sanitizeStaffPayload = (body = {}) => ({
   name: String(body.name || "").trim(),
@@ -13,7 +13,9 @@ const sanitizeStaffPayload = (body = {}) => ({
 export const listStaff = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const branchId = resolveActiveBranchId(req);
     const filter = { business };
+    if (branchId) filter.branch = branchId;
     const active = parseBoolean(req.query.active);
     if (typeof active === "boolean") filter.active = active;
     if (req.query.search) {
@@ -44,7 +46,8 @@ export const createStaff = async (req, res, next) => {
     const payload = sanitizeStaffPayload(req.body);
     if (!payload.name) return next(createError(400, "Staff name is required"));
     const userId = currentUserId(req);
-    const staff = await CarWashStaff.create({ ...payload, business, createdBy: userId, updatedBy: userId });
+    const branchId = resolveActiveBranchId(req);
+    const staff = await CarWashStaff.create({ ...payload, business, branch: branchId || null, createdBy: userId, updatedBy: userId });
     res.status(201).json({ success: true, data: staff, staff, message: "Car Wash staff member created" });
   } catch (error) {
     next(error);

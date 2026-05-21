@@ -3,8 +3,9 @@ import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
-import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
+import { awardLoyaltyStamp, sendPaymentConfirmationSms } from "./loyaltyController.js";
 
 const PAYMENT_METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const RECONCILIATION_STATUSES = new Set(["pending", "reconciled", "flagged"]);
@@ -55,6 +56,8 @@ export const listPayments = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const filter = { business };
+    const branchId = resolveActiveBranchId(req);
+    if (branchId) filter.branch = branchId;
     if (req.query.method) filter.method = String(req.query.method).trim().toLowerCase();
     if (req.query.cashbookAccount && mongoose.Types.ObjectId.isValid(String(req.query.cashbookAccount))) {
       filter.cashbookAccount = String(req.query.cashbookAccount);
@@ -73,6 +76,7 @@ export const listPayments = async (req, res, next) => {
         .populate("job", "jobNumber plateNumber customerName serviceName price status paymentStatus")
         .populate("cashbookAccount", "code name type subGroup")
         .populate("receivedBy", "name username email")
+        .populate("branch", "name")
         .sort({ paymentDate: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -112,6 +116,7 @@ export const recordPayment = async (req, res, next) => {
     const userId = currentUserId(req);
     const payment = await CarWashPayment.create({
       business,
+      branch: job.branch || null,
       job: job._id,
       amount,
       method,
@@ -126,6 +131,9 @@ export const recordPayment = async (req, res, next) => {
     await accrueCommissionForJob({ req, job: updatedJob });
     if (updatedJob.paymentStatus === "paid") {
       await markJobCommissionsPayable({ business, jobId: updatedJob._id });
+      // Award loyalty stamp and send payment confirmation SMS (failures are silenced inside)
+      await awardLoyaltyStamp({ business, job: updatedJob });
+      await sendPaymentConfirmationSms({ business, job: updatedJob, amount });
     }
     res.status(201).json({ success: true, data: payment, payment, job: updatedJob, message: "Car Wash payment recorded" });
   } catch (error) {

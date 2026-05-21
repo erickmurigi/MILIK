@@ -11,6 +11,7 @@ const carWashPaymentSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    branch: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null, index: true },
     job: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "CarWashJob",

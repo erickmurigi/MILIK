@@ -5,7 +5,7 @@ import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import CarWashCommissionPayout from "../models/CarWashCommissionPayout.js";
 import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
-import { currentUserId, escapeRegex, parseBoolean, parseDateRange, resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, escapeRegex, parseBoolean, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import {
   generatePayoutNumber,
   postCommissionPayoutLedger,
@@ -97,7 +97,9 @@ export const upsertCommissionRule = async (req, res, next) => {
 export const listCommissions = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const branchId = resolveActiveBranchId(req);
     const filter = { business: toObjectId(business) };
+    if (branchId) filter.branch = toObjectId(branchId);
     if (req.query.status) filter.status = String(req.query.status).trim().toLowerCase();
     if (req.query.staff && mongoose.Types.ObjectId.isValid(String(req.query.staff))) filter.staff = toObjectId(req.query.staff);
     if (req.query.date) {
@@ -162,9 +164,11 @@ export const createCommissionPayout = async (req, res, next) => {
     if (!payoutMethods.has(method)) return next(createError(400, "Invalid payout method"));
     const cashbookAccount = await resolvePayoutCashbook(business, req.body.cashbookAccount);
     const now = req.body.payoutDate ? new Date(req.body.payoutDate) : new Date();
+    const branchId = resolveActiveBranchId(req);
 
     const payout = await CarWashCommissionPayout.create({
       business,
+      branch: branchId || null,
       payoutNumber: String(req.body.payoutNumber || "").trim() || (await generatePayoutNumber(business)),
       staff,
       amount,
@@ -202,7 +206,9 @@ export const createCommissionPayout = async (req, res, next) => {
 export const listCommissionPayouts = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const branchId = resolveActiveBranchId(req);
     const filter = { business };
+    if (branchId) filter.branch = branchId;
     if (req.query.staff && mongoose.Types.ObjectId.isValid(String(req.query.staff))) filter.staff = req.query.staff;
     if (req.query.date) {
       const { start, end } = parseDateRange(req.query.date);
@@ -211,6 +217,7 @@ export const listCommissionPayouts = async (req, res, next) => {
     const payouts = await CarWashCommissionPayout.find(filter)
       .populate("staff", "name phone role")
       .populate("cashbookAccount", "code name")
+      .populate("branch", "name")
       .sort({ payoutDate: -1, createdAt: -1 })
       .limit(Math.min(Math.max(Number(req.query.limit || 50), 1), 200))
       .lean();

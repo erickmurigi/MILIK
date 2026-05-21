@@ -89,6 +89,17 @@ export const updateService = async (req, res, next) => {
   }
 };
 
+export const listCategories = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const categories = await CarWashService.distinct("category", { business, category: { $nin: ["", null] } });
+    const sorted = categories.filter(Boolean).sort((a, b) => a.localeCompare(b));
+    res.status(200).json({ success: true, data: sorted, categories: sorted });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const deleteService = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);

@@ -281,7 +281,7 @@ const CarWashChartOfAccounts = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-[1fr_220px_auto_auto]">
+      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 md:grid-cols-[1fr_220px_auto_auto]">
         <input className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" placeholder="Search by code, account name, type, class, or subgroup" value={filters.search} onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))} />
         <select className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" value={filters.type} onChange={(event) => setFilters((prev) => ({ ...prev, type: event.target.value }))}>
           <option value="">All account types</option>
@@ -304,7 +304,7 @@ const CarWashChartOfAccounts = () => {
         <span>Selected: <strong className="text-[#0B3B2E]">{selectedAccounts.length}</strong></span>
       </div>
 
-      <div className="min-h-[calc(100vh-15rem)] overflow-auto">
+      <div className="min-h-[calc(100vh-15rem)] overflow-x-auto">
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
           {groupedAccounts.length ? groupedAccounts.map((group) => (
             <section key={group.key} className="overflow-hidden border border-slate-200 bg-white shadow-sm" style={{ borderTop: `2px solid ${group.accent}` }}>
@@ -318,8 +318,8 @@ const CarWashChartOfAccounts = () => {
                 </span>
               </div>
 
-              <div className="overflow-hidden bg-white">
-                <table className="w-full table-fixed text-xs">
+              <div className="overflow-x-auto bg-white">
+                <table className="w-full min-w-[480px] table-fixed text-xs">
                   <thead className="bg-[#0B3B2E] text-white">
                     <tr>
                       <th className="w-8 px-2 py-1.5 text-left font-bold uppercase tracking-wide"></th>

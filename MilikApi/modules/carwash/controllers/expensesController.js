@@ -2,7 +2,7 @@ import { createError } from "../../../utils/error.js";
 import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashExpense from "../models/CarWashExpense.js";
-import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 
 const METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const STATUSES = new Set(["draft", "approved", "paid", "cancelled"]);
@@ -41,6 +41,8 @@ const resolveCashbookAccount = async (business, value, required = false) => {
 
 const buildFilter = (req, business) => {
   const filter = { business };
+  const branchId = resolveActiveBranchId(req);
+  if (branchId) filter.branch = branchId;
   if (req.query.status) filter.status = String(req.query.status).trim().toLowerCase();
   if (req.query.category) filter.category = new RegExp(escapeRegex(String(req.query.category).trim()), "i");
   if (req.query.method) filter.method = String(req.query.method).trim().toLowerCase();
@@ -131,6 +133,7 @@ export const listExpenses = async (req, res, next) => {
         .populate("createdBy", "name username email")
         .populate("approvedBy", "name username email")
         .populate("paidBy", "name username email")
+        .populate("branch", "name")
         .sort({ expenseDate: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -163,8 +166,10 @@ export const createExpense = async (req, res, next) => {
 
     const cashbookAccount = await resolveCashbookAccount(business, req.body.cashbookAccount, status === "paid");
     const userId = currentUserId(req);
+    const branchId = resolveActiveBranchId(req);
     const expense = await CarWashExpense.create({
       business,
+      branch: branchId || null,
       expenseNumber: String(req.body.expenseNumber || "").trim() || (await generateExpenseNumber(business)),
       expenseDate: req.body.expenseDate ? new Date(req.body.expenseDate) : new Date(),
       payee: String(req.body.payee || "").trim(),

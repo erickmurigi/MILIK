@@ -2295,12 +2295,31 @@ export default function CompanySetupPage() {
             <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
               <FaPhoneAlt className="text-[#F97316]" /> Payment identity rule
             </div>
-            <div className="mt-1 text-xs leading-4 text-slate-600">
-              Incoming payments are identified by the company Paybill together with the tenant code entered as the account number. This keeps matching safely company-bound.
-            </div>
-            <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-              Account number used by tenant: <span className="text-slate-900">Tenant Code (example: TT0001)</span>
-            </div>
+            {currentCompany?.modules?.propertyManagement && (
+              <>
+                <div className="mt-1 text-xs leading-4 text-slate-600">
+                  Property Management: incoming payments are matched by Paybill + the tenant code entered as the account number, keeping matching safely company-bound.
+                </div>
+                <div className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                  Account number used by tenant: <span className="text-slate-900">Tenant Code (example: TT0001)</span>
+                </div>
+              </>
+            )}
+            {currentCompany?.modules?.carwash && (
+              <>
+                <div className={`${currentCompany?.modules?.propertyManagement ? "mt-3 border-t border-slate-200 pt-3" : "mt-1"} text-xs leading-4 text-slate-600`}>
+                  Car Wash: incoming payments are matched by Paybill + the vehicle plate number entered as the account number. This ties each payment to an open job and awards loyalty stamps automatically.
+                </div>
+                <div className="mt-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-slate-700">
+                  Account number used by customer: <span className="font-extrabold text-[#0B3B2E]">Vehicle Plate Number (example: KCA 123A)</span>
+                </div>
+              </>
+            )}
+            {!currentCompany?.modules?.propertyManagement && !currentCompany?.modules?.carwash && (
+              <div className="mt-1 text-xs leading-4 text-slate-600">
+                Incoming payments are identified by the company Paybill together with the account number entered by the payer. Enable a module to see its specific identity rule.
+              </div>
+            )}
           </div>
 
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">

@@ -258,7 +258,7 @@ const CarWashCommissions = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm xl:grid-cols-[180px_240px_170px_1fr_auto_auto]">
+      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[180px_240px_170px_1fr_auto_auto]">
         <select className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}>
           <option value="">All status</option>
           {statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
@@ -273,7 +273,7 @@ const CarWashCommissions = () => {
         <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt /> Reset</button>
       </form>
 
-      <div className="min-h-[calc(100vh-14rem)] overflow-auto border border-slate-200 bg-white shadow-sm">
+      <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
         <div className="flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{commissions.length}</strong> / {pagination.total}</span>
           <span>Page: <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
@@ -331,7 +331,7 @@ const CarWashCommissions = () => {
           onClose={() => setShowRulesModal(false)}
           footer={<button type="button" onClick={() => openRule()} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white"><FaPlus /> New Rule</button>}
         >
-          <div className="overflow-auto border border-slate-200">
+          <div className="overflow-x-auto border border-slate-200">
             <table className="w-full min-w-[820px] text-xs">
               <thead className="bg-[#0B3B2E] text-white">
                 <tr>
@@ -370,7 +370,7 @@ const CarWashCommissions = () => {
           subtitle="Audit payouts posted to staff commission payable."
           onClose={() => setShowPayoutHistoryModal(false)}
         >
-          <div className="overflow-auto border border-slate-200">
+          <div className="overflow-x-auto border border-slate-200">
             <table className="w-full min-w-[860px] text-xs">
               <thead className="bg-[#0B3B2E] text-white">
                 <tr>

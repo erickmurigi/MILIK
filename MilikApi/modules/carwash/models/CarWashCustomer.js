@@ -1,0 +1,23 @@
+import mongoose from 'mongoose';
+
+const carWashCustomerSchema = new mongoose.Schema(
+  {
+    business: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+    name: { type: String, required: true, trim: true },
+    phone: { type: String, required: true, trim: true },
+    plates: {
+      type: [{ type: String, trim: true, uppercase: true }],
+      default: [],
+    },
+    notes: { type: String, trim: true, default: '' },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  },
+  { timestamps: true }
+);
+
+carWashCustomerSchema.index({ business: 1, phone: 1 }, { unique: true });
+carWashCustomerSchema.index({ business: 1, plates: 1 });
+carWashCustomerSchema.index({ business: 1, name: 1 });
+
+export default mongoose.model('CarWashCustomer', carWashCustomerSchema);

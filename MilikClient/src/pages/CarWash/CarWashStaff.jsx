@@ -121,7 +121,7 @@ const CarWashStaff = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-[1fr_220px_auto_auto]">
+      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 md:grid-cols-[1fr_220px_auto_auto]">
         <input
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Search name / phone / role"
@@ -147,8 +147,8 @@ const CarWashStaff = () => {
         </button>
       </form>
 
-      <div className="min-h-[calc(100vh-14rem)] overflow-auto border border-slate-200 bg-white shadow-sm">
-        <div className="flex min-h-8 items-center gap-5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+      <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap min-h-8 items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{rows.length}</strong> / {pagination.total}</span>
           <span>Page: <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
           <span>Active: <strong className="text-[#0B3B2E]">{rows.filter((row) => row.active !== false).length}</strong></span>
@@ -240,7 +240,7 @@ const CarWashStaff = () => {
         >
           <form id="carwash-staff-form" onSubmit={submit} className="grid gap-3 md:grid-cols-2">
             <div>
-              <label className={labelClass}>Name</label>
+              <label className={labelClass}>Name *</label>
               <input className={inputClass} value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required autoFocus />
             </div>
             <div>

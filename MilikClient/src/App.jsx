@@ -120,11 +120,14 @@ const CarWashPayments       = lazy(() => import("./pages/CarWash/CarWashPayments
 const CarWashDeposits       = lazy(() => import("./pages/CarWash/CarWashDeposits"));
 const CarWashExpenses       = lazy(() => import("./pages/CarWash/CarWashExpenses"));
 const CarWashCashbooks      = lazy(() => import("./pages/CarWash/CarWashCashbooks"));
-const CarWashChartOfAccounts= lazy(() => import("./pages/CarWash/CarWashChartOfAccounts"));
 const CarWashStaff          = lazy(() => import("./pages/CarWash/CarWashStaff"));
 const CarWashReports        = lazy(() => import("./pages/CarWash/CarWashReports"));
+const CarWashServiceReport  = lazy(() => import("./pages/CarWash/CarWashServiceReport"));
+const CarWashStaffReport    = lazy(() => import("./pages/CarWash/CarWashStaffReport"));
 const CarWashCommissions    = lazy(() => import("./pages/CarWash/CarWashCommissions"));
+const CarWashLoyalty        = lazy(() => import("./pages/CarWash/CarWashLoyalty"));
 const CarWashFinancials     = lazy(() => import("./pages/CarWash/CarWashFinancials"));
+const CarWashBranches       = lazy(() => import("./pages/CarWash/CarWashBranches"));
 
 // HR module
 const HRFinancials       = lazy(() => import("./pages/HR/HRFinancials"));
@@ -159,6 +162,7 @@ const SalePayments          = lazy(() => import("./pages/PropertySale/SalePaymen
 const SaleCommissions       = lazy(() => import("./pages/PropertySale/SaleCommissions"));
 const SaleReports           = lazy(() => import("./pages/PropertySale/SaleReports"));
 const SaleMonthlyDetail     = lazy(() => import("./pages/PropertySale/SaleMonthlyDetail"));
+const SaleFinancials        = lazy(() => import("./pages/PropertySale/SaleFinancials"));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
@@ -498,8 +502,12 @@ function App() {
             <Route path="/carwash/chart-of-accounts" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><ChartOfAccounts /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/financials"        element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><CarWashFinancials /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/staff"             element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-staff" moduleKey="carwash"><CarWashStaff /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/reports"           element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashReports /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/commissions"       element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissions /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/reports"                element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashReports /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/reports/services"       element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashServiceReport /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/reports/staff"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashStaffReport /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/commissions"            element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissions /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/loyalty"           element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-loyalty" moduleKey="carwash"><CarWashLoyalty /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/branches"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-branches" moduleKey="carwash"><CarWashBranches /></PermissionRoute></CompanyModuleRoute>} />
 
             {/* ── HR module ─────────────────────────────────────────────── */}
             <Route path="/hr/dashboard"           element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRDashboard /></ProtectedRoute></CompanyModuleRoute>} />
@@ -536,6 +544,7 @@ function App() {
             <Route path="/sale/commissions"                    element={<CompanyModuleRoute moduleKey="propertySale"><SaleCommissions /></CompanyModuleRoute>} />
             <Route path="/sale/reports"                        element={<CompanyModuleRoute moduleKey="propertySale"><SaleReports /></CompanyModuleRoute>} />
             <Route path="/sale/reports/monthly/:year/:month"   element={<CompanyModuleRoute moduleKey="propertySale"><SaleMonthlyDetail /></CompanyModuleRoute>} />
+            <Route path="/sale/financials"                       element={<CompanyModuleRoute moduleKey="propertySale"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><SaleFinancials /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/sale/chart-of-accounts"              element={<CompanyModuleRoute moduleKey="propertySale"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><ChartOfAccounts /></PermissionRoute></CompanyModuleRoute>} />
 
             {/* ── System setup ──────────────────────────────────────────── */}
@@ -611,6 +620,9 @@ function App() {
             <Route path="/financial/journals"                      element={<PermissionRoute resource="journals" moduleKey={GL_ACCESS_MODULES}><JournalEntries /></PermissionRoute>} />
             <Route path="/financial/chart-of-accounts"             element={<PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><ChartOfAccounts /></PermissionRoute>} />
             <Route path="/financial/chart-of-accounts/:accountId/activity" element={<ProtectedRoute><LedgerAccountActivity /></ProtectedRoute>} />
+            <Route path="/carwash/chart-of-accounts/:accountId/activity"  element={<CompanyModuleRoute moduleKey="carwash"><ProtectedRoute><LedgerAccountActivity /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/chart-of-accounts/:accountId/activity"       element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><LedgerAccountActivity /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/sale/chart-of-accounts/:accountId/activity"     element={<CompanyModuleRoute moduleKey="propertySale"><ProtectedRoute><LedgerAccountActivity /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/financial/ledger-entries"                element={<ProtectedRoute><Navigate to="/financial/chart-of-accounts" replace /></ProtectedRoute>} />
             <Route path="/expenses/payment-vouchers"               element={<ProtectedRoute><PaymentVouchers /></ProtectedRoute>} />
 

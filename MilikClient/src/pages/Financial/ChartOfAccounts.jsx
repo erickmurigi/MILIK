@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   FaBook,
   FaSearch,
@@ -159,7 +159,12 @@ const MODULE_SCOPE_OPTIONS = [
 const ChartOfAccounts = () => {
   const confirm = useConfirm();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
+  const activityBase = location.pathname.startsWith("/carwash/") ? "/carwash/chart-of-accounts"
+    : location.pathname.startsWith("/hr/")   ? "/hr/chart-of-accounts"
+    : location.pathname.startsWith("/sale/") ? "/sale/chart-of-accounts"
+    : "/financial/chart-of-accounts";
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
   const canCreateCOA = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "create", "accounts");
@@ -583,7 +588,7 @@ const ChartOfAccounts = () => {
                                 className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
                                 onDoubleClick={() => {
                                   if (account?.isPosting !== false && !account?.isHeader) {
-                                    navigate(`/financial/chart-of-accounts/${account._id}/activity`);
+                                    navigate(`${activityBase}/${account._id}/activity`);
                                   }
                                 }}
                                 title={account?.isPosting !== false && !account?.isHeader ? "Double-click to open ledger activity" : "Header accounts cannot open activity"}

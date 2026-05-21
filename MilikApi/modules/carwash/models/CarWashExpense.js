@@ -11,6 +11,7 @@ const carWashExpenseSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    branch: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null, index: true },
     expenseNumber: { type: String, required: true, trim: true },
     expenseDate: { type: Date, default: Date.now, index: true },
     payee: { type: String, trim: true, default: "" },

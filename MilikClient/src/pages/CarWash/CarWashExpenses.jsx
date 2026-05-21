@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { FaChevronDown, FaChevronRight, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
+import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 
 const PAGE_SIZE = 30;
@@ -64,6 +64,7 @@ const Modal = ({ title, children, footer, onClose }) => (
 
 const CarWashExpenses = () => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const isConsolidated = !getActiveBranchId();
   const [rows, setRows] = useState([]);
   const [cashbooks, setCashbooks] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
@@ -199,7 +200,7 @@ const CarWashExpenses = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm xl:grid-cols-[150px_150px_180px_150px_220px_1fr_auto_auto]">
+      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[150px_150px_180px_150px_220px_1fr_auto_auto]">
         <input type="date" className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" value={filters.date} onChange={(event) => setFilters((prev) => ({ ...prev, date: event.target.value }))} />
         <select className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}>
           <option value="">All status</option>
@@ -222,7 +223,7 @@ const CarWashExpenses = () => {
         <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt />Reset</button>
       </form>
 
-      <div className="min-h-[calc(100vh-14rem)] overflow-auto border border-slate-200 bg-white shadow-sm">
+      <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
         <div className="flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{rows.length}</strong> / {pagination.total}</span>
           <span>Page Total: <strong className="text-[#0B3B2E]">{formatMoney(pageTotal)}</strong></span>
@@ -240,6 +241,7 @@ const CarWashExpenses = () => {
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Expense</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Payee</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Category</th>
+              {isConsolidated && <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Branch</th>}
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Method</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Cashbook</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
@@ -257,6 +259,7 @@ const CarWashExpenses = () => {
                     <td className="px-2 py-1 font-extrabold text-slate-900">{row.expenseNumber || "-"}</td>
                     <td className="px-2 py-1 font-semibold text-slate-800">{row.payee || "-"}</td>
                     <td className="px-2 py-1 text-slate-700">{row.category || "-"}</td>
+                    {isConsolidated && <td className="px-2 py-1 text-slate-600">{row.branch?.name || <span className="text-slate-400">—</span>}</td>}
                     <td className="px-2 py-1 font-bold uppercase text-slate-700">{row.method || "-"}</td>
                     <td className="px-2 py-1 font-semibold text-slate-800">{row.cashbookAccount ? `${row.cashbookAccount.code || ""} ${row.cashbookAccount.name || ""}`.trim() : "-"}</td>
                     <td className="px-2 py-1">
@@ -268,7 +271,7 @@ const CarWashExpenses = () => {
                   </tr>
                   {expanded && (
                     <tr className="border-b border-slate-200 bg-[#F8FBF9]">
-                      <td colSpan={9} className="px-10 py-2 text-[11px] text-slate-600">
+                      <td colSpan={isConsolidated ? 10 : 9} className="px-10 py-2 text-[11px] text-slate-600">
                         <div className="grid gap-3 md:grid-cols-5">
                           <div><span className="font-extrabold uppercase text-slate-500">Reference:</span> {row.reference || "-"}</div>
                           <div><span className="font-extrabold uppercase text-slate-500">Created By:</span> {row.createdBy?.name || row.createdBy?.username || row.createdBy?.email || "-"}</div>
@@ -284,7 +287,7 @@ const CarWashExpenses = () => {
                 </React.Fragment>
               );
             }) : (
-              <tr><td colSpan={9} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">No Car Wash expenses found for the selected filters.</td></tr>
+              <tr><td colSpan={isConsolidated ? 10 : 9} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">No Car Wash expenses found for the selected filters.</td></tr>
             )}
           </tbody>
         </table>
@@ -310,13 +313,13 @@ const CarWashExpenses = () => {
           }
         >
           <form id="carwash-expense-form" onSubmit={createExpense} className="grid gap-3 md:grid-cols-2">
-            <div><label className={labelClass}>Expense Date</label><input type="date" className={inputClass} value={form.expenseDate} onChange={(event) => setForm((prev) => ({ ...prev, expenseDate: event.target.value }))} required /></div>
-            <div><label className={labelClass}>Amount</label><input type="number" min="1" className={inputClass} value={form.amount} onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))} required autoFocus /></div>
+            <div><label className={labelClass}>Expense Date *</label><input type="date" className={inputClass} value={form.expenseDate} onChange={(event) => setForm((prev) => ({ ...prev, expenseDate: event.target.value }))} required /></div>
+            <div><label className={labelClass}>Amount *</label><input type="number" min="1" className={inputClass} value={form.amount} onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))} required autoFocus /></div>
             <div><label className={labelClass}>Payee</label><input className={inputClass} value={form.payee} onChange={(event) => setForm((prev) => ({ ...prev, payee: event.target.value }))} placeholder="Supplier, staff, utility provider..." /></div>
             <div><label className={labelClass}>Category</label><select className={inputClass} value={form.category} onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))}>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></div>
             <div><label className={labelClass}>Method</label><select className={inputClass} value={form.method} onChange={(event) => setForm((prev) => ({ ...prev, method: event.target.value, cashbookAccount: preferredCashbookForMethod(cashbooks, event.target.value) }))}>{methods.map((method) => <option key={method} value={method}>{method.toUpperCase()}</option>)}</select></div>
             <div><label className={labelClass}>Status</label><select className={inputClass} value={form.status} onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}><option value="paid">Paid</option><option value="draft">Draft</option><option value="approved">Approved</option></select></div>
-            <div><label className={labelClass}>Cashbook Paid From</label><select className={inputClass} value={form.cashbookAccount} onChange={(event) => setForm((prev) => ({ ...prev, cashbookAccount: event.target.value }))} required={form.status === "paid"}><option value="">Select cashbook</option>{cashbooks.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select></div>
+            <div><label className={labelClass}>Cashbook Paid From {form.status === "paid" ? "*" : ""}</label><select className={inputClass} value={form.cashbookAccount} onChange={(event) => setForm((prev) => ({ ...prev, cashbookAccount: event.target.value }))} required={form.status === "paid"}><option value="">Select cashbook</option>{cashbooks.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select></div>
             <div><label className={labelClass}>Reference</label><input className={inputClass} value={form.reference} onChange={(event) => setForm((prev) => ({ ...prev, reference: event.target.value }))} placeholder="Receipt, M-Pesa code, bank ref..." /></div>
             <div className="md:col-span-2"><label className={labelClass}>Description</label><input className={inputClass} value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} placeholder="What was this expense for?" /></div>
             <div className="md:col-span-2"><label className={labelClass}>Notes</label><textarea className="min-h-16 w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none" value={form.notes} onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))} /></div>

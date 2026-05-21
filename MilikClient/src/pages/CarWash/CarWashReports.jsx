@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaExternalLinkAlt, FaPrint, FaRedoAlt, FaSearch } from "react-icons/fa";
-import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
+import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 
 const statusLabels = { waiting: "Waiting", washing: "Washing", done: "Done", paid: "Paid", cancelled: "Cancelled" };
@@ -150,7 +150,7 @@ const CarWashReports = () => {
         </>
       }
     >
-      <form onSubmit={submit} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-[260px_180px_120px]">
+      <form onSubmit={submit} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-[1fr_180px_120px] md:grid-cols-[260px_180px_120px]">
         <div className="flex h-8 border border-[#B7C9C0] bg-[#F1F6F3]">
           {reportModes.map((item) => (
             <button
@@ -184,9 +184,10 @@ const CarWashReports = () => {
         </button>
       </form>
 
-      <div className="mb-2 overflow-auto border border-slate-200 bg-white shadow-sm">
+      <div className="mb-2 overflow-x-auto border border-slate-200 bg-white shadow-sm">
         <div className="flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Period: <strong className="text-slate-900">{periodLabel}</strong></span>
+          {!getActiveBranchId() && <span className="border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-bold normal-case text-slate-500 tracking-normal">All Branches</span>}
           <span>Jobs: <strong className="text-[#0B3B2E]">{jobsCount}</strong></span>
           <span>Revenue: <strong className="text-[#0B3B2E]">{formatMoney(totalRevenue)}</strong></span>
           <span>Paid Expenses: <strong className="text-[#FF8C00]">{formatMoney(totalExpenses)}</strong></span>
@@ -198,7 +199,7 @@ const CarWashReports = () => {
         </div>
       </div>
 
-      <div className="grid gap-2 xl:grid-cols-[0.95fr_1.05fr]">
+      <div className="grid gap-2 grid-cols-1 xl:grid-cols-[0.95fr_1.05fr]">
         <ReportTable title="Operations Position">
           <thead className="bg-[#0B3B2E] text-white">
             <tr><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Metric</th><th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Value</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Control Note</th></tr>
@@ -236,7 +237,7 @@ const CarWashReports = () => {
         </ReportTable>
       </div>
 
-      <div className="mt-2 grid gap-2 xl:grid-cols-2">
+      <div className="mt-2 grid gap-2 grid-cols-1 xl:grid-cols-2">
         <ReportTable title="Job Status Breakdown">
           <thead className="bg-[#0B3B2E] text-white">
             <tr><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Status</th><th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Count</th><th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">% of Jobs</th></tr>
@@ -279,7 +280,7 @@ const CarWashReports = () => {
       </div>
 
       {applied.mode !== "daily" && (
-        <div className="mt-2 grid gap-2 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="mt-2 grid gap-2 grid-cols-1 xl:grid-cols-[1.2fr_0.8fr]">
           <ReportTable title="Daily Trend" minWidth="760px">
             <thead className="bg-[#0B3B2E] text-white">
               <tr><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Date</th><th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Jobs</th><th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Payments</th><th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Revenue</th></tr>
@@ -316,7 +317,7 @@ const CarWashReports = () => {
       )}
 
       {applied.mode === "daily" && (
-        <div className="mt-2 grid gap-2 xl:grid-cols-[1.65fr_0.35fr]">
+        <div className="mt-2 grid gap-2 grid-cols-1 xl:grid-cols-[1.65fr_0.35fr]">
           <ReportTable title="Job Audit" minWidth="100%" right={<button type="button" onClick={() => navigate("/carwash/jobs")} className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase text-[#0B3B2E] hover:text-[#FF8C00]"><FaExternalLinkAlt />Open Jobs</button>}>
             <thead className="bg-[#0B3B2E] text-white">
               <tr><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Time</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Job</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Plate</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Customer</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Service</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Status</th><th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Payment</th><th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Price</th></tr>

@@ -2,7 +2,7 @@ import { createError } from "../../../utils/error.js";
 import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashDeposit from "../models/CarWashDeposit.js";
-import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 
 const DESTINATIONS = new Set(["bank", "mpesa", "safe", "other"]);
 const STATUSES = new Set(["pending", "confirmed", "cancelled"]);
@@ -16,6 +16,8 @@ const generateDepositNumber = async (business) => {
 
 const buildFilter = (req, business) => {
   const filter = { business };
+  const branchId = resolveActiveBranchId(req);
+  if (branchId) filter.branch = branchId;
   if (req.query.status) filter.status = String(req.query.status).trim().toLowerCase();
   if (req.query.destination) filter.destination = String(req.query.destination).trim().toLowerCase();
   if (req.query.cashbookAccount && mongoose.Types.ObjectId.isValid(String(req.query.cashbookAccount))) {
@@ -95,6 +97,7 @@ export const listDeposits = async (req, res, next) => {
         .populate("depositedBy", "name username email")
         .populate("confirmedBy", "name username email")
         .populate("cashbookAccount", "code name type subGroup balance")
+        .populate("branch", "name")
         .sort({ depositDate: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -121,8 +124,10 @@ export const createDeposit = async (req, res, next) => {
     if (!cashbookAccount) return next(createError(400, "Cashbook account is required for Car Wash deposits"));
 
     const userId = currentUserId(req);
+    const branchId = resolveActiveBranchId(req);
     const deposit = await CarWashDeposit.create({
       business,
+      branch: branchId || null,
       depositNumber: String(req.body.depositNumber || "").trim() || (await generateDepositNumber(business)),
       depositDate: req.body.depositDate ? new Date(req.body.depositDate) : new Date(),
       amount,

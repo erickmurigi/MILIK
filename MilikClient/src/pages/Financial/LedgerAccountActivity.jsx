@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
   FaArrowLeft,
@@ -98,7 +98,12 @@ const getAuditCaption = (entry) => {
 
 const LedgerAccountActivity = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { accountId } = useParams();
+  const backRoute = location.pathname.startsWith("/carwash/") ? "/carwash/chart-of-accounts"
+    : location.pathname.startsWith("/hr/")   ? "/hr/chart-of-accounts"
+    : location.pathname.startsWith("/sale/") ? "/sale/chart-of-accounts"
+    : "/financial/chart-of-accounts";
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser);
 
@@ -285,10 +290,10 @@ const LedgerAccountActivity = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
                 <button
-                  onClick={() => navigate("/financial/chart-of-accounts")}
+                  onClick={() => navigate(backRoute)}
                   className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 hover:text-gray-900"
                 >
                   <FaArrowLeft size={10} />
@@ -296,7 +301,7 @@ const LedgerAccountActivity = () => {
                 </button>
 
                 <div className="min-w-0">
-                  <h1 className="truncate text-lg font-bold leading-tight text-slate-900">
+                  <h1 className="truncate text-base font-bold leading-tight text-slate-900 sm:text-lg">
                     {account?.code || "..."} {account?.name || "Ledger Activity"}
                   </h1>
                   <p className="truncate text-[11px] leading-tight text-slate-500">
@@ -306,15 +311,15 @@ const LedgerAccountActivity = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5">
-                <div className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1">
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 sm:px-2.5">
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Opening</div>
                   <div className="text-sm font-bold leading-tight text-blue-900">{formatMoney(openingBalance)}</div>
                 </div>
-                <div className="rounded-md border border-green-200 bg-green-50 px-2.5 py-1">
+                <div className="rounded-md border border-green-200 bg-green-50 px-2 py-1 sm:px-2.5">
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-green-600">Entries</div>
                   <div className="text-sm font-bold leading-tight text-green-900">{rows.length}</div>
                 </div>
-                <div className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1">
+                <div className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 sm:px-2.5">
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-orange-600">Closing</div>
                   <div className="text-sm font-bold leading-tight text-orange-900">{formatMoney(closingBalance)}</div>
                 </div>

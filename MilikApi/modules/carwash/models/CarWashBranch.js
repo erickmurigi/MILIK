@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const carWashStaffSchema = new mongoose.Schema(
+const carWashBranchSchema = new mongoose.Schema(
   {
     business: {
       type: mongoose.Schema.Types.ObjectId,
@@ -8,18 +8,20 @@ const carWashStaffSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    branch: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null, index: true },
     name: { type: String, required: true, trim: true },
+    location: { type: String, trim: true, default: "" },
+    address: { type: String, trim: true, default: "" },
     phone: { type: String, trim: true, default: "" },
-    role: { type: String, trim: true, default: "" },
+    mpesaShortCode: { type: String, trim: true, default: "" },
     active: { type: Boolean, default: true },
+    isDefault: { type: Boolean, default: false },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );
 
-carWashStaffSchema.index({ business: 1, name: 1 });
-carWashStaffSchema.index({ business: 1, active: 1 });
+carWashBranchSchema.index({ business: 1, name: 1 }, { unique: true });
+carWashBranchSchema.index({ business: 1, active: 1 });
 
-export default mongoose.model("CarWashStaff", carWashStaffSchema);
+export default mongoose.model("CarWashBranch", carWashBranchSchema);
