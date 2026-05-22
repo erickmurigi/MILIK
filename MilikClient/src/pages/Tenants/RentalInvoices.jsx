@@ -1807,9 +1807,10 @@ const visibleInvoiceKeys = useMemo(
     currentCompany?.name ||
     currentCompany?.company ||
     "MILIK Property Management";
-  const companyPhone = currentCompany?.phone || currentCompany?.phoneNumber || currentCompany?.contactPhone || "";
+  const companyPhone = currentCompany?.phone || currentCompany?.phoneNo || currentCompany?.phoneNumber || currentCompany?.contactPhone || "";
   const companyEmail = currentCompany?.email || currentCompany?.companyEmail || currentCompany?.contactEmail || "";
-  const companyAddress = currentCompany?.address || currentCompany?.postalAddress || currentCompany?.location || "";
+  const companyTown = currentCompany?.town || currentCompany?.city || "";
+  const companyAddress = [currentCompany?.address || currentCompany?.postalAddress || currentCompany?.location || "", companyTown].filter(Boolean).join(", ");
   const companyLogo = currentCompany?.logo || "";
 
   const activeInvoiceSource = activeInvoice?.originalInvoice || {};
@@ -2097,159 +2098,123 @@ const visibleInvoiceKeys = useMemo(
 
     const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin';
 
+    const tenantCode = escapeHtml(sourceInvoice?.tenant?.tenantCode || '');
+    const tenantEmail = escapeHtml(sourceInvoice?.tenant?.email || invoice?.tenantEmail || '');
+    const statusRaw = String(invoice?.status || 'Issued').toLowerCase().replace(/\s+/g, '_');
+    const statusColors = { paid:'#16a34a', partially_paid:'#d97706', issued:'#2563eb', cancelled:'#6b7280', reversed:'#dc2626' };
+    const statusBg = { paid:'#dcfce7', partially_paid:'#fef3c7', issued:'#dbeafe', cancelled:'#f1f5f9', reversed:'#fee2e2' };
+    const statusColor = statusColors[statusRaw] || '#475569';
+    const statusBgColor = statusBg[statusRaw] || '#f1f5f9';
+    const formatAmt = (n) => Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
     return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>${escapeHtml(invoice?.id || "Invoice")}</title>
+  <title>Invoice ${escapeHtml(invoice?.id || '')}</title>
   <style>
-    @page { size: A4; margin: 12mm; }
-    * { box-sizing: border-box; }
-    body { font-family: Inter, Arial, sans-serif; margin: 0; color: #0f172a; background: #f8fafc; }
-    .page { background: #ffffff; border: 1px solid #dbe4ee; border-radius: 18px; padding: 28px; }
-    .header { display:flex; justify-content:space-between; gap:24px; border-bottom: 3px solid #0B3B2E; padding-bottom: 18px; margin-bottom: 18px; }
-    .brand-wrap { display:flex; gap:14px; align-items:flex-start; }
-    .logo { width:72px; height:72px; border-radius:16px; background:#0B3B2E; color:#fff; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:800; }
-    .logo img { width:72px; height:72px; object-fit:cover; border-radius:16px; border:1px solid #cbd5e1; }
-    .brand { font-size: 24px; font-weight: 800; color: #0B3B2E; letter-spacing: 0.01em; }
-    .subbrand { margin-top:4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #64748b; font-weight: 700; }
-    .company { margin-top:8px; font-size: 13px; color:#0f172a; line-height:1.6; }
-    .invoice-meta { min-width: 260px; background:#f8fafc; border:1px solid #dbe4ee; border-radius:16px; padding:14px 16px; }
-    .invoice-meta h2 { margin:0 0 10px 0; color:#0B3B2E; font-size: 18px; }
-    .meta-grid { display:grid; grid-template-columns: 110px 1fr; gap:8px 10px; font-size: 12px; }
-    .label { color:#64748b; font-weight:700; }
-    .value { color:#0f172a; font-weight:700; }
-    .section-grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom: 18px; }
-    .panel { border:1px solid #dbe4ee; border-radius:16px; padding:14px 16px; }
-    .panel h3 { margin:0 0 10px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color:#64748b; }
-    .panel .name { font-size:15px; font-weight:800; color:#0f172a; margin-bottom:6px; }
-    .panel .small { font-size: 12px; color:#334155; line-height:1.6; }
-    table { width:100%; border-collapse:collapse; }
-    th, td { border:1px solid #dbe4ee; padding:10px 12px; font-size:12px; vertical-align:top; }
-    th { background:#0B3B2E; color:#ffffff; text-align:left; font-weight:800; }
-    td.num { text-align:right; font-weight:700; }
-    .totals { width: 320px; margin-left:auto; margin-top: 14px; border-collapse: separate; border-spacing: 0; }
-    .totals td { border:1px solid #dbe4ee; padding:10px 12px; font-size:12px; }
-    .totals .label-cell { background:#f8fafc; font-weight:700; color:#475569; }
-    .totals .value-cell { text-align:right; font-weight:800; color:#0f172a; }
-    .totals .grand .label-cell, .totals .grand .value-cell { background:#ecfdf3; color:#0B3B2E; font-size:14px; }
-    .footer { margin-top:22px; display:grid; grid-template-columns: 1.2fr .8fr; gap:16px; }
-    .note-box, .signature-box { border:1px solid #dbe4ee; border-radius:16px; padding:14px 16px; min-height:110px; }
-    .note-box h4, .signature-box h4 { margin:0 0 10px 0; font-size:12px; text-transform:uppercase; letter-spacing:0.14em; color:#64748b; }
-    .note-box p, .signature-box p { margin:0; font-size:12px; color:#334155; line-height:1.7; }
-    .signature-line { margin-top: 34px; border-top: 1px solid #94a3b8; padding-top: 8px; font-size: 11px; color:#475569; }
-    .watermark { margin-top: 16px; text-align:center; font-size:10px; color:#94a3b8; letter-spacing:0.12em; text-transform:uppercase; }
+    @page { size: A4; margin: 14mm 16mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 13px; color: #0f172a; background: #fff; }
+    .header { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; padding-bottom:16px; gap:16px; }
+    .co-center { text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px; }
+    .logo-img { max-height:60px; max-width:150px; object-fit:contain; border-radius:6px; }
+    .logo-fb { width:56px; height:56px; border-radius:10px; background:#0B3B2E; color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:900; }
+    .co-center-name { font-size:18px; font-weight:900; color:#0f172a; letter-spacing:-0.01em; margin-top:6px; }
+    .co-center-sub { font-size:10px; color:#64748b; line-height:1.6; }
+    .inv-title { text-align:right; align-self:center; }
+    .inv-label { font-size:38px; font-weight:900; color:#0f172a; letter-spacing:-0.03em; line-height:1; }
+    .inv-number { font-size:14px; color:#64748b; margin-top:6px; }
+    .divider { height:2px; background:linear-gradient(90deg,#3b82f6,#93c5fd); border-radius:2px; margin:16px 0 20px; }
+    .body-grid { display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-bottom:20px; }
+    .sec-label { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.18em; color:#94a3b8; margin-bottom:12px; }
+    .fk { font-size:10px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; margin-top:8px; }
+    .fv { font-size:13px; font-weight:700; color:#0f172a; }
+    .fv.lg { font-size:16px; font-weight:800; }
+    .status-badge { display:inline-block; padding:4px 14px; border-radius:6px; font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:18px; }
+    table { width:100%; border-collapse:collapse; margin-bottom:16px; }
+    thead tr { background:#1e293b; }
+    th { padding:10px 14px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#fff; }
+    th.r { text-align:right; }
+    tbody tr { border-bottom:1px solid #f1f5f9; }
+    td { padding:11px 14px; font-size:13px; color:#0f172a; }
+    td.r { text-align:right; font-weight:600; }
+    .totals { width:280px; margin-left:auto; border-top:1px solid #e2e8f0; padding-top:10px; }
+    .t-row { display:flex; justify-content:space-between; padding:7px 0; font-size:13px; border-bottom:1px solid #f8fafc; }
+    .t-row .tl { color:#64748b; }
+    .t-row .tv { font-weight:700; }
+    .t-row.grand { border-top:2px solid #0f172a; border-bottom:none; padding-top:12px; margin-top:4px; }
+    .t-row.grand .tl, .t-row.grand .tv { font-size:15px; font-weight:800; color:#0f172a; }
+    .footer-note { margin-top:28px; padding-top:12px; border-top:1px solid #f1f5f9; font-size:11px; color:#94a3b8; }
     @media print {
-      body { background:#ffffff; }
-      .page { border:none; border-radius:0; padding:0; }
-      th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      thead tr { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     }
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="header">
-      <div class="brand-wrap">
-        <div class="logo">${companyLogo ? `<img src="${escapeHtml(companyLogo)}" alt="logo" />` : escapeHtml(companyDisplayName.slice(0, 1).toUpperCase())}</div>
-        <div>
-          <div class="brand">${escapeHtml(companyDisplayName)}</div>
-          <div class="subbrand">Official Tenant Invoice</div>
-          <div class="company">
-            ${companyAddress ? `${escapeHtml(companyAddress)}<br/>` : ""}
-            ${companyPhone ? `Phone: ${escapeHtml(companyPhone)}<br/>` : ""}
-            ${companyEmail ? `Email: ${escapeHtml(companyEmail)}` : ""}
-          </div>
-        </div>
-      </div>
-      <div class="invoice-meta">
-        <h2>Invoice</h2>
-        <div class="meta-grid">
-          <div class="label">Invoice #</div><div class="value">${escapeHtml(invoice?.id)}</div>
-          <div class="label">Booking / Invoice Date</div><div class="value">${escapeHtml(invoiceDateLabel)}</div>
-          <div class="label">Due Date</div><div class="value">${escapeHtml(dueDateLabel)}</div>
-          <div class="label">Inv Desc</div><div class="value">${escapeHtml(invoice?.invoiceDescription || deriveInvoiceDescription(sourceInvoice) || invoice?.period || "-")}</div>
-          <div class="label">Bill Type</div><div class="value">${escapeHtml(chargeTypeLabel)}</div>
-          <div class="label">Status</div><div class="value">${escapeHtml(invoice?.status || "Issued")}</div>
-          <div class="label">Prepared On</div><div class="value">${escapeHtml(preparedLabel)}</div>
-        </div>
-      </div>
+  <div class="header">
+    <div></div>
+    <div class="co-center">
+      ${companyLogo ? `<img class="logo-img" src="${escapeHtml(companyLogo)}" alt="logo" />` : `<div class="logo-fb">${escapeHtml(companyDisplayName.slice(0,1).toUpperCase())}</div>`}
+      <div class="co-center-name">${escapeHtml(companyDisplayName)}</div>
+      ${[companyAddress, companyPhone, companyEmail].filter(Boolean).length ? `<div class="co-center-sub">${[companyAddress, companyPhone, companyEmail].filter(Boolean).map(escapeHtml).join(' · ')}</div>` : ''}
     </div>
-
-    <div class="section-grid">
-      <div class="panel">
-        <h3>Bill To</h3>
-        <div class="name">${escapeHtml(invoice?.tenantName || "Tenant")}</div>
-        <div class="small">
-          Property: ${escapeHtml(invoice?.propertyName || "-")}<br/>
-          Unit: ${escapeHtml(invoice?.unitName || "-")}
-        </div>
-      </div>
-      <div class="panel">
-        <h3>Invoice Summary</h3>
-        <div class="small">
-          ${escapeHtml(invoice?.invoiceDescription || deriveInvoiceDescription(sourceInvoice) || `${chargeTypeLabel} charge`)}<br/>
-          ${hasTaxClassification ? `Tax code: ${escapeHtml(taxSnapshot?.taxCodeName || "Tax")} (${Number(taxSnapshot?.taxRate || 0)}%)` : "No tax applied to this invoice."}
-        </div>
-      </div>
+    <div class="inv-title">
+      <div class="inv-label">INVOICE</div>
+      <div class="inv-number"># ${escapeHtml(invoice?.id || '')}</div>
     </div>
+  </div>
 
-    <table>
-      <thead>
-        <tr>
-          <th style="width:64px;">#</th>
-          <th>Description</th>
-          <th style="width:180px; text-align:right;">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${lineRows}
-      </tbody>
-    </table>
+  <div class="divider"></div>
 
-    <table class="totals">
-      <tbody>
-        <tr>
-          <td class="label-cell">Subtotal</td>
-          <td class="value-cell">KES ${subtotal.toLocaleString()}</td>
-        </tr>
-        <tr>
-          <td class="label-cell">Tax</td>
-          <td class="value-cell">KES ${taxAmount.toLocaleString()}</td>
-        </tr>
-        <tr class="grand">
-          <td class="label-cell">Total Due</td>
-          <td class="value-cell">KES ${totalAmount.toLocaleString()}</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="note-box" style="margin-top:16px;">
-      <h4>Notes</h4>
-      <p>
-        Please settle the amount due by the stated due date. Late payments may attract a penalty charge. This invoice was generated by the MILIK Property Management System.
-      </p>
+  <div class="body-grid">
+    <div>
+      <div class="sec-label">Billed To</div>
+      <div class="fk">Tenant</div>
+      <div class="fv lg">${escapeHtml(invoice?.tenantName || 'Tenant')}</div>
+      ${tenantCode ? `<div class="fk">Tenant Code</div><div class="fv">${tenantCode}</div>` : ''}
+      ${tenantEmail ? `<div class="fk">Email</div><div class="fv">${tenantEmail}</div>` : ''}
+      <div class="fk">Property</div>
+      <div class="fv">${escapeHtml(invoice?.propertyName || '-')}</div>
+      <div class="fk">Unit</div>
+      <div class="fv">${escapeHtml(invoice?.unitName || '-')}</div>
     </div>
-
-    <div style="margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:20px;">
-      <div style="text-align:center;">
-        <div style="height:38px; border-bottom:1px solid #334155; margin-bottom:8px; display:flex; align-items:flex-end; justify-content:center; padding-bottom:4px;">
-          <span style="font-size:11px; font-weight:700; color:#0f172a;">${escapeHtml(preparedByName)}</span>
-        </div>
-        <div style="font-size:11px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.12em;">Prepared By</div>
-      </div>
-      <div style="text-align:center;">
-        <div style="height:38px; border-bottom:1px solid #334155; margin-bottom:8px;"></div>
-        <div style="font-size:11px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.12em;">Authorised By</div>
-        <div style="font-size:10px; color:#94a3b8; margin-top:3px;">${escapeHtml(companyDisplayName)}</div>
-      </div>
-      <div style="text-align:center;">
-        <div style="height:38px; border-bottom:1px solid #334155; margin-bottom:8px;"></div>
-        <div style="font-size:11px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.12em;">Tenant Acknowledgment</div>
-        <div style="font-size:10px; color:#94a3b8; margin-top:3px;">Signature &amp; Date</div>
-      </div>
+    <div>
+      <div class="sec-label">Invoice Details</div>
+      <div class="fk">Invoice Date</div>
+      <div class="fv">${escapeHtml(invoiceDateLabel)}</div>
+      <div class="fk">Due Date</div>
+      <div class="fv">${escapeHtml(dueDateLabel)}</div>
+      <div class="fk">Category</div>
+      <div class="fv">${escapeHtml(chargeTypeLabel)}</div>
+      ${hasTaxClassification ? `<div class="fk">Tax Code</div><div class="fv">${escapeHtml(taxSnapshot?.taxCodeName || 'Tax')} (${Number(taxSnapshot?.taxRate || 0)}%)</div>` : ''}
     </div>
+  </div>
 
-    <div class="watermark">Official Invoice · ${escapeHtml(companyDisplayName)} · Milik Property Management System</div>
+  <span class="status-badge" style="background:${statusBgColor};color:${statusColor};">${escapeHtml(invoice?.status || 'Issued')}</span>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="r">Amount (KES)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${lineItems.map((item) => `<tr><td>${escapeHtml(item.description)}</td><td class="r">${formatAmt(item.amount)}</td></tr>`).join('')}
+      ${hasTaxClassification && taxAmount > 0 ? `<tr><td style="color:#64748b">Tax (${Number(taxSnapshot?.taxRate||0)}%)</td><td class="r" style="color:#64748b">${formatAmt(taxAmount)}</td></tr>` : ''}
+    </tbody>
+  </table>
+
+  <div class="totals">
+    ${hasTaxClassification ? `<div class="t-row"><span class="tl">Subtotal</span><span class="tv">KES ${formatAmt(subtotal)}</span></div>
+    <div class="t-row"><span class="tl">Tax (${Number(taxSnapshot?.taxRate||0)}%)</span><span class="tv">KES ${formatAmt(taxAmount)}</span></div>` : ''}
+    <div class="t-row grand"><span class="tl">Total Due</span><span class="tv">KES ${formatAmt(totalAmount)}</span></div>
+  </div>
+
+  <div class="footer-note">
+    Please settle the amount due by ${escapeHtml(dueDateLabel)}. Late payments may attract a penalty charge.<br/>
+    Generated by ${escapeHtml(companyDisplayName)} · Milik Property Management System · ${escapeHtml(preparedLabel)}
   </div>
 </body>
 </html>`;

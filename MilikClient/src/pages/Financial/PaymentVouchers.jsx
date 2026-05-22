@@ -365,11 +365,13 @@ const PaymentVouchers = () => {
   const handlePrintVoucher = (voucher) => {
     const co = currentCompany || {};
     const coName = co.companyName || co.name || "MILIK";
-    const coInfo = [co.phone || co.phoneNumber, co.email || co.companyEmail, co.address || co.location]
-      .filter(Boolean).join(" • ");
+    const coAddr = [co.address || co.postalAddress || co.location || "", co.town || co.city || ""].filter(Boolean).join(", ");
+    const coPhone = co.phone || co.phoneNo || co.phoneNumber || co.contactPhone || "";
+    const coEmail = co.email || co.companyEmail || co.contactEmail || "";
+    const coInfo = [coAddr, coPhone, coEmail].filter(Boolean).join(" · ");
     const logoHtml = co.logo
-      ? `<img src="${String(co.logo)}" alt="logo" style="width:80px;height:80px;object-fit:cover;border-radius:12px;border:1px solid #cbd5e1;padding:4px;" />`
-      : `<div style="width:80px;height:80px;background:#0B3B2E;color:#fff;font-size:28px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:12px">${String(coName).slice(0,1).toUpperCase()}</div>`;
+      ? `<img src="${String(co.logo)}" alt="logo" style="max-height:60px;max-width:150px;object-fit:contain;border-radius:6px;" />`
+      : `<div style="width:56px;height:56px;background:#0B3B2E;color:#fff;font-size:22px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:10px;">${String(coName).slice(0,1).toUpperCase()}</div>`;
 
     const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     const fmtAmt = (n) => `KES ${Number(n||0).toLocaleString("en-KE",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -395,14 +397,18 @@ const PaymentVouchers = () => {
 <title>Payment Voucher — ${esc(voucher.voucherNo)}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px}
-  .hdr{display:grid;grid-template-columns:96px 1fr 160px;align-items:center;border-bottom:3px solid #0B3B2E;padding-bottom:14px;margin-bottom:20px;gap:12px}
-  .co-name{font-size:20px;font-weight:900;color:#0B3B2E}
-  .co-sub{font-size:10px;color:#64748b;margin-top:3px;line-height:1.5}
-  .doc-type{font-size:14px;font-weight:800;color:#0B3B2E;text-transform:uppercase;letter-spacing:.05em;text-align:right}
-  .doc-no{font-family:monospace;font-size:15px;font-weight:700;text-align:right;margin-top:4px}
-  .doc-date{font-size:10px;color:#64748b;text-align:right;margin-top:3px}
-  .status-badge{display:inline-block;padding:3px 12px;border-radius:999px;font-size:10px;font-weight:700;float:right;margin-top:6px;background:${statusBg};color:${statusColor}}
+  body{font-family:'Helvetica Neue',Arial,sans-serif;color:#0f172a;padding:0}
+  .page{max-width:794px;margin:0 auto;padding:32px 40px}
+  .hdr{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding-bottom:16px;gap:16px}
+  .co-center{text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .co-center-name{font-size:18px;font-weight:900;color:#0f172a;letter-spacing:-0.01em;margin-top:6px}
+  .co-sub{font-size:10px;color:#64748b;line-height:1.6}
+  .doc-title-wrap{text-align:right;align-self:center}
+  .doc-type{font-size:28px;font-weight:900;color:#0f172a;letter-spacing:-0.03em;line-height:1}
+  .doc-no{font-size:13px;color:#64748b;margin-top:6px}
+  .doc-date{font-size:10px;color:#64748b;margin-top:3px}
+  .divider{height:2px;background:linear-gradient(90deg,#3b82f6,#93c5fd);border-radius:2px;margin:16px 0 20px}
+  .status-badge{display:inline-block;padding:4px 14px;border-radius:6px;font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:16px;background:${statusBg};color:${statusColor}}
   .fields-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:16px}
   .field{background:#fff;padding:10px 12px}
   .field-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:3px}
@@ -423,19 +429,23 @@ const PaymentVouchers = () => {
   @media print{body{padding:12px 14px}@page{size:A4 portrait;margin:12mm}}
 </style></head>
 <body>
+  <div class="page">
   <div class="hdr">
-    <div>${logoHtml}</div>
-    <div style="text-align:center">
-      <div class="co-name">${esc(coName)}</div>
+    <div></div>
+    <div class="co-center">
+      ${logoHtml}
+      <div class="co-center-name">${esc(coName)}</div>
       ${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}
     </div>
-    <div>
-      <div class="doc-type">Payment Voucher</div>
-      <div class="doc-no">${esc(voucher.voucherNo)}</div>
+    <div class="doc-title-wrap">
+      <div class="doc-type">PAYMENT VOUCHER</div>
+      <div class="doc-no"># ${esc(voucher.voucherNo)}</div>
       <div class="doc-date">${fmtDate(voucher.dueDate)}</div>
-      <div class="status-badge">${esc(String(voucher.status||"").toUpperCase())}</div>
     </div>
   </div>
+
+  <div class="divider"></div>
+  <div class="status-badge">${esc(String(voucher.status||"").toUpperCase())}</div>
 
   <div class="amt-box">
     <div class="amt-label">Amount</div>
@@ -481,6 +491,7 @@ const PaymentVouchers = () => {
   </div>
 
   <div class="notice">Official payment voucher generated by ${esc(coName)} • Printed: ${esc(printedOn)}</div>
+  </div>
 </body></html>`);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 450);

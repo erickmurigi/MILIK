@@ -82,9 +82,6 @@ const MENU_PERMISSION_MAP = {
   "carwash-payments": { resource: "carwash-payments", action: "view", moduleKey: "carwash" },
   "carwash-deposits": { resource: "carwash-deposits", action: "view", moduleKey: "carwash" },
   "carwash-expenses": { resource: "carwash-expenses", action: "view", moduleKey: "carwash" },
-  "carwash-cashbooks": { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
-  "carwash-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
-  "carwash-financials": { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
   "carwash-staff": { resource: "carwash-staff", action: "view", moduleKey: "carwash" },
   "carwash-reports": { resource: "carwash-reports", action: "view", moduleKey: "carwash" },
   "carwash-service-report": { resource: "carwash-reports", action: "view", moduleKey: "carwash" },
@@ -92,10 +89,15 @@ const MENU_PERMISSION_MAP = {
   "carwash-commissions": { resource: "carwash-commissions", action: "view", moduleKey: "carwash" },
   "carwash-loyalty": { resource: "carwash-loyalty", action: "view", moduleKey: "carwash" },
   "carwash-branches": { resource: "carwash-branches", action: "view", moduleKey: "carwash" },
-  "hr-financials":          { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
-  "hr-chart-of-accounts":   { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
-  "sale-financials":        { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
-  "sale-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: GL_ACCESS_MODULES },
+  "acc-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: "accounts" },
+  "acc-journals":          { resource: "journals",        action: "view", moduleKey: "accounts" },
+  "acc-payment-vouchers":  { resource: "paymentVouchers", action: "view", moduleKey: "accounts" },
+  "acc-expenses":          { resource: "expenses",        action: "view", moduleKey: "accounts" },
+  "acc-service-providers": { resource: "expenses",        action: "view", moduleKey: "accounts" },
+  "acc-trial-balance":     { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-income-statement":  { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-balance-sheet":     { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-tax-reports":       { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "sale-dashboard": { resource: "sale-dashboard", action: "view", moduleKey: "propertySale" },
   "sale-listings": { resource: "sale-listings", action: "view", moduleKey: "propertySale" },
   "sale-buyers": { resource: "sale-buyers", action: "view", moduleKey: "propertySale" },
@@ -345,6 +347,7 @@ const TopToolbar = ({
 
   const isSystemAdminWorkspace = currentWorkspace === WORKSPACE_IDS.SYSTEM_ADMIN;
   const isCompanySetupWorkspace = currentWorkspace === WORKSPACE_IDS.COMPANY_SETUP;
+  const isAccountsWorkspace = currentWorkspace === WORKSPACE_IDS.ACCOUNTS;
   const isCarWashWorkspace = currentWorkspace === WORKSPACE_IDS.CARWASH;
   const isPropertySaleWorkspace = currentWorkspace === WORKSPACE_IDS.PROPERTY_SALE;
   const isHumanResourceWorkspace = currentWorkspace === WORKSPACE_IDS.HUMAN_RESOURCE;
@@ -383,9 +386,6 @@ const TopToolbar = ({
         "carwash-payments": "/carwash/payments",
         "carwash-deposits": "/carwash/deposits",
         "carwash-expenses": "/carwash/expenses",
-        "carwash-cashbooks": "/carwash/cashbooks",
-        "carwash-chart-of-accounts": "/carwash/chart-of-accounts",
-        "carwash-financials": "/carwash/financials",
         "carwash-staff": "/carwash/staff",
         "carwash-reports": "/carwash/reports",
         "carwash-service-report": "/carwash/reports/services",
@@ -410,8 +410,6 @@ const TopToolbar = ({
         "sale-payments": "/sale/payments",
         "sale-commissions": "/sale/commissions",
         "sale-reports": "/sale/reports",
-        "sale-financials": "/sale/financials",
-        "sale-chart-of-accounts": "/sale/chart-of-accounts",
         documentation: "/help/documentation",
         support: "/help/support",
         about: "/help/about",
@@ -444,12 +442,29 @@ const TopToolbar = ({
         "hr-appraisals":            "/hr/appraisals",
         "hr-kpis":                  "/hr/appraisals/kpis",
         // Financials — Phase 6 (live)
-        "hr-financials":            "/hr/financials",
-        "hr-chart-of-accounts":     "/hr/chart-of-accounts",
         // Setup — Phase 1 + 2 (live)
         "hr-setup":                 "/hr/setup",
         "hr-setup-leave-types":     "/hr/leave/types",
         // Help
+        documentation: "/help/documentation",
+        support:       "/help/support",
+        about:         "/help/about",
+      };
+    }
+
+    if (isAccountsWorkspace) {
+      return {
+        "acc-dashboard":         "/accounts/dashboard",
+        "acc-chart-of-accounts": "/accounts/chart-of-accounts",
+        "acc-journals":          "/accounts/journals",
+        "acc-payment-vouchers":  "/accounts/payment-vouchers",
+        "acc-petty-cash":        "/accounts/petty-cash",
+        "acc-expenses":          "/accounts/expenses",
+        "acc-service-providers": "/accounts/service-providers",
+        "acc-trial-balance":     "/accounts/trial-balance",
+        "acc-income-statement":  "/accounts/income-statement",
+        "acc-balance-sheet":     "/accounts/balance-sheet",
+        "acc-tax-reports":       "/accounts/tax-reports",
         documentation: "/help/documentation",
         support:       "/help/support",
         about:         "/help/about",
@@ -476,11 +491,6 @@ const TopToolbar = ({
       "tenant-take-on-balances": "/tenants/take-on-balances",
       "tenant-financing": "/tenants/financing",
       "tenant-journals": "/tenants/journals",
-      "payment-vouchers": "/financial/payment-vouchers",
-      "petty-cash": "/financial/petty-cash",
-      journals: "/financial/journals",
-      "service-providers": "/financial/service-providers",
-      "ledger-entries": "/financial/ledger-entries",
       "rental-invoices-list": "/invoices/rental",
       "new-invoice": "/invoices/new",
       "credit-notes": "/invoices/notes",
@@ -497,24 +507,17 @@ const TopToolbar = ({
       "tenant-prepayments": "/receipts/prepayments",
       "instant-receipts": "/receipts/instant",
       "landlord-receipt": "/receipts/landlord",
-      "expense-requisition": "/expenses/requisition",
-      "expenses-service-providers": "/financial/service-providers",
       "landlord-standing-orders": "/landlords/standing-orders",
       "landlord-advancement": "/landlords/advancement",
       "commission-landlord-statement": "/financial/landlord-statement",
       "processed-statements": "/landlord/processed-statements",
       "landlord-statements": "/landlord/statements",
-      "chart-of-accounts": "/financial/chart-of-accounts",
       "rental-collection": "/reports/rental-collection",
       "paid-balance": "/reports/paid-balance",
       "aged-analysis": "/reports/aged-analysis",
       "commission-reports": "/reports/commissions",
       "property-income-summary": "/reports/property-income-summary",
       "mri-tax-summary": "/reports/mri-tax-summary",
-      "trial-balance": "/reports/trial-balance",
-      "income-statement": "/reports/income-statement",
-      "balance-sheet": "/reports/balance-sheet",
-      "tax-reports": "/reports/tax-reports",
       settings: "/settings",
       users: "/users",
       backup: "/tools/backup",
@@ -522,29 +525,11 @@ const TopToolbar = ({
       "meter-readings": "/meter-readings",
       maintenance: "/maintenances",
       inspections: "/inspections",
-      "carwash-dashboard": "/carwash/dashboard",
-      "carwash-jobs": "/carwash/jobs",
-      "carwash-services": "/carwash/services",
-      "carwash-payments": "/carwash/payments",
-      "carwash-deposits": "/carwash/deposits",
-      "carwash-expenses": "/carwash/expenses",
-      "carwash-cashbooks": "/carwash/cashbooks",
-      "carwash-chart-of-accounts": "/carwash/chart-of-accounts",
-      "carwash-financials": "/carwash/financials",
-      "carwash-staff": "/carwash/staff",
-      "carwash-reports": "/carwash/reports",
-      "carwash-service-report": "/carwash/reports/services",
-      "carwash-staff-report": "/carwash/reports/staff",
-      "carwash-commissions": "/carwash/commissions",
-      "carwash-loyalty": "/carwash/loyalty",
-      "carwash-branches": "/carwash/branches",
-      "sale-financials": "/sale/financials",
-      "sale-chart-of-accounts": "/sale/chart-of-accounts",
       documentation: "/help/documentation",
       support: "/help/support",
       about: "/help/about",
     };
-  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const mainMenuItems = useMemo(() => {
     if (isSystemAdminWorkspace) {
@@ -627,9 +612,6 @@ const TopToolbar = ({
             { id: "sale-payments", label: "Payments", icon: FaMoneyBillWave },
             { id: "sale-commissions", label: "Commissions", icon: FaChartLine },
             { id: "sale-reports", label: "Sales Reports", icon: FaFileAlt },
-            { type: "separator" },
-            { id: "sale-financials", label: "Financials", icon: FaBook },
-            { id: "sale-chart-of-accounts", label: "Chart of Accounts", icon: FaLayerGroup },
           ],
         },
       ];
@@ -697,16 +679,6 @@ const TopToolbar = ({
           ],
         },
         {
-          id: "hr-financials",
-          label: "Financials",
-          icon: FaMoneyBillWave,
-          submenu: [
-            { id: "hr-financials",         label: "Payroll Journals & Accounts", icon: FaBook },
-            { type: "separator" },
-            { id: "hr-chart-of-accounts",  label: "Chart of Accounts",           icon: FaLayerGroup },
-          ],
-        },
-        {
           id: "hr-config",
           label: "Setup",
           icon: FaCog,
@@ -726,6 +698,55 @@ const TopToolbar = ({
           ],
         },
       ];
+    }
+
+    if (isAccountsWorkspace) {
+      const accountsItems = [
+        {
+          id: "acc-ledger",
+          label: "General Ledger",
+          icon: FaBook,
+          submenu: [
+            { id: "acc-dashboard",         label: "Accounts Overview",  icon: FaChartLine },
+            { id: "acc-chart-of-accounts", label: "Chart of Accounts",  icon: FaLayerGroup },
+            { id: "acc-journals",          label: "Journal Entries",    icon: FaBook },
+          ],
+        },
+        {
+          id: "acc-payables",
+          label: "Payables",
+          icon: FaCreditCard,
+          submenu: [
+            { id: "acc-payment-vouchers",  label: "Payment Vouchers",     icon: FaCreditCard },
+            { id: "acc-petty-cash",        label: "Petty Cash",           icon: FaWallet },
+            { type: "separator" },
+            { id: "acc-expenses",          label: "Expense Requisitions", icon: FaFileInvoice },
+            { id: "acc-service-providers", label: "Service Providers",    icon: FaCog },
+          ],
+        },
+        {
+          id: "acc-statements",
+          label: "Statements",
+          icon: FaFileAlt,
+          submenu: [
+            { id: "acc-trial-balance",    label: "Trial Balance",         icon: FaBook },
+            { id: "acc-income-statement", label: "Income Statement (P&L)", icon: FaFileAlt },
+            { id: "acc-balance-sheet",    label: "Balance Sheet",         icon: FaBalanceScale },
+            { id: "acc-tax-reports",      label: "Tax Reports",           icon: FaCalculator },
+          ],
+        },
+        {
+          id: "help",
+          label: "Help",
+          icon: FaInfoCircle,
+          submenu: [
+            { id: "documentation", label: "Documentation", icon: FaBook },
+            { id: "support",       label: "Support",       icon: FaHeadset },
+            { id: "about",         label: "About",         icon: FaInfoCircle },
+          ],
+        },
+      ];
+      return filterMenuByPermissions(accountsItems, currentUser, activeCompanyContext);
     }
 
     if (isCarWashWorkspace) {
@@ -749,16 +770,6 @@ const TopToolbar = ({
             { id: "carwash-payments", label: "Payments", icon: FaMoneyBillWave },
             { id: "carwash-deposits", label: "Deposits", icon: FaCoins },
             { id: "carwash-expenses", label: "Expenses", icon: FaFileInvoice },
-          ],
-        },
-        {
-          id: "carwash-accounts",
-          label: "Accounts",
-          icon: FaBook,
-          submenu: [
-            { id: "carwash-financials", label: "Financials", icon: FaChartLine },
-            { id: "carwash-cashbooks", label: "Cashbooks", icon: FaWallet },
-            { id: "carwash-chart-of-accounts", label: "Chart of Accounts", icon: FaLayerGroup },
           ],
         },
         {
@@ -843,24 +854,18 @@ const TopToolbar = ({
       },
       {
         id: "financial",
-        label: "Financial Accounts",
-        icon: FaMoneyBillWave,
+        label: "Billing",
+        icon: FaFileInvoice,
         submenu: [
           { id: "rental-invoicing", label: "Rental Invoicing", hasSubmenu: true, icon: FaFileInvoice, category: "invoicing", categoryColor: "#4F46E5" },
           { id: "rental-receipting", label: "Rental Receipting", hasSubmenu: true, icon: FaReceipt, category: "receipting", categoryColor: "#10B981" },
           { type: "separator" },
-          { id: "payment-vouchers", label: "Payment Vouchers", icon: FaCreditCard, category: "expenses", categoryColor: "#FF8C00" },
-          { id: "petty-cash", label: "Petty Cash", icon: FaWallet, category: "expenses", categoryColor: "#FF8C00" },
-          { id: "expenses", label: "Expenses", hasSubmenu: true, icon: FaMoneyBillWave, category: "expenses", categoryColor: "#FF8C00" },
           { id: "landlord-payments", label: "Landlord Payments", hasSubmenu: true, icon: FaHandHolding, category: "landlord", categoryColor: "#8B5CF6" },
-          { type: "separator" },
-          { id: "chart-of-accounts", label: "Chart of Accounts", icon: FaBook, category: "ledger", categoryColor: "#0B3B2E" },
-          { id: "journals", label: "Journals", icon: FaBook, category: "ledger", categoryColor: "#0B3B2E" },
         ],
       },
       {
         id: "reports",
-        label: "Financial Reports",
+        label: "Reports",
         icon: FaChartBar,
         submenu: [
           { id: "rental-collection", label: "Rental Collection Report", icon: FaChartBar },
@@ -870,10 +875,6 @@ const TopToolbar = ({
           { id: "aged-analysis", label: "Aged Analysis", icon: FaChartPie },
           { type: "separator" },
           { id: "commission-reports", label: "Commission Reports", icon: FaMoneyBillWave },
-          { id: "trial-balance", label: "Trial Balance", icon: FaBook },
-          { id: "income-statement", label: "Income Statement", icon: FaFileAlt },
-          { id: "balance-sheet", label: "Balance Sheet", icon: FaBalanceScale },
-          { id: "tax-reports", label: "Tax Reports", icon: FaCalculator },
         ],
       },
       {
@@ -930,14 +931,7 @@ const TopToolbar = ({
         if (item.id === "financial") {
           return {
             ...item,
-            label: "Finance",
-            submenu: item.submenu
-              .filter((subItem) => subItem.id !== "landlord-payments")
-              .map((subItem) => {
-                if (subItem.id === "payment-vouchers") return { ...subItem, label: "Outgoing Payments" };
-                if (subItem.id === "expenses") return { ...subItem, label: "Expenses & Suppliers" };
-                return subItem;
-              }),
+            submenu: item.submenu.filter((subItem) => subItem.id !== "landlord-payments"),
           };
         }
 
@@ -966,10 +960,10 @@ const TopToolbar = ({
       });
 
     return filterMenuByPermissions(items, currentUser, activeCompanyContext);
-  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const nestedSubmenus = useMemo(() => {
-    if (isSystemAdminWorkspace || isCompanySetupWorkspace || isCarWashWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace) {
+    if (isSystemAdminWorkspace || isCompanySetupWorkspace || isAccountsWorkspace || isCarWashWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace) {
       return {};
     }
 
@@ -991,14 +985,10 @@ const TopToolbar = ({
         { id: "instant-receipts", label: "Instant Receipts", icon: FaReceipt },
         { id: "landlord-receipt", label: "Landlord Receipts", icon: FaReceipt },
       ],
-      expenses: [
-        { id: "expense-requisition", label: "Expense Requisition", icon: FaFileInvoice },
-        { id: "expenses-service-providers", label: "Service Providers", icon: FaCog },
-      ],
       "landlord-payments": [
+        { id: "commission-landlord-statement", label: "Commissions & LL Statement", icon: FaFileAlt },
         { id: "landlord-standing-orders", label: "Landlord Standing Orders", icon: FaCalendarAlt },
         { id: "landlord-advancement", label: "Landlord Advancement", icon: FaMoneyBillWave },
-        { id: "commission-landlord-statement", label: "Commissions & LL Statement", icon: FaFileAlt },
         { id: "processed-statements", label: "Processed Statements (Legacy)", icon: FaCheckCircle },
       ],
     };
@@ -1015,11 +1005,6 @@ const TopToolbar = ({
           if (item.id === "tenant-prepayments") return { ...item, label: "Prepayments & Credits" };
           return item;
         });
-      submenus.expenses = submenus.expenses.map((item) => {
-        if (item.id === "expense-requisition") return { ...item, label: "Expense Requests" };
-        if (item.id === "expenses-service-providers") return { ...item, label: "Suppliers" };
-        return item;
-      });
       delete submenus["landlord-payments"];
     }
 
@@ -1039,7 +1024,7 @@ const TopToolbar = ({
     });
 
     return submenus;
-  }, [activeCompanyContext, currentUser, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const handleMenuItemClick = (menuId) => {
     const route = routeConfig[menuId];
@@ -1068,11 +1053,9 @@ const TopToolbar = ({
     help: { color: "#8B5CF6", label: "Help & Support", icon: FaInfoCircle },
     "rental-invoicing": { color: "#4F46E5", label: "Rental Invoicing", icon: FaFileInvoice },
     "rental-receipting": { color: "#10B981", label: "Rental Receipting", icon: FaReceipt },
-    expenses: { color: "#FF8C00", label: "Expenses", icon: FaMoneyBillWave },
     "landlord-payments": { color: "#8B5CF6", label: "Landlord Payments", icon: FaHandHolding },
     "carwash-operations": { color: "#0B3B2E", label: "Operations", icon: FaCar },
     "carwash-finance": { color: "#0B3B2E", label: "Finance", icon: FaMoneyBillWave },
-    "carwash-accounts": { color: "#0B3B2E", label: "Accounts", icon: FaBook },
     "carwash-reporting": { color: "#0B3B2E", label: "Reports", icon: FaChartBar },
     "carwash-setup": { color: "#0B3B2E", label: "Setup", icon: FaCog },
     "sale-operations": { color: "#027333", label: "Operations", icon: FaHandshake },
@@ -1083,8 +1066,10 @@ const TopToolbar = ({
     "hr-payroll":     { color: "#7c3aed", label: "Payroll",     icon: FaMoneyBillWave },
     "hr-reports":     { color: "#059669", label: "Reports",     icon: FaChartBar },
     "hr-appraisals":  { color: "#b45309", label: "Appraisals",  icon: FaChartLine },
-    "hr-financials":  { color: "#0B3B2E", label: "Financials",  icon: FaMoneyBillWave },
     "hr-config":      { color: "#FF8C00", label: "Setup",       icon: FaCog },
+    "acc-ledger":     { color: "#0B3B2E", label: "General Ledger",        icon: FaBook },
+    "acc-payables":   { color: "#b45309", label: "Payables & Expenses",   icon: FaCreditCard },
+    "acc-statements": { color: "#0f766e", label: "Financial Statements",  icon: FaFileAlt },
   };
 
   const ProfessionalDropdown = ({ menuId, items }) => {
@@ -1397,7 +1382,33 @@ const TopToolbar = ({
           </button>
         </div>
         )}
-        {!isCarWashWorkspace && !isPropertySaleWorkspace && !isHumanResourceWorkspace && (
+        {isAccountsWorkspace && (
+        <div className="flex items-center space-x-1 px-1.5 py-0 text-[11px]">
+          <button
+            onClick={() => navigate("/accounts/journals")}
+            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            title="New Journal Entry"
+          >
+            + Journal
+          </button>
+          <button
+            onClick={() => navigate("/accounts/payment-vouchers")}
+            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            title="New Payment Voucher"
+          >
+            + Voucher
+          </button>
+          <div className={`h-5 w-px ${darkMode ? "bg-gray-600" : "bg-gray-300"} mx-1`} />
+          <button
+            onClick={() => window.location.reload()}
+            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            title="Refresh"
+          >
+            <FaRedoAlt aria-hidden="true" />
+          </button>
+        </div>
+        )}
+        {!isAccountsWorkspace && !isCarWashWorkspace && !isPropertySaleWorkspace && !isHumanResourceWorkspace && (
         <div className="flex items-center space-x-1 px-1.5 py-0 text-[11px]">
           <button
             onClick={() => navigate("/tenant/new")}

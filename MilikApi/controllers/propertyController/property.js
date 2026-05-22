@@ -850,14 +850,15 @@ export const getProperties = async (req, res, next) => {
     if (lrNumber) query.lrNumber = { $regex: lrNumber, $options: "i" };
     if (landlord) query["landlords.landlordId"] = landlord;
 
-    const properties = await Property.find(query)
-      .populate("landlords.landlordId", "_id landlordName firstName lastName")
-      .limit(limitNumber)
-      .skip((pageNumber - 1) * limitNumber)
-      .sort({ createdAt: -1 })
-      .lean();
-
-    const total = await Property.countDocuments(query);
+    const [properties, total] = await Promise.all([
+      Property.find(query)
+        .populate("landlords.landlordId", "_id landlordName firstName lastName")
+        .limit(limitNumber)
+        .skip((pageNumber - 1) * limitNumber)
+        .sort({ createdAt: -1 })
+        .lean(),
+      Property.countDocuments(query),
+    ]);
 
     res.json({
       success: true,

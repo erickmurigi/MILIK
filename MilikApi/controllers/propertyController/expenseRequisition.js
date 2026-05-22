@@ -336,8 +336,8 @@ export const getExpenseRequisitions = async (req, res, next) => {
       ];
     }
 
-    const rows = await populateQuery(ExpenseRequisition.find(filter).sort({ createdAt: -1 }));
-    res.status(200).json(await rows);
+    const rows = await populateQuery(ExpenseRequisition.find(filter).sort({ createdAt: -1 })).lean();
+    res.status(200).json(rows);
   } catch (error) {
     next(error);
   }
@@ -451,8 +451,8 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
     }
 
     await row.save();
-    const populated = await populateQuery(ExpenseRequisition.findById(row._id));
-    res.status(200).json(await populated);
+    const populated = await populateQuery(ExpenseRequisition.findById(row._id)).lean();
+    res.status(200).json(populated);
   } catch (error) {
     next(error);
   }

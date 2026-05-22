@@ -81,6 +81,7 @@ const ExpenseRequisition = () => {
   const canCreate  = hasCompanyPermission(currentUser, currentCompany, "expenses", "create", "accounts");
   const canUpdate  = hasCompanyPermission(currentUser, currentCompany, "expenses", "update", "accounts");
   const canDelete  = hasCompanyPermission(currentUser, currentCompany, "expenses", "delete", "accounts");
+  const canApprove = hasCompanyPermission(currentUser, currentCompany, "expenses", "approve", "accounts");
 
   const _uid = currentUser?._id || currentUser?.id;
   const _erDraftKey = (currentCompany?._id && _uid) ? `milik:draft:expense-req:${currentCompany._id}:${_uid}` : null;
@@ -109,12 +110,8 @@ const ExpenseRequisition = () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
-      const [reqs, serviceProviders] = await Promise.all([
-        getExpenseRequisitions({ business: currentCompany._id, company: currentCompany._id, ...filters, search: debouncedSearch }),
-        getServiceProviders({ business: currentCompany._id, company: currentCompany._id }),
-      ]);
+      const reqs = await getExpenseRequisitions({ business: currentCompany._id, company: currentCompany._id, ...filters, search: debouncedSearch });
       setRows(Array.isArray(reqs) ? reqs : []);
-      setProviders(Array.isArray(serviceProviders) ? serviceProviders : []);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load expense requisitions");
     } finally {
@@ -125,6 +122,13 @@ const ExpenseRequisition = () => {
   useEffect(() => {
     loadRows();
   }, [currentCompany?._id, debouncedSearch, filters.status]);
+
+  useEffect(() => {
+    if (!currentCompany?._id) return;
+    getServiceProviders({ business: currentCompany._id, company: currentCompany._id })
+      .then((data) => setProviders(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [currentCompany?._id]);
 
   const filteredRows = useMemo(
     () =>
@@ -275,7 +279,6 @@ const ExpenseRequisition = () => {
       const deletedId = String(response?.deletedId || row._id || "");
       setRows((prev) => prev.filter((item) => String(item?._id || "") !== deletedId));
       setSelectedIds((prev) => prev.filter((id) => String(id || "") !== deletedId));
-      await loadRows();
       toast.success(response?.message || "Expense requisition deleted");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to delete expense requisition");
@@ -385,24 +388,30 @@ const ExpenseRequisition = () => {
 
         {rowStatus === "submitted" && (
           <>
-            <button
-              onClick={() => handleStatus(row, "approved")}
-              className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700"
-            >
-              <FaCheck /> Approve
-            </button>
-            <button
-              onClick={() => handleStatus(row, "rejected")}
-              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700"
-            >
-              <FaTimes /> Reject
-            </button>
-            <button
-              onClick={() => handleStatus(row, "draft")}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700"
-            >
-              <FaUndo /> Recall
-            </button>
+            {canApprove && (
+              <button
+                onClick={() => handleStatus(row, "approved")}
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700"
+              >
+                <FaCheck /> Approve
+              </button>
+            )}
+            {canApprove && (
+              <button
+                onClick={() => handleStatus(row, "rejected")}
+                className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700"
+              >
+                <FaTimes /> Reject
+              </button>
+            )}
+            {canUpdate && (
+              <button
+                onClick={() => handleStatus(row, "draft")}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700"
+              >
+                <FaUndo /> Recall
+              </button>
+            )}
           </>
         )}
 

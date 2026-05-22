@@ -1000,7 +1000,8 @@ export const getStatementsByBusiness = async (req, res) => {
         { path: "reversedSourceStatement", select: "statementNumber status approvedAt" },
         { path: "reversedBy", select: "username email surname otherNames" },
       ])
-      .sort({ closedAt: -1 });
+      .sort({ closedAt: -1 })
+      .lean();
 
     res.status(200).json({ success: true, count: statements.length, statements });
   } catch (error) {

@@ -158,21 +158,13 @@ export const calculateTotalMonthlyAmount = async (unitOrId) => {
 const updatePropertyUnitCounts = async (propertyId) => {
   if (!propertyId) return;
 
-  const totalUnits = await Unit.countDocuments({ property: propertyId });
-  const occupiedUnits = await Unit.countDocuments({
-    property: propertyId,
-    status: "occupied",
-  });
-  const vacantUnits = await Unit.countDocuments({
-    property: propertyId,
-    status: "vacant",
-  });
+  const [totalUnits, occupiedUnits, vacantUnits] = await Promise.all([
+    Unit.countDocuments({ property: propertyId }),
+    Unit.countDocuments({ property: propertyId, status: "occupied" }),
+    Unit.countDocuments({ property: propertyId, status: "vacant" }),
+  ]);
 
-  await Property.findByIdAndUpdate(propertyId, {
-    totalUnits,
-    occupiedUnits,
-    vacantUnits,
-  });
+  await Property.findByIdAndUpdate(propertyId, { totalUnits, occupiedUnits, vacantUnits });
 };
 
 const buildEffectiveUnitPayload = ({ unitDoc, currentTenant = null, totalMonthlyAmount = null } = {}) => {
@@ -556,7 +548,8 @@ export const getUnits = async (req, res, next) => {
         .populate("lastTenant", "name phone status")
         .sort({ createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
-        .limit(limitNum),
+        .limit(limitNum)
+        .lean(),
       Unit.countDocuments(filter),
     ]);
 
@@ -583,24 +576,52 @@ export const getUnits = async (req, res, next) => {
       });
     });
 
-    const unitsWithExtras = await Promise.all(
+    // First pass: resolve tenants + compute amounts (no DB writes yet)
+    const unitPayloads = await Promise.all(
       units.map(async (unit) => {
         const totalMonthlyAmount = await calculateTotalMonthlyAmount(unit);
         const candidateTenants = tenantMap.get(String(unit._id)) || [];
         const currentTenant = pickPrimaryCurrentTenant(unit._id, candidateTenants) || null;
-
-        if (currentTenant?._id) {
-          await persistOccupiedUnitStateIfNeeded(unit, currentTenant);
-        } else {
-          await persistVacantUnitStateIfNeeded(unit);
-        }
-
-        return buildEffectiveUnitPayload({
-          unitDoc: unit,
-          currentTenant,
-          totalMonthlyAmount,
-        });
+        return { unit, currentTenant, totalMonthlyAmount };
       })
+    );
+
+    // Second pass: batch stale-state corrections (bulkWrite + per-property count refresh)
+    const bulkOps = [];
+    const dirtyPropertyIds = new Set();
+
+    for (const { unit, currentTenant } of unitPayloads) {
+      const rawStatus = normalizeUnitStatus(unit?.status || "vacant", "vacant");
+      const propertyId = String(unit.property?._id || unit.property || "");
+
+      if (currentTenant?._id) {
+        if (rawStatus !== "occupied" || unit?.isVacant !== false || unit?.vacantSince) {
+          bulkOps.push({
+            updateOne: {
+              filter: { _id: unit._id },
+              update: { $set: { status: "occupied", isVacant: false, vacantSince: null, daysVacant: 0, lastTenant: currentTenant._id } },
+            },
+          });
+          if (propertyId) dirtyPropertyIds.add(propertyId);
+        }
+      } else if (rawStatus === "occupied") {
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: unit._id },
+            update: { $set: { status: "vacant", isVacant: true, vacantSince: unit.vacantSince || new Date(), daysVacant: 0 } },
+          },
+        });
+        if (propertyId) dirtyPropertyIds.add(propertyId);
+      }
+    }
+
+    if (bulkOps.length > 0) {
+      await Unit.bulkWrite(bulkOps, { ordered: false });
+      await Promise.all([...dirtyPropertyIds].map((pid) => updatePropertyUnitCounts(pid)));
+    }
+
+    const unitsWithExtras = unitPayloads.map(({ unit, currentTenant, totalMonthlyAmount }) =>
+      buildEffectiveUnitPayload({ unitDoc: unit, currentTenant, totalMonthlyAmount })
     );
 
     return res.status(200).json({

@@ -903,8 +903,8 @@ const applyDraftOrPreDisbursementUpdates = async ({ row, req, businessId }) => {
 
 const persistAndRespond = async (res, row, statusCode = 200) => {
   await row.save();
-  const populated = await populateQuery(LandlordAdvancement.findById(row._id));
-  res.status(statusCode).json(serializeAdvancement(await populated));
+  const populated = await populateQuery(LandlordAdvancement.findById(row._id)).lean();
+  res.status(statusCode).json(serializeAdvancement(populated));
 };
 
 const ensureSafeDeletion = (row) => {
@@ -1209,8 +1209,8 @@ export const getLandlordAdvancements = async (req, res, next) => {
       ];
     }
 
-    const rows = await populateQuery(LandlordAdvancement.find(filter).sort({ createdAt: -1 }));
-    let serialized = serializeRows(await rows);
+    const rows = await populateQuery(LandlordAdvancement.find(filter).sort({ createdAt: -1 })).lean();
+    let serialized = serializeRows(rows);
 
     if (req.query?.status && req.query.status !== "all") {
       const requested = normalizeRequestedStatus(req.query.status);

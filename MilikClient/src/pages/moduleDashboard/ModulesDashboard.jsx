@@ -46,7 +46,7 @@ const moduleRegistry = [
     title: "Accounting",
     subtitle: "Finance & Reporting",
     status: "active",
-    route: "/financial/chart-of-accounts",
+    route: "/accounts/dashboard",
     icon: <FaChartLine />,
     color: "#b45309",
     category: "Finance",

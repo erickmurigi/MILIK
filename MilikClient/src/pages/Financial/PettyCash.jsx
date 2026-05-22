@@ -1,4 +1,3 @@
-import { LISTING_UI } from "../../utils/listingPageUtils";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -265,16 +264,16 @@ const PettyCash = () => {
   // ── Paged slices
   const pagedDisbursements = useMemo(
     () => filteredDisbursements.slice((disbPage - 1) * pageSize, disbPage * pageSize),
-    [filteredDisbursements, disbPage]
+    [filteredDisbursements, disbPage, pageSize]
   );
   const pagedReplenishments = useMemo(
     () => filteredReplenishments.slice((repPage - 1) * pageSize, repPage * pageSize),
-    [filteredReplenishments, repPage]
+    [filteredReplenishments, repPage, pageSize]
   );
 
   // ── Account helpers
   const bankAccounts = useMemo(
-    () => coas.filter((a) => String(a.type).toLowerCase() === "asset" && /cash|bank|mpesa|mobile|wallet|till/i.test(`${a.name} ${a.subGroup || ""}`)),
+    () => coas.filter((a) => String(a.type).toLowerCase() === "asset" && /cash|bank|m-?pesa|mobile|wallet|till/i.test(`${a.name} ${a.subGroup || ""}`)),
     [coas]
   );
   const expenseAccounts = useMemo(() => coas.filter((a) => String(a.type).toLowerCase() === "expense"), [coas]);

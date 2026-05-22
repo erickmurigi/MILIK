@@ -921,16 +921,68 @@ const visibleReceiptIds = useMemo(
       to = toInputDate(new Date(today.getFullYear(), today.getMonth() + 1, 0));
     }
 
+    if (preset === "yesterday") {
+      const y = new Date(today); y.setDate(today.getDate() - 1);
+      from = toInputDate(y); to = toInputDate(y);
+    }
+    if (preset === "thisWeek") {
+      const day = today.getDay();
+      const mon = new Date(today); mon.setDate(today.getDate() - ((day + 6) % 7));
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      from = toInputDate(mon); to = toInputDate(sun);
+    }
+    if (preset === "lastWeek") {
+      const day = today.getDay();
+      const mon = new Date(today); mon.setDate(today.getDate() - ((day + 6) % 7) - 7);
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      from = toInputDate(mon); to = toInputDate(sun);
+    }
     if (preset === "lastMonth") {
       from = toInputDate(new Date(today.getFullYear(), today.getMonth() - 1, 1));
       to = toInputDate(new Date(today.getFullYear(), today.getMonth(), 0));
     }
+    if (preset === "thisQuarter") {
+      const q = Math.floor(today.getMonth() / 3);
+      from = toInputDate(new Date(today.getFullYear(), q * 3, 1));
+      to = toInputDate(new Date(today.getFullYear(), q * 3 + 3, 0));
+    }
+    if (preset === "lastQuarter") {
+      const q = Math.floor(today.getMonth() / 3) - 1;
+      const yr = q < 0 ? today.getFullYear() - 1 : today.getFullYear();
+      const qq = (q + 4) % 4;
+      from = toInputDate(new Date(yr, qq * 3, 1));
+      to = toInputDate(new Date(yr, qq * 3 + 3, 0));
+    }
+    if (preset === "thisYear") {
+      from = toInputDate(new Date(today.getFullYear(), 0, 1));
+      to = toInputDate(new Date(today.getFullYear(), 11, 31));
+    }
+    if (preset === "lastYear") {
+      from = toInputDate(new Date(today.getFullYear() - 1, 0, 1));
+      to = toInputDate(new Date(today.getFullYear() - 1, 11, 31));
+    }
 
-    setDraftFilters((prev) => ({
-      ...prev,
-      from,
-      to,
-    }));
+    setDraftFilters((prev) => ({ ...prev, from, to }));
+  };
+
+  const applyDatePresetAndSearch = (preset) => {
+    const today = new Date();
+    let from = "";
+    let to = "";
+    if (preset === "today") { from = toInputDate(today); to = toInputDate(today); }
+    else if (preset === "yesterday") { const y = new Date(today); y.setDate(today.getDate() - 1); from = toInputDate(y); to = toInputDate(y); }
+    else if (preset === "thisWeek") { const d = today.getDay(); const m = new Date(today); m.setDate(today.getDate() - ((d + 6) % 7)); const s = new Date(m); s.setDate(m.getDate() + 6); from = toInputDate(m); to = toInputDate(s); }
+    else if (preset === "lastWeek") { const d = today.getDay(); const m = new Date(today); m.setDate(today.getDate() - ((d + 6) % 7) - 7); const s = new Date(m); s.setDate(m.getDate() + 6); from = toInputDate(m); to = toInputDate(s); }
+    else if (preset === "thisMonth") { from = toInputDate(new Date(today.getFullYear(), today.getMonth(), 1)); to = toInputDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)); }
+    else if (preset === "lastMonth") { from = toInputDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)); to = toInputDate(new Date(today.getFullYear(), today.getMonth(), 0)); }
+    else if (preset === "thisQuarter") { const q = Math.floor(today.getMonth() / 3); from = toInputDate(new Date(today.getFullYear(), q * 3, 1)); to = toInputDate(new Date(today.getFullYear(), q * 3 + 3, 0)); }
+    else if (preset === "lastQuarter") { const q = Math.floor(today.getMonth() / 3) - 1; const yr = q < 0 ? today.getFullYear() - 1 : today.getFullYear(); const qq = (q + 4) % 4; from = toInputDate(new Date(yr, qq * 3, 1)); to = toInputDate(new Date(yr, qq * 3 + 3, 0)); }
+    else if (preset === "thisYear") { from = toInputDate(new Date(today.getFullYear(), 0, 1)); to = toInputDate(new Date(today.getFullYear(), 11, 31)); }
+    else if (preset === "lastYear") { from = toInputDate(new Date(today.getFullYear() - 1, 0, 1)); to = toInputDate(new Date(today.getFullYear() - 1, 11, 31)); }
+    setAppliedFilters((prev) => ({ ...prev, from, to }));
+    setDraftFilters((prev) => ({ ...prev, from, to }));
+    setSelectedIds([]);
+    setCurrentPage(1);
   };
 
   const handleConfirmOne = async (receipt) => {
@@ -1043,13 +1095,11 @@ const visibleReceiptIds = useMemo(
     const unitName = getUnitName(receipt, tenants);
     const propertyName = getPropertyName(receipt, tenants);
     const companyName = currentCompany?.companyName || currentCompany?.name || "MILIK";
-    const companyEmail = currentCompany?.email || "";
-    const companyPhone = currentCompany?.phoneNo || currentCompany?.phone || "";
-    const companyTown = currentCompany?.town || "";
+    const companyEmail = currentCompany?.email || currentCompany?.companyEmail || "";
+    const companyPhone = currentCompany?.phoneNo || currentCompany?.phone || currentCompany?.phoneNumber || "";
+    const companyAddress = currentCompany?.address || currentCompany?.location || currentCompany?.postalAddress || "";
+    const companyTown = currentCompany?.town || currentCompany?.city || "";
     const companyLogo = currentCompany?.logo || "";
-    const safeLogoHtml = companyLogo
-      ? `<img src="${escapeHtml(companyLogo)}" alt="Company logo" style="max-height:64px;max-width:96px;object-fit:contain;" />`
-      : `<div style="height:64px;width:64px;border-radius:18px;background:#ecfdf5;color:#0B3B2E;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;">${escapeHtml(String(companyName || "M").slice(0, 1).toUpperCase())}</div>`;
 
     const amount = Math.abs(Number(receipt?.amount || 0));
     const allocationSummary = receipt?.allocationSummary || {};
@@ -1106,160 +1156,127 @@ const visibleReceiptIds = useMemo(
         `;
 
     const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin';
+    const preparedLabel = new Date().toLocaleString();
+    const formatAmt = (n) => Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const statusColor = receipt.isConfirmed ? '#16a34a' : '#d97706';
+    const statusBgColor = receipt.isConfirmed ? '#dcfce7' : '#fef3c7';
+    const logoBlock = companyLogo
+      ? `<img style="max-height:60px;max-width:150px;object-fit:contain;border-radius:6px;" src="${escapeHtml(companyLogo)}" alt="logo" />`
+      : `<div style="width:56px;height:56px;border-radius:10px;background:#0B3B2E;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;">${escapeHtml(String(companyName || "M").slice(0,1).toUpperCase())}</div>`;
 
     const printWindow = window.open("", "_blank", "width=980,height=760");
     if (!printWindow) return;
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${escapeHtml(companyName)} Receipt ${escapeHtml(receipt.receiptNumber || receipt.referenceNumber || "")}</title>
-          <style>
-            * { box-sizing: border-box; }
-            body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: #f8fafc; }
-            .page { width: 100%; padding: 28px; }
-            .sheet { background: white; border: 1px solid #e2e8f0; border-radius: 24px; padding: 28px; box-shadow: 0 10px 35px rgba(15, 23, 42, 0.08); }
-            .topbar { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; padding-bottom:20px; border-bottom:3px solid #0B3B2E; }
-            .company-name { font-size: 28px; font-weight: 900; letter-spacing: -0.03em; color: #0B3B2E; }
-            .company-meta { margin-top: 6px; font-size: 12px; color: #475569; line-height: 1.6; }
-            .badge { display:inline-flex; margin-top: 10px; padding: 6px 12px; border-radius:999px; background:#ecfdf5; color:#0B3B2E; font-size:11px; font-weight:800; letter-spacing:0.18em; text-transform:uppercase; }
-            .title-row { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-top:24px; }
-            .title h1 { margin:0; font-size:30px; color:#0f172a; letter-spacing:-0.03em; }
-            .title p { margin:6px 0 0; color:#64748b; font-size:13px; }
-            .amount-card { min-width: 230px; border-radius: 20px; background: linear-gradient(135deg, #0B3B2E, #153f35); color: white; padding: 18px 20px; }
-            .amount-card .label { font-size: 11px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.86; }
-            .amount-card .value { margin-top: 10px; font-size: 30px; font-weight: 900; }
-            .grid { display:grid; grid-template-columns: 1.15fr 0.85fr; gap:18px; margin-top:22px; }
-            .card { border:1px solid #e2e8f0; border-radius:18px; padding:18px; }
-            .card h2 { margin:0 0 14px; font-size:14px; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; color:#475569; }
-            .info-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px 16px; }
-            .info-item span { display:block; font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:#64748b; }
-            .info-item strong { display:block; margin-top:6px; font-size:14px; color:#0f172a; }
-            .mini-row { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #e2e8f0; font-size:13px; }
-            .mini-row:last-child { border-bottom:none; padding-bottom:0; }
-            table { width:100%; border-collapse: collapse; margin-top: 6px; }
-            th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.14em; color:#64748b; background:#f8fafc; padding:10px 12px; border-bottom:1px solid #e2e8f0; }
-            td { padding:10px 12px; border-bottom:1px solid #e2e8f0; font-size:13px; }
-            tbody tr:last-child td { border-bottom:none; }
-            .footer { margin-top:24px; display:flex; justify-content:space-between; gap:20px; align-items:flex-start; border-top:1px solid #e2e8f0; padding-top:18px; color:#64748b; font-size:12px; }
-            .note { max-width: 60%; line-height:1.6; }
-            .signature { min-width:220px; text-align:right; }
-            .signature-line { margin-top:38px; border-top:1px solid #94a3b8; padding-top:8px; color:#334155; }
-            @media print {
-              body { background: white; }
-              .page { padding: 0; }
-              .sheet { border: none; box-shadow: none; border-radius: 0; padding: 12px; }
-              @page { size: A4 portrait; margin: 10mm; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="page">
-            <div class="sheet">
-              <div class="topbar">
-                <div>
-                  <div class="company-name">${escapeHtml(companyName)}</div>
-                  <div class="company-meta">
-                    ${companyTown ? `${escapeHtml(companyTown)}<br/>` : ""}
-                    ${companyPhone ? `${escapeHtml(companyPhone)}<br/>` : ""}
-                    ${companyEmail ? `${escapeHtml(companyEmail)}` : ""}
-                  </div>
-                  <div class="badge">${escapeHtml(getReceiptDisplayType(receipt))}</div>
-                </div>
-                <div>${safeLogoHtml}</div>
-              </div>
+    printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Receipt ${escapeHtml(receipt.receiptNumber || receipt.referenceNumber || "")}</title>
+  <style>
+    @page { size: A4; margin: 14mm 16mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 13px; color: #0f172a; background: #fff; }
+    .header { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; padding-bottom:16px; gap:16px; }
+    .co-center { text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px; }
+    .co-center-name { font-size:18px; font-weight:900; color:#0f172a; letter-spacing:-0.01em; margin-top:6px; }
+    .co-center-sub { font-size:10px; color:#64748b; line-height:1.6; }
+    .rcpt-title { text-align:right; align-self:center; }
+    .rcpt-label { font-size:38px; font-weight:900; color:#0f172a; letter-spacing:-0.03em; line-height:1; }
+    .rcpt-number { font-size:14px; color:#64748b; margin-top:6px; }
+    .divider { height:2px; background:linear-gradient(90deg,#3b82f6,#93c5fd); border-radius:2px; margin:16px 0 20px; }
+    .body-grid { display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-bottom:20px; }
+    .sec-label { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.18em; color:#94a3b8; margin-bottom:12px; }
+    .fk { font-size:10px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; margin-top:8px; }
+    .fv { font-size:13px; font-weight:700; color:#0f172a; }
+    .fv.lg { font-size:16px; font-weight:800; }
+    .status-badge { display:inline-block; padding:4px 14px; border-radius:6px; font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:18px; }
+    table { width:100%; border-collapse:collapse; margin-bottom:16px; }
+    thead tr { background:#1e293b; }
+    th { padding:10px 14px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#fff; }
+    th.r { text-align:right; }
+    tbody tr { border-bottom:1px solid #f1f5f9; }
+    td { padding:11px 14px; font-size:13px; color:#0f172a; }
+    td.r { text-align:right; font-weight:600; }
+    .totals { width:280px; margin-left:auto; border-top:1px solid #e2e8f0; padding-top:10px; }
+    .t-row { display:flex; justify-content:space-between; padding:7px 0; font-size:13px; border-bottom:1px solid #f8fafc; }
+    .t-row .tl { color:#64748b; }
+    .t-row .tv { font-weight:700; }
+    .t-row.grand { border-top:2px solid #0f172a; border-bottom:none; padding-top:12px; margin-top:4px; }
+    .t-row.grand .tl, .t-row.grand .tv { font-size:15px; font-weight:800; color:#0f172a; }
+    .footer-note { margin-top:28px; padding-top:12px; border-top:1px solid #f1f5f9; font-size:11px; color:#94a3b8; }
+    @media print {
+      thead tr { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div></div>
+    <div class="co-center">
+      ${logoBlock}
+      <div class="co-center-name">${escapeHtml(companyName)}</div>
+      ${[companyAddress, companyTown, companyPhone, companyEmail].filter(Boolean).length ? `<div class="co-center-sub">${[companyAddress, companyTown, companyPhone, companyEmail].filter(Boolean).map(escapeHtml).join(' · ')}</div>` : ''}
+    </div>
+    <div class="rcpt-title">
+      <div class="rcpt-label">RECEIPT</div>
+      <div class="rcpt-number"># ${escapeHtml(receipt.receiptNumber || receipt.referenceNumber || '-')}</div>
+    </div>
+  </div>
 
-              <div class="title-row">
-                <div class="title">
-                  <h1>Official Receipt</h1>
-                  <p>This receipt confirms collection captured in MILIK and is intended for customer-facing use.</p>
-                </div>
-                <div class="amount-card">
-                  <div class="label">Receipt amount</div>
-                  <div class="value">KES ${amount.toLocaleString()}</div>
-                </div>
-              </div>
+  <div class="divider"></div>
 
-              <div class="grid">
-                <div class="card">
-                  <h2>Receipt details</h2>
-                  <div class="info-grid">
-                    <div class="info-item"><span>Receipt number</span><strong>${escapeHtml(receipt.receiptNumber || "-")}</strong></div>
-                    <div class="info-item"><span>Reference number</span><strong>${escapeHtml(receipt.referenceNumber || "-")}</strong></div>
-                    <div class="info-item"><span>Receipt date</span><strong>${escapeHtml(formatDate(receipt.paymentDate))}</strong></div>
-                    <div class="info-item"><span>Banking date</span><strong>${escapeHtml(formatDate(receipt.bankingDate))}</strong></div>
-                    <div class="info-item"><span>Payment method</span><strong>${escapeHtml(String(receipt.paymentMethod || "-").replaceAll("_", " "))}</strong></div>
-                    <div class="info-item"><span>Cashbook</span><strong>${escapeHtml(getCashbookLabel(receipt))}</strong></div>
-                    <div class="info-item"><span>Status</span><strong>${receipt.isConfirmed ? "Confirmed" : "Pending confirmation"}</strong></div>
-                    <div class="info-item"><span>Posting status</span><strong>${escapeHtml(String(receipt.postingStatus || "unposted").replaceAll("_", " "))}</strong></div>
-                  </div>
-                </div>
+  <div class="body-grid">
+    <div>
+      <div class="sec-label">Received From</div>
+      <div class="fk">Tenant</div>
+      <div class="fv lg">${escapeHtml(tenantName)}</div>
+      <div class="fk">Property</div>
+      <div class="fv">${escapeHtml(propertyName)}</div>
+      <div class="fk">Unit</div>
+      <div class="fv">${escapeHtml(unitName)}</div>
+    </div>
+    <div>
+      <div class="sec-label">Receipt Details</div>
+      <div class="fk">Receipt Date</div>
+      <div class="fv">${escapeHtml(formatDate(receipt.paymentDate))}</div>
+      <div class="fk">Payment Method</div>
+      <div class="fv">${escapeHtml(String(receipt.paymentMethod || '-').replaceAll('_', ' '))}</div>
+      <div class="fk">Reference</div>
+      <div class="fv">${escapeHtml(receipt.referenceNumber || '-')}</div>
+      <div class="fk">Cashbook</div>
+      <div class="fv">${escapeHtml(getCashbookLabel(receipt))}</div>
+    </div>
+  </div>
 
-                <div class="card">
-                  <h2>Payer and property</h2>
-                  <div class="info-grid">
-                    <div class="info-item"><span>Tenant</span><strong>${escapeHtml(tenantName)}</strong></div>
-                    <div class="info-item"><span>Unit</span><strong>${escapeHtml(unitName)}</strong></div>
-                    <div class="info-item"><span>Property</span><strong>${escapeHtml(propertyName)}</strong></div>
-                    <div class="info-item"><span>Receipt type</span><strong>${escapeHtml(getReceiptDisplayType(receipt))}</strong></div>
-                  </div>
-                  <div style="margin-top:16px;">
-                    <h2 style="margin-bottom:8px;">Allocation summary</h2>
-                    ${breakdownHtml}
-                  </div>
-                </div>
-              </div>
+  <span class="status-badge" style="background:${statusBgColor};color:${statusColor};">${receipt.isConfirmed ? 'Confirmed' : 'Pending Confirmation'}</span>
 
-              <div class="card" style="margin-top:18px;">
-                <h2>Allocation lines</h2>
-                <table>
-                  <thead>
-                    <tr>
-                      <th style="width:64px;">#</th>
-                      <th>Reference</th>
-                      <th>Category</th>
-                      <th style="text-align:right;">Applied amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${allocationTable}
-                  </tbody>
-                </table>
-              </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px;">#</th>
+        <th>Reference</th>
+        <th>Category</th>
+        <th class="r">Applied Amount (KES)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${allocationTable}
+    </tbody>
+  </table>
 
-              ${receipt?.description ? `
-              <div style="margin-top:16px; padding:14px 18px; background:#f8fafc; border-radius:12px; border-left:3px solid #0B3B2E; font-size:12px; color:#334155; line-height:1.6;">
-                <strong style="display:block; color:#0f172a; margin-bottom:4px; font-size:11px; text-transform:uppercase; letter-spacing:0.1em;">Narration / Notes</strong>
-                ${escapeHtml(receipt.description)}
-              </div>` : ""}
+  <div class="totals">
+    ${summaryRows.map((row) => `<div class="t-row"><span class="tl">${escapeHtml(row.label)}</span><span class="tv">KES ${formatAmt(row.value)}</span></div>`).join('')}
+    <div class="t-row grand"><span class="tl">Total Received</span><span class="tv">KES ${formatAmt(amount)}</span></div>
+  </div>
 
-              <div style="margin-top:28px; display:grid; grid-template-columns:repeat(3,1fr); gap:20px; padding-top:20px; border-top:1px solid #e2e8f0;">
-                <div style="text-align:center;">
-                  <div style="height:40px; border-bottom:1px solid #334155; margin-bottom:8px; display:flex; align-items:flex-end; justify-content:center; padding-bottom:4px;">
-                    <span style="font-size:11px; font-weight:700; color:#0f172a;">${escapeHtml(preparedByName)}</span>
-                  </div>
-                  <div style="font-size:11px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.12em;">Prepared By</div>
-                </div>
-                <div style="text-align:center;">
-                  <div style="height:40px; border-bottom:1px solid #334155; margin-bottom:8px;"></div>
-                  <div style="font-size:11px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.12em;">Cashier / Verified By</div>
-                  <div style="font-size:10px; color:#94a3b8; margin-top:3px;">Name &amp; Signature</div>
-                </div>
-                <div style="text-align:center;">
-                  <div style="height:40px; border-bottom:1px solid #334155; margin-bottom:8px;"></div>
-                  <div style="font-size:11px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.12em;">Tenant / Payer</div>
-                  <div style="font-size:10px; color:#94a3b8; margin-top:3px;">Signature &amp; Date</div>
-                </div>
-              </div>
+  ${receipt?.description ? `<div style="margin-top:16px;padding:10px 14px;background:#f8fafc;border-left:3px solid #3b82f6;border-radius:4px;font-size:12px;color:#334155;line-height:1.6;">${escapeHtml(receipt.description)}</div>` : ''}
 
-              <div style="margin-top:16px; text-align:center; font-size:10px; color:#94a3b8; border-top:1px solid #f1f5f9; padding-top:10px;">
-                Official receipt generated by ${escapeHtml(companyName)} • ${escapeHtml(new Date().toLocaleString())} • Milik Property Management System
-              </div>
-            </div>
-          </div>
-        </body>
-      </html>
-    `);
+  <div class="footer-note">
+    This is an official receipt confirming payment received by ${escapeHtml(companyName)}.<br/>
+    Generated by ${escapeHtml(companyName)} · Milik Property Management System · ${escapeHtml(preparedLabel)} · Prepared by ${escapeHtml(preparedByName)}
+  </div>
+</body>
+</html>`);
     printWindow.document.close();
     setTimeout(() => { printWindow.focus(); printWindow.print(); }, 450);
   };
@@ -1675,11 +1692,6 @@ const visibleReceiptIds = useMemo(
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex-none sticky top-0 z-30 mb-2 border-b border-slate-200 bg-white shadow-sm">
             <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-              <button onClick={() => navigate(backPath)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-slate-600 hover:text-slate-900">
-                <FaArrowLeft size={11} /> {isLandlordReceiptView ? "Landlords" : "Tenants"}
-              </button>
-              <span className="shrink-0 text-xs font-black text-slate-800">{pageLabel}</span>
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <span className="shrink-0 rounded border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700">{stats.count} Receipts</span>
               <span className="shrink-0 rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">Ksh {stats.total.toLocaleString()}</span>
               <span className="shrink-0 rounded border border-blue-300 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{stats.confirmedCount} Confirmed</span>
@@ -1716,9 +1728,23 @@ const visibleReceiptIds = useMemo(
               <input type="date" value={draftFilters.from} onChange={(e) => setDraftFilters((prev) => ({ ...prev, from: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <input type="date" value={draftFilters.to} onChange={(e) => setDraftFilters((prev) => ({ ...prev, to: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <button onClick={() => applyDatePreset("today")} className="h-7 shrink-0 rounded bg-slate-100 px-2 text-xs font-semibold text-slate-800 hover:bg-slate-200">Today</button>
-              <button onClick={() => applyDatePreset("thisMonth")} className="h-7 shrink-0 rounded bg-slate-100 px-2 text-xs font-semibold text-slate-800 hover:bg-slate-200">This Mo.</button>
-              <button onClick={() => applyDatePreset("lastMonth")} className="h-7 shrink-0 rounded bg-slate-100 px-2 text-xs font-semibold text-slate-800 hover:bg-slate-200">Last Mo.</button>
+              <select
+                value=""
+                onChange={(e) => { if (e.target.value) applyDatePresetAndSearch(e.target.value); e.target.value = ""; }}
+                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              >
+                <option value="">Period</option>
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="thisWeek">This Week</option>
+                <option value="lastWeek">Last Week</option>
+                <option value="thisMonth">This Month</option>
+                <option value="lastMonth">Last Month</option>
+                <option value="thisQuarter">This Quarter</option>
+                <option value="lastQuarter">Last Quarter</option>
+                <option value="thisYear">This Year</option>
+                <option value="lastYear">Last Year</option>
+              </select>
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <button onClick={applySearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
               <button onClick={resetSearchFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-500 px-2.5 text-xs font-semibold text-white hover:bg-slate-600"><FaRedoAlt size={10} /></button>

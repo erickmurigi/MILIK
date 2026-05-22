@@ -11,9 +11,9 @@ const GRN = "#0B3B2E";
 const co = (company = {}) => ({
   name: company?.companyName || company?.name || "MILIK PROPERTY MANAGEMENT",
   logo: company?.logo || "",
-  phone: company?.phone || company?.phoneNumber || company?.mobile || "",
-  email: company?.email || company?.companyEmail || "",
-  address: company?.address || company?.location || company?.city || "",
+  phone: company?.phone || company?.phoneNo || company?.phoneNumber || company?.mobile || company?.contactPhone || "",
+  email: company?.email || company?.companyEmail || company?.contactEmail || "",
+  address: [company?.address || company?.postalAddress || company?.location || "", company?.town || company?.city || ""].filter(Boolean).join(", "),
 });
 
 const dt = (d) =>
@@ -71,16 +71,18 @@ const BASE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: #fff; }
   .page { max-width: 800px; margin: 0 auto; padding: 32px 36px; }
-  .hdr { display: grid; grid-template-columns: 88px 1fr 160px; align-items: center; border-bottom: 3px solid ${GRN}; padding-bottom: 16px; margin-bottom: 22px; gap: 12px; }
-  .hdr-logo img { width: 80px; height: 80px; object-fit: cover; border-radius: 12px; border: 1px solid #cbd5e1; background: #fff; padding: 5px; }
-  .hdr-logo .fallback { width: 80px; height: 80px; background: ${GRN}; color: #fff; font-size: 30px; font-weight: 800; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
-  .hdr-center { text-align: center; }
-  .co-name { font-size: 20px; font-weight: 800; letter-spacing: .01em; color: ${GRN}; }
-  .co-sub { font-size: 10px; color: #64748b; margin-top: 4px; line-height: 1.6; }
-  .doc-title-wrap { text-align: right; }
-  .doc-type { font-size: 14px; font-weight: 800; color: ${GRN}; letter-spacing: .04em; text-transform: uppercase; }
-  .doc-no { font-size: 14px; font-weight: 700; color: #1e293b; margin-top: 4px; font-family: 'Courier New', monospace; letter-spacing: .02em; }
-  .doc-date { font-size: 11px; color: #475569; margin-top: 4px; }
+  .hdr { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding-bottom: 16px; margin-bottom: 4px; gap: 16px; }
+  .hdr-logo { display: none; }
+  .hdr-center { display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; }
+  .hdr-center img { max-height: 60px; max-width: 150px; object-fit: contain; border-radius: 6px; }
+  .hdr-center .fallback { width: 56px; height: 56px; background: ${GRN}; color: #fff; font-size: 22px; font-weight: 900; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+  .co-name { font-size: 18px; font-weight: 900; color: #0f172a; letter-spacing: -.01em; margin-top: 6px; }
+  .co-sub { font-size: 10px; color: #64748b; line-height: 1.6; }
+  .divider { height: 2px; background: linear-gradient(90deg, #3b82f6, #93c5fd); border-radius: 2px; margin: 16px 0 20px; }
+  .doc-title-wrap { text-align: right; align-self: center; }
+  .doc-type { font-size: 24px; font-weight: 900; color: #0f172a; letter-spacing: -0.03em; line-height: 1; }
+  .doc-no { font-size: 13px; color: #64748b; margin-top: 6px; }
+  .doc-date { font-size: 10px; color: #64748b; margin-top: 3px; }
   .section { margin-bottom: 18px; }
   .section-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: #94a3b8; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
   .field-row { display: grid; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
@@ -158,21 +160,21 @@ export const printPettyCashVoucher = ({ disbursement, account, company, user }) 
   <div class="page">
 
     <div class="hdr">
-      <div class="hdr-logo">
+      <div></div>
+      <div class="hdr-center">
         ${c.logo
           ? `<img src="${escapeHtml(c.logo)}" alt="logo" />`
           : `<div class="fallback">${escapeHtml(c.name.slice(0, 1).toUpperCase())}</div>`}
-      </div>
-      <div class="hdr-center">
         <div class="co-name">${escapeHtml(c.name)}</div>
         ${coInfo ? `<div class="co-sub">${escapeHtml(coInfo)}</div>` : ""}
       </div>
       <div class="doc-title-wrap">
-        <div class="doc-type">Petty Cash Voucher</div>
-        <div class="doc-no">${escapeHtml(disbursement.voucherNumber)}</div>
+        <div class="doc-type">PETTY CASH VOUCHER</div>
+        <div class="doc-no"># ${escapeHtml(disbursement.voucherNumber)}</div>
         <div class="doc-date">${dt(disbursement.date)}</div>
       </div>
     </div>
+    <div class="divider"></div>
 
     <div class="section">
       <div class="section-title">Account Details</div>
@@ -342,22 +344,22 @@ export const printReplenishmentSummary = ({ replenishment, disbursements = [], a
   <div class="page">
 
     <div class="hdr">
-      <div class="hdr-logo">
+      <div></div>
+      <div class="hdr-center">
         ${c.logo
           ? `<img src="${escapeHtml(c.logo)}" alt="logo" />`
           : `<div class="fallback">${escapeHtml(c.name.slice(0, 1).toUpperCase())}</div>`}
-      </div>
-      <div class="hdr-center">
         <div class="co-name">${escapeHtml(c.name)}</div>
         ${coInfo ? `<div class="co-sub">${escapeHtml(coInfo)}</div>` : ""}
       </div>
       <div class="doc-title-wrap">
-        <div class="doc-type">Imprest Reimbursement</div>
-        <div class="doc-no">${escapeHtml(replenishment.replenishmentNumber)}</div>
+        <div class="doc-type">IMPREST REIMBURSEMENT</div>
+        <div class="doc-no"># ${escapeHtml(replenishment.replenishmentNumber)}</div>
         <div class="doc-date">${dt(replenishment.requestDate)}</div>
-        <div style="margin-top:6px">${statusBadge}</div>
+        <div style="margin-top:8px">${statusBadge}</div>
       </div>
     </div>
+    <div class="divider"></div>
 
     <div class="section">
       <div class="section-title">Account Details</div>

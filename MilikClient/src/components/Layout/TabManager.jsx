@@ -23,6 +23,7 @@ const getActiveStorageKey = (companyKey) => `${ACTIVE_STORAGE_KEY_PREFIX}-${comp
 
 const buildInitialTabsByWorkspace = () => ({
   [WORKSPACE_IDS.PROPERTY]: [getWorkspaceDefaultTab(WORKSPACE_IDS.PROPERTY)],
+  [WORKSPACE_IDS.ACCOUNTS]: [getWorkspaceDefaultTab(WORKSPACE_IDS.ACCOUNTS)],
   [WORKSPACE_IDS.CARWASH]: [getWorkspaceDefaultTab(WORKSPACE_IDS.CARWASH)],
   [WORKSPACE_IDS.SYSTEM_ADMIN]: [getWorkspaceDefaultTab(WORKSPACE_IDS.SYSTEM_ADMIN)],
   [WORKSPACE_IDS.COMPANY_SETUP]: [getWorkspaceDefaultTab(WORKSPACE_IDS.COMPANY_SETUP)],
@@ -30,6 +31,7 @@ const buildInitialTabsByWorkspace = () => ({
 
 const buildInitialActiveTabs = () => ({
   [WORKSPACE_IDS.PROPERTY]: 'dashboard',
+  [WORKSPACE_IDS.ACCOUNTS]: 'acc-dashboard',
   [WORKSPACE_IDS.CARWASH]: 'carwash-dashboard',
   [WORKSPACE_IDS.SYSTEM_ADMIN]: 'system-admin-home',
   [WORKSPACE_IDS.COMPANY_SETUP]: 'company-setup-home',
@@ -91,6 +93,17 @@ const getPageTitle = (pathname) => {
     '/reports/income-statement': 'Income Statement',
     '/reports/balance-sheet': 'Balance Sheet',
     '/reports/tax-reports': 'Tax Reports',
+    '/accounts/dashboard': 'Dashboard',
+    '/accounts/chart-of-accounts': 'Chart of Accounts',
+    '/accounts/journals': 'Journal Entries',
+    '/accounts/payment-vouchers': 'Payment Vouchers',
+    '/accounts/petty-cash': 'Petty Cash',
+    '/accounts/expenses': 'Expense Requisitions',
+    '/accounts/service-providers': 'Service Providers',
+    '/accounts/trial-balance': 'Trial Balance',
+    '/accounts/income-statement': 'Income Statement',
+    '/accounts/balance-sheet': 'Balance Sheet',
+    '/accounts/tax-reports': 'Tax Reports',
     '/meter-readings': 'Meter Readings',
     '/invoices/late-penalties': 'Late Penalties',
     '/settings': 'Operational Settings',
@@ -139,6 +152,7 @@ const getPageTitle = (pathname) => {
   }
   if (
     (pathname.startsWith('/financial/chart-of-accounts/') ||
+     pathname.startsWith('/accounts/chart-of-accounts/') ||
      pathname.startsWith('/carwash/chart-of-accounts/') ||
      pathname.startsWith('/hr/chart-of-accounts/') ||
      pathname.startsWith('/sale/chart-of-accounts/')) &&

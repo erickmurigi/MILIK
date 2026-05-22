@@ -2004,7 +2004,8 @@ export const getTenantInvoiceNotes = async (req, res) => {
       .populate("property", "propertyName name")
       .populate("chartAccount", "code name type")
       .populate("createdBy", "surname otherNames email profile")
-      .populate("sourceInvoice", "invoiceNumber amount category invoiceDate dueDate status");
+      .populate("sourceInvoice", "invoiceNumber amount category invoiceDate dueDate status")
+      .lean();
 
     return res.status(200).json(notes.map(buildNoteStatementRow));
   } catch (error) {

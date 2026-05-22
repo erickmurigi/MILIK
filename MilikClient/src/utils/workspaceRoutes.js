@@ -1,5 +1,6 @@
 export const WORKSPACE_IDS = {
   PROPERTY: 'property-management',
+  ACCOUNTS: 'financial-accounts',
   CARWASH: 'carwash',
   PROPERTY_SALE: 'property-sale',
   HUMAN_RESOURCE: 'human-resource',
@@ -16,6 +17,17 @@ export const WORKSPACE_CONFIG = {
       id: 'dashboard',
       title: 'Dashboard',
       route: '/dashboard',
+      closable: false,
+    },
+  },
+  [WORKSPACE_IDS.ACCOUNTS]: {
+    id: WORKSPACE_IDS.ACCOUNTS,
+    label: 'Financial Accounts',
+    defaultRoute: '/accounts/dashboard',
+    defaultTab: {
+      id: 'acc-dashboard',
+      title: 'Dashboard',
+      route: '/accounts/dashboard',
       closable: false,
     },
   },
@@ -85,6 +97,10 @@ const SYSTEM_ADMIN_ROUTE_MATCHERS = [
 export const getWorkspaceFromRoute = (pathname = '') => {
   if (pathname === '/moduleDashboard' || pathname.startsWith('/moduleDashboard/')) {
     return null;
+  }
+
+  if (pathname === '/accounts' || pathname.startsWith('/accounts/')) {
+    return WORKSPACE_IDS.ACCOUNTS;
   }
 
   if (pathname === '/carwash' || pathname.startsWith('/carwash/')) {

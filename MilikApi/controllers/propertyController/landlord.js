@@ -297,7 +297,8 @@ export const getLandlords = async (req, res, next) => {
         .populate("company", "companyName")
         .sort({ createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
-        .limit(limitNum),
+        .limit(limitNum)
+        .lean(),
       Landlord.countDocuments(query),
     ]);
 
@@ -397,7 +398,7 @@ export const getLandlords = async (req, res, next) => {
       }
 
       return {
-        ...landlord.toObject(),
+        ...landlord,
         activeProperties,
         archivedProperties,
         balance,
@@ -693,7 +694,7 @@ export const getLandlordStats = async (req, res, next) => {
 
     const propertyQuery = buildLandlordPropertyMatch(landlord);
 
-    const properties = await Property.find(propertyQuery).select("_id status");
+    const properties = await Property.find(propertyQuery).select("_id status").lean();
     const propertyIds = properties.map((p) => p._id);
 
     const totalProperties = properties.length;
@@ -705,23 +706,13 @@ export const getLandlordStats = async (req, res, next) => {
       property: { $in: propertyIds },
     };
 
-    const totalUnits = propertyIds.length
-      ? await Unit.countDocuments(unitBaseQuery)
-      : 0;
-
-    const occupiedUnits = propertyIds.length
-      ? await Unit.countDocuments({
-          ...unitBaseQuery,
-          status: "occupied",
-        })
-      : 0;
-
-    const vacantUnits = propertyIds.length
-      ? await Unit.countDocuments({
-          ...unitBaseQuery,
-          status: "vacant",
-        })
-      : 0;
+    const [totalUnits, occupiedUnits, vacantUnits] = propertyIds.length
+      ? await Promise.all([
+          Unit.countDocuments(unitBaseQuery),
+          Unit.countDocuments({ ...unitBaseQuery, status: "occupied" }),
+          Unit.countDocuments({ ...unitBaseQuery, status: "vacant" }),
+        ])
+      : [0, 0, 0];
 
     res.status(200).json({
       success: true,
@@ -825,73 +816,84 @@ export const bulkImportLandlords = async (req, res, next) => {
       totalProcessed: 0,
     };
 
+    // Resolve starting code number once — avoids N aggregation calls in the loop
+    const codeResult = await Landlord.aggregate([
+      { $match: { company: new mongoose.Types.ObjectId(String(companyId)), landlordCode: { $regex: /^LL\d+$/ } } },
+      { $addFields: { codeNum: { $toInt: { $substr: ["$landlordCode", 2, -1] } } } },
+      { $group: { _id: null, maxNum: { $max: "$codeNum" } } },
+    ]);
+    let nextCodeNum = (codeResult[0]?.maxNum ?? 0) + 1;
+
+    const toInsert = [];
+
     for (const landlordData of normalizedLandlords) {
       results.totalProcessed++;
 
-      try {
-        if (!landlordData.landlordName || !landlordData.regId || !landlordData.taxPin || !landlordData.phoneNumber) {
-          results.failed.push({
-            landlord: landlordData.landlordName || "",
-            error: "Landlord name, Reg/ID, Tax PIN, and Phone Number are required",
-          });
-          continue;
-        }
-
-        // Duplicate check: only run for real (non-null) values.
-        if (landlordData.email && existingEmails.has(landlordData.email)) {
-          results.failed.push({
-            landlord: landlordData.landlordName,
-            error: `Email ${landlordData.email} already exists`,
-          });
-          continue;
-        }
-
-        if (
-          (landlordData.regId && existingRegIds.has(landlordData.regId)) ||
-          (landlordData.idNumber && existingIdNumbers.has(landlordData.idNumber))
-        ) {
-          results.failed.push({
-            landlord: landlordData.landlordName,
-            error: `Reg/ID Number ${landlordData.regId || landlordData.idNumber} already exists`,
-          });
-          continue;
-        }
-
-        const landlordCode = await generateLandlordCode(companyId);
-
-        const newLandlord = new Landlord({
-          landlordCode,
-          landlordName: landlordData.landlordName,
-          landlordType: landlordData.landlordType,
-          regId: landlordData.regId,
-          idNumber: landlordData.idNumber,
-          taxPin: landlordData.taxPin,
-          email: landlordData.email || "",
-          phoneNumber: landlordData.phoneNumber,
-          postalAddress: landlordData.postalAddress,
-          location: landlordData.location,
-          status: landlordData.status,
-          portalAccess: landlordData.portalAccess,
-          company: companyId,
-          createdBy: createdById,
-        });
-
-        await newLandlord.save();
-
-        // Only register real values in the seen-sets so subsequent rows with
-        // the same placeholder do not incorrectly trigger a duplicate error.
-        if (landlordData.email) existingEmails.add(landlordData.email);
-        if (landlordData.regId) existingRegIds.add(landlordData.regId);
-        if (landlordData.idNumber) existingIdNumbers.add(landlordData.idNumber);
-
-        results.successful.push({
-          landlord: landlordData.landlordName,
-          code: landlordCode,
-        });
-      } catch (error) {
+      if (!landlordData.landlordName || !landlordData.regId || !landlordData.taxPin || !landlordData.phoneNumber) {
         results.failed.push({
           landlord: landlordData.landlordName || "",
-          error: error.message || "Unknown error",
+          error: "Landlord name, Reg/ID, Tax PIN, and Phone Number are required",
+        });
+        continue;
+      }
+
+      if (landlordData.email && existingEmails.has(landlordData.email)) {
+        results.failed.push({
+          landlord: landlordData.landlordName,
+          error: `Email ${landlordData.email} already exists`,
+        });
+        continue;
+      }
+
+      if (
+        (landlordData.regId && existingRegIds.has(landlordData.regId)) ||
+        (landlordData.idNumber && existingIdNumbers.has(landlordData.idNumber))
+      ) {
+        results.failed.push({
+          landlord: landlordData.landlordName,
+          error: `Reg/ID Number ${landlordData.regId || landlordData.idNumber} already exists`,
+        });
+        continue;
+      }
+
+      const landlordCode = `LL${String(nextCodeNum++).padStart(3, "0")}`;
+
+      // Track in sets so within-batch duplicates are caught on subsequent rows
+      if (landlordData.email) existingEmails.add(landlordData.email);
+      if (landlordData.regId) existingRegIds.add(landlordData.regId);
+      if (landlordData.idNumber) existingIdNumbers.add(landlordData.idNumber);
+
+      toInsert.push({
+        landlordCode,
+        landlordName: landlordData.landlordName,
+        landlordType: landlordData.landlordType,
+        regId: landlordData.regId,
+        idNumber: landlordData.idNumber,
+        taxPin: landlordData.taxPin,
+        email: landlordData.email || "",
+        phoneNumber: landlordData.phoneNumber,
+        postalAddress: landlordData.postalAddress,
+        location: landlordData.location,
+        status: landlordData.status,
+        portalAccess: landlordData.portalAccess,
+        company: companyId,
+        createdBy: createdById,
+      });
+    }
+
+    if (toInsert.length > 0) {
+      try {
+        const inserted = await Landlord.insertMany(toInsert, { ordered: false });
+        results.successful = inserted.map((doc) => ({ landlord: doc.landlordName, code: doc.landlordCode }));
+      } catch (bulkErr) {
+        const writeErrors = bulkErr.writeErrors || [];
+        const failedIndexes = new Map(writeErrors.map((e) => [e.index, e.errmsg || e.message || "Insert failed"]));
+        toInsert.forEach((doc, idx) => {
+          if (failedIndexes.has(idx)) {
+            results.failed.push({ landlord: doc.landlordName, error: failedIndexes.get(idx) });
+          } else {
+            results.successful.push({ landlord: doc.landlordName, code: doc.landlordCode });
+          }
         });
       }
     }

@@ -56,7 +56,7 @@ const moduleRegistry = [
     moduleKey: "accounts",
     label: "Financial Accounts",
     icon: <FaChartLine />,
-    to: "/financial/chart-of-accounts",
+    to: "/accounts/dashboard",
     status: "active",
   },
   {

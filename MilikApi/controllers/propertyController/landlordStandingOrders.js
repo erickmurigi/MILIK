@@ -388,8 +388,8 @@ export const createLandlordStandingOrder = async (req, res, next) => {
     syncNextRunDate(doc, { preserveStopped: true });
     await doc.save();
 
-    const populated = await populateQuery(LandlordStandingOrder.findById(doc._id));
-    res.status(201).json(serializeStandingOrder(await populated));
+    const populated = await populateQuery(LandlordStandingOrder.findById(doc._id)).lean();
+    res.status(201).json(serializeStandingOrder(populated));
   } catch (error) {
     next(error);
   }
@@ -415,8 +415,8 @@ export const getLandlordStandingOrders = async (req, res, next) => {
       ];
     }
 
-    const rows = await populateQuery(LandlordStandingOrder.find(filter).sort({ createdAt: -1 }));
-    res.status(200).json(serializeRows(await rows));
+    const rows = await populateQuery(LandlordStandingOrder.find(filter).sort({ createdAt: -1 })).lean();
+    res.status(200).json(serializeRows(rows));
   } catch (error) {
     next(error);
   }
@@ -533,8 +533,8 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
     syncNextRunDate(row, { preserveStopped: true });
 
     await row.save();
-    const populated = await populateQuery(LandlordStandingOrder.findById(row._id));
-    res.status(200).json(serializeStandingOrder(await populated));
+    const populated = await populateQuery(LandlordStandingOrder.findById(row._id)).lean();
+    res.status(200).json(serializeStandingOrder(populated));
   } catch (error) {
     next(error);
   }
@@ -572,8 +572,8 @@ export const updateLandlordStandingOrderStatus = async (req, res, next) => {
     }
 
     await row.save();
-    const populated = await populateQuery(LandlordStandingOrder.findById(row._id));
-    res.status(200).json(serializeStandingOrder(await populated));
+    const populated = await populateQuery(LandlordStandingOrder.findById(row._id)).lean();
+    res.status(200).json(serializeStandingOrder(populated));
   } catch (error) {
     next(error);
   }
@@ -763,8 +763,8 @@ export const runLandlordStandingOrder = async (req, res, next) => {
       String(cashbookAccount._id),
     ]);
 
-    const populated = await populateQuery(LandlordStandingOrder.findById(row._id));
-    res.status(200).json(serializeStandingOrder(await populated));
+    const populated = await populateQuery(LandlordStandingOrder.findById(row._id)).lean();
+    res.status(200).json(serializeStandingOrder(populated));
   } catch (error) {
     next(error);
   }
@@ -849,8 +849,8 @@ export const reverseLandlordStandingOrderRun = async (req, res, next) => {
     syncNextRunDate(row, { preserveStopped: true });
     await row.save();
 
-    const populated = await populateQuery(LandlordStandingOrder.findById(row._id));
-    res.status(200).json(serializeStandingOrder(await populated));
+    const populated = await populateQuery(LandlordStandingOrder.findById(row._id)).lean();
+    res.status(200).json(serializeStandingOrder(populated));
   } catch (error) {
     next(error);
   }

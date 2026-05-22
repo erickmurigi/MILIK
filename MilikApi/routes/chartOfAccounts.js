@@ -393,8 +393,8 @@ router.post("/", verifyUser, requireCompanyModule("accounts"), async (req, res) 
       balance: 0,
     });
 
-    const populated = await ChartOfAccount.findById(account._id).populate("parentAccount", "code name type group subGroup");
-    return res.status(201).json(serializeAccount(populated.toObject()));
+    const populated = await ChartOfAccount.findById(account._id).populate("parentAccount", "code name type group subGroup").lean();
+    return res.status(201).json(serializeAccount(populated));
   } catch (err) {
     console.error("Failed to create ChartOfAccount:", err);
     return res.status(500).json({
@@ -494,8 +494,8 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res
 
     await account.save();
 
-    const populated = await ChartOfAccount.findById(account._id).populate("parentAccount", "code name type group subGroup");
-    return res.status(200).json(serializeAccount(populated.toObject()));
+    const populated = await ChartOfAccount.findById(account._id).populate("parentAccount", "code name type group subGroup").lean();
+    return res.status(200).json(serializeAccount(populated));
   } catch (err) {
     console.error("Failed to update ChartOfAccount:", err);
     return res.status(500).json({

@@ -460,11 +460,11 @@ const ChartOfAccounts = () => {
 
     setSaving(true);
     try {
-      for (const account of selectedAccounts) {
-        await adminRequests.delete(`/chart-of-accounts/${account._id}`, {
-          data: { business: businessId },
-        });
-      }
+      await Promise.all(
+        selectedAccounts.map((account) =>
+          adminRequests.delete(`/chart-of-accounts/${account._id}`, { data: { business: businessId } })
+        )
+      );
 
       toast.success("Selected account(s) deleted.");
       setSelectedIds([]);

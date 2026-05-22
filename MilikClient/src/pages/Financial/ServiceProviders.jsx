@@ -94,8 +94,6 @@ const ServiceProviders = () => {
         business: currentCompany._id,
         company: currentCompany._id,
         search,
-        name: nameFilter,
-        category: categoryFilter,
       });
       setRows(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -107,7 +105,7 @@ const ServiceProviders = () => {
 
   useEffect(() => {
     loadRows();
-  }, [currentCompany?._id, search, nameFilter, categoryFilter]);
+  }, [currentCompany?._id, search]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {

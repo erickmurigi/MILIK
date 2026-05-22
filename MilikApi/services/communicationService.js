@@ -3,6 +3,7 @@ import Company from '../models/Company.js';
 import Landlord from '../models/Landlord.js';
 import { generateStatementPdf } from './statementPdfService.js';
 import { generateInvoicePdf } from './invoicePdfService.js';
+import { generateReceiptPdf } from './receiptPdfService.js';
 import MeterReading from '../models/MeterReading.js';
 import ProcessedStatement from '../models/ProcessedStatement.js';
 import Property from '../models/Property.js';
@@ -1082,6 +1083,19 @@ export const sendCommunication = async ({ businessId, contextType, channel, temp
             const invoiceNum = item.payload?.invoiceNumber || String(item.recordId);
             attachments = [{
               filename: `Invoice-${invoiceNum}.pdf`,
+              content: pdfBuffer,
+              contentType: 'application/pdf',
+            }];
+          } catch {
+            // PDF generation is best-effort — send without attachment on failure
+          }
+        }
+        if (contextType === 'receipt') {
+          try {
+            const pdfBuffer = await generateReceiptPdf(item.recordId, businessId);
+            const receiptNum = item.payload?.receiptNumber || String(item.recordId);
+            attachments = [{
+              filename: `Receipt-${receiptNum}.pdf`,
               content: pdfBuffer,
               contentType: 'application/pdf',
             }];

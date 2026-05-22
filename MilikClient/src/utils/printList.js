@@ -20,23 +20,22 @@ const formatDateTime = (value = new Date()) => {
 const getCompanyDetails = (company = {}) => ({
   name: company?.companyName || company?.name || "MILIK",
   logo: company?.logo || "",
-  phone: company?.phone || company?.phoneNumber || company?.mobile || "",
-  email: company?.email || company?.companyEmail || "",
-  address: company?.address || company?.location || company?.city || "",
+  phone: company?.phone || company?.phoneNo || company?.phoneNumber || company?.mobile || company?.contactPhone || "",
+  email: company?.email || company?.companyEmail || company?.contactEmail || "",
+  address: [company?.address || company?.postalAddress || company?.location || "", company?.town || company?.city || ""].filter(Boolean).join(", "),
 });
 
 const buildHeaderHtml = ({ company, title, subtitle, metaLine }) => {
   const d = getCompanyDetails(company);
-  const infoLine = [d.phone, d.email, d.address].filter(Boolean).join(" • ");
+  const infoLine = [d.address, d.phone, d.email].filter(Boolean).join(" · ");
 
   return `
     <div class="hdr">
-      <div class="hdr-logo">
+      <div></div>
+      <div class="hdr-center">
         ${d.logo
           ? `<img src="${escapeHtml(d.logo)}" alt="${escapeHtml(d.name)} logo" class="logo-img" />`
           : `<div class="logo-fallback">${escapeHtml(d.name.slice(0, 1).toUpperCase())}</div>`}
-      </div>
-      <div class="hdr-center">
         <div class="co-name">${escapeHtml(d.name)}</div>
         ${infoLine ? `<div class="co-sub">${escapeHtml(infoLine)}</div>` : ""}
         <div class="rpt-title">${escapeHtml(title)}</div>
@@ -46,6 +45,7 @@ const buildHeaderHtml = ({ company, title, subtitle, metaLine }) => {
         <div class="print-date">${escapeHtml(metaLine || `Printed: ${formatDateTime()}`)}</div>
       </div>
     </div>
+    <div class="divider"></div>
   `;
 };
 
@@ -78,16 +78,17 @@ const BASE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: #fff; padding: 26px 28px; font-size: 12px; }
   /* Header */
-  .hdr { display: grid; grid-template-columns: 100px 1fr 140px; align-items: center; border-bottom: 3px solid ${GRN}; padding-bottom: 16px; margin-bottom: 18px; gap: 12px; }
-  .hdr-logo { display: flex; align-items: center; justify-content: flex-start; }
-  .logo-img { width: 84px; height: 84px; object-fit: cover; border-radius: 14px; border: 1px solid #cbd5e1; background: #fff; padding: 5px; }
-  .logo-fallback { width: 84px; height: 84px; background: ${GRN}; color: #fff; font-size: 32px; font-weight: 900; display: flex; align-items: center; justify-content: center; border-radius: 14px; }
-  .hdr-center { text-align: center; }
-  .co-name { font-size: 22px; font-weight: 900; letter-spacing: .02em; color: ${GRN}; }
-  .co-sub { font-size: 10px; color: #64748b; margin-top: 3px; line-height: 1.5; }
-  .rpt-title { font-size: 16px; font-weight: 800; margin-top: 6px; color: #1e293b; }
+  .hdr { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding-bottom: 16px; margin-bottom: 4px; gap: 16px; }
+  .hdr-logo { display: none; }
+  .logo-img { max-height: 60px; max-width: 150px; object-fit: contain; border-radius: 6px; }
+  .logo-fallback { width: 56px; height: 56px; background: ${GRN}; color: #fff; font-size: 22px; font-weight: 900; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+  .hdr-center { display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; }
+  .co-name { font-size: 18px; font-weight: 900; color: #0f172a; letter-spacing: -.01em; margin-top: 6px; }
+  .co-sub { font-size: 10px; color: #64748b; line-height: 1.6; }
+  .rpt-title { font-size: 15px; font-weight: 800; color: #1e293b; margin-top: 6px; }
   .rpt-sub { font-size: 11px; color: #475569; margin-top: 3px; }
-  .hdr-right { text-align: right; }
+  .divider { height: 2px; background: linear-gradient(90deg, #3b82f6, #93c5fd); border-radius: 2px; margin: 16px 0 16px; }
+  .hdr-right { text-align: right; align-self: center; }
   .print-date { font-size: 10px; color: #64748b; line-height: 1.6; }
   /* Summary line */
   .summary { font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 12px; padding: 7px 10px; background: #f8fafc; border-left: 3px solid ${GRN}; border-radius: 0 4px 4px 0; }

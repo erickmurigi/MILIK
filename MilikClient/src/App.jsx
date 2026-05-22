@@ -88,6 +88,9 @@ const Inspections    = lazy(() => import("./pages/Inspections/Inspections"));
 const MeterReadings  = lazy(() => import("./pages/Tools/MeterReadings"));
 const LatePenalties  = lazy(() => import("./pages/Tools/LatePenalties"));
 
+// Financial Accounts module
+const AccountsDashboard     = lazy(() => import("./pages/Accounts/AccountsDashboard"));
+
 // Financial
 const PaymentVouchers       = lazy(() => import("./pages/Financial/PaymentVouchers"));
 const PettyCash             = lazy(() => import("./pages/Financial/PettyCash"));
@@ -496,6 +499,21 @@ function App() {
             <Route path="/my-account"            element={<ProtectedRoute><MyAccount /></ProtectedRoute>} />
             <Route path="/communications/sms"   element={<ProtectedRoute><SmsManager /></ProtectedRoute>} />
             <Route path="/communications/email" element={<ProtectedRoute><EmailManager /></ProtectedRoute>} />
+
+            {/* ── Financial Accounts module ─────────────────────────────── */}
+            <Route path="/accounts" element={<Navigate to="/accounts/dashboard" replace />} />
+            <Route path="/accounts/dashboard"         element={<CompanyModuleRoute moduleKey="accounts"><ProtectedRoute><AccountsDashboard /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/chart-of-accounts" element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="chartOfAccounts" moduleKey="accounts"><ChartOfAccounts /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/chart-of-accounts/:accountId/activity" element={<CompanyModuleRoute moduleKey="accounts"><ProtectedRoute><LedgerAccountActivity /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/journals"          element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="journals" moduleKey="accounts"><JournalEntries /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/payment-vouchers"  element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="paymentVouchers" moduleKey="accounts"><PaymentVouchers /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/petty-cash"        element={<CompanyModuleRoute moduleKey="accounts"><ProtectedRoute><PettyCash /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/expenses"          element={<CompanyModuleRoute moduleKey="accounts"><ProtectedRoute><ExpenseRequisition /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/service-providers" element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="expenses" moduleKey="accounts"><ServiceProviders /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/trial-balance"     element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><TrialBalanceReport /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/income-statement"  element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><IncomeStatementReport /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/balance-sheet"     element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><BalanceSheetReport /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/tax-reports"       element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><TaxReports /></PermissionRoute></CompanyModuleRoute>} />
 
             {/* ── Car Wash module ───────────────────────────────────────── */}
             <Route path="/carwash/dashboard"         element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-dashboard" moduleKey="carwash"><CarWashDashboard /></PermissionRoute></CompanyModuleRoute>} />

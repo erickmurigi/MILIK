@@ -2551,6 +2551,7 @@ export const getJournalEntries = async (filters = {}) => {
   if (filters.propertyId && filters.propertyId !== "all") params.append("property", filters.propertyId);
   if (filters.landlordId && filters.landlordId !== "all") params.append("landlord", filters.landlordId);
   if (filters.sourceModule && filters.sourceModule !== "all") params.append("sourceModule", filters.sourceModule);
+  if (filters.excludeSourceModules) params.append("excludeSourceModules", filters.excludeSourceModules);
   if (filters.startDate) params.append("startDate", filters.startDate);
   if (filters.endDate) params.append("endDate", filters.endDate);
   if (filters.search) params.append("search", filters.search);

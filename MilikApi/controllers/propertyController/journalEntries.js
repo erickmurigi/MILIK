@@ -341,19 +341,19 @@ const reverseJournalLedgerEntries = async ({ journal, userId, reason }) => {
     sourceTransactionId: String(journal._id),
     $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     status: "approved",
-  }).select("_id accountId");
+  }).select("_id accountId").lean();
 
   if (!originalEntries.length) return [];
 
-  const reversalResults = [];
-  for (const entry of originalEntries) {
-    const result = await postReversal({
-      entryId: entry._id,
-      reason: reason || `Reversal of journal ${journal.journalNo}`,
-      userId,
-    });
-    reversalResults.push(result);
-  }
+  const reversalResults = await Promise.all(
+    originalEntries.map((entry) =>
+      postReversal({
+        entryId: entry._id,
+        reason: reason || `Reversal of journal ${journal.journalNo}`,
+        userId,
+      })
+    )
+  );
 
   const touchedAccountIds = new Set();
   originalEntries.forEach((entry) => {
@@ -379,7 +379,7 @@ const postJournalToLedger = async ({ journal, actorUserId }) => {
     sourceTransactionId: String(journal._id),
     $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     status: "approved",
-  }).select("_id");
+  }).select("_id").lean();
 
   if (existingEntries.length > 0) {
     return existingEntries;
@@ -509,6 +509,7 @@ export const createJournalEntry = async (req, res, next) => {
       reference: normalizedPayload.reference || "",
       narration: normalizedPayload.narration || "",
       includeInLandlordStatement: Boolean(normalizedIncludeInStatement),
+      sourceModule: String(normalizedPayload.sourceModule || "propertyManagement"),
       status: "draft",
       createdBy: actorUserId,
       business: businessId,
@@ -516,7 +517,7 @@ export const createJournalEntry = async (req, res, next) => {
 
     emitToCompany(businessId, "journal:new", { journalId: journal._id });
 
-    const populated = await populateJournalQuery(JournalEntry.findById(journal._id));
+    const populated = await populateJournalQuery(JournalEntry.findById(journal._id)).lean();
     return res.status(201).json(populated);
   } catch (err) {
     next(err);
@@ -530,14 +531,19 @@ export const getJournalEntries = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "User must have a company context" });
     }
 
-    const { status, journalType, property, landlord, sourceModule, startDate, endDate, search, page = 1, limit = 5000 } = req.query;
+    const { status, journalType, property, landlord, sourceModule, excludeSourceModules, startDate, endDate, search, page = 1, limit = 5000 } = req.query;
     const filter = { business };
 
     if (status && status !== "all") filter.status = status;
     if (journalType && journalType !== "all") filter.journalType = journalType;
     if (property && property !== "all") filter.property = property;
     if (landlord && landlord !== "all") filter.landlord = landlord;
-    if (sourceModule && sourceModule !== "all") filter.sourceModule = sourceModule;
+    if (sourceModule && sourceModule !== "all") {
+      filter.sourceModule = sourceModule;
+    } else if (excludeSourceModules) {
+      const toExclude = String(excludeSourceModules).split(",").map((s) => s.trim()).filter(Boolean);
+      if (toExclude.length > 0) filter.sourceModule = { $nin: toExclude };
+    }
 
     if (startDate || endDate) {
       filter.date = {};
@@ -563,7 +569,7 @@ export const getJournalEntries = async (req, res, next) => {
           .sort({ date: -1, createdAt: -1 })
           .skip((pageNum - 1) * limitNum)
           .limit(limitNum)
-      ),
+      ).lean(),
       JournalEntry.countDocuments(filter),
     ]);
 
@@ -591,7 +597,7 @@ export const getJournalEntry = async (req, res, next) => {
         _id: req.params.id,
         business,
       })
-    );
+    ).lean();
 
     if (!journal) {
       return res.status(404).json({ success: false, message: "Journal not found" });
@@ -651,7 +657,7 @@ export const updateJournalEntry = async (req, res, next) => {
 
     emitToCompany(businessId, "journal:updated", { journalId: existing._id });
 
-    const populated = await populateJournalQuery(JournalEntry.findById(existing._id));
+    const populated = await populateJournalQuery(JournalEntry.findById(existing._id)).lean();
     return res.status(200).json(populated);
   } catch (err) {
     next(err);
@@ -684,7 +690,7 @@ export const postJournalEntry = async (req, res, next) => {
 
     emitToCompany(businessId, "journal:posted", { journalId: journal._id });
 
-    const populated = await populateJournalQuery(JournalEntry.findById(journal._id));
+    const populated = await populateJournalQuery(JournalEntry.findById(journal._id)).lean();
     return res.status(200).json(populated);
   } catch (err) {
     next(err);
@@ -732,7 +738,7 @@ export const reverseJournalEntry = async (req, res, next) => {
 
     emitToCompany(businessId, "journal:reversed", { journalId: journal._id });
 
-    const populated = await populateJournalQuery(JournalEntry.findById(journal._id));
+    const populated = await populateJournalQuery(JournalEntry.findById(journal._id)).lean();
     return res.status(200).json(populated);
   } catch (err) {
     next(err);
@@ -781,13 +787,10 @@ export const getJournalPostingPreview = async (req, res, next) => {
       payload: req.body || {},
     });
 
-    const debitAccount = await ChartOfAccount.findById(req.body.debitAccount)
-      .select("code name type group")
-      .lean();
-
-    const creditAccount = await ChartOfAccount.findById(req.body.creditAccount)
-      .select("code name type group")
-      .lean();
+    const [debitAccount, creditAccount] = await Promise.all([
+      ChartOfAccount.findById(req.body.debitAccount).select("code name type group").lean(),
+      ChartOfAccount.findById(req.body.creditAccount).select("code name type group").lean(),
+    ]);
 
     const amount = Number(req.body.amount || 0);
     const date = normalizeDate(req.body.date || new Date());
@@ -857,7 +860,7 @@ export const createJournalFromVoucher = async (req, res, next) => {
 
     emitToCompany(businessId, "journal:new", { journalId: journal._id });
 
-    const populated = await populateJournalQuery(JournalEntry.findById(journal._id));
+    const populated = await populateJournalQuery(JournalEntry.findById(journal._id)).lean();
     return res.status(201).json(populated);
   } catch (err) {
     next(err);

@@ -639,7 +639,7 @@ const reverseVoucherLedgerEntries = async ({ voucher, userId, reason }) => {
     sourceTransactionId: String(voucher._id),
     $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     status: "approved",
-  }).select("_id accountId journalGroupId metadata");
+  }).select("_id accountId journalGroupId metadata").lean();
 
   if (!originalEntries.length) return [];
 
@@ -677,7 +677,7 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
     sourceTransactionId: String(voucher._id),
     $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     status: "approved",
-  }).select("_id accountId journalGroupId");
+  }).select("_id accountId journalGroupId").lean();
 
   if (existingEntries.length > 0) {
     return {
@@ -823,7 +823,7 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
     status: "approved",
     "metadata.postingRole": { $in: ["liability_settlement", "cashbook_outflow"] },
-  }).select("_id accountId journalGroupId metadata");
+  }).select("_id accountId journalGroupId metadata").lean();
 
   if (existingSettlementEntries.length > 0) {
     return {
@@ -1074,7 +1074,7 @@ export const getPaymentVouchers = async (req, res, next) => {
 
     const rows = await populateVoucherQuery(
       PaymentVoucher.find(filter).sort({ createdAt: -1 })
-    );
+    ).lean();
 
     res.status(200).json(rows);
   } catch (err) {
@@ -1091,7 +1091,7 @@ export const getPaymentVoucher = async (req, res, next) => {
 
     const row = await populateVoucherQuery(
       PaymentVoucher.findOne({ _id: req.params.id, business })
-    );
+    ).lean();
 
     if (!row) return res.status(404).json({ message: "Payment voucher not found" });
     res.status(200).json(row);

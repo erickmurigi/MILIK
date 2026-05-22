@@ -1000,17 +1000,15 @@ export const getTenants = async (req, res, next) => {
         .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy")
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       Tenant.countDocuments(filter),
     ]);
 
-    const enrichedTenants = tenants.map((tenantDoc) => {
-      const tenant = typeof tenantDoc?.toObject === "function" ? tenantDoc.toObject() : tenantDoc;
-      return {
-        ...tenant,
-        status: computeOperationalTenantStatus({ tenant }),
-      };
-    });
+    const enrichedTenants = tenants.map((tenantDoc) => ({
+      ...tenantDoc,
+      status: computeOperationalTenantStatus({ tenant: tenantDoc }),
+    }));
 
     return res.status(200).json({
       success: true,
@@ -1532,10 +1530,7 @@ export const updateTenantStatus = async (req, res, next) => {
       terminationReason,
     });
 
-    const updatedTenant =
-      typeof updatedTenantDoc?.toObject === "function"
-        ? updatedTenantDoc.toObject()
-        : updatedTenantDoc;
+    const updatedTenant = updatedTenantDoc;
 
     await logAuditEvent({
       req,
@@ -1586,9 +1581,9 @@ export const getTenantPayments = async (req, res, next) => {
     const payments = await RentPayment.find({
       tenant: req.params.id,
       business: tenant.business,
-    }).sort({
-      paymentDate: -1,
-    });
+    })
+      .sort({ paymentDate: -1 })
+      .lean();
 
     return res.status(200).json({
       success: true,
@@ -1621,9 +1616,8 @@ export const getTenantBalance = async (req, res, next) => {
 
     const totalPaid = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
-    const allFailed = successful.length === 0 && failed.length > 0;
     return res.status(200).json({
-      success: !allFailed,
+      success: true,
       data: {
         tenant: tenant.name,
         currentBalance: tenant.balance,
@@ -2184,24 +2178,20 @@ export const migrateTenantCodes = async (req, res, next) => {
       .filter((n) => !Number.isNaN(n));
 
     let nextNumber = existingNumbers.length ? Math.max(...existingNumbers) + 1 : 1;
-    let updatedCount = 0;
     const updates = [];
+    const bulkOps = [];
 
     for (const tenant of tenantsWithoutCodes) {
       const tenantCode = `TT${String(nextNumber).padStart(4, "0")}`;
       nextNumber += 1;
+      bulkOps.push({ updateOne: { filter: { _id: tenant._id }, update: { $set: { tenantCode } } } });
+      updates.push({ tenantId: tenant._id, tenantName: tenant.name, assignedCode: tenantCode });
+    }
 
-      try {
-        await Tenant.findByIdAndUpdate(tenant._id, { tenantCode });
-        updatedCount += 1;
-        updates.push({
-          tenantId: tenant._id,
-          tenantName: tenant.name,
-          assignedCode: tenantCode,
-        });
-      } catch (err) {
-        console.error(`Failed to update tenant ${tenant._id}:`, err);
-      }
+    let updatedCount = 0;
+    if (bulkOps.length > 0) {
+      const result = await Tenant.bulkWrite(bulkOps, { ordered: false });
+      updatedCount = result.modifiedCount ?? bulkOps.length;
     }
 
     return res.status(200).json({

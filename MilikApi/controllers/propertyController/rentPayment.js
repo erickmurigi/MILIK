@@ -1512,7 +1512,7 @@ const reverseAllLedgerEntriesForPayment = async (payment, userId, reason) => {
     sourceTransactionId: String(payment._id),
     status: "approved",
     category: { $ne: "REVERSAL" },
-  });
+  }).lean();
 
   if (!originalEntries.length) {
     return [];
@@ -2245,12 +2245,12 @@ export const getPayments = async (req, res, next) => {
 
     const parsedPage = Math.max(1, Number.parseInt(page || "1", 10) || 1);
     const parsedLimit = Math.min(200, Math.max(1, Number.parseInt(limit || "50", 10) || 50));
-    const totalItems = await RentPayment.countDocuments(filter);
+    const [totalItems, items] = await Promise.all([
+      RentPayment.countDocuments(filter),
+      populateReceiptListQuery(query.clone().skip((parsedPage - 1) * parsedLimit).limit(parsedLimit)),
+    ]);
     const totalPages = Math.max(1, Math.ceil(totalItems / parsedLimit));
     const safePage = Math.min(parsedPage, totalPages);
-    const items = await populateReceiptListQuery(
-      query.skip((safePage - 1) * parsedLimit).limit(parsedLimit)
-    );
 
     let summary = null;
     if (String(includeTotals || "").toLowerCase() === "true") {
@@ -2454,10 +2454,12 @@ export const updatePaymentAllocations = async (req, res, next) => {
     if (actorUserId) nextMetadata.lastAllocationChangedBy = actorUserId;
     if (req.body?.reason) nextMetadata.lastAllocationChangeReason = String(req.body.reason).trim();
 
-    const linkedTenant = await Tenant.findOne({ _id: payment.tenant, business: payment.business }).select("_id depositHeldBy").lean();
-    const linkedUnit = payment.unit
-      ? await Unit.findOne({ _id: payment.unit, business: payment.business }).select("_id property").lean()
-      : null;
+    const [linkedTenant, linkedUnit] = await Promise.all([
+      Tenant.findOne({ _id: payment.tenant, business: payment.business }).select("_id depositHeldBy").lean(),
+      payment.unit
+        ? Unit.findOne({ _id: payment.unit, business: payment.business }).select("_id property").lean()
+        : Promise.resolve(null),
+    ]);
     const linkedProperty = linkedUnit?.property
       ? await Property.findOne({ _id: linkedUnit.property, business: payment.business }).select("_id depositHeldBy").lean()
       : null;
