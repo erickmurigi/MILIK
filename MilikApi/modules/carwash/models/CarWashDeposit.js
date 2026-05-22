@@ -31,6 +31,7 @@ const carWashDepositSchema = new mongoose.Schema(
 
 carWashDepositSchema.index({ business: 1, depositNumber: 1 }, { unique: true });
 carWashDepositSchema.index({ business: 1, depositDate: -1 });
+carWashDepositSchema.index({ business: 1, branch: 1, depositDate: -1 });
 carWashDepositSchema.index({ business: 1, status: 1 });
 carWashDepositSchema.index({ business: 1, cashbookAccount: 1 });
 

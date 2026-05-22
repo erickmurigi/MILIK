@@ -82,7 +82,6 @@ const MetricsGrid = ({ darkMode }) => {
         icon: <FaBuilding />,
         color: 'from-[#1e5a4a] to-[#0f3d2e]',
         iconBg: 'bg-[#1e5a4a]/20',
-        change: '-',
         loading: propertiesLoading,
       },
       {
@@ -92,7 +91,6 @@ const MetricsGrid = ({ darkMode }) => {
         icon: <FaHome />,
         color: 'from-[#31694E] to-[#1f4a35]',
         iconBg: 'bg-[#31694E]/25',
-        change: '-',
         loading: propertiesLoading,
       },
       {
@@ -102,7 +100,6 @@ const MetricsGrid = ({ darkMode }) => {
         icon: <FaChartPie />,
         color: 'from-[#4a9976] to-[#31694E]',
         iconBg: 'bg-[#4a9976]/25',
-        change: '-',
         loading: propertiesLoading,
       },
       {
@@ -112,7 +109,6 @@ const MetricsGrid = ({ darkMode }) => {
         icon: <FaMoneyBillWave />,
         color: 'from-[#E85C0D] to-[#c7490a]',
         iconBg: 'bg-[#E85C0D]/25',
-        change: '-',
         loading: propertiesLoading,
       },
     ],
@@ -132,9 +128,6 @@ const MetricsGrid = ({ darkMode }) => {
             <div className={`p-1.5 ${metric.iconBg} rounded-lg backdrop-blur-sm`}>
               <div className="text-white text-base">{metric.icon}</div>
             </div>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-500/35 text-white">
-              {metric.change}
-            </span>
           </div>
           <h3 className="mb-0.5 text-base font-extrabold tracking-tight">
             {metric.loading ? '...' : metric.value}

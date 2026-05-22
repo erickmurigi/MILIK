@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Company from '../models/Company.js';
@@ -14,10 +15,10 @@ const router = express.Router();
 
 const COMPANY_SELECT = 'companyName companyCode baseCurrency logo country town email phoneNo slogan companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus';
 const isSystemAdmin = (user = {}) => Boolean(user?.isSystemAdmin || user?.superAdminAccess);
-const SYSTEM_ACCESS_FIELDS = ['superAdminAccess', 'isSystemAdmin'];
+const SYSTEM_ACCESS_FIELDS = ['superAdminAccess', 'isSystemAdmin', 'isSystemAuditUser'];
 const userId = (user = {}) => String(user?._id || user?.id || '');
 const hasSystemAccessPayload = (payload = {}) => SYSTEM_ACCESS_FIELDS.some((field) => payload[field] === true);
-const hasRequiredUserFields = (body = {}) => ['surname', 'otherNames', 'email', 'phoneNumber', 'profile'].every((field) => String(body[field] || '').trim());
+const hasRequiredUserFields = (body = {}) => ['surname', 'otherNames', 'idNumber', 'email', 'phoneNumber', 'profile'].every((field) => String(body[field] || '').trim());
 
 const userAccessibleCompanyIds = (user = {}) => {
   if (isSystemAdmin(user)) return [];
@@ -102,11 +103,15 @@ const sanitizeAssignments = (assignments = [], companyDocs = [], fallbackModuleA
     .map((item) => {
       const companyId = String(item.company);
       const company = companyMap.get(companyId);
+      const carwashBranch = item?.carwashBranch
+        ? (mongoose.Types.ObjectId.isValid(String(item.carwashBranch)) ? String(item.carwashBranch) : null)
+        : null;
       return {
         company: companyId,
         moduleAccess: sanitizeModuleAccess(company, item?.moduleAccess && typeof item.moduleAccess === 'object' ? item.moduleAccess : fallbackModuleAccess),
         permissions: sanitizePermissionMap(item?.permissions && typeof item.permissions === 'object' ? item.permissions : fallbackPermissions),
         rights: Array.isArray(item?.rights) ? item.rights.map(String) : [],
+        carwashBranch: carwashBranch || null,
       };
     })
     .filter((item) => {
@@ -410,6 +415,10 @@ router.post('/', verifyUser, async (req, res) => {
     });
   } catch (error) {
     if (error.code === 11000) return res.status(400).json({ message: 'Duplicate field value (email might already exist)' });
+    if (error.name === 'ValidationError') {
+      const firstMessage = Object.values(error.errors)[0]?.message || error.message;
+      return res.status(400).json({ message: firstMessage });
+    }
     res.status(400).json({ message: error.message });
   }
 });
@@ -491,6 +500,10 @@ router.put('/:id', verifyUser, async (req, res) => {
     res.json({ ...serialized, accessSummary: buildAccessSummary(serialized) });
   } catch (error) {
     if (error.code === 11000) return res.status(400).json({ message: 'Duplicate field value' });
+    if (error.name === 'ValidationError') {
+      const firstMessage = Object.values(error.errors)[0]?.message || error.message;
+      return res.status(400).json({ message: firstMessage });
+    }
     res.status(400).json({ message: error.message });
   }
 });

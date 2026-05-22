@@ -9,40 +9,11 @@ import Landlord from "../../models/Landlord.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import { verifyUser } from "../verifyToken.js";
+import { isManagerIncomeAccount, isManagerExpenseAccount } from "../../utils/accountClassifiers.js";
 
 const router = express.Router();
 
-// ── Account classifiers (unchanged logic) ────────────────────────────────────
-
-const isManagerIncomeAccount = (account = {}) => {
-  const code = String(account.code || "").trim();
-  const name = String(account.name || "").trim().toLowerCase();
-  const subGroup = String(account.subGroup || "").trim().toLowerCase();
-  if (["4200", "4210", "4103"].includes(code)) return true;
-  if (
-    name.includes("management fee") ||
-    name.includes("commission income") ||
-    name.includes("late fee") ||
-    name.includes("penalty")
-  ) return true;
-  if (subGroup === "other income" && !name.includes("property income")) return true;
-  return false;
-};
-
-const isManagerExpenseAccount = (account = {}) => {
-  const code = String(account.code || "").trim();
-  const name = String(account.name || "").trim().toLowerCase();
-  const subGroup = String(account.subGroup || "").trim().toLowerCase();
-  if (["5200", "5201", "5202"].includes(code)) return true;
-  if (subGroup === "administrative expenses" || subGroup === "finance costs") return true;
-  if (
-    name.includes("management expense") ||
-    name.includes("bank charges") ||
-    name.includes("legal") ||
-    name.includes("compliance")
-  ) return true;
-  return false;
-};
+// isManagerIncomeAccount and isManagerExpenseAccount are imported from accountClassifiers.js
 
 // ── Aggregation expression helpers ───────────────────────────────────────────
 
@@ -123,12 +94,12 @@ router.get("/summary", verifyUser, async (req, res) => {
       }),
       RentPayment.countDocuments({ business, isConfirmed: { $ne: true } }),
       Tenant.countDocuments({ business, status: "active" }),
-      Tenant.countDocuments({ business, $or: [{ status: "overdue" }, { balance: { $gt: 0 } }] }),
+      Tenant.countDocuments({ business, status: "overdue" }),
       Maintenance.countDocuments({ business, status: "pending" }),
       Maintenance.countDocuments({ business, status: "completed" }),
       Landlord.countDocuments({ business, status: "active" }),
       Tenant.aggregate([
-        { $match: { business } },
+        { $match: { business, status: { $in: ["active", "overdue"] } } },
         { $group: { _id: null, total: { $sum: { $ifNull: ["$rent", 0] } } } },
       ]),
       RentPayment.aggregate([

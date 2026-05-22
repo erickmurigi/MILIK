@@ -727,11 +727,13 @@ const setCompanySmsTemplates = (company, templates = []) => {
     ? company.communication.toObject()
     : company.communication || {};
   const smsProfiles = getCompanySmsProfiles(company);
-
-  company.communication = {
-    ...currentCommunication,
-    smsTemplates: mergeSmsTemplatesWithDefaults(templates, smsProfiles),
-  };
+  const merged = mergeSmsTemplatesWithDefaults(templates, smsProfiles);
+  // Strip synthetic/fake IDs (non-ObjectId strings) so Mongoose auto-assigns real ObjectIds on save
+  const toSave = merged.map((template) => {
+    const { _id, ...rest } = template;
+    return /^[a-f0-9]{24}$/i.test(String(_id || '')) ? { _id, ...rest } : rest;
+  });
+  company.communication = { ...currentCommunication, smsTemplates: toSave };
 };
 
 const applySmsTemplateMutation = ({ company, payload, actorUserId }) => {

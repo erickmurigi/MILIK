@@ -122,12 +122,6 @@ const resolveInvoiceCoverageWindow = (invoice = {}) => {
 const isInvoiceInCurrentPenaltyWindow = (invoice, runDate) => {
   const runAt = startOfDay(runDate);
   const invoiceWindow = resolveInvoiceCoverageWindow(invoice);
-  if (invoiceWindow.periodKey) {
-    return invoiceWindow.periodKey === buildPeriodKey({ repeatFrequency: invoiceWindow.billingPeriodKey === "monthly" ? "monthly" : "manual" }, invoiceWindow.start)
-      ? runAt >= invoiceWindow.start && runAt <= invoiceWindow.end
-      : runAt >= invoiceWindow.start && runAt <= invoiceWindow.end;
-  }
-
   return runAt >= invoiceWindow.start && runAt <= invoiceWindow.end;
 };
 

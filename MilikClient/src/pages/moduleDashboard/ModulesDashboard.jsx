@@ -1,5 +1,5 @@
 // pages/ModulesDashboard/ModulesDashboard.jsx
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
@@ -11,121 +11,128 @@ import {
   FaStore,
   FaArrowRight,
   FaEnvelope,
-  FaHome,
   FaLock,
   FaCar,
   FaBuilding,
+  FaSearch,
+  FaHome,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { getCompanyOperatingModeLabel, hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import {
+  getCompanyOperatingModeLabel,
+  hasCompanyModule,
+  isSelfManagingLandlordCompany,
+} from "../../utils/companyModules";
 import StartMenu from "../../components/StartMenu/StartMenu";
 import "./ModulesDashboard.css";
+
+const CATEGORIES = ["All", "Core", "Finance", "Sales", "Operations", "People"];
 
 const moduleRegistry = [
   {
     id: "milik",
     moduleKey: "propertyManagement",
     title: "MILIK",
-    subtitle: "Milik Property Management System",
-    description: "Launch Milik core workspace for properties, tenants, leases and rent operations.",
+    subtitle: "Property Management",
     status: "active",
     route: "/dashboard",
-    icon: <img src="/logo.png" alt="Milik logo" className="h-9 w-9 object-contain milik-logo-mark" />,
-    tint: "milik-icon-light",
+    icon: null, // uses logo image
+    color: "#0b3b2e",
+    category: "Core",
   },
   {
     id: "accounts",
     moduleKey: "accounts",
-    title: "Accounts & Finance",
-    subtitle: "Financial management and accounting",
-    description: "Track income, expenses, analytics and accounting operations with clear financial visibility.",
+    title: "Accounting",
+    subtitle: "Finance & Reporting",
     status: "active",
     route: "/financial/chart-of-accounts",
     icon: <FaChartLine />,
-    tint: "milik-icon-gold",
+    color: "#b45309",
+    category: "Finance",
   },
   {
     id: "billing",
     moduleKey: "billing",
     title: "Billing",
-    subtitle: "Invoice and billing workspace",
-    description: "Prepare billing-focused workflows for future activation under the company module set.",
+    subtitle: "Invoices & Payments",
     status: "coming",
     icon: <FaEnvelope />,
-    tint: "milik-icon-gold",
+    color: "#ca8a04",
+    category: "Finance",
   },
   {
     id: "inventory",
     moduleKey: "inventory",
     title: "Inventory",
-    subtitle: "Stock management and warehousing",
-    description: "Monitor stock movement, automate replenishment and keep warehouse operations synchronized.",
+    subtitle: "Stock & Warehousing",
     status: "coming",
     icon: <FaWarehouse />,
-    tint: "milik-icon-cyan",
+    color: "#0e7490",
+    category: "Operations",
   },
   {
     id: "propertySale",
     moduleKey: "propertySale",
     title: "Property Sales",
-    subtitle: "Land & property sale management",
-    description: "Manage listings, buyers, offers, deals, payment schedules, and agent commissions end-to-end.",
+    subtitle: "Listings & Deals",
     status: "active",
     route: "/sale/dashboard",
     icon: <FaBuilding />,
-    tint: "milik-icon-teal",
+    color: "#0f766e",
+    category: "Sales",
   },
   {
     id: "security",
     moduleKey: "securityServices",
     title: "Security",
-    subtitle: "Access control and monitoring",
-    description: "Protect operations with role controls, security workflows and monitoring tools.",
+    subtitle: "Access & Monitoring",
     status: "coming",
     icon: <FaShieldAlt />,
-    tint: "milik-icon-charcoal",
+    color: "#374151",
+    category: "Operations",
   },
   {
     id: "pos",
     moduleKey: "pos",
     title: "POS & Billing",
-    subtitle: "Point of sale system",
-    description: "Process payments, issue receipts and manage checkout operations with inventory sync.",
+    subtitle: "Point of Sale",
     status: "coming",
     icon: <FaStore />,
-    tint: "milik-icon-orange",
+    color: "#c2410c",
+    category: "Sales",
   },
   {
     id: "carwash",
     moduleKey: "carwash",
-    title: "MILIK Car Wash",
-    subtitle: "Car Wash Management",
-    description: "Manage wash jobs, services, payments, staff, and daily operations.",
+    title: "Car Wash",
+    subtitle: "Wash Jobs & Staff",
     status: "active",
     route: "/carwash/dashboard",
     icon: <FaCar />,
-    tint: "milik-icon-cyan",
+    color: "#0369a1",
+    category: "Operations",
   },
   {
     id: "hr",
     moduleKey: "hr",
     title: "Human Resource",
-    subtitle: "HR & People management",
-    description: "Manage employees, departments, designations, leave, payroll, and performance appraisals.",
+    subtitle: "People & Payroll",
     status: "active",
     route: "/hr/dashboard",
     icon: <FaUsers />,
-    tint: "milik-icon-teal",
+    color: "#7c3aed",
+    category: "People",
   },
   {
     id: "vendoor",
     moduleKey: "procurement",
     title: "Ven-Door",
-    subtitle: "Vendor management portal",
-    description: "Centralize supplier workflows, purchase coordination and vendor performance.",
+    subtitle: "Vendor Management",
     status: "coming",
     icon: <FaHandshake />,
-    tint: "milik-icon-indigo",
+    color: "#1d4ed8",
+    category: "Operations",
   },
 ];
 
@@ -133,152 +140,154 @@ const ModulesDashboard = () => {
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany || null);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
   const operatingModeLabel = getCompanyOperatingModeLabel(activeCompanyContext?.companyMode);
 
   useEffect(() => {
-    const companyName = String(activeCompanyContext?.companyName || activeCompanyContext?.name || '').trim();
-    document.title = companyName
-      ? `Choose Module | ${companyName} | Milik`
-      : 'Choose Module | Milik';
+    const name = String(activeCompanyContext?.companyName || activeCompanyContext?.name || "").trim();
+    document.title = name ? `Apps | ${name} | Milik` : "Apps | Milik";
   }, [activeCompanyContext]);
+
   const visibleModules = useMemo(() => {
     if (!activeCompanyContext) return [];
     return moduleRegistry
-      .map((moduleItem) => {
-        if (moduleItem.id !== "milik") return moduleItem;
+      .map((m) => {
+        if (m.id !== "milik") return m;
         return {
-          ...moduleItem,
-          subtitle: isLandlordMode ? "Self-managing landlord workspace" : moduleItem.subtitle,
-          description: isLandlordMode
-            ? "Launch a landlord-focused workspace for your own properties, tenants, receipts, expenses and reports."
-            : moduleItem.description,
+          ...m,
+          subtitle: isLandlordMode ? "Landlord Workspace" : m.subtitle,
         };
       })
-      .filter((moduleItem) => hasCompanyModule(activeCompanyContext, moduleItem.moduleKey));
+      .filter((m) => hasCompanyModule(activeCompanyContext, m.moduleKey));
   }, [activeCompanyContext, isLandlordMode]);
 
-  const handleOpen = (moduleItem) => {
-    if (moduleItem.status === "active" && moduleItem.route) {
+  const filteredModules = useMemo(() => {
+    let list = visibleModules;
+    if (activeCategory !== "All") list = list.filter((m) => m.category === activeCategory);
+    const q = search.trim().toLowerCase();
+    if (q) list = list.filter((m) => m.title.toLowerCase().includes(q) || m.subtitle.toLowerCase().includes(q) || m.category.toLowerCase().includes(q));
+    return list;
+  }, [visibleModules, activeCategory, search]);
+
+  // only show categories that have at least one visible module
+  const availableCategories = useMemo(() => {
+    const cats = new Set(visibleModules.map((m) => m.category));
+    return CATEGORIES.filter((c) => c === "All" || cats.has(c));
+  }, [visibleModules]);
+
+  const handleOpen = (m) => {
+    if (m.status === "active" && m.route) {
       const recent = JSON.parse(localStorage.getItem("recentModules") || "[]");
-      const updated = [moduleItem.id, ...recent.filter((id) => id !== moduleItem.id)].slice(0, 5);
-      localStorage.setItem("recentModules", JSON.stringify(updated));
-      navigate(moduleItem.route);
+      localStorage.setItem("recentModules", JSON.stringify([m.id, ...recent.filter((id) => id !== m.id)].slice(0, 5)));
+      navigate(m.route);
       return;
     }
-
-    if (moduleItem.status === "coming") {
-      toast.info(`${moduleItem.title} is enabled for this company and its workspace is coming soon.`);
+    if (m.status === "coming") {
+      toast.info(`${m.title} is coming soon for this company.`);
       return;
     }
-
-    toast.warning(`${moduleItem.title} is currently unavailable for your account.`);
+    toast.warning(`${m.title} is currently unavailable.`);
   };
-
-  const StatusPill = ({ status }) => {
-    const base = "milik-status-pill";
-    if (status === "active") return <span className={`${base} active`}>Live</span>;
-    if (status === "coming") return <span className={`${base} coming`}>Soon</span>;
-    return <span className={`${base} locked`}>Locked</span>;
-  };
-
-  const emptyState = !activeCompanyContext
-    ? {
-        title: "No active company selected",
-        subtitle: "Switch to a company workspace first, then the enabled modules for that company will appear here.",
-      }
-    : {
-        title: "No modules enabled",
-        subtitle: "No business modules are currently assigned to this company.",
-      };
 
   return (
-    <div className="milik-modules-page">
-      <div className="milik-atmosphere" aria-hidden="true">
-        <div className="milik-orb orb-1" />
-        <div className="milik-orb orb-2" />
-        <div className="milik-orb orb-3" />
-        <div className="milik-grid-sheen" />
+    <div className="odoo-page">
+      {/* ── Subtle ambient layer ── */}
+      <div className="odoo-bg" aria-hidden="true">
+        <div className="odoo-orb odoo-orb-a" />
+        <div className="odoo-orb odoo-orb-b" />
       </div>
 
-      <main className="milik-modules-main">
-        <header className="milik-header-panel">
-          <div className="milik-header-chip">
-            <img src="/logo.png" alt="Milik" className="h-9 w-9 object-contain" />
-            <span>Milik Smart Workbench</span>
+      {/* ── Top bar ── */}
+      <header className="odoo-topbar">
+        <div className="odoo-topbar-left">
+          <img src="/logo.png" alt="Milik" className="odoo-topbar-logo" />
+          <div className="odoo-topbar-company">
+            <span className="odoo-topbar-name">{activeCompanyContext?.companyName || "Milik"}</span>
+            {operatingModeLabel && <span className="odoo-topbar-mode">{operatingModeLabel}</span>}
           </div>
-          <h1>Choose a Module</h1>
-          <p>
-            {activeCompanyContext?.companyName
-              ? `Only the modules enabled for ${activeCompanyContext.companyName} are shown here. Operating mode: ${operatingModeLabel}.`
-              : "A cleaner, sharper control center for every Milik business line."}
-          </p>
-        </header>
+        </div>
+        <div className="odoo-topbar-search">
+          <FaSearch className="odoo-search-ico" size={13} />
+          <input
+            className="odoo-search-input"
+            type="text"
+            placeholder="Search apps…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setActiveCategory("All"); }}
+          />
+        </div>
+      </header>
 
-        <section className="milik-module-grid" aria-label="Milik modules">
-          <div className="milik-module-grid-inner">
-            {visibleModules.map((moduleItem, index) => (
+      {/* ── Category tab strip ── */}
+      <div className="odoo-tabs-bar">
+        <div className="odoo-tabs">
+          {availableCategories.map((cat) => (
+            <button
+              key={cat}
+              className={`odoo-tab ${activeCategory === cat ? "odoo-tab-active" : ""}`}
+              onClick={() => { setActiveCategory(cat); setSearch(""); }}
+            >
+              {cat}
+              {cat !== "All" && (
+                <span className="odoo-tab-count">
+                  {visibleModules.filter((m) => m.category === cat).length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── App grid ── */}
+      <main className="odoo-main">
+        {filteredModules.length > 0 ? (
+          <div className="odoo-grid">
+            {filteredModules.map((m, i) => (
               <button
-                key={moduleItem.id}
-                onClick={() => handleOpen(moduleItem)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    handleOpen(moduleItem);
-                  }
-                }}
-                className={`milik-module-tile ${moduleItem.id === "milik" ? "milik-featured-tile" : ""}`}
-                style={{ animationDelay: `${(index + 1) * 90}ms` }}
-                aria-label={`${moduleItem.title} - ${moduleItem.subtitle}${moduleItem.status === "active" ? "" : " (Coming soon)"}`}
-                tabIndex={0}
+                key={m.id}
+                className={`odoo-tile ${m.status === "coming" ? "odoo-tile-soon" : ""}`}
+                style={{ animationDelay: `${i * 55}ms` }}
+                onClick={() => handleOpen(m)}
+                aria-label={`${m.title} — ${m.subtitle}`}
               >
-                <div className="milik-module-overlay" aria-hidden="true" />
-                <div className="milik-module-content">
-                  <div className="milik-module-head">
-                    <StatusPill status={moduleItem.status} />
-                  </div>
+                {/* Status dot */}
+                <span className={`odoo-dot ${m.status === "active" ? "odoo-dot-live" : "odoo-dot-soon"}`} title={m.status === "active" ? "Live" : "Coming soon"} />
 
-                  <div className={`milik-icon-shell ${moduleItem.tint} ${moduleItem.id === "milik" ? "milik-logo-shell" : ""}`}>
-                    <span className="milik-icon-wrap">{moduleItem.icon}</span>
-                  </div>
+                {/* Icon panel — top half of card */}
+                <div className="odoo-icon-panel" style={{ background: m.color }}>
+                  {m.id === "milik" ? (
+                    <img src="/logo.png" alt="Milik" className="odoo-logo-img" />
+                  ) : (
+                    <span className="odoo-icon">{m.icon}</span>
+                  )}
+                </div>
 
-                  <h3>{moduleItem.title}</h3>
-                  <p className="milik-subtitle">{moduleItem.subtitle}</p>
+                {/* Text panel — bottom half */}
+                <div className="odoo-tile-body">
+                  <div className="odoo-tile-name">{m.title}</div>
+                  <div className="odoo-tile-sub">{m.subtitle}</div>
+                </div>
 
-                  <div className="milik-tile-action">
-                    <span>{moduleItem.status === "active" ? "Open Module" : "Preview"}</span>
-                    <div className="milik-arrow-wrap">
-                      <FaArrowRight />
-                    </div>
-                  </div>
+                {/* Hover overlay — "Open" button */}
+                <div className="odoo-hover-overlay">
+                  <span className="odoo-open-btn">
+                    {m.status === "active" ? "Open" : "Coming soon"}
+                    {m.status === "active" && <FaArrowRight size={11} />}
+                  </span>
                 </div>
               </button>
             ))}
           </div>
-        </section>
-
-        {!visibleModules.length && (
-          <section className="milik-module-grid" aria-label="No enabled modules">
-            <div className="milik-module-grid-inner">
-              <div className="milik-module-tile milik-featured-tile" style={{ cursor: "default" }}>
-                <div className="milik-module-overlay" aria-hidden="true" />
-                <div className="milik-module-content">
-                  <div className="milik-module-head">
-                    <span className="milik-status-pill locked">Unavailable</span>
-                  </div>
-                  <div className="milik-icon-shell milik-icon-charcoal">
-                    <span className="milik-icon-wrap">
-                      <FaLock />
-                    </span>
-                  </div>
-                  <h3>{emptyState.title}</h3>
-                  <p className="milik-subtitle">{emptyState.subtitle}</p>
-                </div>
-              </div>
-            </div>
-          </section>
+        ) : (
+          <div className="odoo-empty">
+            <div className="odoo-empty-ico"><FaLock /></div>
+            <p className="odoo-empty-title">{search ? "No apps match your search" : "No modules available"}</p>
+            <p className="odoo-empty-sub">{search ? `Try searching something else` : "No business modules are assigned to this company."}</p>
+          </div>
         )}
       </main>
 

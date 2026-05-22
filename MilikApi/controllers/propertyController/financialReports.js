@@ -11,6 +11,7 @@ import { computeTenantInvoiceSnapshotsBatch } from "./tenantInvoices.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import { computeAccountBalance, getNormalBalanceSide } from "../../services/accountingClassificationService.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
+import { isManagerIncomeAccount, isManagerExpenseAccount } from "../../utils/accountClassifiers.js";
 
 const toObjectId = (value) => {
   const raw = typeof value === "object" && value?._id ? value._id : value;
@@ -62,69 +63,7 @@ const resolveInvoiceDueDateForReports = (invoice = {}) => {
   return fallback ? normalizeDate(fallback, true) : null;
 };
 
-const isManagerIncomeAccount = (account = {}) => {
-  const code = String(account.code || "").trim();
-  const name = String(account.name || "").trim().toLowerCase();
-  const subGroup = String(account.subGroup || "").trim().toLowerCase();
-
-  if (code === "4200" || code === "4210") return true;
-  if (name.includes("management fee") || name.includes("commission income")) return true;
-  if (name.includes("late fee") || name.includes("penalty")) return true;
-  if (name.includes("lease agreement fee") || name.includes("letting fee") || name.includes("agreement fee")) return true;
-  if (subGroup === "other income" && !name.includes("property income")) return true;
-
-  if (["4100", "4101", "4102", "4300"].includes(code)) return false;
-  if (name.includes("rent income")) return false;
-  if (name.includes("service charge income")) return false;
-  if (name.includes("utility recharge income")) return false;
-  if (name.includes("other property income")) return false;
-
-  return false;
-};
-
-const isManagerExpenseAccount = (account = {}) => {
-  const code = String(account.code || "").trim();
-  const name = String(account.name || "").trim().toLowerCase();
-  const subGroup = String(account.subGroup || "").trim().toLowerCase();
-
-  if (["5200", "5201", "5202"].includes(code)) return true;
-  if (subGroup === "administrative expenses" || subGroup === "finance costs") return true;
-  if (name.includes("management expense")) return true;
-  if (name.includes("bank charges")) return true;
-  if (name.includes("legal") || name.includes("compliance")) return true;
-  if (
-    name.includes("salary") ||
-    name.includes("wage") ||
-    name.includes("office") ||
-    name.includes("internet") ||
-    name.includes("software") ||
-    name.includes("subscription") ||
-    name.includes("marketing") ||
-    name.includes("transport") ||
-    name.includes("fuel")
-  ) return true;
-
-  // Internal petty cash / office running costs
-  if (name.includes("staff welfare") || name.includes("welfare")) return true;
-  if (name.includes("miscellaneous")) return true;
-  if (name.includes("stationery") || name.includes("stationary")) return true;
-  if (name.includes("cleaning supplies")) return true;
-  if (name.includes("petty cash")) return true;
-  if (name.includes("postage") || name.includes("courier")) return true;
-  if (name.includes("staff training") || name.includes("training")) return true;
-  if (name.includes("tea") || name.includes("refreshment") || name.includes("catering")) return true;
-
-  // Explicit property expense exclusions (must come after inclusions)
-  if (["5100", "5101", "5102", "5103", "5104"].includes(code)) return false;
-  if (subGroup === "property expenses") return false;
-  if (name.includes("maintenance expense")) return false;
-  if (name.includes("repairs expense")) return false;
-  if (name.includes("cleaning expense")) return false;
-  if (name.includes("security expense")) return false;
-  if (name.includes("utility expense")) return false;
-
-  return false;
-};
+// isManagerIncomeAccount and isManagerExpenseAccount imported from accountClassifiers.js
 
 const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, endDate = null }) => {
   const match = {

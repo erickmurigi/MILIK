@@ -2,14 +2,21 @@ import { adminRequests } from "../utils/requestMethods";
 
 const unwrap = (response) => response?.data?.data ?? response?.data;
 
-const getBranchStorageKey = () => {
-  try { const cid = localStorage.getItem("milik_active_company_id") || "default"; return `carwash_active_branch_${cid}`; } catch { return "carwash_active_branch_default"; }
+export const getActiveBranchId = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("milik_user") || "null");
+    const activeCompanyId = localStorage.getItem("milik_active_company_id") || "";
+    if (!user || !activeCompanyId) return "";
+    const assignments = Array.isArray(user.companyAssignments) ? user.companyAssignments : [];
+    const assignment = assignments.find((a) => String(a?.company?._id || a?.company || "") === activeCompanyId);
+    return assignment?.carwashBranch || "";
+  } catch {
+    return "";
+  }
 };
-export const getActiveBranchId = () => { try { return localStorage.getItem(getBranchStorageKey()) || ""; } catch { return ""; } };
-export const setActiveBranchId = (id) => { try { if (id) localStorage.setItem(getBranchStorageKey(), id); else localStorage.removeItem(getBranchStorageKey()); } catch {} };
 
-const bp = (params = {}) => { const b = getActiveBranchId(); return b ? { branch: b, ...params } : params; };
-const bb = (body = {}) => { const b = getActiveBranchId(); return b ? { branch: b, ...body } : body; };
+const bp = (params = {}) => params;
+const bb = (body = {}) => body;
 
 export const carWashApi = {
   getDailySummary: async (date) => unwrap(await adminRequests.get("/carwash/reports/daily-summary", { params: bp({ date }) })),

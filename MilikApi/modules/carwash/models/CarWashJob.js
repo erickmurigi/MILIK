@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const JOB_STATUSES = ["waiting", "washing", "done", "paid", "cancelled"];
 const PAYMENT_STATUSES = ["unpaid", "partial", "paid"];
+const JOB_TYPES = ["vehicle", "carpet"];
 
 const carWashJobSchema = new mongoose.Schema(
   {
@@ -12,11 +13,14 @@ const carWashJobSchema = new mongoose.Schema(
       index: true,
     },
     branch: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null, index: true },
+    jobType: { type: String, enum: JOB_TYPES, default: "vehicle", index: true },
     jobNumber: { type: String, required: true, trim: true },
     customerName: { type: String, trim: true, default: "" },
     phone: { type: String, trim: true, default: "" },
-    plateNumber: { type: String, required: true, trim: true, uppercase: true },
+    plateNumber: { type: String, trim: true, uppercase: true, default: "" },
     vehicleType: { type: String, trim: true, default: "" },
+    itemDescription: { type: String, trim: true, default: "" },
+    expectedReadyAt: { type: Date, default: null },
     service: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashService", default: null },
     serviceName: { type: String, trim: true, default: "" },
     price: { type: Number, required: true, min: 0, default: 0 },
@@ -32,6 +36,9 @@ const carWashJobSchema = new mongoose.Schema(
 
 carWashJobSchema.index({ business: 1, jobNumber: 1 }, { unique: true });
 carWashJobSchema.index({ business: 1, createdAt: -1 });
+carWashJobSchema.index({ business: 1, branch: 1, createdAt: -1 });
+carWashJobSchema.index({ business: 1, jobType: 1, createdAt: -1 });
 carWashJobSchema.index({ business: 1, plateNumber: 1 });
+carWashJobSchema.index({ business: 1, jobType: 1, status: 1 });
 
 export default mongoose.model("CarWashJob", carWashJobSchema);

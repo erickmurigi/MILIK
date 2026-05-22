@@ -3,20 +3,10 @@ import { createError } from "../../../utils/error.js";
 
 export const resolveActiveBusinessId = (req) => {
   const rawCompanyId =
-    req.body?.business ||
-    req.body?.businessId ||
-    req.body?.company ||
-    req.body?.companyId ||
-    req.query?.business ||
-    req.query?.businessId ||
-    req.query?.company ||
-    req.query?.companyId ||
     req.headers?.["x-active-company-id"] ||
     req.headers?.["x-company-id"] ||
     req.user?.company?._id ||
     req.user?.company ||
-    req.userCompany ||
-    req.companyContext?._id ||
     null;
 
   const businessId = rawCompanyId ? String(rawCompanyId) : "";
@@ -54,12 +44,18 @@ export const parseDateRange = (dateValue = null) => {
 export const escapeRegex = (value = "") => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const resolveActiveBranchId = (req) => {
-  const raw =
-    req.body?.branch ||
-    req.query?.branch ||
-    req.headers?.["x-active-branch-id"] ||
-    null;
-  if (!raw) return null;
-  const id = String(raw).trim();
+  const activeCompanyId = String(
+    req.headers?.["x-active-company-id"] ||
+    req.headers?.["x-company-id"] ||
+    req.user?.company?._id ||
+    req.user?.company ||
+    ""
+  );
+  if (!activeCompanyId) return null;
+  const assignments = Array.isArray(req.user?.companyAssignments) ? req.user.companyAssignments : [];
+  const assignment = assignments.find((a) => String(a?.company?._id || a?.company) === activeCompanyId);
+  const branchId = assignment?.carwashBranch || null;
+  if (!branchId) return null;
+  const id = String(branchId).trim();
   return mongoose.Types.ObjectId.isValid(id) ? id : null;
 };

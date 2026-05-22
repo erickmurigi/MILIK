@@ -18,6 +18,7 @@ import {
   FaReceipt,
   FaMoneyBillWave,
   FaSms,
+  FaEnvelope,
 } from "react-icons/fa";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { toast } from "react-toastify";
@@ -857,6 +858,9 @@ function InvoiceTableRowBase({
       <td className="px-3 py-2 text-right font-bold text-slate-900">
         KES {Number(invoice.amount || 0).toLocaleString()}
       </td>
+      <td className="px-3 py-2 text-right font-semibold text-emerald-700">
+        {Number(invoice.appliedAmount || 0) > 0 ? `KES ${Number(invoice.appliedAmount).toLocaleString()}` : <span className="text-slate-400">—</span>}
+      </td>
       <td className="px-3 py-2 text-center">
         <span
           className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${
@@ -924,6 +928,7 @@ function areEqual(prev, next) {
     prev.invoice._id === next.invoice._id &&
     prev.invoice.status === next.invoice.status &&
     prev.invoice.amount === next.invoice.amount &&
+    prev.invoice.appliedAmount === next.invoice.appliedAmount &&
     prev.invoice.updatedAt === next.invoice.updatedAt &&
     prev.isSelected === next.isSelected &&
     prev.idx === next.idx &&
@@ -947,6 +952,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [showSmsModal, setShowSmsModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [bookingAction, setBookingAction] = useState("");
   const [showSingleBooking, setShowSingleBooking] = useState(false);
@@ -3334,9 +3340,11 @@ const createInvoiceForTenant = async (
                 <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
                 <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Pending: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                {[{val:"ACTIVE",label:"All"},{val:"Issued",label:"Issued"},{val:"Paid",label:"Paid"}].map(({val,label}) => (
-                  <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>{label}</button>
-                ))}
+                <select value={draftFilters.status} onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                  <option value="ACTIVE">All</option>
+                  <option value="Issued">Issued</option>
+                  <option value="Paid">Paid</option>
+                </select>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 {!tenantId && <input type="text" value={draftFilters.tenantName} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantName: e.target.value }))} placeholder="Tenant" className="h-7 w-28 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />}
@@ -3357,10 +3365,17 @@ const createInvoiceForTenant = async (
                   onClick={() => setShowSmsModal(true)}
                   disabled={selectedCount === 0}
                   title={selectedCount === 0 ? "Select invoices to SMS" : `SMS ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`}
-                  className={`h-7 shrink-0 flex items-center gap-1.5 rounded px-2.5 text-xs font-semibold text-white shadow-sm transition ${selectedCount > 0 ? "bg-emerald-600 hover:bg-emerald-700" : "cursor-not-allowed bg-gray-400"}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm transition ${selectedCount > 0 ? "bg-emerald-600 hover:bg-emerald-700" : "cursor-not-allowed bg-gray-400"}`}
                 >
                   <FaSms size={11} />
-                  {selectedCount > 0 ? `SMS (${selectedCount})` : "SMS"}
+                </button>
+                <button
+                  onClick={() => setShowEmailModal(true)}
+                  disabled={selectedCount === 0}
+                  title={selectedCount === 0 ? "Select invoices to email" : `Email ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm transition ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-gray-400"}`}
+                >
+                  <FaEnvelope size={11} />
                 </button>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <button type="button" onClick={() => navigate("/tenants/deposits")} disabled={!canCreateInvoice} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold text-white ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}>Deposit</button>
@@ -3391,6 +3406,7 @@ const createInvoiceForTenant = async (
                     <th className="px-3 py-2 text-center font-semibold">Booking / Invoice Date</th>
                     <th className="px-3 py-2 text-center font-semibold">Due Date</th>
                     <th className="px-3 py-2 text-right font-semibold">Amount</th>
+                    <th className="px-3 py-2 text-right font-semibold">Paid</th>
                     <th className="px-3 py-2 text-center font-semibold">Status</th>
                     <th className="px-3 py-2 text-center font-semibold">Created</th>
                     <th className="px-3 py-2 text-right font-semibold">Actions</th>
@@ -4328,6 +4344,18 @@ const createInvoiceForTenant = async (
         allowedChannels={["sms"]}
         defaultChannel="sms"
         onSent={() => setShowSmsModal(false)}
+      />
+      <CommunicationComposerModal
+        open={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        businessId={currentCompany?._id || ""}
+        contextType="invoice"
+        recordIds={selectedInvoices}
+        title={`Email Invoice${selectedInvoices.length !== 1 ? "s" : ""} (${selectedInvoices.length})`}
+        subtitle="Send an email notification to the tenants for the selected invoices."
+        allowedChannels={["email"]}
+        defaultChannel="email"
+        onSent={() => setShowEmailModal(false)}
       />
     </DashboardLayout>
   );

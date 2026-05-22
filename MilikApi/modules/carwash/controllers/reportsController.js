@@ -122,7 +122,7 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
   const expenseMatch = { business: businessId, expenseDate: { $gte: start, $lt: end }, status: "paid", ...branchFilter };
   const pendingExpenseMatch = { business: businessId, expenseDate: { $gte: start, $lt: end }, status: { $in: ["draft", "approved"] }, ...branchFilter };
 
-  const [jobStatusRows, paymentRows, expenseRows, pendingExpenseRows, expenseCategoryRows, jobsCount, jobTrendRows, paymentTrendRows, serviceRows, staffRows] = await Promise.all([
+  const [jobStatusRows, paymentRows, expenseRows, pendingExpenseRows, expenseCategoryRows, jobTrendRows, paymentTrendRows, serviceRows, staffRows] = await Promise.all([
     CarWashJob.aggregate([{ $match: jobMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
     CarWashPayment.aggregate([{ $match: paymentMatch }, { $group: { _id: "$method", amount: { $sum: "$amount" }, count: { $sum: 1 } } }]),
     CarWashExpense.aggregate([{ $match: expenseMatch }, { $group: { _id: "$status", amount: { $sum: "$amount" }, count: { $sum: 1 } } }]),
@@ -133,7 +133,6 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
       { $sort: { amount: -1, count: -1 } },
       { $limit: 20 },
     ]),
-    CarWashJob.countDocuments({ business, createdAt: { $gte: start, $lt: end }, ...(branchId ? { branch: branchId } : {}) }),
     CarWashJob.aggregate([
       { $match: jobMatch },
       { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
@@ -176,6 +175,7 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
     revenueByMethod[row._id || "other"] = Number(row.amount || 0);
   });
 
+  const jobsCount = Object.values(statusCounts).reduce((sum, n) => sum + n, 0);
   const totalRevenue = Object.values(revenueByMethod).reduce((sum, amount) => sum + Number(amount || 0), 0);
   const totalExpenses = expenseRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const pendingExpenses = pendingExpenseRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
@@ -190,13 +190,11 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
       end: isoDate(new Date(end.getTime() - 1)),
     },
     jobsCount,
-    todayJobsCount: jobsCount,
     totalRevenue,
     totalExpenses,
     pendingExpenses,
     pendingExpenseCount,
     netPosition: totalRevenue - totalExpenses,
-    todayRevenue: totalRevenue,
     cashTotal: revenueByMethod.cash || 0,
     mpesaTotal: revenueByMethod.mpesa || 0,
     nonCashTotal: Math.max(totalRevenue - Number(revenueByMethod.cash || 0), 0),
@@ -268,8 +266,6 @@ export const dailySummary = async (req, res, next) => {
       data: {
         date: start.toISOString().slice(0, 10),
         jobsCount,
-        todayJobsCount: jobsCount,
-        todayRevenue,
         totalRevenue: todayRevenue,
         totalExpenses,
         pendingExpenses,
@@ -321,7 +317,8 @@ export const serviceReport = async (req, res, next) => {
     const categoryFilter = String(req.query.category || "").trim();
     const branchFilter = branchId ? { branch: new mongoose.Types.ObjectId(String(branchId)) } : {};
 
-    const jobMatch = { business: businessId, createdAt: { $gte: start, $lt: end }, ...branchFilter };
+    const jobTypeFilter = req.query.jobType && ["vehicle", "carpet"].includes(req.query.jobType) ? { jobType: req.query.jobType } : {};
+    const jobMatch = { business: businessId, createdAt: { $gte: start, $lt: end }, ...branchFilter, ...jobTypeFilter };
     const paymentMatch = { business: businessId, paymentDate: { $gte: start, $lt: end }, ...branchFilter };
 
     const [serviceJobRows, paymentByServiceRows] = await Promise.all([
@@ -345,6 +342,7 @@ export const serviceReport = async (req, res, next) => {
         { $match: paymentMatch },
         { $lookup: { from: "carwashjobs", localField: "job", foreignField: "_id", as: "jobDoc" } },
         { $unwind: { path: "$jobDoc", preserveNullAndEmptyArrays: true } },
+        ...(jobTypeFilter.jobType ? [{ $match: { "jobDoc.jobType": jobTypeFilter.jobType } }] : []),
         {
           $group: {
             _id: { $ifNull: ["$jobDoc.serviceName", "Unspecified"] },
@@ -406,6 +404,7 @@ export const serviceReport = async (req, res, next) => {
         totalRevenue,
         serviceCount: rows.length,
         categoryFilter: categoryFilter || null,
+        jobTypeFilter: jobTypeFilter.jobType || null,
         rows,
       },
     });
@@ -421,8 +420,9 @@ export const staffReport = async (req, res, next) => {
     const branchId = resolveActiveBranchId(req);
     const { start, end } = parseDateRangePair(req.query.from, req.query.to);
     const branchFilter = branchId ? { branch: new mongoose.Types.ObjectId(String(branchId)) } : {};
+    const jobTypeFilter = req.query.jobType && ["vehicle", "carpet"].includes(req.query.jobType) ? { jobType: req.query.jobType } : {};
 
-    const jobMatch = { business: businessId, createdAt: { $gte: start, $lt: end }, ...branchFilter };
+    const jobMatch = { business: businessId, createdAt: { $gte: start, $lt: end }, ...branchFilter, ...jobTypeFilter };
     const paymentMatch = { business: businessId, paymentDate: { $gte: start, $lt: end }, ...branchFilter };
     const commissionMatch = { business: businessId, earnedAt: { $gte: start, $lt: end }, status: { $ne: "cancelled" }, ...branchFilter };
 
@@ -449,7 +449,7 @@ export const staffReport = async (req, res, next) => {
         { $unwind: { path: "$staffDoc", preserveNullAndEmptyArrays: true } },
         {
           $group: {
-            _id: { $ifNull: ["$staffDoc.name", "Unassigned"] },
+            _id: { staffId: { $ifNull: ["$staffDoc._id", null] }, staffName: { $ifNull: ["$staffDoc.name", "Unassigned"] } },
             revenue: { $sum: "$amount" },
             payments: { $sum: 1 },
             cash: { $sum: { $cond: [{ $eq: ["$method", "cash"] }, "$amount", 0] } },
@@ -463,7 +463,7 @@ export const staffReport = async (req, res, next) => {
         { $unwind: { path: "$staffDoc", preserveNullAndEmptyArrays: true } },
         {
           $group: {
-            _id: { $ifNull: ["$staffDoc.name", "Unassigned"] },
+            _id: { staffId: { $ifNull: ["$staffDoc._id", null] }, staffName: { $ifNull: ["$staffDoc.name", "Unassigned"] } },
             totalCommission: { $sum: "$commissionAmount" },
             commissionCount: { $sum: 1 },
           },
@@ -472,16 +472,17 @@ export const staffReport = async (req, res, next) => {
     ]);
 
     const totalJobs = staffJobRows.reduce((s, r) => s + r.jobs, 0);
-    const paymentMap = new Map(paymentByStaffRows.map((r) => [r._id, r]));
-    const commissionMap = new Map(commissionByStaffRows.map((r) => [r._id, r]));
+    const paymentMap = new Map(paymentByStaffRows.map((r) => [String(r._id.staffId), r]));
+    const commissionMap = new Map(commissionByStaffRows.map((r) => [String(r._id.staffId), r]));
     const totalRevenue = paymentByStaffRows.reduce((s, r) => s + r.revenue, 0);
     const totalCommission = commissionByStaffRows.reduce((s, r) => s + r.totalCommission, 0);
 
     const rows = staffJobRows
       .map((row) => {
         const staffName = row._id.staffName;
-        const p = paymentMap.get(staffName) || { revenue: 0, payments: 0, cash: 0, mpesa: 0 };
-        const c = commissionMap.get(staffName) || { totalCommission: 0, commissionCount: 0 };
+        const staffIdKey = String(row._id.staffId);
+        const p = paymentMap.get(staffIdKey) || { revenue: 0, payments: 0, cash: 0, mpesa: 0 };
+        const c = commissionMap.get(staffIdKey) || { totalCommission: 0, commissionCount: 0 };
         return {
           staff: staffName,
           jobs: row.jobs,
@@ -509,6 +510,7 @@ export const staffReport = async (req, res, next) => {
         totalRevenue,
         totalCommission,
         staffCount: rows.length,
+        jobTypeFilter: jobTypeFilter.jobType || null,
         rows,
       },
     });

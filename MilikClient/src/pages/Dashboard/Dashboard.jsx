@@ -52,7 +52,7 @@ const Dashboard = ({ darkMode }) => {
     };
 
     refreshDashboardData();
-    const intervalId = setInterval(refreshDashboardData, 30000);
+    const intervalId = setInterval(refreshDashboardData, 300000);
 
     return () => clearInterval(intervalId);
   }, [dispatch, currentCompany?._id, currentUser?.company]);

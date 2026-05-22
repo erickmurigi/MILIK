@@ -8,11 +8,12 @@ import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, re
 import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
 
 const JOB_STATUSES = new Set(["waiting", "washing", "done", "paid", "cancelled"]);
+const JOB_TYPES = new Set(["vehicle", "carpet"]);
 
 const generateJobNumber = async (business) => {
   const { start, end } = parseDateRange(new Date());
-  const count = await CarWashJob.countDocuments({ business, createdAt: { $gte: start, $lt: end } });
   const stamp = start.toISOString().slice(0, 10).replace(/-/g, "");
+  const count = await CarWashJob.countDocuments({ business, createdAt: { $gte: start, $lt: end } });
   return `CW-${stamp}-${String(count + 1).padStart(4, "0")}`;
 };
 
@@ -78,6 +79,7 @@ export const listJobs = async (req, res, next) => {
     const branchId = resolveActiveBranchId(req);
     const filter = { business };
     if (branchId) filter.branch = branchId;
+    if (req.query.jobType && JOB_TYPES.has(String(req.query.jobType).trim().toLowerCase())) filter.jobType = String(req.query.jobType).trim().toLowerCase();
     if (req.query.status) filter.status = String(req.query.status).trim().toLowerCase();
     if (req.query.paymentStatus) filter.paymentStatus = String(req.query.paymentStatus).trim().toLowerCase();
     if (req.query.service && mongoose.Types.ObjectId.isValid(req.query.service)) filter.service = req.query.service;
@@ -95,6 +97,7 @@ export const listJobs = async (req, res, next) => {
       const searchFilter = [
         { jobNumber: new RegExp(search, "i") },
         { plateNumber: new RegExp(search, "i") },
+        { itemDescription: new RegExp(search, "i") },
         { customerName: new RegExp(search, "i") },
         { phone: new RegExp(search, "i") },
       ];
@@ -110,7 +113,7 @@ export const listJobs = async (req, res, next) => {
       CarWashJob.find(filter)
         .populate("service", "name category vehicleType defaultPrice")
         .populate("assignedStaff", "name phone role")
-        .populate("branch", "name")
+        .populate(branchId ? null : "branch", "name")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -141,8 +144,12 @@ export const getJob = async (req, res, next) => {
 export const createJob = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const jobType = JOB_TYPES.has(String(req.body.jobType || "").toLowerCase()) ? String(req.body.jobType).toLowerCase() : "vehicle";
+
     const plateNumber = String(req.body.plateNumber || "").trim().toUpperCase();
-    if (!plateNumber) return next(createError(400, "Plate number is required"));
+    const itemDescription = String(req.body.itemDescription || "").trim();
+    if (jobType === "vehicle" && !plateNumber) return next(createError(400, "Plate number is required for vehicle jobs"));
+    if (jobType === "carpet" && !itemDescription) return next(createError(400, "Item description is required for carpet jobs"));
 
     const serviceSnapshot = await resolveServiceSnapshot(business, req.body);
     if (!serviceSnapshot.serviceName) return next(createError(400, "Service name is required"));
@@ -153,13 +160,18 @@ export const createJob = async (req, res, next) => {
     const assignedStaff = await assertStaffBelongsToBusiness(business, req.body.assignedStaff);
     const userId = currentUserId(req);
     const branchId = resolveActiveBranchId(req);
-    const job = await CarWashJob.create({
+    const expectedReadyAt = req.body.expectedReadyAt ? new Date(req.body.expectedReadyAt) : null;
+
+    const manualJobNumber = String(req.body.jobNumber || "").trim();
+    const jobBase = {
       business,
       branch: branchId || null,
-      jobNumber: String(req.body.jobNumber || "").trim() || (await generateJobNumber(business)),
+      jobType,
       customerName: String(req.body.customerName || "").trim(),
       phone: String(req.body.phone || "").trim(),
-      plateNumber,
+      plateNumber: jobType === "vehicle" ? plateNumber : "",
+      itemDescription: jobType === "carpet" ? itemDescription : "",
+      expectedReadyAt: jobType === "carpet" && expectedReadyAt && !Number.isNaN(expectedReadyAt.getTime()) ? expectedReadyAt : null,
       ...serviceSnapshot,
       status: JOB_STATUSES.has(String(req.body.status || "").toLowerCase()) ? String(req.body.status).toLowerCase() : "waiting",
       assignedStaff,
@@ -167,9 +179,21 @@ export const createJob = async (req, res, next) => {
       notes: String(req.body.notes || "").trim(),
       createdBy: userId,
       updatedBy: userId,
-    });
+    };
 
-    res.status(201).json({ success: true, data: job, job, message: "Car Wash job created" });
+    let job;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const jobNumber = manualJobNumber || (await generateJobNumber(business));
+      try {
+        job = await CarWashJob.create({ ...jobBase, jobNumber });
+        break;
+      } catch (err) {
+        if (err.code === 11000 && err.keyPattern?.jobNumber && !manualJobNumber && attempt < 2) continue;
+        throw err;
+      }
+    }
+
+    res.status(201).json({ success: true, data: job, job, message: `${jobType === "carpet" ? "Carpet" : "Car Wash"} job created` });
   } catch (error) {
     next(error);
   }
@@ -196,7 +220,19 @@ export const updateJob = async (req, res, next) => {
 
     existing.customerName = String(req.body.customerName ?? existing.customerName).trim();
     existing.phone = String(req.body.phone ?? existing.phone).trim();
-    existing.plateNumber = String(req.body.plateNumber ?? existing.plateNumber).trim().toUpperCase();
+    if (existing.jobType === "vehicle") {
+      const updatedPlate = String(req.body.plateNumber ?? existing.plateNumber).trim().toUpperCase();
+      if (!updatedPlate) return next(createError(400, "Plate number is required for vehicle jobs"));
+      existing.plateNumber = updatedPlate;
+    } else {
+      const updatedItem = String(req.body.itemDescription ?? existing.itemDescription).trim();
+      if (!updatedItem) return next(createError(400, "Item description is required for carpet jobs"));
+      existing.itemDescription = updatedItem;
+      if (req.body.expectedReadyAt !== undefined) {
+        const d = req.body.expectedReadyAt ? new Date(req.body.expectedReadyAt) : null;
+        existing.expectedReadyAt = d && !Number.isNaN(d.getTime()) ? d : null;
+      }
+    }
     existing.vehicleType = serviceSnapshot.vehicleType;
     existing.service = serviceSnapshot.service;
     existing.serviceName = serviceSnapshot.serviceName;
@@ -239,28 +275,29 @@ export const updateJobStatus = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const status = String(req.body.status || "").trim().toLowerCase();
     if (!JOB_STATUSES.has(status)) return next(createError(400, "Invalid Car Wash job status"));
-    const existing = await CarWashJob.findOne({ _id: req.params.id, business }).select("_id paymentStatus").lean();
-    if (!existing) return next(createError(404, "Car Wash job not found"));
-    if (status === "paid") {
-      if (existing.paymentStatus !== "paid") {
-        return next(createError(400, "Record payment before marking a Car Wash job as paid"));
-      }
-    } else if (existing.paymentStatus === "paid" && status !== "cancelled") {
-      return next(createError(400, "A fully paid Car Wash job cannot be moved back to an active status"));
-    }
+
     if (status === "cancelled") {
       const paidAmount = await getPaidAmount(business, req.params.id);
-      if (paidAmount > 0) {
-        return next(createError(400, "Cannot cancel a Car Wash job that already has payments"));
-      }
+      if (paidAmount > 0) return next(createError(400, "Cannot cancel a Car Wash job that already has payments"));
     }
 
+    const updateFilter = { _id: req.params.id, business };
+    if (status === "paid") updateFilter.paymentStatus = "paid";
+    else if (status !== "cancelled") updateFilter.paymentStatus = { $ne: "paid" };
+
     const job = await CarWashJob.findOneAndUpdate(
-      { _id: req.params.id, business },
+      updateFilter,
       { status, updatedBy: currentUserId(req) },
       { new: true, runValidators: true }
     );
-    if (!job) return next(createError(404, "Car Wash job not found"));
+
+    if (!job) {
+      const exists = await CarWashJob.exists({ _id: req.params.id, business });
+      if (!exists) return next(createError(404, "Car Wash job not found"));
+      if (status === "paid") return next(createError(400, "Record payment before marking a Car Wash job as paid"));
+      return next(createError(400, "A fully paid Car Wash job cannot be moved back to an active status"));
+    }
+
     if (status === "cancelled") {
       await cancelJobCommissions({ req, business, jobId: job._id });
     } else if (!["done", "paid"].includes(status)) {
@@ -303,10 +340,21 @@ export const deleteJobsBulk = async (req, res, next) => {
     const safeIds = [];
     const skipped = [];
 
+    const paymentCounts = await CarWashPayment.aggregate([
+      { $match: { business: new mongoose.Types.ObjectId(String(business)), job: { $in: jobs.map((j) => j._id) } } },
+      { $group: { _id: "$job", count: { $sum: 1 } } },
+    ]);
+    const paymentsMap = new Map(paymentCounts.map((r) => [String(r._id), r.count]));
+
     for (const job of jobs) {
-      const blocker = await getJobDeleteBlocker(business, job);
-      if (blocker) skipped.push({ id: String(job._id), jobNumber: job.jobNumber, reason: blocker });
-      else safeIds.push(job._id);
+      if (!job) { skipped.push({ id: "", reason: "Car Wash job not found" }); continue; }
+      if (job.paymentStatus !== "unpaid" || job.status === "paid") {
+        skipped.push({ id: String(job._id), jobNumber: job.jobNumber, reason: "Only unpaid Car Wash jobs can be deleted" });
+      } else if ((paymentsMap.get(String(job._id)) || 0) > 0) {
+        skipped.push({ id: String(job._id), jobNumber: job.jobNumber, reason: "Cannot delete a Car Wash job that has payments" });
+      } else {
+        safeIds.push(job._id);
+      }
     }
 
     let deletedCount = 0;

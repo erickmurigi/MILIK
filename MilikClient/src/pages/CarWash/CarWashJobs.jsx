@@ -98,9 +98,12 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound }) => {
 };
 
 const emptyJobForm = {
+  jobType: "vehicle",
   customerName: "",
   phone: "",
   plateNumber: "",
+  itemDescription: "",
+  expectedReadyAt: "",
   service: "",
   serviceName: "",
   vehicleType: "",
@@ -125,6 +128,7 @@ const defaultFilters = {
   staff: "",
   status: "",
   paymentStatus: "",
+  jobType: "",
   date: todayISO(),
 };
 
@@ -138,6 +142,14 @@ const statusLabels = {
   done: "Done",
   paid: "Paid",
   cancelled: "Cancelled",
+};
+
+const getJobStatusLabel = (status, jobType) => {
+  if (jobType === "carpet") {
+    if (status === "washing") return "Processing";
+    if (status === "done") return "Ready";
+  }
+  return statusLabels[status] || status;
 };
 
 const paymentBadgeClass = {
@@ -203,6 +215,7 @@ const CarWashJobs = () => {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 });
   const [loading, setLoading] = useState(false);
+  const [modalUnpaidJobs, setModalUnpaidJobs] = useState([]);
 
   const unpaidJobs = useMemo(() => jobs.filter((job) => job.paymentStatus !== "paid"), [jobs]);
   const safeVisibleJobIds = useMemo(
@@ -210,37 +223,49 @@ const CarWashJobs = () => {
     [jobs]
   );
   const selectedService = useMemo(() => services.find((item) => item._id === jobForm.service), [jobForm.service, services]);
-  const selectedPaymentJob = useMemo(() => jobs.find((job) => job._id === paymentForm.job), [jobs, paymentForm.job]);
+  const allPaymentJobs = useMemo(() => {
+    const seen = new Set();
+    return [...modalUnpaidJobs, ...jobs].filter((j) => { if (seen.has(j._id)) return false; seen.add(j._id); return true; });
+  }, [modalUnpaidJobs, jobs]);
+  const selectedPaymentJob = useMemo(() => allPaymentJobs.find((job) => job._id === paymentForm.job), [allPaymentJobs, paymentForm.job]);
   const selectedCashbook = useMemo(() => cashbooks.find((item) => item._id === paymentForm.cashbookAccount), [cashbooks, paymentForm.cashbookAccount]);
 
-  const load = async () => {
-    setLoading(true);
+  const loadReferenceData = async () => {
     try {
-      const [jobPayload, servicePayload, staffPayload, cashbookPayload] = await Promise.all([
-        carWashApi.listJobs({
-          date: appliedFilters.date,
-          search: appliedFilters.search || undefined,
-          customer: appliedFilters.customer || undefined,
-          service: appliedFilters.service || undefined,
-          staff: appliedFilters.staff || undefined,
-          status: appliedFilters.status || undefined,
-          paymentStatus: appliedFilters.paymentStatus || undefined,
-          limit: pageSize,
-          page,
-        }),
+      const [servicePayload, staffPayload, cashbookPayload] = await Promise.all([
         carWashApi.listServices({ active: true }),
         carWashApi.listStaff({ active: true }),
         currentCompany?._id
           ? carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" })
           : Promise.resolve([]),
       ]);
+      setServices(normalizeListPayload(servicePayload, "services"));
+      setStaff(normalizeListPayload(staffPayload, "staff"));
+      setCashbooks(Array.isArray(cashbookPayload) ? cashbookPayload : []);
+    } catch {
+      toast.error("Failed to load reference data");
+    }
+  };
+
+  const loadJobs = async () => {
+    setLoading(true);
+    try {
+      const jobPayload = await carWashApi.listJobs({
+        date: appliedFilters.date,
+        search: appliedFilters.search || undefined,
+        customer: appliedFilters.customer || undefined,
+        service: appliedFilters.service || undefined,
+        staff: appliedFilters.staff || undefined,
+        status: appliedFilters.status || undefined,
+        paymentStatus: appliedFilters.paymentStatus || undefined,
+        jobType: appliedFilters.jobType || undefined,
+        limit: pageSize,
+        page,
+      });
       setJobs(normalizeListPayload(jobPayload, "jobs"));
       setPagination(jobPayload?.pagination || { page, limit: pageSize, total: normalizeListPayload(jobPayload, "jobs").length, pages: 1 });
       setSelectedIds([]);
       setExpandedIds([]);
-      setServices(normalizeListPayload(servicePayload, "services"));
-      setStaff(normalizeListPayload(staffPayload, "staff"));
-      setCashbooks(Array.isArray(cashbookPayload) ? cashbookPayload : []);
     } catch {
       toast.error("Failed to load Car Wash jobs");
     } finally {
@@ -248,9 +273,12 @@ const CarWashJobs = () => {
     }
   };
 
-  useEffect(() => {
-    load();
-  }, [appliedFilters, page, pageSize]);
+  const load = async () => {
+    await Promise.all([loadJobs(), loadReferenceData()]);
+  };
+
+  useEffect(() => { loadReferenceData(); }, []);
+  useEffect(() => { loadJobs(); }, [appliedFilters, page, pageSize]);
 
   useEffect(() => {
     if (!selectedService) return;
@@ -288,9 +316,10 @@ const CarWashJobs = () => {
   const closePaymentModal = () => {
     setShowPaymentModal(false);
     setPaymentForm(emptyPaymentForm);
+    setModalUnpaidJobs([]);
   };
 
-  const openPaymentModal = (job = null) => {
+  const openPaymentModal = async (job = null) => {
     setPaymentForm({
       ...emptyPaymentForm,
       job: job?._id || "",
@@ -298,6 +327,12 @@ const CarWashJobs = () => {
       cashbookAccount: preferredCashbookForMethod(cashbooks, emptyPaymentForm.method),
     });
     setShowPaymentModal(true);
+    try {
+      const payload = await carWashApi.listJobs({ limit: 100 });
+      setModalUnpaidJobs(normalizeListPayload(payload, "jobs").filter((j) => j.paymentStatus !== "paid"));
+    } catch {
+      setModalUnpaidJobs(jobs.filter((j) => j.paymentStatus !== "paid"));
+    }
   };
 
   const createJob = async (event) => {
@@ -309,7 +344,7 @@ const CarWashJobs = () => {
         assignedStaff: jobForm.assignedStaff || null,
       });
       closeJobModal();
-      await load();
+      await loadJobs();
       toast.success("Job created");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to create job");
@@ -324,7 +359,7 @@ const CarWashJobs = () => {
         amount: Number(paymentForm.amount || 0),
       });
       closePaymentModal();
-      await load();
+      await loadJobs();
       toast.success("Payment recorded");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to record payment");
@@ -332,10 +367,12 @@ const CarWashJobs = () => {
   };
 
   const updateStatus = async (job, status) => {
+    const previous = job.status;
+    setJobs((prev) => prev.map((j) => (j._id === job._id ? { ...j, status } : j)));
     try {
       await carWashApi.updateJobStatus(job._id, status);
-      await load();
     } catch (error) {
+      setJobs((prev) => prev.map((j) => (j._id === job._id ? { ...j, status: previous } : j)));
       toast.error(error?.response?.data?.message || "Unable to update job status");
     }
   };
@@ -358,7 +395,7 @@ const CarWashJobs = () => {
 
   const deleteSelectedJobs = async () => {
     if (!selectedIds.length) return;
-    const confirmed = await confirm({ title: "Delete Car Wash Jobs", message: "Delete selected unpaid Car Wash jobs? Jobs with payments cannot be deleted.", confirmText: "Delete", isDangerous: true });
+    const confirmed = await confirm({ title: "Delete Jobs", message: "Delete selected unpaid jobs? Jobs with payments cannot be deleted.", confirmText: "Delete", isDangerous: true });
     if (!confirmed) return;
     try {
       const result = await carWashApi.deleteJobs(selectedIds);
@@ -429,7 +466,7 @@ const CarWashJobs = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_0.9fr_0.9fr_0.8fr_0.8fr_0.85fr_auto_auto]">
+      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_0.9fr_0.9fr_0.8fr_0.8fr_0.65fr_0.85fr_auto_auto]">
         <input
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Job # / plate"
@@ -474,7 +511,7 @@ const CarWashJobs = () => {
           <option value="">Status</option>
           {statuses.map((status) => (
             <option key={status} value={status}>
-              {statusLabels[status]}
+              {getJobStatusLabel(status, filters.jobType)}
             </option>
           ))}
         </select>
@@ -487,6 +524,15 @@ const CarWashJobs = () => {
           <option value="unpaid">Unpaid</option>
           <option value="partial">Partial</option>
           <option value="paid">Paid</option>
+        </select>
+        <select
+          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          value={filters.jobType}
+          onChange={(event) => setFilterValue("jobType", event.target.value)}
+        >
+          <option value="">All Types</option>
+          <option value="vehicle">Vehicle</option>
+          <option value="carpet">Carpet</option>
         </select>
         <input
           type="date"
@@ -527,7 +573,7 @@ const CarWashJobs = () => {
               </th>
               <th className="w-8 px-2 py-1.5 text-left" />
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Job</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Plate</th>
+              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Plate / Item</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Customer</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Service</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Staff</th>
@@ -560,8 +606,17 @@ const CarWashJobs = () => {
                           {expanded ? <FaChevronDown /> : <FaChevronRight />}
                         </button>
                       </td>
-                      <td className="px-2 py-1 font-extrabold text-slate-900">{job.jobNumber}</td>
-                      <td className="px-2 py-1 font-extrabold uppercase text-slate-900">{job.plateNumber || "-"}</td>
+                      <td className="px-2 py-1 font-extrabold text-slate-900">
+                        {job.jobNumber}
+                        {job.jobType === "carpet" && (
+                          <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold uppercase text-amber-700">Carpet</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1 font-extrabold uppercase text-slate-900">
+                        {job.jobType === "carpet"
+                          ? <span className="font-semibold normal-case text-slate-700">{job.itemDescription || "-"}</span>
+                          : job.plateNumber || "-"}
+                      </td>
                       <td className="px-2 py-1 font-semibold text-slate-800">{job.customerName || "-"}</td>
                       <td className="px-2 py-1 text-slate-700">{job.serviceName || "-"}</td>
                       <td className="px-2 py-1 text-slate-700">{job.assignedStaff?.name || "-"}</td>
@@ -572,11 +627,13 @@ const CarWashJobs = () => {
                           value={job.status}
                           onChange={(event) => updateStatus(job, event.target.value)}
                         >
-                          {statuses.map((status) => (
-                            <option key={status} value={status}>
-                              {statusLabels[status]}
-                            </option>
-                          ))}
+                          {statuses
+                            .filter((status) => status !== "paid" || job.paymentStatus === "paid")
+                            .map((status) => (
+                              <option key={status} value={status}>
+                                {getJobStatusLabel(status, job.jobType)}
+                              </option>
+                            ))}
                         </select>
                       </td>
                       <td className="px-2 py-1">
@@ -602,7 +659,11 @@ const CarWashJobs = () => {
                           <div className="grid gap-3 text-[11px] text-slate-600 md:grid-cols-5">
                             <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
                             <div><span className="font-extrabold uppercase text-slate-500">Phone:</span> {job.phone || "-"}</div>
-                            <div><span className="font-extrabold uppercase text-slate-500">Vehicle:</span> {job.vehicleType || "-"}</div>
+                            {job.jobType === "carpet" ? (
+                              <div><span className="font-extrabold uppercase text-slate-500">Ready By:</span> {job.expectedReadyAt ? new Date(job.expectedReadyAt).toLocaleDateString("en-KE") : "-"}</div>
+                            ) : (
+                              <div><span className="font-extrabold uppercase text-slate-500">Vehicle:</span> {job.vehicleType || "-"}</div>
+                            )}
                             <div><span className="font-extrabold uppercase text-slate-500">Staff Phone:</span> {job.assignedStaff?.phone || "-"}</div>
                             <div><span className="font-extrabold uppercase text-slate-500">Delete:</span> {canDelete ? "Safe" : "Locked"}</div>
                             <div className="md:col-span-5"><span className="font-extrabold uppercase text-slate-500">Notes:</span> {job.notes || "-"}</div>
@@ -653,8 +714,8 @@ const CarWashJobs = () => {
 
       {showJobModal && (
         <Modal
-          title="Create Car Wash Job"
-          subtitle="Capture the vehicle, service, price and assigned staff."
+          title={jobForm.jobType === "carpet" ? "Create Carpet Job" : "Create Car Wash Job"}
+          subtitle={jobForm.jobType === "carpet" ? "Capture item details, service, and expected collection date." : "Capture the vehicle, service, price and assigned staff."}
           onClose={closeJobModal}
           footer={
             <>
@@ -669,15 +730,58 @@ const CarWashJobs = () => {
         >
           <form id="carwash-job-form" onSubmit={createJob} className="grid gap-3 md:grid-cols-2">
             <div className="md:col-span-2">
-              <PlateLookupWidget
-                plate={jobForm.plateNumber}
-                onPlateChange={(val) => setJobForm((prev) => ({ ...prev, plateNumber: val }))}
-                onCustomerFound={({ name, phone }) => setJobForm((prev) => ({ ...prev, customerName: prev.customerName || name, phone: prev.phone || phone }))}
-              />
+              <label className={labelClass}>Job Type</label>
+              <div className="flex overflow-hidden border border-slate-300">
+                <button
+                  type="button"
+                  onClick={() => setJobForm((prev) => ({ ...prev, jobType: "vehicle", itemDescription: "", expectedReadyAt: "" }))}
+                  className={`flex-1 py-2 text-xs font-bold ${jobForm.jobType === "vehicle" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+                >
+                  Vehicle Wash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setJobForm((prev) => ({ ...prev, jobType: "carpet", plateNumber: "", vehicleType: "" }))}
+                  className={`flex-1 border-l border-slate-300 py-2 text-xs font-bold ${jobForm.jobType === "carpet" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+                >
+                  Carpet / Textile
+                </button>
+              </div>
             </div>
+            {jobForm.jobType === "vehicle" ? (
+              <div className="md:col-span-2">
+                <PlateLookupWidget
+                  plate={jobForm.plateNumber}
+                  onPlateChange={(val) => setJobForm((prev) => ({ ...prev, plateNumber: val }))}
+                  onCustomerFound={({ name, phone }) => setJobForm((prev) => ({ ...prev, customerName: prev.customerName || name, phone: prev.phone || phone }))}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="md:col-span-2">
+                  <label className={labelClass}>Item Description *</label>
+                  <textarea
+                    className="min-h-[60px] w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                    value={jobForm.itemDescription}
+                    onChange={(event) => setJobForm((prev) => ({ ...prev, itemDescription: event.target.value }))}
+                    placeholder="e.g. 2 bedroom carpets, sofa set, car mat..."
+                    required
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Expected Ready Date</label>
+                  <input
+                    className={inputClass}
+                    type="date"
+                    value={jobForm.expectedReadyAt}
+                    onChange={(event) => setJobForm((prev) => ({ ...prev, expectedReadyAt: event.target.value }))}
+                  />
+                </div>
+              </>
+            )}
             <div>
               <label className={labelClass}>Customer Name</label>
-              <input className={inputClass} value={jobForm.customerName} onChange={(event) => setJobForm((prev) => ({ ...prev, customerName: event.target.value }))} placeholder="Auto-filled for registered plates" />
+              <input className={inputClass} value={jobForm.customerName} onChange={(event) => setJobForm((prev) => ({ ...prev, customerName: event.target.value }))} placeholder="Customer name" />
             </div>
             <div>
               <label className={labelClass}>Phone</label>
@@ -698,15 +802,17 @@ const CarWashJobs = () => {
               <label className={labelClass}>Service Name {!jobForm.service ? "*" : ""}</label>
               <input className={inputClass} value={jobForm.serviceName} onChange={(event) => setJobForm((prev) => ({ ...prev, serviceName: event.target.value }))} required={!jobForm.service} />
             </div>
-            <div>
-              <label className={labelClass}>Vehicle Type</label>
-              <input className={inputClass} value={jobForm.vehicleType} onChange={(event) => setJobForm((prev) => ({ ...prev, vehicleType: event.target.value }))} />
-            </div>
-            <div>
+            {jobForm.jobType === "vehicle" && (
+              <div>
+                <label className={labelClass}>Vehicle Type</label>
+                <input className={inputClass} value={jobForm.vehicleType} onChange={(event) => setJobForm((prev) => ({ ...prev, vehicleType: event.target.value }))} />
+              </div>
+            )}
+            <div className={jobForm.jobType === "vehicle" ? "" : "md:col-span-2"}>
               <label className={labelClass}>Price *</label>
               <input className={inputClass} type="number" min="0" value={jobForm.price} onChange={(event) => setJobForm((prev) => ({ ...prev, price: event.target.value }))} required />
             </div>
-            <div>
+            <div className="md:col-span-2">
               <label className={labelClass}>Assigned Staff</label>
               <select className={inputClass} value={jobForm.assignedStaff} onChange={(event) => setJobForm((prev) => ({ ...prev, assignedStaff: event.target.value }))}>
                 <option value="">Assign staff</option>
@@ -746,9 +852,9 @@ const CarWashJobs = () => {
               <label className={labelClass}>Job *</label>
               <select className={inputClass} value={paymentForm.job} onChange={(event) => setPaymentForm((prev) => ({ ...prev, job: event.target.value, amount: "" }))} required>
                 <option value="">Select job</option>
-                {unpaidJobs.map((job) => (
+                {allPaymentJobs.filter((j) => j.paymentStatus !== "paid").map((job) => (
                   <option key={job._id} value={job._id}>
-                    {job.jobNumber} - {job.plateNumber} - {formatMoney(job.price)}
+                    {job.jobNumber} - {job.jobType === "carpet" ? job.itemDescription : job.plateNumber} - {formatMoney(job.price)}
                   </option>
                 ))}
               </select>

@@ -35,6 +35,7 @@ const carWashExpenseSchema = new mongoose.Schema(
 
 carWashExpenseSchema.index({ business: 1, expenseNumber: 1 }, { unique: true });
 carWashExpenseSchema.index({ business: 1, expenseDate: -1 });
+carWashExpenseSchema.index({ business: 1, branch: 1, expenseDate: -1 });
 carWashExpenseSchema.index({ business: 1, status: 1 });
 carWashExpenseSchema.index({ business: 1, category: 1 });
 carWashExpenseSchema.index({ business: 1, cashbookAccount: 1 });

@@ -14,7 +14,7 @@ const resolveCompanyId = (req) => {
   if (req.user?.isSystemAdmin && (req.body?.company || req.query?.company)) {
     return req.body?.company || req.query?.company;
   }
-  return req.user?.company || req.body?.company || req.query?.company || null;
+  return req.user?.company || null;
 };
 
 // Generate unique landlord code within a company
@@ -93,42 +93,19 @@ const syncLinkedPropertyLandlordSnapshots = async ({
 }) => {
   if (!companyId || !landlordId) return;
 
-  const linkedProperties = await Property.find({
-    business: companyId,
-    $or: [
-      { "landlords.landlordId": landlordId },
-      ...(previousName ? [{ "landlords.name": previousName }] : []),
-    ],
-  });
-
-  if (!linkedProperties.length) return;
-
-  await Promise.all(
-    linkedProperties.map(async (property) => {
-      let changed = false;
-
-      property.landlords = (Array.isArray(property.landlords) ? property.landlords : []).map((entry) => {
-        const matchesById = entry?.landlordId && String(entry.landlordId) === String(landlordId);
-        const matchesByLegacyName = !entry?.landlordId && previousName && entry?.name === previousName;
-
-        if (!matchesById && !matchesByLegacyName) {
-          return entry;
-        }
-
-        changed = true;
-        return {
-          ...entry.toObject?.(),
-          landlordId: entry?.landlordId || landlordId,
-          name: nextName,
-          contact: nextContact,
-        };
-      });
-
-      if (changed) {
-        await property.save();
-      }
-    })
+  await Property.updateMany(
+    { business: companyId, "landlords.landlordId": landlordId },
+    { $set: { "landlords.$[entry].name": nextName, "landlords.$[entry].contact": nextContact, "landlords.$[entry].landlordId": landlordId } },
+    { arrayFilters: [{ "entry.landlordId": landlordId }] }
   );
+
+  if (previousName) {
+    await Property.updateMany(
+      { business: companyId, "landlords.name": previousName, "landlords.landlordId": { $exists: false } },
+      { $set: { "landlords.$[entry].name": nextName, "landlords.$[entry].contact": nextContact, "landlords.$[entry].landlordId": landlordId } },
+      { arrayFilters: [{ "entry.name": previousName, "entry.landlordId": { $exists: false } }] }
+    );
+  }
 };
 
 // Create landlord

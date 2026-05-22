@@ -34,7 +34,9 @@ const carWashPaymentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+carWashPaymentSchema.index({ business: 1, job: 1 });
 carWashPaymentSchema.index({ business: 1, paymentDate: -1 });
+carWashPaymentSchema.index({ business: 1, branch: 1, paymentDate: -1 });
 carWashPaymentSchema.index({ business: 1, method: 1 });
 carWashPaymentSchema.index({ business: 1, cashbookAccount: 1 });
 carWashPaymentSchema.index({ business: 1, reconciliationStatus: 1 });

@@ -1082,6 +1082,10 @@ export const updateTenant = async (req, res, next) => {
       normalizedPayload.idNumber = normalizeString(normalizedPayload.idNumber);
     }
 
+    if (normalizedPayload.email !== undefined) {
+      normalizedPayload.email = String(normalizedPayload.email || "").trim().toLowerCase();
+    }
+
     if (normalizedPayload.tenantCode !== undefined) {
       normalizedPayload.tenantCode = normalizeString(normalizedPayload.tenantCode);
     }

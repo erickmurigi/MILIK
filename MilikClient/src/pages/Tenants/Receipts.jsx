@@ -22,6 +22,7 @@ import {
   FaMinusCircle,
   FaPlusCircle,
   FaSms,
+  FaEnvelope,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -338,6 +339,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [showSmsModal, setShowSmsModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const [showView, setShowView] = useState(false);
   const [activeReceipt, setActiveReceipt] = useState(null);
   const [journalDrawerOpen, setJournalDrawerOpen] = useState(false);
@@ -1719,11 +1721,27 @@ const visibleReceiptIds = useMemo(
               <button onClick={resetSearchFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-500 px-2.5 text-xs font-semibold text-white hover:bg-slate-600"><FaRedoAlt size={10} /></button>
               <button onClick={loadData} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-300 bg-white px-2.5 text-xs font-semibold hover:bg-slate-50"><FaRedoAlt size={10} /></button>
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <button onClick={handleConfirmSelected} disabled={!canProcessReceipt} title={canProcessReceipt ? "Confirm selected" : "No permission"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-green-600 px-2.5 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"><FaCheck size={10} /></button>
-              <button onClick={handleReverseSelected} disabled={!canReverseReceipt} title={canReverseReceipt ? "Reverse selected" : "No permission"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-orange-600 px-2.5 text-xs font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"><FaUndo size={10} /></button>
-              <button onClick={handleDeleteSelected} disabled={!canDeleteReceipt} title={canDeleteReceipt ? "Delete selected" : "No permission"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-red-600 px-2.5 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash size={10} /></button>
+              <select
+                value=""
+                disabled={selectedIds.length === 0}
+                onChange={(e) => {
+                  const action = e.target.value;
+                  if (action === "confirm") handleConfirmSelected();
+                  else if (action === "reverse") handleReverseSelected();
+                  else if (action === "delete") handleDeleteSelected();
+                  e.target.value = "";
+                }}
+                title={selectedIds.length === 0 ? "Select receipts first" : "Bulk actions"}
+                className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="">Actions</option>
+                {canProcessReceipt && <option value="confirm">Confirm selected</option>}
+                {canReverseReceipt && <option value="reverse">Reverse selected</option>}
+                {canDeleteReceipt && <option value="delete">Delete selected</option>}
+              </select>
               <button onClick={handlePrintList} disabled={!canExportReceipt} title={canExportReceipt ? "Print list" : "No permission"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-indigo-600 px-2.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"><FaPrint size={10} /></button>
-              <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to SMS"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-teal-600 px-2.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={10} />{selectedIds.length > 0 && <span>{selectedIds.length}</span>}</button>
+              <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to SMS"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-teal-600 px-2.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={10} /></button>
+              <button onClick={() => setShowEmailModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `Email ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to email"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-600 px-2.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEnvelope size={10} /></button>
               <button onClick={openCreateForm} disabled={!canCreateReceipt} title={canCreateReceipt ? pageCreateLabel : "No permission"} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canCreateReceipt ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPlus size={10} /></button>
             </div>
           </div>
@@ -2738,6 +2756,18 @@ const visibleReceiptIds = useMemo(
         allowedChannels={["sms"]}
         defaultChannel="sms"
         onSent={() => setShowSmsModal(false)}
+      />
+      <CommunicationComposerModal
+        open={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        businessId={currentCompany?._id || ""}
+        contextType="receipt"
+        recordIds={selectedIds}
+        title={`Email Receipt${selectedIds.length !== 1 ? "s" : ""} (${selectedIds.length})`}
+        subtitle="Send an email notification to the tenants for the selected receipts."
+        allowedChannels={["email"]}
+        defaultChannel="email"
+        onSent={() => setShowEmailModal(false)}
       />
     </DashboardLayout>
   );

@@ -86,6 +86,7 @@ const createAuthToken = (user) => {
           moduleAccess: item?.moduleAccess && typeof item.moduleAccess === "object" ? item.moduleAccess : {},
           permissions: item?.permissions && typeof item.permissions === "object" ? item.permissions : {},
           rights: Array.isArray(item?.rights) ? item.rights : [],
+          carwashBranch: toId(item?.carwashBranch) || null,
         }))
     : [];
 
@@ -269,7 +270,7 @@ export const registerUser = async (req, res, next) => {
       }
     }
 
-    if (!email || !surname || !otherNames || !phoneNumber) {
+    if (!email || !surname || !otherNames || !phoneNumber || !idNumber) {
       return next(createError(400, 'All required fields must be provided'));
     }
 
@@ -372,6 +373,10 @@ export const registerUser = async (req, res, next) => {
   } catch (err) {
     if (err.code === 11000) {
       return next(createError(400, 'Email already exists'));
+    }
+    if (err.name === 'ValidationError') {
+      const firstMessage = Object.values(err.errors)[0]?.message || 'Validation failed';
+      return next(createError(400, firstMessage));
     }
     console.error('Register error:', err);
     next(err);

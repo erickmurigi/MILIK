@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FaArrowLeft,
   FaBuilding,
@@ -8,6 +8,9 @@ import {
   FaSave,
   FaShieldAlt,
   FaUserPlus,
+  FaBan,
+  FaEye,
+  FaUnlockAlt,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useDispatch, useSelector } from 'react-redux';
@@ -58,6 +61,7 @@ const makeDefaultAssignment = (company) => {
     moduleAccess,
     permissions: emptyPermissionMap(),
     rights: [],
+    carwashBranch: null,
   };
 };
 
@@ -80,6 +84,7 @@ const normalizeUserToForm = (user, companies) => {
         moduleAccess: { ...defaults.moduleAccess, ...(assignment?.moduleAccess || {}) },
         permissions: normalizePermissionMap(assignment?.permissions || {}),
         rights: Array.isArray(assignment?.rights) ? assignment.rights : [],
+        carwashBranch: assignment?.carwashBranch || null,
       };
     });
 
@@ -122,6 +127,7 @@ export default function AddUserPage() {
   const [companies, setCompanies] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [branchesByCompany, setBranchesByCompany] = useState({});
   const [form, setForm] = useState({
     surname: '',
     otherNames: '',
@@ -186,6 +192,27 @@ export default function AddUserPage() {
     load();
   }, [id, isEditing, isSystemAdmin, currentCompany?._id]);
 
+  const loadedBranchCompanies = useRef(new Set());
+  useEffect(() => {
+    const carwashCompanyIds = form.companyAssignments
+      .filter((a) => {
+        const company = companies.find((c) => c._id === a.company);
+        const keys = getEnabledCompanyModuleKeys(company);
+        return keys.includes("carwash") && !loadedBranchCompanies.current.has(a.company);
+      })
+      .map((a) => a.company);
+
+    carwashCompanyIds.forEach((companyId) => {
+      loadedBranchCompanies.current.add(companyId);
+      adminRequests.get("/carwash/branches", { params: { company: companyId, active: true, limit: 100 } })
+        .then((res) => {
+          const list = Array.isArray(res?.data?.branches) ? res.data.branches : Array.isArray(res?.data?.data?.branches) ? res.data.data.branches : [];
+          setBranchesByCompany((prev) => ({ ...prev, [companyId]: list }));
+        })
+        .catch(() => setBranchesByCompany((prev) => ({ ...prev, [companyId]: [] })));
+    });
+  }, [form.companyAssignments, companies]);
+
   const availableCompanies = useMemo(() => {
     if (isSystemAdmin) return companies;
     return companies.filter((company) => company._id === currentCompany?._id);
@@ -228,6 +255,14 @@ export default function AddUserPage() {
     }
     if (!isEditing && !form.autoGeneratePassword && !form.password) {
       toast.error('Password is required when automatic first-time access is off');
+      return;
+    }
+    if (!form.autoGeneratePassword && form.password && form.password.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+    if (isEditing && form.password && form.password.length < 8) {
+      toast.error('New password must be at least 8 characters');
       return;
     }
     if (!form.autoGeneratePassword && form.password && form.password !== form.confirmPassword) {
@@ -451,9 +486,17 @@ export default function AddUserPage() {
 
                         <div className="grid gap-3 lg:grid-cols-[0.95fr,1.05fr]">
                           {/* Module access */}
-                          <div className="rounded-lg border border-slate-200 bg-white p-2">
-                            <div className="mb-1.5 text-[11px] font-black text-slate-900">Module access levels</div>
-                            <div className="grid gap-1.5 sm:grid-cols-2">
+                          <div className="rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="mb-2 flex items-center gap-2">
+                              <FaShieldAlt className="text-emerald-600" size={11} />
+                              <span className="text-[11px] font-black text-slate-900">Module access levels</span>
+                            </div>
+                            <div className="mb-2 flex items-center gap-3 text-[10px] text-slate-500">
+                              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-red-400" />Not allowed</span>
+                              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-blue-400" />View only</span>
+                              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />Full access</span>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2">
                               {enabledModuleKeys.map((moduleKey) => {
                                 const mappedKey = {
                                   propertyManagement: 'propertyMgmt',
@@ -475,16 +518,80 @@ export default function AddUserPage() {
                                   sacco: 'sacco',
                                   pos: 'inventory',
                                 }[moduleKey] || moduleKey;
+                                const currentAccess = assignment.moduleAccess?.[mappedKey] || 'View only';
+                                const setAccess = (val) => updateAssignment(assignment.company, (current) => ({ ...current, moduleAccess: { ...current.moduleAccess, [mappedKey]: val } }));
                                 return (
-                                  <div key={moduleKey} className="flex items-center gap-2 rounded border border-slate-200 px-2 py-1.5">
-                                    <span className="flex-1 text-[11px] font-semibold text-slate-800">{MODULE_LABELS[moduleKey] || moduleKey}</span>
-                                    <select value={assignment.moduleAccess?.[mappedKey] || 'View only'} onChange={(e) => updateAssignment(assignment.company, (current) => ({ ...current, moduleAccess: { ...current.moduleAccess, [mappedKey]: e.target.value } }))} className="h-6 rounded border border-slate-200 px-1 text-[10px] outline-none focus:border-emerald-500">
-                                      {ACCESS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                                    </select>
+                                  <div key={moduleKey} className={`rounded-lg border p-2 transition-all ${
+                                    currentAccess === 'Not allowed' ? 'border-red-200 bg-red-50/40' :
+                                    currentAccess === 'Full access' ? 'border-emerald-200 bg-emerald-50/40' :
+                                    'border-blue-200 bg-blue-50/30'
+                                  }`}>
+                                    <div className="mb-1.5 text-[10px] font-bold text-slate-700">{MODULE_LABELS[moduleKey] || moduleKey}</div>
+                                    <div className="flex gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setAccess('Not allowed')}
+                                        className={`flex flex-1 items-center justify-center gap-1 rounded px-1 py-1 text-[9px] font-semibold transition-all ${
+                                          currentAccess === 'Not allowed'
+                                            ? 'bg-red-500 text-white shadow-sm'
+                                            : 'bg-white text-red-400 border border-red-200 hover:bg-red-50'
+                                        }`}
+                                        title="Not allowed"
+                                      >
+                                        <FaBan size={9} />
+                                        <span>None</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAccess('View only')}
+                                        className={`flex flex-1 items-center justify-center gap-1 rounded px-1 py-1 text-[9px] font-semibold transition-all ${
+                                          currentAccess === 'View only'
+                                            ? 'bg-blue-500 text-white shadow-sm'
+                                            : 'bg-white text-blue-400 border border-blue-200 hover:bg-blue-50'
+                                        }`}
+                                        title="View only"
+                                      >
+                                        <FaEye size={9} />
+                                        <span>View</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAccess('Full access')}
+                                        className={`flex flex-1 items-center justify-center gap-1 rounded px-1 py-1 text-[9px] font-semibold transition-all ${
+                                          currentAccess === 'Full access'
+                                            ? 'bg-emerald-500 text-white shadow-sm'
+                                            : 'bg-white text-emerald-500 border border-emerald-200 hover:bg-emerald-50'
+                                        }`}
+                                        title="Full access"
+                                      >
+                                        <FaUnlockAlt size={9} />
+                                        <span>Full</span>
+                                      </button>
+                                    </div>
                                   </div>
                                 );
                               })}
                             </div>
+                            {/* Branch lock — shown per module when branches exist */}
+                            {enabledModuleKeys.includes("carwash") && assignment.moduleAccess?.carwash !== "Not allowed" && (
+                              <div className="mt-2 border-t border-slate-100 pt-2">
+                                <div className="mb-1 text-[11px] font-black text-slate-700">Branch Restrictions</div>
+                                <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
+                                  <span className="flex-1 text-[11px] font-semibold text-slate-800">Car Wash Branch</span>
+                                  <select
+                                    value={assignment.carwashBranch || ""}
+                                    onChange={(e) => updateAssignment(assignment.company, (current) => ({ ...current, carwashBranch: e.target.value || null }))}
+                                    className="h-6 rounded border border-slate-200 px-1 text-[10px] outline-none focus:border-emerald-500"
+                                  >
+                                    <option value="">All branches (admin view)</option>
+                                    {(branchesByCompany[assignment.company] || []).map((b) => (
+                                      <option key={b._id} value={b._id}>{b.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <p className="mt-1 text-[10px] text-slate-500">Assign a branch to lock this user to that branch only. Leave blank for all-branch access.</p>
+                              </div>
+                            )}
                           </div>
 
                           {/* Action permissions */}

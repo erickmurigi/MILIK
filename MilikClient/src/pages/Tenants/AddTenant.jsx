@@ -10,6 +10,14 @@ import {
   FaCalculator,
   FaPlus,
   FaTrash,
+  FaUser,
+  FaBuilding,
+  FaMoneyBillWave,
+  FaEnvelope,
+  FaExclamationTriangle,
+  FaPhone,
+  FaIdCard,
+  FaBolt,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getProperties } from "../../redux/propertyRedux";
@@ -359,6 +367,7 @@ const AddTenant = () => {
     tenantCode: generateNextTenantCode(),
     name: "",
     phone: "",
+    email: "",
     idNumber: "",
     property: "",
     unit: "",
@@ -855,6 +864,7 @@ useEffect(() => {
           tenantCode: tenant.tenantCode || "",
           name: tenant.name || "",
           phone: tenant.phone || "",
+          email: tenant.email || "",
           idNumber: tenant.idNumber || "",
           property: propertyId,
           unit: unitId,
@@ -1108,6 +1118,9 @@ useEffect(() => {
 
     if (!formData.name?.trim()) errors.name = "Tenant name is required";
     if (!formData.phone?.trim()) errors.phone = "Phone number is required";
+    if (formData.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      errors.email = "Enter a valid email address";
+    }
     if (!formData.idNumber?.trim()) errors.idNumber = "ID number is required";
     if (!formData.property?.trim()) errors.property = "Property is required";
     if (!formData.unit?.trim()) errors.unit = "Unit is required";
@@ -1380,17 +1393,6 @@ for (const request of invoiceRequests) {
     <DashboardLayout>
       <div className="h-[calc(100vh-8rem)] min-h-0 w-full overflow-y-auto overscroll-contain bg-gradient-to-br from-slate-50 via-white to-slate-100 px-2 py-2 pb-28 sm:px-3 lg:px-4">
         <div className="w-full max-w-none mx-0">
-          <div className="mb-2">
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              {isEditMode ? "Edit Tenant" : "New Tenant"}
-            </h1>
-            <p className="mt-0.5 text-sm text-slate-600">
-              {isEditMode
-                ? "Update tenant record and billing information"
-                : "Create a new tenant record with billing information"}
-            </p>
-          </div>
-
           {generalError && (
             <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {generalError}
@@ -1404,85 +1406,82 @@ for (const request of invoiceRequests) {
             </div>
           ) : (
           <form onSubmit={handleSubmit}>
-            <div className="bg-white shadow-sm rounded-lg border border-slate-200 overflow-hidden">
-              <div className="p-3 space-y-3 sm:p-4 sm:space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="space-y-3">
+
+              {/* ── Tenant Information ── */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-3 rounded-t-xl">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-orange-600"><FaUser size={13} /></span>
                   <div>
-                    <label className={labelClass}>Tenant Code (Optional)</label>
+                    <h3 className="text-sm font-bold text-slate-900 leading-tight">Tenant Information</h3>
+                    <p className="text-[11px] text-slate-500 leading-tight">Identity and contact details</p>
+                  </div>
+                  <div className="ml-auto">
                     <input
                       type="text"
                       name="tenantCode"
                       value={formData.tenantCode}
                       onChange={handleInputChange}
-                      placeholder="Leave blank for auto-generation"
-                      className={inputClass}
+                      placeholder="Tenant Code (auto)"
+                      className="h-7 w-36 rounded border border-slate-200 bg-white px-2 text-xs font-mono text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
                     />
-                    <p className="mt-1 text-xs text-gray-500">
-                      Leave blank and the system will auto-assign a code
-                    </p>
                   </div>
                 </div>
-
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 mb-3 border-b-2 border-orange-500 pb-2">
-                    👤 Tenant Information
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    <div>
-                      <label className={labelClass}>
-                        Full Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        placeholder="John Doe"
-                        className={`${inputClass} ${fieldErrors.name ? "border-red-500" : ""}`}
-                      />
-                      {fieldErrors.name && (
-                        <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>
-                      )}
+                <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <label className={labelClass}>Full Name <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <FaUser className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={11} />
+                      <input type="text" name="name" value={formData.name} onChange={handleInputChange} placeholder="John Doe"
+                        className={`${inputClass} pl-8 ${fieldErrors.name ? "border-red-400" : ""}`} />
                     </div>
+                    {fieldErrors.name && <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>}
+                  </div>
 
-                    <div>
-                      <label className={labelClass}>
-                        Phone Number <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        placeholder="+254 712 345 678"
-                        className={`${inputClass} ${fieldErrors.phone ? "border-red-500" : ""}`}
-                      />
-                      {fieldErrors.phone && (
-                        <p className="mt-1 text-xs text-red-600">{fieldErrors.phone}</p>
-                      )}
+                  <div>
+                    <label className={labelClass}>Phone Number <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <FaPhone className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={11} />
+                      <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+254 712 345 678"
+                        className={`${inputClass} pl-8 ${fieldErrors.phone ? "border-red-400" : ""}`} />
                     </div>
+                    {fieldErrors.phone && <p className="mt-1 text-xs text-red-600">{fieldErrors.phone}</p>}
+                  </div>
 
-                    <div>
-                      <label className={labelClass}>ID Number</label>
-                      <input
-                        type="text"
-                        name="idNumber"
-                        value={formData.idNumber}
-                        onChange={handleInputChange}
-                        placeholder="12345678"
-                        className={`${inputClass} ${fieldErrors.idNumber ? "border-red-500" : ""}`}
-                      />
-                      {fieldErrors.idNumber && (
-                        <p className="mt-1 text-xs text-red-600">{fieldErrors.idNumber}</p>
-                      )}
+                  <div>
+                    <label className={labelClass}>Email Address</label>
+                    <div className="relative">
+                      <FaEnvelope className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={11} />
+                      <input type="email" name="email" value={formData.email} onChange={handleInputChange} placeholder="tenant@example.com"
+                        className={`${inputClass} pl-8 ${fieldErrors.email ? "border-red-400" : ""}`} />
                     </div>
+                    {fieldErrors.email
+                      ? <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>
+                      : <p className="mt-1 text-[11px] text-slate-400">Used for email notifications &amp; receipts</p>}
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>ID / Passport Number <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <FaIdCard className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={11} />
+                      <input type="text" name="idNumber" value={formData.idNumber} onChange={handleInputChange} placeholder="12345678"
+                        className={`${inputClass} pl-8 ${fieldErrors.idNumber ? "border-red-400" : ""}`} />
+                    </div>
+                    {fieldErrors.idNumber && <p className="mt-1 text-xs text-red-600">{fieldErrors.idNumber}</p>}
                   </div>
                 </div>
+              </div>
 
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 mb-3 border-b-2 border-green-500 pb-2">
-                    🏢 Property & Unit
-                  </h3>
+              {/* ── Property & Unit ── */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-3 rounded-t-xl">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600"><FaBuilding size={13} /></span>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 leading-tight">Property &amp; Unit</h3>
+                    <p className="text-[11px] text-slate-500 leading-tight">Assign a property and unit to this tenant</p>
+                  </div>
+                </div>
+                <div className="p-4 space-y-4">
 
                   {preselectedUnitBanner && !isEditMode && (
                     <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
@@ -1638,14 +1637,19 @@ for (const request of invoiceRequests) {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                </div>
+              </div>
+
+              {/* ── Billing Information ── */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-3 rounded-t-xl">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 text-blue-600"><FaMoneyBillWave size={13} /></span>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 leading-tight">Billing Information</h3>
+                    <p className="text-[11px] text-slate-500 leading-tight">Rent, deposit and billing settings</p>
                   </div>
                 </div>
-
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 mb-3 border-b-2 border-blue-500 pb-2">
-                    💰 Billing Information
-                  </h3>
+                <div className="p-4 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <div>
                       <label className={labelClass}>
@@ -1772,21 +1776,6 @@ for (const request of invoiceRequests) {
                           <p className="text-xs text-orange-700 mt-0.5">Rent + Utilities</p>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className={labelClass}>
-                        Status <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        name="status"
-                        value={formData.status}
-                        onChange={handleInputChange}
-                        className={inputClass}
-                      >
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
                     </div>
 
                     <div className="md:col-span-1">
@@ -1950,25 +1939,27 @@ for (const request of invoiceRequests) {
                     </div>
                   )}
                 </div>
+              </div>
 
-                <div ref={additionalUtilitiesSectionRef} className="bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-50 border-2 border-dashed border-indigo-300 rounded-xl p-4 space-y-3 shadow-sm">
-                  <div className="flex items-center justify-between">
+              {/* ── Additional Utilities ── */}
+              <div ref={additionalUtilitiesSectionRef} className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-3 rounded-t-xl">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600"><FaBolt size={13} /></span>
                     <div>
-                      <h3 className="text-base font-bold text-indigo-900 flex items-center gap-2">
-                        ➕ Additional Utilities (Optional)
-                      </h3>
-                      <p className="text-xs text-indigo-700 mt-1">
-                        Add utilities not included in the unit.
-                      </p>
+                      <h3 className="text-sm font-bold text-slate-900 leading-tight">Additional Utilities</h3>
+                      <p className="text-[11px] text-slate-500 leading-tight">Add utilities beyond the unit's defaults</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={addAdditionalUtility}
-                      className="h-10 px-4 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2 transition-all shadow-sm hover:shadow-md"
-                    >
-                      <FaPlus /> Add Utility
-                    </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={addAdditionalUtility}
+                    className="h-7 px-3 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1.5 transition-all"
+                  >
+                    <FaPlus size={10} /> Add Utility
+                  </button>
+                </div>
+                <div className="p-4 space-y-3">
 
                   {additionalUtilities.length === 0 ? (
                     <div className="text-center py-8 text-indigo-600">
@@ -2043,11 +2034,18 @@ for (const request of invoiceRequests) {
                     <p className="mt-3 text-xs text-red-600">{fieldErrors.additionalUtilities}</p>
                   )}
                 </div>
+              </div>
 
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 mb-3 border-b-2 border-purple-500 pb-2">
-                    🚨 Emergency Contact
-                  </h3>
+              {/* ── Emergency Contact ── */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-3 rounded-t-xl">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 text-red-500"><FaExclamationTriangle size={13} /></span>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 leading-tight">Emergency Contact</h3>
+                    <p className="text-[11px] text-slate-500 leading-tight">Optional backup contact for this tenant</p>
+                  </div>
+                </div>
+                <div className="p-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className={labelClass}>Contact Name</label>

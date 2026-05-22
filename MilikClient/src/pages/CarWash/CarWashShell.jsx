@@ -1,25 +1,22 @@
 import React, { useEffect, useState } from "react";
 import { FaCodeBranch } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { carWashApi, getActiveBranchId, normalizeListPayload, setActiveBranchId } from "../../services/carWashApi";
+import { carWashApi, getActiveBranchId, normalizeListPayload } from "../../services/carWashApi";
 
 const CarWashShell = ({ title, action, children, showToolbar = true }) => {
-  const [branches, setBranches] = useState([]);
-  const [activeBranchId, setLocalBranchId] = useState(getActiveBranchId());
+  const [branchName, setBranchName] = useState("");
+  const assignedBranchId = getActiveBranchId();
 
   useEffect(() => {
+    if (!assignedBranchId) return;
     carWashApi.listBranches({ active: true })
-      .then((result) => setBranches(normalizeListPayload(result, "branches")))
-      .catch(() => setBranches([]));
-  }, []);
-
-  const handleBranchChange = (id) => {
-    setActiveBranchId(id);
-    setLocalBranchId(id);
-    window.location.reload();
-  };
-
-  const activeBranch = branches.find((b) => b._id === activeBranchId);
+      .then((result) => {
+        const branches = normalizeListPayload(result, "branches");
+        const match = branches.find((b) => b._id === assignedBranchId);
+        if (match) setBranchName(match.name);
+      })
+      .catch(() => {});
+  }, [assignedBranchId]);
 
   return (
     <DashboardLayout>
@@ -31,26 +28,12 @@ const CarWashShell = ({ title, action, children, showToolbar = true }) => {
               <span className="text-sm font-extrabold text-slate-900">{title}</span>
             </div>
             <div className="flex items-center gap-2">
-              {branches.length > 0 && (
-                <div className="flex items-center gap-1.5 border border-[#B7C9C0] bg-[#F1F6F3] px-2" style={{ height: 32 }}>
-                  <FaCodeBranch className="text-[#0B3B2E] text-[11px]" />
-                  <select
-                    className="h-full bg-transparent text-xs font-bold text-[#0B3B2E] focus:outline-none"
-                    value={activeBranchId}
-                    onChange={(e) => handleBranchChange(e.target.value)}
-                  >
-                    <option value="">All Branches</option>
-                    {branches.map((b) => (
-                      <option key={b._id} value={b._id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {activeBranch && (
-                <span className="hidden sm:inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
-                  {activeBranch.location || activeBranch.name}
+              <div className="flex items-center gap-1.5 border border-[#B7C9C0] bg-[#F1F6F3] px-2.5 py-1">
+                <FaCodeBranch className="text-[#0B3B2E] text-[11px]" />
+                <span className="text-xs font-bold text-[#0B3B2E]">
+                  {assignedBranchId ? (branchName || "Loading…") : "All Branches"}
                 </span>
-              )}
+              </div>
               {action}
             </div>
           </div>

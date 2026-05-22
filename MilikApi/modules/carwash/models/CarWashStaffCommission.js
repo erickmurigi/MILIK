@@ -34,5 +34,6 @@ const carWashStaffCommissionSchema = new mongoose.Schema(
 carWashStaffCommissionSchema.index({ business: 1, job: 1, staff: 1 }, { unique: true });
 carWashStaffCommissionSchema.index({ business: 1, status: 1, earnedAt: -1 });
 carWashStaffCommissionSchema.index({ business: 1, staff: 1, status: 1 });
+carWashStaffCommissionSchema.index({ business: 1, branch: 1, earnedAt: -1 });
 
 export default mongoose.model("CarWashStaffCommission", carWashStaffCommissionSchema);

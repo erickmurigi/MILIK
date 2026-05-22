@@ -48,6 +48,16 @@ const TenantSchema = new mongoose.Schema(
       trim: true,
     },
 
+    email: {
+      type: String,
+      trim: true,
+      default: "",
+      validate: {
+        validator: (v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+        message: "Invalid email address format",
+      },
+    },
+
     idNumber: {
       type: String,
       required: true,
@@ -231,6 +241,10 @@ TenantSchema.pre("validate", function (next) {
 
   if (typeof this.phone === "string") {
     this.phone = this.phone.trim();
+  }
+
+  if (typeof this.email === "string") {
+    this.email = this.email.trim().toLowerCase();
   }
 
   if (typeof this.idNumber === "string") {

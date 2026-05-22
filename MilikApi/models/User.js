@@ -60,6 +60,7 @@ const userSchema = new mongoose.Schema({
     moduleAccess: { type: mongoose.Schema.Types.Mixed, default: {} },
     permissions: { type: mongoose.Schema.Types.Mixed, default: {} },
     rights: [{ type: String }],
+    carwashBranch: { type: mongoose.Schema.Types.ObjectId, ref: 'CarWashBranch', default: null },
   }],
 
   // Authentication
