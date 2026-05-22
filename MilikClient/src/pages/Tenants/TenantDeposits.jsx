@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   FaArrowRight,
+  FaEnvelope,
   FaEye,
   FaFileInvoice,
   FaMoneyBillWave,
@@ -12,11 +13,13 @@ import {
   FaReceipt,
   FaRedoAlt,
   FaSearch,
+  FaSms,
   FaSpinner,
   FaTimes,
   FaTrash,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { useConfirm } from "../../context/ConfirmContext";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getUnits } from "../../redux/unitRedux";
@@ -197,6 +200,7 @@ const TenantDeposits = () => {
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
+  const [communicationModal, setCommunicationModal] = useState(null);
   const [tenantPropertyFilter, setTenantPropertyFilter] = useState("any");
   const [depositForm, setDepositForm] = useState({
     tenantId: "",
@@ -770,6 +774,18 @@ const TenantDeposits = () => {
                 <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
                 <button onClick={loadDepositInvoices} disabled={loading} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 text-xs text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60">{loading ? <FaSpinner className="animate-spin" size={10} /> : <FaRedoAlt size={10} />}</button>
                 <button onClick={handleDeleteSelected} disabled={!canDeleteInvoice || selectedCount === 0 || deleting} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "cursor-not-allowed bg-gray-400"}`}><FaTrash size={10} /></button>
+                <button
+                  onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedInvoices, title: `Notify ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send deposit invoice notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
+                  disabled={selectedCount === 0}
+                  title={selectedCount === 0 ? "Select deposits to SMS tenants" : `SMS ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-teal-600 hover:bg-teal-700" : "cursor-not-allowed bg-gray-400"}`}
+                ><FaSms size={10} /></button>
+                <button
+                  onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedInvoices, title: `Email ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send deposit invoice notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
+                  disabled={selectedCount === 0}
+                  title={selectedCount === 0 ? "Select deposits to email tenants" : `Email ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-gray-400"}`}
+                ><FaEnvelope size={10} /></button>
                 <button onClick={handlePrintList} disabled={!canExportInvoice || totalFilteredCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaPrint size={10} /></button>
                 <button type="button" onClick={openDepositModal} disabled={!canCreateInvoice} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaPlus size={10} /> Deposit</button>
               </div>
@@ -1083,6 +1099,18 @@ const TenantDeposits = () => {
           </div>
         </div>
       )}
+
+      <CommunicationComposerModal
+        open={Boolean(communicationModal)}
+        onClose={() => setCommunicationModal(null)}
+        businessId={currentCompany?._id || ""}
+        contextType={communicationModal?.contextType || "invoice"}
+        recordIds={communicationModal?.recordIds || []}
+        title={communicationModal?.title || "Deposit Invoice Notification"}
+        subtitle={communicationModal?.subtitle || "Preview and send deposit invoice notification."}
+        allowedChannels={communicationModal?.allowedChannels || ["sms", "email"]}
+        defaultChannel={communicationModal?.defaultChannel || "sms"}
+      />
     </DashboardLayout>
   );
 };

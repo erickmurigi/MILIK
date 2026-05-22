@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { FaSave } from "react-icons/fa";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { FaSave, FaSpinner } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -184,6 +184,7 @@ const AddReceipt = () => {
   };
   const [tenantInvoices, setTenantInvoices] = useState([]);
   const [cashbookOptions, setCashbookOptions] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
   const manualSelectionMode = Boolean(receiptDraft.manualSelectionMode);
   const setManualSelectionMode = (updater) => {
     setReceiptDraft((prev) => ({
@@ -477,48 +478,6 @@ const AddReceipt = () => {
     };
   }, [formData.amount, orderedOutstandingInvoices, balanceSummary.balance, manualSelectionMode, priorityInvoiceKeys]);
 
-  const combinedOutstandingInvoices = useMemo(
-    () => outstandingInvoices.filter((invoice) => invoice.chargeType === "combined"),
-    [outstandingInvoices]
-  );
-
-  const rentOutstandingInvoices = useMemo(
-    () => outstandingInvoices.filter((invoice) => invoice.chargeType === "rent"),
-    [outstandingInvoices]
-  );
-
-  const utilityOutstandingInvoices = useMemo(
-    () => outstandingInvoices.filter((invoice) => invoice.chargeType === "utility"),
-    [outstandingInvoices]
-  );
-
-  const depositOutstandingInvoices = useMemo(
-    () => outstandingInvoices.filter((invoice) => invoice.chargeType === "deposit"),
-    [outstandingInvoices]
-  );
-
-  const latePenaltyOutstandingInvoices = useMemo(
-    () => outstandingInvoices.filter((invoice) => invoice.chargeType === "late_fee"),
-    [outstandingInvoices]
-  );
-
-
-  const invoicePreviewSections = useMemo(
-    () => [
-      { key: "combined", title: "Combined Invoices", rows: combinedOutstandingInvoices },
-      { key: "rent", title: "Rent Invoices", rows: rentOutstandingInvoices },
-      { key: "utility", title: "Utility Invoices", rows: utilityOutstandingInvoices },
-      { key: "deposit", title: "Deposit Invoices", rows: depositOutstandingInvoices },
-      { key: "late_fee", title: "Late Penalty Invoices", rows: latePenaltyOutstandingInvoices },
-    ].filter((section) => section.rows.length > 0),
-    [
-      combinedOutstandingInvoices,
-      rentOutstandingInvoices,
-      utilityOutstandingInvoices,
-      depositOutstandingInvoices,
-      latePenaltyOutstandingInvoices,
-    ]
-  );
 
   const onPropertyChange = (propertyId) => {
     setFormData((prev) => ({
@@ -537,7 +496,8 @@ const AddReceipt = () => {
     event.currentTarget.blur();
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
+    if (isSaving) return;
     if (!canSaveReceipt) {
       toast.error("You do not have permission to record receipts");
       return;
@@ -623,6 +583,7 @@ const AddReceipt = () => {
         : undefined,
     };
 
+    setIsSaving(true);
     try {
       await createRentPayment(dispatch, payload);
       toast.success("Receipt created successfully");
@@ -630,8 +591,9 @@ const AddReceipt = () => {
       navigate(backToPath);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to create receipt");
+      setIsSaving(false);
     }
-  };
+  }, [isSaving, canSaveReceipt, currentCompany, formData, isDirectToLandlord, isCompanyLandlordMode, selectedTenant, allocationPreview, manualSelectionMode, priorityInvoiceKeys, prefilledCollectionId, prefilledAccountReference, prefilledMsisdn, prefilledPayerName, isInstantMode, dispatch, clearReceiptDraft, navigate, backToPath]);
 
   const amountDueColor =
     !formData.tenantId
@@ -1103,13 +1065,14 @@ const AddReceipt = () => {
                 </button>
                 <button
                   onClick={handleSubmit}
-                  disabled={!canSaveReceipt}
+                  disabled={!canSaveReceipt || isSaving}
                   title={canSaveReceipt ? "Save receipt" : "You do not have permission to record receipts"}
                   className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white shadow-sm transition ${
-                    canSaveReceipt ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
+                    canSaveReceipt && !isSaving ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
                   }`}
                 >
-                  <FaSave /> Save Receipt
+                  {isSaving ? <FaSpinner className="animate-spin" /> : <FaSave />}
+                  {isSaving ? "Saving…" : "Save Receipt"}
                 </button>
               </div>
 

@@ -829,7 +829,7 @@ function InvoiceTableRowBase({
           ? "bg-white hover:bg-blue-50/40"
           : "bg-slate-50 hover:bg-blue-50/40"
       }`}
-      onClick={() => onView(invoice)}
+      onClick={() => onSelect(invoice.key)}
     >
       <td className="px-3 py-2">
         <input
@@ -839,7 +839,15 @@ function InvoiceTableRowBase({
           onClick={(e) => e.stopPropagation()}
         />
       </td>
-      <td className="px-3 py-2 font-bold text-blue-700">{invoice.id}</td>
+      <td className="px-3 py-2">
+        <button
+          type="button"
+          className="font-bold text-blue-700 hover:text-blue-900 hover:underline focus:outline-none"
+          onClick={(e) => { e.stopPropagation(); onView(invoice); }}
+        >
+          {invoice.id}
+        </button>
+      </td>
       {showTenantColumns && (
         <td className="px-3 py-2 font-bold text-slate-900">{invoice.tenantName}</td>
       )}

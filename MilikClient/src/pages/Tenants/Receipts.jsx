@@ -8,6 +8,9 @@ import {
   FaEdit,
   FaEye,
   FaFileInvoiceDollar,
+  FaFileInvoice,
+  FaMoneyBillWave,
+  FaReceipt,
   FaPlus,
   FaPrint,
   FaRedoAlt,
@@ -1788,14 +1791,14 @@ const visibleReceiptIds = useMemo(
                       return (
                         <tr
                           key={receipt._id}
-                          className={`border-b border-slate-200 ${
+                          className={`cursor-pointer border-b border-slate-200 transition-colors ${
                             isSelected
-                              ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E]"
+                              ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
                               : index % 2 === 0
-                              ? "bg-white"
-                              : "bg-slate-50"
+                              ? "bg-white hover:bg-blue-50/40"
+                              : "bg-slate-50 hover:bg-blue-50/40"
                           }`}
-                          onClick={() => openJournalDrawer(receipt)}
+                          onClick={() => toggleSelection(receipt._id)}
                         >
                           <td className="px-3 py-2 text-center">
                             <input
@@ -1805,7 +1808,15 @@ const visibleReceiptIds = useMemo(
                               onClick={(e) => e.stopPropagation()}
                             />
                           </td>
-                          <td className="px-3 py-2 font-bold text-slate-900">{receipt.receiptNumber || "-"}</td>
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              className="font-bold text-blue-700 hover:text-blue-900 hover:underline focus:outline-none"
+                              onClick={(e) => { e.stopPropagation(); openView(receipt); }}
+                            >
+                              {receipt.receiptNumber || "-"}
+                            </button>
+                          </td>
                           <td className="px-3 py-2 font-semibold text-slate-900">{formatDate(receipt.paymentDate)}</td>
                           <td className="px-3 py-2 font-semibold text-slate-900">{getTenantName(receipt, tenants)}</td>
                           <td className="px-3 py-2 font-semibold text-slate-900">{getPropertyName(receipt, tenants)}</td>
@@ -2225,142 +2236,288 @@ const visibleReceiptIds = useMemo(
         </div>
       )}
 
-      {showView && activeReceipt && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-xl">
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <FaFileInvoiceDollar /> Receipt Details
-              </h3>
-              <button onClick={() => setShowView(false)} className="text-slate-500 hover:text-slate-700">
-                <FaTimes />
-              </button>
-            </div>
-            <div className="p-4 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-slate-600">Receipt #</span><span className="font-semibold">{activeReceipt.receiptNumber || "-"}</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">Reference #</span><span className="font-semibold">{activeReceipt.referenceNumber || "-"}</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">Tenant</span><span className="font-semibold">{getTenantName(activeReceipt, tenants)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">Unit</span><span className="font-semibold">{getUnitName(activeReceipt, tenants)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">Payment Date</span><span className="font-semibold">{formatDate(activeReceipt.paymentDate)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">Due Date</span><span className="font-semibold">{formatDate(activeReceipt.dueDate)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">Type</span><span className="font-semibold">{getReceiptDisplayType(activeReceipt)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">Method</span><span className="font-semibold capitalize">{activeReceipt.paymentMethod?.replace("_", " ")}</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">Cashbook</span><span className="font-semibold">{getCashbookLabel(activeReceipt)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">Status</span><span className="font-semibold">{activeReceipt.isConfirmed ? "Confirmed" : "Pending"}</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">Amount</span><span className="font-bold text-lg">Ksh {Math.abs(Number(activeReceipt.amount || 0)).toLocaleString()}</span></div>
-              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Receipt Allocation</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatMoney(Number(activeReceipt?.amount || 0) - Number(activeReceipt?.allocationSummary?.unapplied || 0))} allocated · {formatMoney(activeReceipt?.allocationSummary?.unapplied || 0)} unapplied</p>
+      {showView && activeReceipt && (() => {
+        const receiptAmount = Math.abs(Number(activeReceipt.amount || 0));
+        const allocated = receiptAmount - Math.abs(Number(activeReceipt?.allocationSummary?.unapplied || 0));
+        const settlePct = receiptAmount > 0 ? Math.min(100, (allocated / receiptAmount) * 100) : 0;
+        const receiptJournalLines = buildJournalEntriesForReceipt(activeReceipt);
+        const receiptAllocations = Array.isArray(activeReceipt?.allocations) ? activeReceipt.allocations : [];
+        const allocationSummary = activeReceipt?.allocationSummary || {};
+        const summaryBreakdown = [
+          { label: "Rent", value: Number(allocationSummary.rent || 0) },
+          { label: "Utilities", value: Number(allocationSummary.utility || 0) },
+          { label: "Deposit", value: Number(allocationSummary.deposit || 0) },
+          { label: "Late Penalty", value: Number(allocationSummary.latePenalty || 0) },
+          { label: "Debit Note", value: Number(allocationSummary.debitNote || 0) },
+          { label: "Other", value: Number(allocationSummary.other || 0) },
+        ].filter((r) => r.value > 0);
+        const statusBadgeClass = activeReceipt.isReversed
+          ? "bg-red-100 text-red-700"
+          : activeReceipt.isConfirmed
+          ? "bg-green-100 text-green-700"
+          : "bg-amber-100 text-amber-700";
+        const statusLabel = activeReceipt.isReversed ? "Reversed" : activeReceipt.isConfirmed ? "Confirmed" : "Pending";
+        return (
+          <div className="fixed inset-0 z-[80]" onClick={() => setShowView(false)}>
+            <button
+              type="button"
+              aria-label="Close receipt details"
+              onClick={() => setShowView(false)}
+              className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+            />
+            <div className="absolute inset-y-0 right-0 flex w-full justify-end">
+              <div
+                className="relative flex h-full w-full max-w-[700px] flex-col bg-white shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* HEADER */}
+                <div className="shrink-0 bg-[#0B3B2E] px-6 py-5 text-white">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[9px] font-black uppercase tracking-[0.35em] text-emerald-300/80">Rental Receipt</p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
+                        <h2 className="font-mono text-[22px] font-black leading-none tracking-tight">
+                          {activeReceipt.receiptNumber || activeReceipt.referenceNumber || "—"}
+                        </h2>
+                        <span className={`inline-flex shrink-0 rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-widest bg-white/90 ${statusBadgeClass}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-[11px] font-semibold text-emerald-100/90">
+                        {getReceiptDisplayType(activeReceipt)} · {(activeReceipt.paymentMethod || "").replace(/_/g, " ") || "—"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowView(false)}
+                      className="shrink-0 rounded border border-white/20 bg-white/10 p-1.5 text-white hover:bg-white/20"
+                      title="Close"
+                    >
+                      <FaTimes size={13} />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => openAllocationDrawer(activeReceipt)}
-                    className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={activeReceipt.isReversed}
-                  >
-                    <FaLink /> Manage
+                  {/* Meta strip */}
+                  <div className="mt-4 grid grid-cols-3 divide-x divide-white/10 rounded border border-white/10 bg-white/5 text-[11px]">
+                    <div className="px-3 py-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">Tenant</p>
+                      <p className="mt-0.5 truncate font-semibold text-white">{getTenantName(activeReceipt, tenants)}</p>
+                    </div>
+                    <div className="px-3 py-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">Unit</p>
+                      <p className="mt-0.5 truncate font-semibold text-white">{getPropertyName(activeReceipt, tenants)} · {getUnitName(activeReceipt, tenants)}</p>
+                    </div>
+                    <div className="px-3 py-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300/60">Date</p>
+                      <p className="mt-0.5 font-semibold text-white">{formatDate(activeReceipt.paymentDate) || "—"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* FINANCIAL SUMMARY */}
+                <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-4">
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Receipt Amount</p>
+                      <p className="mt-1 font-mono text-[28px] font-black leading-none tracking-tight text-slate-900">
+                        Ksh {receiptAmount.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-stretch divide-x divide-slate-200 rounded border border-slate-200 text-center text-[11px]">
+                      <div className="px-4 py-2">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Allocated</p>
+                        <p className="mt-1 font-mono font-black text-slate-900">{formatMoney(allocated)}</p>
+                      </div>
+                      <div className="px-4 py-2">
+                        <p className={`text-[9px] font-black uppercase tracking-widest ${Number(allocationSummary.unapplied || 0) > 0 ? "text-amber-600" : "text-slate-400"}`}>
+                          Unapplied
+                        </p>
+                        <p className={`mt-1 font-mono font-black ${Number(allocationSummary.unapplied || 0) > 0 ? "text-amber-700" : "text-slate-400"}`}>
+                          {formatMoney(allocationSummary.unapplied || 0)}
+                        </p>
+                      </div>
+                      <div className="px-4 py-2">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Cashbook</p>
+                        <p className="mt-1 font-mono font-black text-slate-700 text-[10px]">{getCashbookLabel(activeReceipt)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="mt-4">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Allocation Progress</p>
+                      <p className="text-[9px] font-black text-slate-600">{settlePct.toFixed(0)}% allocated</p>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          settlePct >= 100 ? "bg-emerald-500" : settlePct > 0 ? "bg-amber-400" : "bg-slate-200"
+                        }`}
+                        style={{ width: `${settlePct}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ACTION BAR */}
+                <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-6 py-2.5">
+                  <button type="button" onClick={() => handlePrintReceipt(activeReceipt)}
+                    className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50">
+                    <FaPrint size={10} /> Print
+                  </button>
+                  <button type="button" onClick={() => { setShowView(false); openAllocationDrawer(activeReceipt); }} disabled={activeReceipt.isReversed}
+                    className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">
+                    <FaLink size={10} /> Manage Allocations
+                  </button>
+                  {!activeReceipt.isConfirmed && !activeReceipt.isReversed && (
+                    <button type="button" onClick={() => { handleConfirmOne(activeReceipt); setShowView(false); }}
+                      className="inline-flex items-center gap-1.5 rounded border border-green-200 bg-white px-3 py-1.5 text-[11px] font-bold text-green-700 transition hover:bg-green-50">
+                      <FaCheck size={10} /> Confirm
+                    </button>
+                  )}
+                  {activeReceipt.isConfirmed && !activeReceipt.isReversed && (
+                    <button type="button" onClick={() => { handleUnconfirmOne(activeReceipt); setShowView(false); }}
+                      className="inline-flex items-center gap-1.5 rounded border border-amber-200 bg-white px-3 py-1.5 text-[11px] font-bold text-amber-700 transition hover:bg-amber-50">
+                      <FaTimes size={10} /> Unconfirm
+                    </button>
+                  )}
+                  {activeReceipt.isReversed && (
+                    <button type="button" onClick={() => { handleCancelReversalOne(activeReceipt); setShowView(false); }}
+                      className="inline-flex items-center gap-1.5 rounded border border-teal-200 bg-white px-3 py-1.5 text-[11px] font-bold text-teal-700 transition hover:bg-teal-50">
+                      <FaRedoAlt size={10} /> Cancel Reversal
+                    </button>
+                  )}
+                  <button type="button" onClick={() => { openEditForm(activeReceipt); setShowView(false); }}
+                    className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-blue-700 transition hover:bg-blue-50">
+                    <FaEdit size={10} /> Edit
+                  </button>
+                  <button type="button" onClick={() => { handleDeleteOne(activeReceipt._id); setShowView(false); }} disabled={!canDeleteReceipt}
+                    className="ml-auto inline-flex items-center gap-1.5 rounded border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-bold text-rose-600 transition hover:bg-rose-50 disabled:opacity-40">
+                    <FaTrash size={10} /> Delete
                   </button>
                 </div>
-                <div className="mt-3 space-y-2">
-                  {(Array.isArray(activeReceipt?.allocations) ? activeReceipt.allocations : []).length > 0 ? (
-                    (Array.isArray(activeReceipt?.allocations) ? activeReceipt.allocations : []).map((row, index) => (
-                      <div key={`${row?.invoice || row?.invoiceId || index}`} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-900">{row?.invoiceNumber || row?.description || `Invoice ${index + 1}`}</p>
-                          <p className="text-[11px] text-slate-500">{getAllocationGroupLabel(row?.priorityGroup || row?.category)}{row?.utilityType ? ` · ${row.utilityType}` : ""}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-slate-900">{formatMoney(row?.appliedAmount || 0)}</p>
-                          <p className="text-[11px] text-slate-500">Outstanding before {formatMoney(row?.beforeOutstanding || 0)}</p>
-                        </div>
+
+                {/* BODY */}
+                <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-slate-100">
+
+                  {/* Allocation Breakdown by Type */}
+                  <div className="bg-white">
+                    <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-6 py-2">
+                      <FaMoneyBillWave size={10} className="text-slate-400" />
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Allocation Breakdown</span>
+                    </div>
+                    {summaryBreakdown.length > 0 ? (
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-100">
+                            <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Category</th>
+                            <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {summaryBreakdown.map((row) => (
+                            <tr key={row.label} className="border-b border-slate-50 hover:bg-slate-50/60">
+                              <td className="px-6 py-2.5 text-slate-700">{row.label}</td>
+                              <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-900">{formatMoney(row.value)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-[#0B3B2E]/20 bg-[#0B3B2E]/5">
+                            <td className="px-6 py-3 text-[11px] font-black uppercase tracking-wider text-[#0B3B2E]">Total Allocated</td>
+                            <td className="px-6 py-3 text-right font-mono text-sm font-black text-[#0B3B2E]">{formatMoney(allocated)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    ) : (
+                      <div className="px-6 py-8 text-center text-[11px] text-slate-400">No allocation breakdown available.</div>
+                    )}
+                  </div>
+
+                  {/* Invoice Allocations */}
+                  <div className="bg-white">
+                    <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-2">
+                      <div className="flex items-center gap-2">
+                        <FaReceipt size={10} className="text-slate-400" />
+                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Invoice Allocations</span>
                       </div>
-                    ))
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-3 text-xs text-slate-500">No allocation lines saved on this receipt yet.</div>
-                  )}
+                      <span className="text-[9px] font-bold text-slate-400">{receiptAllocations.length} line(s)</span>
+                    </div>
+                    {receiptAllocations.length === 0 ? (
+                      <div className="px-6 py-8 text-center text-[11px] text-slate-400">No allocation lines saved on this receipt yet.</div>
+                    ) : (
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-100 bg-slate-50">
+                            <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Invoice</th>
+                            <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Category</th>
+                            <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Applied</th>
+                            <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Before</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {receiptAllocations.map((row, index) => (
+                            <tr key={`${row?.invoice || row?.invoiceId || index}`} className="border-b border-slate-50 hover:bg-slate-50/60">
+                              <td className="px-6 py-2.5">
+                                <p className="font-mono font-bold text-slate-900">{row?.invoiceNumber || `Invoice ${index + 1}`}</p>
+                                {row?.description && <p className="text-[10px] text-slate-400">{row.description}</p>}
+                              </td>
+                              <td className="px-6 py-2.5 text-slate-500">
+                                {getAllocationGroupLabel(row?.priorityGroup || row?.category)}{row?.utilityType ? ` · ${row.utilityType}` : ""}
+                              </td>
+                              <td className="px-6 py-2.5 text-right font-mono font-bold text-emerald-700">{formatMoney(row?.appliedAmount || 0)}</td>
+                              <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-500">{formatMoney(row?.beforeOutstanding || 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+
+                  {/* Journal Entries */}
+                  <div className="bg-white">
+                    <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-6 py-2">
+                      <FaFileInvoice size={10} className="text-slate-400" />
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Journal Entries</span>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-slate-900 text-white">
+                          <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest">Account</th>
+                          <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest">Debit</th>
+                          <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest">Credit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {receiptJournalLines.map((line, i) => (
+                          <tr key={`${line.accountCode}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
+                            <td className="px-6 py-2.5">
+                              <p className="font-mono font-bold text-slate-800">{line.accountCode} · {line.accountName}</p>
+                              <p className="mt-0.5 text-[10px] text-slate-400">{line.narration}</p>
+                            </td>
+                            <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-700">
+                              {line.debit ? formatMoney(line.debit) : <span className="text-slate-300">—</span>}
+                            </td>
+                            <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-700">
+                              {line.credit ? formatMoney(line.credit) : <span className="text-slate-300">—</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {activeReceipt.description && (
+                      <div className="border-t border-slate-100 px-6 py-3">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Description</p>
+                        <p className="mt-1 text-xs text-slate-600">{activeReceipt.description}</p>
+                      </div>
+                    )}
+                  </div>
+
                 </div>
               </div>
-              <div className="pt-2 border-t border-slate-200">
-                <span className="text-slate-600">Description</span>
-                <p className="font-medium mt-1">{activeReceipt.description || "-"}</p>
-              </div>
-            </div>
-            <div className="px-4 py-3 border-t border-slate-200 flex justify-end gap-2">
-              {!activeReceipt.isConfirmed && (
-                <button
-                  onClick={() => {
-                    handleConfirmOne(activeReceipt);
-                    setShowView(false);
-                  }}
-                  className="px-4 py-2 text-xs rounded-md text-white font-semibold bg-green-600 hover:bg-green-700 flex items-center gap-2"
-                >
-                  <FaCheck /> Confirm
-                </button>
-              )}
-              {activeReceipt.isConfirmed && (
-                <button
-                  onClick={() => {
-                    handleUnconfirmOne(activeReceipt);
-                    setShowView(false);
-                  }}
-                  className="px-4 py-2 text-xs rounded-md text-white font-semibold bg-orange-600 hover:bg-orange-700 flex items-center gap-2"
-                >
-                  <FaTimes /> Unconfirm
-                </button>
-              )}
-              <button
-                onClick={() => openAllocationDrawer(activeReceipt)}
-                className="px-4 py-2 text-xs rounded-md text-white font-semibold bg-indigo-600 hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={activeReceipt.isReversed}
-              >
-                <FaLink /> Allocations
-              </button>
-              <button
-                onClick={() => {
-                  openEditForm(activeReceipt);
-                  setShowView(false);
-                }}
-                className="px-4 py-2 text-xs rounded-md text-white font-semibold bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
-              >
-                <FaEdit /> Edit
-              </button>
-              <button
-                onClick={() => {
-                  handleDeleteOne(activeReceipt._id);
-                  setShowView(false);
-                }}
-                className="px-4 py-2 text-xs rounded-md text-white font-semibold bg-red-600 hover:bg-red-700 flex items-center gap-2"
-              >
-                <FaTrash /> Delete
-              </button>
-              <button
-                onClick={() => handlePrintReceipt(activeReceipt)}
-                className="px-4 py-2 text-xs rounded-md text-white font-semibold bg-purple-600 hover:bg-purple-700 flex items-center gap-2"
-              >
-                <FaPrint /> Print
-              </button>
-              {activeReceipt.isReversed && (
-                <button
-                  onClick={() => {
-                    handleCancelReversalOne(activeReceipt);
-                    setShowView(false);
-                  }}
-                  className="px-4 py-2 text-xs rounded-md text-white font-semibold bg-teal-600 hover:bg-teal-700 flex items-center gap-2"
-                >
-                  <FaRedoAlt /> Cancel Reversal
-                </button>
-              )}
-              <button
-                onClick={() => setShowView(false)}
-                className="px-4 py-2 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
-              >
-                Close
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {allocationDrawerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">

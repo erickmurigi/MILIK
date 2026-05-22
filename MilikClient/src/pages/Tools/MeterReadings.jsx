@@ -1235,6 +1235,18 @@ const MeterReadings = () => {
                 <button onClick={handleEditSelected} disabled={!canEditSelected} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${canEditSelected ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={10} /></button>
                 <button onClick={handleDeleteSelected} disabled={selectedDeletableRows.length === 0 || bulkDeleting || !canDeleteReading} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${selectedDeletableRows.length > 0 && !bulkDeleting && canDeleteReading ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}><FaTrash size={10} /></button>
                 <button onClick={handleBulkBill} disabled={selectedDraftCount === 0 || bulkBilling || !canProcessReading} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${selectedDraftCount > 0 && !bulkBilling && canProcessReading ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaFileInvoice size={10} /> {bulkBilling ? "…" : "Bill"}</button>
+                <button
+                  onClick={() => setCommunicationModal({ contextType: "meter_reading", recordIds: selectedReadingIds, title: `Notify ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send meter reading notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
+                  disabled={selectedCount === 0}
+                  title={selectedCount === 0 ? "Select readings to SMS tenants" : `SMS ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${selectedCount > 0 ? "bg-teal-600 hover:bg-teal-700" : "bg-gray-400 cursor-not-allowed"}`}
+                ><FaSms size={10} /></button>
+                <button
+                  onClick={() => setCommunicationModal({ contextType: "meter_reading", recordIds: selectedReadingIds, title: `Email ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send meter reading notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
+                  disabled={selectedCount === 0}
+                  title={selectedCount === 0 ? "Select readings to email tenants" : `Email ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400 cursor-not-allowed"}`}
+                ><FaEnvelope size={10} /></button>
                 <button onClick={handlePrintList} disabled={filteredReadings.length === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${filteredReadings.length > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPrint size={10} /></button>
                 <button onClick={loadPageData} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSync size={10} /></button>
                 <button onClick={openAddSectionForNew} disabled={!canCreateReading} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${canCreateReading ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPlus size={10} /> Add</button>

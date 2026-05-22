@@ -794,6 +794,24 @@ const LatePenalties = () => {
                     >
                       <FaTrash size={9} /> Delete Selected
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setCommunicationModal({ contextType: "penalty_invoice", recordIds: selectedProcessedItemIds, title: `Notify ${selectedProcessedItemIds.length} Tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`, subtitle: "Send late penalty notice via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
+                      disabled={selectedProcessedItemIds.length === 0}
+                      title={selectedProcessedItemIds.length === 0 ? "Select penalties to SMS tenants" : `SMS ${selectedProcessedItemIds.length} tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`}
+                      className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-bold text-white ${selectedProcessedItemIds.length > 0 ? "bg-teal-600 hover:bg-teal-700" : "bg-slate-400 cursor-not-allowed"}`}
+                    >
+                      <FaSms size={9} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCommunicationModal({ contextType: "penalty_invoice", recordIds: selectedProcessedItemIds, title: `Email ${selectedProcessedItemIds.length} Tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`, subtitle: "Send late penalty notice via email.", allowedChannels: ["email"], defaultChannel: "email" })}
+                      disabled={selectedProcessedItemIds.length === 0}
+                      title={selectedProcessedItemIds.length === 0 ? "Select penalties to email tenants" : `Email ${selectedProcessedItemIds.length} tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`}
+                      className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-bold text-white ${selectedProcessedItemIds.length > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-400 cursor-not-allowed"}`}
+                    >
+                      <FaEnvelope size={9} />
+                    </button>
                   </div>
                 </div>
 

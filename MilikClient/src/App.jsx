@@ -34,6 +34,9 @@ const FirstTimePassword = lazy(() => import("./pages/Login/FirstTimePassword"));
 // Core
 const ModulesDashboard  = lazy(() => import("./pages/moduleDashboard/ModulesDashboard"));
 const Dashboard         = lazy(() => import("./pages/Dashboard/Dashboard"));
+const MyAccount         = lazy(() => import("./pages/Account/MyAccount"));
+const SmsManager        = lazy(() => import("./pages/Communications/SmsManager"));
+const EmailManager      = lazy(() => import("./pages/Communications/EmailManager"));
 const CompanySetupPage  = lazy(() => import("./pages/companySetup/CompanySetupPage"));
 const SystemSetupPage   = lazy(() => import("./pages/SystemSetup/SystemSetup"));
 const AddCompanyWizard  = lazy(() => import("./pages/SystemSetup/AddCompanyWizard"));
@@ -490,6 +493,9 @@ function App() {
             {/* ── Core dashboards ───────────────────────────────────────── */}
             <Route path="/moduleDashboard" element={<ProtectedRoute><ModulesDashboard /></ProtectedRoute>} />
             <Route path="/dashboard" element={<CompanyModuleRoute moduleKey="propertyManagement"><ProtectedRoute><Dashboard /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/my-account"            element={<ProtectedRoute><MyAccount /></ProtectedRoute>} />
+            <Route path="/communications/sms"   element={<ProtectedRoute><SmsManager /></ProtectedRoute>} />
+            <Route path="/communications/email" element={<ProtectedRoute><EmailManager /></ProtectedRoute>} />
 
             {/* ── Car Wash module ───────────────────────────────────────── */}
             <Route path="/carwash/dashboard"         element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-dashboard" moduleKey="carwash"><CarWashDashboard /></PermissionRoute></CompanyModuleRoute>} />

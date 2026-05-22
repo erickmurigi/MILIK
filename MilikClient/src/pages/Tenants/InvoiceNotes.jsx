@@ -3,16 +3,19 @@ import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import { LISTING_UI } from "../../utils/listingPageUtils";
 import {
+  FaEnvelope,
   FaFileInvoice,
   FaPlus,
   FaRedoAlt,
   FaSave,
   FaSearch,
+  FaSms,
   FaTimes,
   FaUndo,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getChartOfAccounts, getTenantInvoices } from "../../redux/apiCalls";
 import {
@@ -327,6 +330,12 @@ const InvoiceNotes = () => {
   const [busyNoteId, setBusyNoteId] = useState("");
   const [selectedNotes, setSelectedNotes] = useState([]);
   const [expandedNotes, setExpandedNotes] = useState(new Set());
+  const [communicationModal, setCommunicationModal] = useState(null);
+
+  const selectedNoteTenantIds = useMemo(() => {
+    const objs = notes.filter((n) => selectedNotes.includes(String(n._id)));
+    return [...new Set(objs.map((n) => String(n.tenant?._id || n.tenant || '')).filter(Boolean))];
+  }, [notes, selectedNotes]);
 
   const propertyMap = useMemo(
     () => new Map((properties || []).map((item) => [String(item?._id || ""), item])),
@@ -796,6 +805,20 @@ const InvoiceNotes = () => {
                 <button type="button" onClick={resetWorkspaceFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaRedoAlt size={10} /></button>
                 <button type="button" onClick={loadData} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaRedoAlt size={10} /></button>
                 <button type="button" onClick={openAddModal} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} hover:bg-[#e67e00]`}><FaPlus size={10} /> Add Note</button>
+                <button
+                  type="button"
+                  onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Notify ${selectedNoteTenantIds.length} Tenant${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
+                  disabled={selectedNoteTenantIds.length === 0}
+                  title={selectedNotes.length === 0 ? "Select notes to SMS tenants" : `SMS ${selectedNoteTenantIds.length} tenant${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedNoteTenantIds.length > 0 ? "bg-teal-600 hover:bg-teal-700" : "bg-gray-400 cursor-not-allowed"}`}
+                ><FaSms size={10} /></button>
+                <button
+                  type="button"
+                  onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Email ${selectedNoteTenantIds.length} Tenant${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
+                  disabled={selectedNoteTenantIds.length === 0}
+                  title={selectedNotes.length === 0 ? "Select notes to email tenants" : `Email ${selectedNoteTenantIds.length} tenant${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedNoteTenantIds.length > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400 cursor-not-allowed"}`}
+                ><FaEnvelope size={10} /></button>
               </div>
             </div>
 
@@ -1185,6 +1208,18 @@ const InvoiceNotes = () => {
             </div>
           </div>
         ) : null}
+
+      <CommunicationComposerModal
+        open={Boolean(communicationModal)}
+        onClose={() => setCommunicationModal(null)}
+        businessId={currentCompany?._id || ""}
+        contextType={communicationModal?.contextType || "tenant_bulk"}
+        recordIds={communicationModal?.recordIds || []}
+        title={communicationModal?.title || "Send Notification"}
+        subtitle={communicationModal?.subtitle || "Preview and send credit/debit note notification."}
+        allowedChannels={communicationModal?.allowedChannels || ["sms", "email"]}
+        defaultChannel={communicationModal?.defaultChannel || "sms"}
+      />
     </DashboardLayout>
   );
 };

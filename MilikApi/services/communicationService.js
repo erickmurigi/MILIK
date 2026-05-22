@@ -2,6 +2,7 @@ import axios from 'axios';
 import Company from '../models/Company.js';
 import Landlord from '../models/Landlord.js';
 import { generateStatementPdf } from './statementPdfService.js';
+import { generateInvoicePdf } from './invoicePdfService.js';
 import MeterReading from '../models/MeterReading.js';
 import ProcessedStatement from '../models/ProcessedStatement.js';
 import Property from '../models/Property.js';
@@ -135,9 +136,27 @@ const EMAIL_TEMPLATE_DEFINITIONS = [
     body:
       'Hello {tenantName} ({tenantCode}),\n\nYour {utilityType} meter reading for {propertyName} Unit {unitNumber} has been recorded for {billingPeriod}.\n\nMeter Number: {meterNumber}\nReading Date: {readingDate}\nPrevious Reading: {previousReading}\nCurrent Reading: {currentReading}\nUnits Consumed: {unitsConsumed}\nRate per Unit: {rate}\nCharge Amount: {amount}\n\nRegards,\n{companyName}\n{companyPhone}',
   },
+  {
+    key: 'tenant_notice_email',
+    name: 'Tenant Notice Email',
+    recipientType: 'tenant',
+    description: 'General-purpose email notice to a tenant.',
+    subject: 'Notice from {companyName}',
+    body: 'Hello {tenantName},\n\n{customBody}\n\nRegards,\n{companyName}\n{companyPhone}',
+  },
+  {
+    key: 'landlord_notice_email',
+    name: 'Landlord Notice Email',
+    recipientType: 'landlord',
+    description: 'General-purpose email notice to a landlord.',
+    subject: 'Notice from {companyName}',
+    body: 'Hello {landlordName},\n\n{customBody}\n\nRegards,\n{companyName}\n{companyPhone}',
+  },
 ];
 
 const EMAIL_ALLOWED_TEMPLATE_KEYS = {
+  tenant_bulk: ['tenant_notice_email'],
+  landlord_bulk: ['landlord_notice_email'],
   processed_statement: ['landlord_statement_ready_email'],
   receipt: ['receipt_email_tenant'],
   invoice: ['invoice_email_tenant'],
@@ -692,7 +711,7 @@ const buildRecordPreview = ({ company, channel, template, record, profileStatus 
   };
 };
 
-export const previewCommunication = async ({ businessId, contextType, channel, templateKey, recordIds = [], profileId = '', customBody = '' }) => {
+export const previewCommunication = async ({ businessId, contextType, channel, templateKey, recordIds = [], profileId = '', customBody = '', customSubject = '' }) => {
   const loader = CONTEXT_LOADERS[contextType];
   if (!loader) {
     const error = new Error('Unsupported communication context.');
@@ -709,9 +728,11 @@ export const previewCommunication = async ({ businessId, contextType, channel, t
 
   const company = await ensureCompany(businessId);
   const template = resolveChannelTemplate({ company, contextType, channel, templateKey });
-  const effectiveTemplate = normalizeText(customBody)
-    ? { ...template, messageBody: customBody, body: customBody }
-    : template;
+  const effectiveTemplate = {
+    ...template,
+    ...(normalizeText(customBody)    ? { messageBody: customBody, body: customBody } : {}),
+    ...(normalizeText(customSubject) ? { subject: customSubject } : {}),
+  };
   const loaded = await loader(normalizedIds, businessId);
   const previews = [];
 
@@ -948,8 +969,8 @@ const dispatchEmail = async ({ profile, to, subject, text, html, attachments }) 
   });
 };
 
-export const sendCommunication = async ({ businessId, contextType, channel, templateKey, recordIds = [], profileId = '', customBody = '' }) => {
-  const preview = await previewCommunication({ businessId, contextType, channel, templateKey, recordIds, profileId, customBody });
+export const sendCommunication = async ({ businessId, contextType, channel, templateKey, recordIds = [], profileId = '', customBody = '', customSubject = '' }) => {
+  const preview = await previewCommunication({ businessId, contextType, channel, templateKey, recordIds, profileId, customBody, customSubject });
   const results = [];
 
   if (!preview.senderProfile?.sendingAvailable) {
@@ -1051,6 +1072,19 @@ export const sendCommunication = async ({ businessId, contextType, channel, temp
                 contentType: 'application/pdf',
               }];
             }
+          } catch {
+            // PDF generation is best-effort — send without attachment on failure
+          }
+        }
+        if (contextType === 'invoice' || contextType === 'penalty_invoice') {
+          try {
+            const pdfBuffer = await generateInvoicePdf(item.recordId, businessId);
+            const invoiceNum = item.payload?.invoiceNumber || String(item.recordId);
+            attachments = [{
+              filename: `Invoice-${invoiceNum}.pdf`,
+              content: pdfBuffer,
+              contentType: 'application/pdf',
+            }];
           } catch {
             // PDF generation is best-effort — send without attachment on failure
           }

@@ -1870,7 +1870,7 @@ export default function CompanySetupPage() {
       template: {
         enabled: Boolean(smsTemplateForm.enabled),
         sendMode: smsTemplateForm.sendMode,
-        profileId: smsTemplateForm.profileId || null,
+        profileId: smsTemplateForm.profileId || "",
         messageBody: smsTemplateForm.messageBody.trim(),
       },
       successMessage: "SMS template updated successfully",

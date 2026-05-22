@@ -480,10 +480,8 @@ const Tenants = ({ listingMode = "active" }) => {
       const hasBalance = Math.abs(Number(balance || 0)) > 0.009;
       const canTerminate = tenantOperationalStatus === "active";
       const canTransfer = tenantOperationalStatus === "active";
-      const canDelete = !canTerminate && !hasBalance && leaseCount === 0 && invoiceCount === 0 && invoiceNoteCount === 0 && paymentCount === 0;
-      const deleteBlockedReason = canTerminate
-        ? "This tenant is still active. Terminate the tenancy instead of deleting it."
-        : hasBalance
+      const canDelete = !hasBalance && leaseCount === 0 && invoiceCount === 0 && invoiceNoteCount === 0 && paymentCount === 0;
+      const deleteBlockedReason = hasBalance
         ? "This tenant still has an outstanding balance."
         : leaseCount > 0 || invoiceCount > 0 || invoiceNoteCount > 0 || paymentCount > 0
         ? "This tenant already has historical records and should remain protected."
@@ -1336,7 +1334,7 @@ const confirmTransferUnit = async () => {
       toast.success(`Successfully deleted ${successCount} tenant(s)`);
     }
     if (skippedCount > 0) {
-      toast.info(`${skippedCount} tenant(s) were skipped because they are still protected by active occupancy, balances, or history.`);
+      toast.info(`${skippedCount} tenant(s) were skipped because they have balances or transaction history that prevents deletion.`);
     }
     if (failCount > 0) {
       toast.error(`Failed to delete ${failCount} tenant(s)`);
@@ -1363,8 +1361,11 @@ const confirmTransferUnit = async () => {
         business: currentCompany._id,
       }, { timeout: 0 });
 
-      await dispatch(getTenants({ business: currentCompany._id, ...(tenantStatusQuery ? { status: tenantStatusQuery } : {}) }));
-      await loadInvoices();
+      await Promise.all([
+        dispatch(getTenants({ business: currentCompany._id, ...(tenantStatusQuery ? { status: tenantStatusQuery } : {}) })),
+        dispatch(getUnits({ business: currentCompany._id })),
+        loadInvoices(),
+      ]);
 
       return response.data;
     } catch (error) {
@@ -1655,8 +1656,11 @@ const confirmTransferUnit = async () => {
                     <th className="px-2 py-1.5 text-center font-bold border-r border-gray-400 min-w-[80px]">
                       Status
                     </th>
-                    <th className="px-2 py-1.5 text-left font-bold min-w-[100px]">
+                    <th className="px-2 py-1.5 text-left font-bold border-r border-gray-400 min-w-[100px]">
                       Phone
+                    </th>
+                    <th className="px-2 py-1.5 text-left font-bold min-w-[160px]">
+                      Email
                     </th>
                   </>
                 )}
@@ -1673,7 +1677,7 @@ const confirmTransferUnit = async () => {
                     <React.Fragment key={tenant.id}>
                       {isFirstOfProperty && (
                         <tr className="bg-transparent">
-                          <td colSpan={12} className="px-2 pt-1.5 pb-1">
+                          <td colSpan={isTerminatedView ? 12 : 13} className="px-2 pt-1.5 pb-1">
                             <h3 className="text-sm font-extrabold text-black tracking-normal uppercase">
                               {toListingCaps(tenant.propertyName)}
                             </h3>
@@ -1818,8 +1822,26 @@ const confirmTransferUnit = async () => {
                                 )}
                               </div>
                             </td>
-                            <td className="px-2 py-1 font-bold text-gray-900">
+                            <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
                               {tenant.phone}
+                            </td>
+                            <td className="px-2 py-1">
+                              {tenant.email && tenant.email !== "-" ? (
+                                <a
+                                  href={`mailto:${tenant.email}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-medium truncate max-w-[160px]"
+                                  title={tenant.email}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 shrink-0">
+                                    <path d="M3 4a2 2 0 0 0-2 2v1.161l8.441 4.221a1.25 1.25 0 0 0 1.118 0L19 7.162V6a2 2 0 0 0-2-2H3Z"/>
+                                    <path d="m19 8.839-7.77 3.885a2.75 2.75 0 0 1-2.46 0L1 8.839V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.839Z"/>
+                                  </svg>
+                                  <span className="truncate">{tenant.email}</span>
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
                             </td>
                           </>
                         )}
@@ -1827,7 +1849,7 @@ const confirmTransferUnit = async () => {
 
                       {expandedTenants.includes(tenant.id) && (
                         <tr className="bg-gray-100 border-b border-gray-200">
-                          <td colSpan="12" className="px-3 py-1.5">
+                          <td colSpan={isTerminatedView ? 12 : 13} className="px-3 py-1.5">
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
                               <div>
                                 <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">

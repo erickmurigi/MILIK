@@ -142,6 +142,9 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
   const anchorRef = useRef(null);
   const menuRef = useRef(null);
 
+  const businessId = currentCompany?._id ||
+    (typeof currentUser?.company === "string" ? currentUser.company : currentUser?.company?._id) || "";
+
   const isSystemAdmin = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
   const isDemoUser = Boolean(currentUser?.isDemoUser);
   const userName = [currentUser?.surname, currentUser?.otherNames].filter(Boolean).join(" ") || "Milik User";
@@ -455,7 +458,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
                   <div className={darkMode ? "mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-white/75" : "mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600"}>Account</div>
                   <div className="space-y-2">
                     <button
-                      onClick={() => toast.info("My Account is coming soon")}
+                      onClick={() => { setOpen(false); navigate("/my-account"); }}
                       className={[
                         "w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 transition",
                         darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
@@ -474,6 +477,30 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
                     >
                       <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-600/90 text-white"><FaSignOutAlt /></span>
                       <div className="text-sm font-semibold">Sign Out</div>
+                    </button>
+
+                    <div className={["h-px my-1", darkMode ? "bg-white/10" : "bg-slate-200"].join(" ")} />
+
+                    <button
+                      onClick={() => { setOpen(false); navigate("/communications/sms"); }}
+                      className={[
+                        "w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 transition",
+                        darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
+                      ].join(" ")}
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-600/90 text-white"><FaSms /></span>
+                      <div className="text-sm font-semibold">SMS Manager</div>
+                    </button>
+
+                    <button
+                      onClick={() => { setOpen(false); navigate("/communications/email"); }}
+                      className={[
+                        "w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 transition",
+                        darkMode ? "border-white/10 text-white hover:bg-white/10" : "border-slate-200 text-slate-900 hover:bg-white",
+                      ].join(" ")}
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600/90 text-white"><FaEnvelope /></span>
+                      <div className="text-sm font-semibold">Email Manager</div>
                     </button>
                   </div>
                 </div>

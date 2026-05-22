@@ -117,7 +117,8 @@ export const sendCommunicationController = async (req, res, next) => {
 
     ensurePermission({ req, businessId, contextType, action: 'send' });
 
-    const customBody = String(req.body?.customBody || '').trim();
+    const customBody    = String(req.body?.customBody    || '').trim();
+    const customSubject = String(req.body?.customSubject || '').trim();
 
     const result = await sendCommunication({
       businessId,
@@ -127,6 +128,7 @@ export const sendCommunicationController = async (req, res, next) => {
       recordIds,
       profileId,
       customBody,
+      customSubject,
     });
 
     return res.status(200).json(result);
