@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
@@ -41,6 +42,8 @@ const BudgetVsActual = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const businessId  = currentCompany?._id;
   const companyName = String(currentCompany?.companyName || currentCompany?.name || "").trim();
+  const { pathname } = useLocation();
+  const isAnalysisRoute = pathname === "/accounts/budget/analysis";
 
   const [view,       setView]       = useState(VIEW.LIST);
   const [budgets,    setBudgets]    = useState([]);
@@ -106,6 +109,23 @@ const BudgetVsActual = () => {
       setLoadingDetail(false);
     }
   }, [businessId]);
+
+  // ── Auto-open analysis: on /analysis route, load first active budget ─────────
+  const analysisAutoRef = useRef(false);
+  useEffect(() => {
+    if (!isAnalysisRoute || analysisAutoRef.current || loadingList) return;
+    if (budgets.length === 0) return;
+    const active = budgets.find((b) => b.status === "active") || budgets[0];
+    if (active && view === VIEW.LIST) {
+      analysisAutoRef.current = true;
+      openBudget(active);
+    }
+  }, [isAnalysisRoute, budgets, loadingList, view, openBudget]);
+
+  // Reset auto flag when navigating away from analysis route
+  useEffect(() => {
+    if (!isAnalysisRoute) analysisAutoRef.current = false;
+  }, [isAnalysisRoute]);
 
   // ── Create budget ────────────────────────────────────────────────────────────
   const handleCreate = useCallback(async () => {

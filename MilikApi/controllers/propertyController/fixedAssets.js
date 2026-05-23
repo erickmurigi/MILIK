@@ -300,6 +300,11 @@ export const runDepreciation = async (req, res, next) => {
 };
 
 // ─── Dispose asset ─────────────────────────────────────────────────────────────
+// Journal structure (always balanced):
+//   DR Accumulated Depreciation   = accumulated
+//   DR/CR depreciationExpenseAccount = net gain/loss vs proceeds
+//   CR Asset Account              = cost
+//   DR proceedsAccount (optional) = proceeds (if provided)
 export const disposeFixedAsset = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -308,18 +313,24 @@ export const disposeFixedAsset = async (req, res, next) => {
     const userId = req.user?._id || req.user?.id;
     const asset = await FixedAsset.findOne({ _id: req.params.id, business: businessId })
       .populate("assetAccount", "_id code name")
-      .populate("accumulatedDepreciationAccount", "_id code name");
+      .populate("accumulatedDepreciationAccount", "_id code name")
+      .populate("depreciationExpenseAccount", "_id code name");
 
     if (!asset) return res.status(404).json({ message: "Asset not found" });
     if (asset.status === "disposed") return res.status(400).json({ message: "Asset already disposed" });
 
-    const { disposalDate, disposalProceeds = 0, disposalNotes = "" } = req.body;
+    const { disposalDate, disposalProceeds = 0, disposalNotes = "", proceedsAccount } = req.body;
     const disposalAt = disposalDate ? new Date(disposalDate) : new Date();
     const proceeds = round2(Number(disposalProceeds || 0));
+    const proceedsAccountId = proceedsAccount ? toObjectId(proceedsAccount) : null;
 
     const accumulated = round2(Number(asset.accumulatedDepreciation || 0));
     const cost = round2(Number(asset.purchaseCost || 0));
     const bookValue = round2(Math.max(0, cost - accumulated));
+
+    // Net gain/loss. Positive = gain; negative = loss.
+    // When no proceedsAccount: we recognise the full bookValue as a loss (proceeds handled via cash receipt later).
+    const netGainLoss = proceedsAccountId ? round2(proceeds - bookValue) : round2(-bookValue);
 
     const journalGroupId = new mongoose.Types.ObjectId();
     const touchedAccounts = new Set();
@@ -341,13 +352,34 @@ export const disposeFixedAsset = async (req, res, next) => {
       notes: `Asset disposal — ${asset.name} on ${disposalAt.toISOString().split("T")[0]}`,
     };
 
-    // DR Accumulated Depreciation (clear it)
+    // 1. DR Accumulated Depreciation (clear contra-asset)
     if (accumulated > 0) {
       await postEntry({ ...basePayload, accountId: asset.accumulatedDepreciationAccount._id, direction: "debit", amount: accumulated });
       touchedAccounts.add(String(asset.accumulatedDepreciationAccount._id));
     }
 
-    // CR Asset Account (remove at cost)
+    // 2. DR Proceeds Account (if provided and proceeds > 0)
+    if (proceedsAccountId && proceeds > 0) {
+      await postEntry({ ...basePayload, accountId: proceedsAccountId, direction: "debit", amount: proceeds });
+      touchedAccounts.add(String(proceedsAccountId));
+    }
+
+    // 3. DR Loss on Disposal / CR Gain on Disposal (balancing leg via depreciationExpenseAccount)
+    //    netGainLoss > 0 → gain → CR expense account (reduces net expense = income-like)
+    //    netGainLoss < 0 → loss → DR expense account
+    if (Math.abs(netGainLoss) > 0.005) {
+      const gainLossDir = netGainLoss > 0 ? "credit" : "debit";
+      await postEntry({
+        ...basePayload,
+        accountId: asset.depreciationExpenseAccount._id,
+        direction: gainLossDir,
+        amount: Math.abs(netGainLoss),
+        notes: `${netGainLoss > 0 ? "Gain" : "Loss"} on disposal — ${asset.name}`,
+      });
+      touchedAccounts.add(String(asset.depreciationExpenseAccount._id));
+    }
+
+    // 4. CR Asset Account (remove at cost)
     if (cost > 0) {
       await postEntry({ ...basePayload, accountId: asset.assetAccount._id, direction: "credit", amount: cost });
       touchedAccounts.add(String(asset.assetAccount._id));

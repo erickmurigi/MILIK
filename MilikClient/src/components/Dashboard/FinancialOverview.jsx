@@ -9,7 +9,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { adminRequests } from '../../utils/requestMethods';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
 const SNAPSHOT_CATEGORIES = new Set(['RENT_CHARGE', 'UTILITY_CHARGE']);
@@ -33,60 +32,17 @@ const parseDate = (value) => {
 const getInvoiceRecognitionDate = (invoice) =>
   parseDate(invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt);
 
-const FinancialOverview = ({ darkMode }) => {
+const FinancialOverview = ({ darkMode, invoices = [] }) => {
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
   const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
   const rentPayments = useMemo(() => normalizeArray(rawRentPayments), [rawRentPayments]);
 
-  const [invoices, setInvoices] = useState([]);
   const chartRef = useRef(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
-
-  const businessId =
-    currentCompany?._id ||
-    currentUser?.company?._id ||
-    (typeof currentUser?.company === 'string' ? currentUser.company : '');
-
-  useEffect(() => {
-    let active = true;
-
-    const loadData = async () => {
-      if (!businessId) {
-        if (active) {
-          setInvoices([]);
-        }
-        return;
-      }
-
-      const invoiceRes = await adminRequests
-        .get(`/tenant-invoices?business=${businessId}&includeSnapshots=true`)
-        .catch(() => ({ data: [] }));
-
-      if (!active) return;
-
-      const invoicePayload = invoiceRes?.data || [];
-
-      setInvoices(
-        Array.isArray(invoicePayload)
-          ? invoicePayload
-          : Array.isArray(invoicePayload?.invoices)
-          ? invoicePayload.invoices
-          : Array.isArray(invoicePayload?.data)
-          ? invoicePayload.data
-          : []
-      );
-    };
-
-    loadData();
-
-    return () => {
-      active = false;
-    };
-  }, [businessId]);
 
   useEffect(() => {
     const element = chartRef.current;

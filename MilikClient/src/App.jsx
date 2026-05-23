@@ -529,6 +529,7 @@ function App() {
             <Route path="/accounts/fixed-assets"              element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><FixedAssets /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/accounts/fixed-assets/depreciation" element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><FixedAssetsDepreciation /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/accounts/budget"                    element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><BudgetVsActual /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/budget/analysis"           element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><BudgetVsActual /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/accounts/creditor-ledger"           element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="expenses" moduleKey="accounts"><CreditorLedger /></PermissionRoute></CompanyModuleRoute>} />
 
             {/* ── Car Wash module ───────────────────────────────────────── */}

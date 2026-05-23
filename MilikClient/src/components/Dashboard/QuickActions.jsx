@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
@@ -11,7 +11,6 @@ import {
   FaReceipt,
   FaTools,
 } from 'react-icons/fa';
-import { adminRequests } from '../../utils/requestMethods';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
 const normalizeArray = (value) => {
@@ -49,7 +48,13 @@ const hasFutureMoveOut = (tenant, today) => {
   return Boolean(moveOutDate && moveOutDate >= today);
 };
 
-const QuickActions = ({ darkMode }) => {
+const QuickActions = ({
+  darkMode,
+  invoices = [],
+  paymentVouchers = [],
+  processedStatements = [],
+  loading = false,
+}) => {
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
@@ -62,56 +67,6 @@ const QuickActions = ({ darkMode }) => {
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
-
-  const [invoices, setInvoices] = useState([]);
-  const [paymentVouchers, setPaymentVouchers] = useState([]);
-  const [processedStatements, setProcessedStatements] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  const businessId = useMemo(
-    () =>
-      currentCompany?._id ||
-      currentUser?.company?._id ||
-      (typeof currentUser?.company === 'string' ? currentUser.company : ''),
-    [currentCompany?._id, currentUser?.company]
-  );
-
-  useEffect(() => {
-    let active = true;
-
-    const loadOperationalData = async () => {
-      if (!businessId) {
-        if (active) {
-          setInvoices([]);
-          setPaymentVouchers([]);
-          setProcessedStatements([]);
-        }
-        return;
-      }
-
-      setLoading(true);
-      try {
-        const [invoiceRes, voucherRes, statementRes] = await Promise.allSettled([
-          adminRequests.get(`/tenant-invoices?business=${businessId}`),
-          adminRequests.get(`/payment-vouchers?business=${businessId}`),
-          adminRequests.get(`/processed-statements/business/${businessId}`),
-        ]);
-
-        if (!active) return;
-
-        setInvoices(invoiceRes.status === 'fulfilled' ? normalizeArray(invoiceRes.value?.data) : []);
-        setPaymentVouchers(voucherRes.status === 'fulfilled' ? normalizeArray(voucherRes.value?.data) : []);
-        setProcessedStatements(statementRes.status === 'fulfilled' ? normalizeArray(statementRes.value?.data) : []);
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    loadOperationalData();
-    return () => {
-      active = false;
-    };
-  }, [businessId]);
 
   const today = useMemo(() => {
     const now = new Date();

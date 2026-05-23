@@ -130,7 +130,7 @@ export const createBudget = async (req, res, next) => {
       status:      "draft",
       notes:       String(notes || ""),
       lines:       sanitizedLines,
-      createdBy:   req.user?._id || req.user?.id || null,
+      createdBy:   toObjectId(req.user?._id || req.user?.id),
     });
 
     return res.status(201).json(budget);

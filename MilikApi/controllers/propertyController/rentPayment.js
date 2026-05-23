@@ -1519,18 +1519,22 @@ const reverseAllLedgerEntriesForPayment = async (payment, userId, reason) => {
   }
 
   const reversalResults = [];
-  for (const entry of originalEntries) {
-    if (entry.reversedByEntry || entry.status === "reversed") {
-      continue;
-    }
-
-    const result = await postReversal({
-      entryId: entry._id,
-      reason: reason || "Payment reversed",
-      userId,
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      for (const entry of originalEntries) {
+        if (entry.reversedByEntry || entry.status === "reversed") continue;
+        const result = await postReversal({
+          entryId: entry._id,
+          reason: reason || "Payment reversed",
+          userId,
+          session,
+        });
+        reversalResults.push(result.reversalEntry);
+      }
     });
-
-    reversalResults.push(result.reversalEntry);
+  } finally {
+    await session.endSession();
   }
 
   return reversalResults;

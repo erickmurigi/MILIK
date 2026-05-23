@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MetricsGrid from '../../components/Dashboard/MetricsGrid';
@@ -17,7 +17,17 @@ import {
   getNotifications,
   getRentPayments
 } from '../../redux/apiCalls';
+import { adminRequests } from '../../utils/requestMethods';
 import './dashboard.css';
+
+// Normalise a Promise.allSettled result into an array, trying multiple response-body shapes
+const normalizeArr = (settled, ...keys) => {
+  if (settled.status !== 'fulfilled') return [];
+  const d = settled.value?.data;
+  if (Array.isArray(d)) return d;
+  for (const k of keys) if (Array.isArray(d?.[k])) return d[k];
+  return [];
+};
 
 const Dashboard = ({ darkMode }) => {
   const dispatch = useDispatch();
@@ -25,9 +35,12 @@ const Dashboard = ({ darkMode }) => {
   const currentCompany = useSelector(state => state.company?.currentCompany);
   const currentUser = useSelector(state => state.auth?.currentUser);
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+  const [invoices, setInvoices] = useState([]);
+  const [paymentVouchers, setPaymentVouchers] = useState([]);
+  const [processedStatements, setProcessedStatements] = useState([]);
+  const [operationalLoading, setOperationalLoading] = useState(false);
+
+  useEffect(() => { window.scrollTo(0, 0); }, []);
 
   useEffect(() => {
     const companyFromUser =
@@ -37,24 +50,41 @@ const Dashboard = ({ darkMode }) => {
     const businessId = currentCompany?._id || companyFromUser;
     if (!businessId) return;
 
+    let active = true;
+
     const refreshDashboardData = async () => {
       dispatch(getProperties({ business: businessId, status: 'active', limit: 1000 }));
       dispatch(getUnits({ business: businessId }));
       dispatch(getTenants({ business: businessId }));
 
-      await Promise.allSettled([
-        getRentPayments(dispatch, businessId),
-        getMaintenances(dispatch, businessId),
-        getLeases(dispatch, businessId),
-        getNotifications(dispatch, businessId),
-        getExpenseProperties(dispatch, businessId)
-      ]);
+      setOperationalLoading(true);
+      try {
+        const results = await Promise.allSettled([
+          adminRequests.get(`/tenant-invoices?business=${businessId}&includeSnapshots=true`),
+          adminRequests.get(`/payment-vouchers?business=${businessId}`),
+          adminRequests.get(`/processed-statements/business/${businessId}`),
+          getRentPayments(dispatch, businessId),
+          getMaintenances(dispatch, businessId),
+          getLeases(dispatch, businessId),
+          getNotifications(dispatch, businessId),
+          getExpenseProperties(dispatch, businessId),
+        ]);
+
+        if (!active) return;
+        setInvoices(normalizeArr(results[0], 'invoices', 'data'));
+        setPaymentVouchers(normalizeArr(results[1], 'vouchers', 'paymentVouchers', 'data'));
+        setProcessedStatements(normalizeArr(results[2], 'statements', 'data'));
+      } finally {
+        if (active) setOperationalLoading(false);
+      }
     };
 
     refreshDashboardData();
     const intervalId = setInterval(refreshDashboardData, 300000);
-
-    return () => clearInterval(intervalId);
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+    };
   }, [dispatch, currentCompany?._id, currentUser?.company]);
 
   useEffect(() => {
@@ -92,9 +122,15 @@ const Dashboard = ({ darkMode }) => {
           <MetricsGrid darkMode={darkMode} />
 
           <div className="dashboard-main-grid gap-2">
-            <QuickActions darkMode={darkMode} />
-            <PropertiesOverview darkMode={darkMode} />
-            <FinancialOverview darkMode={darkMode} />
+            <QuickActions
+              darkMode={darkMode}
+              invoices={invoices}
+              paymentVouchers={paymentVouchers}
+              processedStatements={processedStatements}
+              loading={operationalLoading}
+            />
+            <PropertiesOverview darkMode={darkMode} invoices={invoices} />
+            <FinancialOverview darkMode={darkMode} invoices={invoices} />
           </div>
 
           <RecentActivity darkMode={darkMode} />

@@ -24,6 +24,9 @@ const LEDGER_CATEGORIES = [
   "PETTY_CASH_REPLENISHMENT",
   "CARWASH_COMMISSION_ACCRUAL",
   "CARWASH_COMMISSION_PAYOUT",
+  "DEPRECIATION",
+  "DISPOSAL",
+  "JOURNAL_ENTRY",
 ];
 
 const SOURCE_TYPES = [
@@ -46,6 +49,9 @@ const SOURCE_TYPES = [
   "petty_cash_replenishment",
   "carwash_commission",
   "carwash_commission_payout",
+  "fixed_asset_depreciation",
+  "fixed_asset_disposal",
+  "journal_entry",
   "other",
 ];
 

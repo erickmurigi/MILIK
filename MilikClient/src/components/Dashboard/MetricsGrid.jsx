@@ -1,17 +1,14 @@
-import React, { useEffect, useMemo } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import React, { useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import {
   FaBuilding,
   FaHome,
   FaChartPie,
   FaMoneyBillWave,
 } from 'react-icons/fa';
-import { getProperties } from '../../redux/propertyRedux';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
 const MetricsGrid = ({ darkMode }) => {
-  const dispatch = useDispatch();
-
   const properties = useSelector((state) => state.property?.properties || []);
   const units = useSelector((state) => state.unit?.units || []);
   const rentPayments = useSelector((state) => state.rentPayment?.rentPayments || []);
@@ -21,18 +18,6 @@ const MetricsGrid = ({ darkMode }) => {
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
-
-  useEffect(() => {
-    if (currentCompany?._id) {
-      dispatch(
-        getProperties({
-          business: currentCompany._id,
-          status: 'active',
-          limit: 1000,
-        })
-      );
-    }
-  }, [dispatch, currentCompany?._id]);
 
   const totalProperties = properties.length;
   const totalUnits = units.filter((u) => {

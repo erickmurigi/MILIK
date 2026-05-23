@@ -1,5 +1,5 @@
 // pages/ModulesDashboard/ModulesDashboard.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
@@ -15,7 +15,6 @@ import {
   FaCar,
   FaBuilding,
   FaSearch,
-  FaHome,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import {
@@ -36,7 +35,7 @@ const moduleRegistry = [
     subtitle: "Property Management",
     status: "active",
     route: "/dashboard",
-    icon: null, // uses logo image
+    icon: null,
     color: "#0b3b2e",
     category: "Core",
   },
@@ -47,7 +46,7 @@ const moduleRegistry = [
     subtitle: "Finance & Reporting",
     status: "active",
     route: "/accounts/dashboard",
-    icon: <FaChartLine />,
+    icon: FaChartLine,
     color: "#b45309",
     category: "Finance",
   },
@@ -57,7 +56,7 @@ const moduleRegistry = [
     title: "Billing",
     subtitle: "Invoices & Payments",
     status: "coming",
-    icon: <FaEnvelope />,
+    icon: FaEnvelope,
     color: "#ca8a04",
     category: "Finance",
   },
@@ -67,7 +66,7 @@ const moduleRegistry = [
     title: "Inventory",
     subtitle: "Stock & Warehousing",
     status: "coming",
-    icon: <FaWarehouse />,
+    icon: FaWarehouse,
     color: "#0e7490",
     category: "Operations",
   },
@@ -78,7 +77,7 @@ const moduleRegistry = [
     subtitle: "Listings & Deals",
     status: "active",
     route: "/sale/dashboard",
-    icon: <FaBuilding />,
+    icon: FaBuilding,
     color: "#0f766e",
     category: "Sales",
   },
@@ -88,7 +87,7 @@ const moduleRegistry = [
     title: "Security",
     subtitle: "Access & Monitoring",
     status: "coming",
-    icon: <FaShieldAlt />,
+    icon: FaShieldAlt,
     color: "#374151",
     category: "Operations",
   },
@@ -98,7 +97,7 @@ const moduleRegistry = [
     title: "POS & Billing",
     subtitle: "Point of Sale",
     status: "coming",
-    icon: <FaStore />,
+    icon: FaStore,
     color: "#c2410c",
     category: "Sales",
   },
@@ -109,7 +108,7 @@ const moduleRegistry = [
     subtitle: "Wash Jobs & Staff",
     status: "active",
     route: "/carwash/dashboard",
-    icon: <FaCar />,
+    icon: FaCar,
     color: "#0369a1",
     category: "Operations",
   },
@@ -120,7 +119,7 @@ const moduleRegistry = [
     subtitle: "People & Payroll",
     status: "active",
     route: "/hr/dashboard",
-    icon: <FaUsers />,
+    icon: FaUsers,
     color: "#7c3aed",
     category: "People",
   },
@@ -130,7 +129,7 @@ const moduleRegistry = [
     title: "Ven-Door",
     subtitle: "Vendor Management",
     status: "coming",
-    icon: <FaHandshake />,
+    icon: FaHandshake,
     color: "#1d4ed8",
     category: "Operations",
   },
@@ -179,7 +178,7 @@ const ModulesDashboard = () => {
     return CATEGORIES.filter((c) => c === "All" || cats.has(c));
   }, [visibleModules]);
 
-  const handleOpen = (m) => {
+  const handleOpen = useCallback((m) => {
     if (m.status === "active" && m.route) {
       const recent = JSON.parse(localStorage.getItem("recentModules") || "[]");
       localStorage.setItem("recentModules", JSON.stringify([m.id, ...recent.filter((id) => id !== m.id)].slice(0, 5)));
@@ -191,7 +190,7 @@ const ModulesDashboard = () => {
       return;
     }
     toast.warning(`${m.title} is currently unavailable.`);
-  };
+  }, [navigate]);
 
   return (
     <div className="odoo-page">
@@ -259,10 +258,10 @@ const ModulesDashboard = () => {
 
                 {/* Icon panel — top half of card */}
                 <div className="odoo-icon-panel" style={{ background: m.color }}>
-                  {m.id === "milik" ? (
-                    <img src="/logo.png" alt="Milik" className="odoo-logo-img" />
+                  {m.icon ? (
+                    <span className="odoo-icon"><m.icon /></span>
                   ) : (
-                    <span className="odoo-icon">{m.icon}</span>
+                    <img src="/logo.png" alt="Milik" className="odoo-logo-img" />
                   )}
                 </div>
 

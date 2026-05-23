@@ -644,13 +644,21 @@ const reverseVoucherLedgerEntries = async ({ voucher, userId, reason }) => {
   if (!originalEntries.length) return [];
 
   const reversalResults = [];
-  for (const entry of originalEntries) {
-    const result = await postReversal({
-      entryId: entry._id,
-      reason: reason || `Voucher ${voucher.voucherNo} reversed`,
-      userId,
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      for (const entry of originalEntries) {
+        const result = await postReversal({
+          entryId: entry._id,
+          reason: reason || `Voucher ${voucher.voucherNo} reversed`,
+          userId,
+          session,
+        });
+        reversalResults.push(result);
+      }
     });
-    reversalResults.push(result);
+  } finally {
+    await session.endSession();
   }
 
   const touchedAccountIds = new Set();

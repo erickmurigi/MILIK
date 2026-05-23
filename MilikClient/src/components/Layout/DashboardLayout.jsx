@@ -105,6 +105,7 @@ const MENU_PERMISSION_MAP = {
   "acc-fixed-assets":              { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-fixed-assets-depreciation": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-budget":                    { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-budget-analysis":           { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-creditor-ledger":           { resource: "expenses",         action: "view", moduleKey: "accounts" },
   "sale-dashboard": { resource: "sale-dashboard", action: "view", moduleKey: "propertySale" },
   "sale-listings": { resource: "sale-listings", action: "view", moduleKey: "propertySale" },
@@ -319,6 +320,109 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
   );
 };
 
+const HELP_MODULES = [
+  { label: "Property Management", icon: FaBuilding,  path: "/properties" },
+  { label: "Accounting",          icon: FaBook,       path: "/accounts" },
+  { label: "Human Resources",     icon: FaUsers,      path: "/hr/overview" },
+  { label: "Car Wash",            icon: FaCar,        path: "/carwash" },
+  { label: "Property Sales",      icon: FaKey,        path: "/sale/dashboard" },
+];
+
+const HELP_RESOURCES = [
+  { label: "Getting Started",   icon: FaChartLine },
+  { label: "User Guide",        icon: FaFileAlt },
+  { label: "What's New",        icon: FaStar },
+  { label: "Documentation",     icon: FaBook },
+];
+
+const HelpMegaPanel = ({ darkMode, onClose, navigate }) => {
+  const panelBase = darkMode
+    ? "bg-gray-900 border-gray-700 text-gray-100"
+    : "bg-white border-gray-200 text-gray-800";
+  const sectionHead = darkMode ? "text-gray-400" : "text-gray-400";
+  const divider = darkMode ? "border-gray-700" : "border-gray-100";
+  const rowHover = darkMode ? "hover:bg-gray-800" : "hover:bg-emerald-50";
+  const iconWrap = darkMode ? "bg-gray-800 text-emerald-400" : "bg-emerald-50 text-[#1f4a35]";
+  const contactBg = darkMode ? "bg-gray-800" : "bg-[#f7fbf9]";
+  const tagStyle = darkMode ? "bg-emerald-900/40 text-emerald-300" : "bg-emerald-100 text-[#1f4a35]";
+
+  return (
+    <div
+      className={`absolute right-0 top-full z-[120] mt-0 w-[540px] rounded-b-xl border shadow-2xl ${panelBase}`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div className={`flex items-center justify-between border-b px-5 py-3 ${divider}`}>
+        <div>
+          <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#31694E]">Milik PMS</p>
+          <p className={`text-[10px] font-medium ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+            Property Management System — Help &amp; Resources
+          </p>
+        </div>
+        <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-widest ${tagStyle}`}>
+          v2.0
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-0">
+        {/* Left: Modules */}
+        <div className={`border-r px-4 py-3 ${divider}`}>
+          <p className={`mb-2 text-[9px] font-extrabold uppercase tracking-[0.2em] ${sectionHead}`}>Modules</p>
+          {HELP_MODULES.map(({ label, icon: Icon, path }) => (
+            <button
+              key={label}
+              onClick={() => { navigate(path); onClose(); }}
+              className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${rowHover}`}
+            >
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${iconWrap}`}>
+                <Icon className="text-[11px]" />
+              </span>
+              <span className="text-[11px] font-semibold">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Right: Resources */}
+        <div className="px-4 py-3">
+          <p className={`mb-2 text-[9px] font-extrabold uppercase tracking-[0.2em] ${sectionHead}`}>Resources</p>
+          {HELP_RESOURCES.map(({ label, icon: Icon }) => (
+            <button
+              key={label}
+              className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${rowHover}`}
+            >
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${iconWrap}`}>
+                <Icon className="text-[11px]" />
+              </span>
+              <span className="text-[11px] font-semibold">{label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Contact footer */}
+      <div className={`rounded-b-xl border-t px-5 py-3 ${divider} ${contactBg}`}>
+        <p className={`mb-1.5 text-[9px] font-extrabold uppercase tracking-[0.2em] ${sectionHead}`}>Contact &amp; Support</p>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+          <a
+            href="tel:0141455841"
+            className={`inline-flex items-center gap-1.5 text-[11px] font-bold transition-colors ${darkMode ? "text-emerald-400 hover:text-emerald-300" : "text-[#1f4a35] hover:text-[#31694E]"}`}
+          >
+            <FaPhone className="text-[10px]" />
+            0141 455 841
+          </a>
+          <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+            <FaHeadset className="text-[10px]" />
+            Mon–Fri, 8 am–6 pm EAT
+          </span>
+        </div>
+        <p className={`mt-1 text-[10px] ${darkMode ? "text-gray-500" : "text-gray-400"}`}>
+          For urgent issues outside office hours, email <span className="font-semibold">support@milik.co.ke</span>
+        </p>
+      </div>
+    </div>
+  );
+};
+
 const TopToolbar = ({
   darkMode,
   setDarkMode,
@@ -480,6 +584,7 @@ const TopToolbar = ({
         "acc-fixed-assets":              "/accounts/fixed-assets",
         "acc-fixed-assets-depreciation": "/accounts/fixed-assets/depreciation",
         "acc-budget":                    "/accounts/budget",
+        "acc-budget-analysis":           "/accounts/budget/analysis",
         "acc-creditor-ledger":           "/accounts/creditor-ledger",
         documentation: "/help/documentation",
         support:       "/help/support",
@@ -739,6 +844,15 @@ const TopToolbar = ({
           ],
         },
         {
+          id: "acc-budget-group",
+          label: "Budgets",
+          icon: FaChartPie,
+          submenu: [
+            { id: "acc-budget",          label: "Budget Plans",      icon: FaFileAlt },
+            { id: "acc-budget-analysis", label: "Budget vs Actual",  icon: FaChartPie },
+          ],
+        },
+        {
           id: "acc-payables",
           label: "Payables",
           icon: FaCreditCard,
@@ -764,7 +878,6 @@ const TopToolbar = ({
               ? [{ id: "acc-arrears-analysis", label: "Arrears Aged Analysis", icon: FaChartBar }]
               : []),
             { id: "acc-payment-analysis", label: "Payment Aged Analysis",  icon: FaChartBar },
-            { id: "acc-budget",           label: "Budget vs Actual",       icon: FaChartPie },
             { id: "acc-tax-reports",      label: "Tax Reports",            icon: FaCalculator },
           ],
         },
@@ -1372,17 +1485,25 @@ const TopToolbar = ({
             </button>
 
             {activeMenu === item.id && item.submenu && (
-              <div
-                className={`absolute left-0 top-full mt-0 max-h-[70vh] w-64 overflow-visible shadow-lg z-[90] border ${
-                  darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
-                }`}
-              >
-                {item.submenu.map((subItem, index) => (
-                  <React.Fragment key={subItem.id || `submenu-${item.id}-${index}`}>
-                    {renderMenuItem(subItem, index)}
-                  </React.Fragment>
-                ))}
-              </div>
+              item.id === "help" ? (
+                <HelpMegaPanel
+                  darkMode={darkMode}
+                  navigate={navigate}
+                  onClose={() => setActiveMenu(null)}
+                />
+              ) : (
+                <div
+                  className={`absolute left-0 top-full mt-0 max-h-[70vh] w-64 overflow-visible shadow-lg z-[90] border ${
+                    darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+                  }`}
+                >
+                  {item.submenu.map((subItem, index) => (
+                    <React.Fragment key={subItem.id || `submenu-${item.id}-${index}`}>
+                      {renderMenuItem(subItem, index)}
+                    </React.Fragment>
+                  ))}
+                </div>
+              )
             )}
           </div>
         ))}

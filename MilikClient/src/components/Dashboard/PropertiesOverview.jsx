@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { adminRequests } from '../../utils/requestMethods';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
 const normalizeArray = (value) => {
@@ -27,7 +26,7 @@ const getInvoiceRecognitionDate = (invoice) => parseDate(invoice?.bookingDate ||
 const isOpenMaintenanceStatus = (status) => !['completed', 'cancelled', 'resolved', 'closed'].includes(normalizeText(status));
 const isOperationalTenant = (tenant) => !['inactive', 'terminated', 'evicted', 'moved_out'].includes(normalizeText(tenant?.status));
 
-const PropertiesOverview = ({ darkMode }) => {
+const PropertiesOverview = ({ darkMode, invoices = [] }) => {
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
@@ -39,39 +38,8 @@ const PropertiesOverview = ({ darkMode }) => {
   const rentPayments = useMemo(() => normalizeArray(rawRentPayments), [rawRentPayments]);
   const propertiesLoading = useSelector((state) => state.property?.loading || state.property?.isFetching);
 
-  const [invoices, setInvoices] = useState([]);
-
-  const businessId =
-    currentCompany?._id ||
-    currentUser?.company?._id ||
-    (typeof currentUser?.company === 'string' ? currentUser.company : '');
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
-
-  useEffect(() => {
-    let active = true;
-
-    const loadInvoices = async () => {
-      if (!businessId) {
-        if (active) setInvoices([]);
-        return;
-      }
-
-      try {
-        const response = await adminRequests.get(`/tenant-invoices?business=${businessId}`);
-        if (!active) return;
-        const payload = response?.data;
-        setInvoices(Array.isArray(payload) ? payload : Array.isArray(payload?.invoices) ? payload.invoices : []);
-      } catch (_error) {
-        if (active) setInvoices([]);
-      }
-    };
-
-    loadInvoices();
-    return () => {
-      active = false;
-    };
-  }, [businessId]);
 
   const activeProperties = useMemo(
     () => properties.filter((p) => !p?.status || normalizeText(p.status) === 'active'),
@@ -375,7 +343,7 @@ const PropertiesOverview = ({ darkMode }) => {
                 </div>
                 <div>
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1">
-                    <span>Scheduled rent</span>
+                    <span>Base rent invoiced <span className="font-normal text-slate-400">(excl. VAT)</span></span>
                     <span>{formatMoney(property.bookedRentThisMonth)} / {formatMoney(property.expectedCollections)}</span>
                   </div>
                   <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
