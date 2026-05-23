@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
   FaBalanceScale, FaBook, FaCalculator, FaChartLine,
-  FaCreditCard, FaFileAlt, FaLayerGroup, FaWallet,
-  FaFileInvoice, FaCog,
+  FaCreditCard, FaExchangeAlt, FaFileAlt, FaLayerGroup, FaWallet,
+  FaFileInvoice, FaCog, FaUniversity, FaToolbox, FaChartPie,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getJournalEntries, getChartOfAccounts } from "../../redux/apiCalls";
@@ -13,6 +13,11 @@ import { getJournalEntries, getChartOfAccounts } from "../../redux/apiCalls";
 const QUICK_NAV = [
   { label: "Chart of Accounts", icon: FaLayerGroup, route: "/accounts/chart-of-accounts", color: "#0B3B2E", desc: "Manage your GL account structure" },
   { label: "Journal Entries",   icon: FaBook,       route: "/accounts/journals",           color: "#0B3B2E", desc: "All journals across every module" },
+  { label: "Bank Reconciliation", icon: FaUniversity, route: "/accounts/bank-reconciliation", color: "#0B3B2E", desc: "Match books against bank statements" },
+  { label: "Asset Register",       icon: FaToolbox,    route: "/accounts/fixed-assets",              color: "#0B3B2E", desc: "Fixed asset register & disposals" },
+  { label: "Depreciation",        icon: FaCalculator, route: "/accounts/fixed-assets/depreciation", color: "#0B3B2E", desc: "Run & post monthly depreciation" },
+  { label: "Budget vs Actual",    icon: FaChartPie,   route: "/accounts/budget",                    color: "#0f766e", desc: "Compare budgeted vs actual GL spend" },
+  { label: "Creditors Ledger",   icon: FaBook,       route: "/accounts/creditor-ledger",           color: "#b45309", desc: "Per-vendor invoices, payments & balance" },
   { label: "Payment Vouchers",  icon: FaCreditCard, route: "/accounts/payment-vouchers",   color: "#b45309", desc: "Outgoing payment documentation" },
   { label: "Petty Cash",        icon: FaWallet,     route: "/accounts/petty-cash",         color: "#b45309", desc: "Petty cash disbursements" },
   { label: "Expense Requisitions", icon: FaFileInvoice, route: "/accounts/expenses",      color: "#b45309", desc: "Expense requests & approvals" },
@@ -20,6 +25,9 @@ const QUICK_NAV = [
   { label: "Trial Balance",     icon: FaBook,       route: "/accounts/trial-balance",      color: "#0f766e", desc: "Debit / credit balance check" },
   { label: "Income Statement",  icon: FaChartLine,  route: "/accounts/income-statement",   color: "#0f766e", desc: "Revenue vs. expense (P&L)" },
   { label: "Balance Sheet",     icon: FaBalanceScale, route: "/accounts/balance-sheet",    color: "#0f766e", desc: "Assets, liabilities & equity" },
+  { label: "Cash Flow",         icon: FaExchangeAlt, route: "/accounts/cash-flow",         color: "#0f766e", desc: "Cash in & out by activity type" },
+  { label: "Arrears Aged Analysis", icon: FaChartLine, route: "/accounts/arrears-aged-analysis", color: "#0f766e", desc: "Tenant rent arrears by age bucket" },
+  { label: "Payment Aged Analysis", icon: FaChartLine, route: "/accounts/payment-aged-analysis", color: "#b45309", desc: "Pending payment vouchers by age" },
   { label: "Tax Reports",       icon: FaCalculator, route: "/accounts/tax-reports",        color: "#0f766e", desc: "VAT, withholding & statutory" },
 ];
 

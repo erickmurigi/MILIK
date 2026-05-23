@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { FaHome, FaTimes, FaCog, FaBuilding, FaCar, FaHandshake, FaUsers } from 'react-icons/fa';
+import { FaHome, FaTimes, FaCog, FaBuilding, FaCar, FaHandshake, FaUsers, FaBook } from 'react-icons/fa';
 import {
   WORKSPACE_IDS,
   getWorkspaceDefaultRoute,
@@ -16,6 +16,14 @@ const MODULES = {
     title: 'Property Management',
     route: '/dashboard',
     icon: <FaHome className="w-4 h-4" />,
+    closable: true,
+  },
+  [WORKSPACE_IDS.ACCOUNTS]: {
+    id: WORKSPACE_IDS.ACCOUNTS,
+    moduleKey: 'accounts',
+    title: 'Financial Accounts',
+    route: '/accounts/dashboard',
+    icon: <FaBook className="w-4 h-4" />,
     closable: true,
   },
   [WORKSPACE_IDS.PROPERTY_SALE]: {

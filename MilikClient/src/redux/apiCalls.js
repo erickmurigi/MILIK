@@ -1526,6 +1526,18 @@ export const deleteServiceProvider = async (id, context = {}) => {
   return res.data;
 };
 
+// ─── Creditor Ledger ──────────────────────────────────────────────────────────
+export const getCreditorsSummary = async (params = {}) => {
+  const q = buildQuery(params);
+  const res = await adminRequests.get(`/service-providers/creditors/summary${q ? `?${q}` : ""}`);
+  return extractList(res.data);
+};
+export const getCreditorStatement = async (id, params = {}) => {
+  const q = buildQuery(params);
+  const res = await adminRequests.get(`/service-providers/creditors/${id}/statement${q ? `?${q}` : ""}`);
+  return res.data;
+};
+
 export const getLandlordStandingOrders = async (filters = {}) => {
   const params = new URLSearchParams();
   if (filters.business) params.append("business", filters.business);
@@ -2631,6 +2643,138 @@ export const getBalanceSheetReport = async (params = {}) => {
 
   const query = search.toString();
   const res = await adminRequests.get(`/financial-reports/balance-sheet${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
+export const getCashFlowReport = async (params = {}) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") search.append(key, value);
+  });
+  const query = search.toString();
+  const res = await adminRequests.get(`/financial-reports/cash-flow${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
+export const getARAgingReport = async (params = {}) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") search.append(key, value);
+  });
+  const query = search.toString();
+  const res = await adminRequests.get(`/financial-reports/ar-aging${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
+export const getAPAgingReport = async (params = {}) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") search.append(key, value);
+  });
+  const query = search.toString();
+  const res = await adminRequests.get(`/financial-reports/ap-aging${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
+// ─── Bank Reconciliation ──────────────────────────────────────────────────────
+const buildQuery = (params) => {
+  const s = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v !== null && v !== undefined && v !== "") s.append(k, v); });
+  return s.toString();
+};
+
+export const getBankReconciliationAccounts = async (params = {}) => {
+  const q = buildQuery(params);
+  const res = await adminRequests.get(`/bank-reconciliation/accounts${q ? `?${q}` : ""}`);
+  return res.data;
+};
+export const getReconciliationEntries = async (params = {}) => {
+  const q = buildQuery(params);
+  const res = await adminRequests.get(`/bank-reconciliation/entries${q ? `?${q}` : ""}`);
+  return res.data;
+};
+export const getReconciliations = async (params = {}) => {
+  if (params.id) {
+    const res = await adminRequests.get(`/bank-reconciliation/${params.id}`);
+    return res.data;
+  }
+  const q = buildQuery(params);
+  const res = await adminRequests.get(`/bank-reconciliation${q ? `?${q}` : ""}`);
+  return res.data;
+};
+export const createReconciliation = async (data) => {
+  const res = await adminRequests.post("/bank-reconciliation", data);
+  return res.data;
+};
+export const saveReconciliation = async (id, data) => {
+  const res = await adminRequests.put(`/bank-reconciliation/${id}`, data);
+  return res.data;
+};
+export const finalizeReconciliation = async (id, data) => {
+  const res = await adminRequests.post(`/bank-reconciliation/${id}/finalize`, data);
+  return res.data;
+};
+export const deleteReconciliation = async (id, params = {}) => {
+  const q = buildQuery(params);
+  const res = await adminRequests.delete(`/bank-reconciliation/${id}${q ? `?${q}` : ""}`);
+  return res.data;
+};
+
+// ─── Budgets ──────────────────────────────────────────────────────────────────
+export const getBudgets = async (params = {}) => {
+  const q = buildQuery(params);
+  const res = await adminRequests.get(`/budgets${q ? `?${q}` : ""}`);
+  return res.data;
+};
+export const getBudget = async (id, params = {}) => {
+  const q = buildQuery(params);
+  const res = await adminRequests.get(`/budgets/${id}${q ? `?${q}` : ""}`);
+  return res.data;
+};
+export const createBudget = async (data) => {
+  const res = await adminRequests.post("/budgets", data);
+  return res.data;
+};
+export const updateBudget = async (id, data) => {
+  const res = await adminRequests.put(`/budgets/${id}`, data);
+  return res.data;
+};
+export const deleteBudget = async (id, params = {}) => {
+  const q = buildQuery(params);
+  const res = await adminRequests.delete(`/budgets/${id}${q ? `?${q}` : ""}`);
+  return res.data;
+};
+
+// ─── Fixed Assets ─────────────────────────────────────────────────────────────
+export const getFixedAssets = async (params = {}) => {
+  const q = buildQuery(params);
+  const res = await adminRequests.get(`/fixed-assets${q ? `?${q}` : ""}`);
+  return res.data;
+};
+export const getFixedAsset = async (id, params = {}) => {
+  const q = buildQuery(params);
+  const res = await adminRequests.get(`/fixed-assets/${id}${q ? `?${q}` : ""}`);
+  return res.data;
+};
+export const createFixedAsset = async (data) => {
+  const res = await adminRequests.post("/fixed-assets", data);
+  return res.data;
+};
+export const updateFixedAsset = async (id, data) => {
+  const res = await adminRequests.put(`/fixed-assets/${id}`, data);
+  return res.data;
+};
+export const disposeFixedAsset = async (id, data) => {
+  const res = await adminRequests.post(`/fixed-assets/${id}/dispose`, data);
+  return res.data;
+};
+export const previewDepreciation = async (params = {}) => {
+  const q = buildQuery(params);
+  const res = await adminRequests.get(`/fixed-assets/depreciation/preview${q ? `?${q}` : ""}`);
+  return res.data;
+};
+export const runDepreciation = async (data) => {
+  const res = await adminRequests.post("/fixed-assets/depreciation/run", data);
   return res.data;
 };
 

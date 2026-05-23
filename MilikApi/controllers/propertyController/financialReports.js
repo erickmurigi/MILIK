@@ -7,6 +7,7 @@ import RentPayment from "../../models/RentPayment.js";
 import Property from "../../models/Property.js";
 import Unit from "../../models/Unit.js";
 import ExpenseProperty from "../../models/ExpenseProperty.js";
+import PaymentVoucher from "../../models/PaymentVoucher.js";
 import { computeTenantInvoiceSnapshotsBatch } from "./tenantInvoices.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import { computeAccountBalance, getNormalBalanceSide } from "../../services/accountingClassificationService.js";
@@ -1195,6 +1196,174 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
   }
 };
 
+const CASH_ACCOUNT_OPERATING_TYPES = new Set([
+  "rent_payment", "landlord_receipt", "invoice", "invoice_note",
+  "expense", "payment_voucher", "petty_cash_disbursement",
+  "petty_cash_replenishment", "meter_reading", "recurring_deduction",
+]);
+const CASH_ACCOUNT_FINANCING_TYPES = new Set([
+  "landlord_payment", "advance", "processed_statement",
+  "processed_statement_payment", "deposit",
+]);
+const CASH_FLOW_LABELS = {
+  rent_payment:               "Collections from Tenants",
+  landlord_receipt:           "Direct Landlord Receipts",
+  invoice:                    "Invoice-Linked Cash",
+  invoice_note:               "Invoice Adjustment Cash",
+  expense:                    "Expense Payments",
+  payment_voucher:            "Payment Voucher Disbursements",
+  petty_cash_disbursement:    "Petty Cash Disbursements",
+  petty_cash_replenishment:   "Petty Cash Replenishments",
+  meter_reading:              "Utility / Meter Charges",
+  recurring_deduction:        "Recurring Deduction Payments",
+  landlord_payment:           "Landlord Remittances",
+  advance:                    "Landlord Advances",
+  processed_statement:        "Statement Movements",
+  processed_statement_payment:"Statement Settlement Payments",
+  deposit:                    "Security Deposit Movements",
+  manual_adjustment:          "Manual Adjustments",
+  system_migration:           "System Migration Entries",
+  carwash_commission:         "Car Wash Commission Accruals",
+  carwash_commission_payout:  "Car Wash Commission Payouts",
+  other:                      "Other Movements",
+};
+
+export const getCashFlowReport = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: "A valid business id is required." });
+    }
+
+    const startDate = normalizeDate(req.query.startDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+    const endDate = normalizeDate(req.query.endDate || new Date(), true);
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, error: "Invalid report dates supplied." });
+    }
+    if (startDate > endDate) {
+      return res.status(400).json({ success: false, error: "Start date cannot be after end date." });
+    }
+
+    const cashAccounts = await ChartOfAccount.find({
+      business: businessId,
+      type: "asset",
+      isHeader: { $ne: true },
+      isPosting: { $ne: false },
+      $or: [
+        { subGroup: { $regex: /cash|bank|petty/i } },
+        { name: { $regex: /cash|bank|petty/i } },
+        { group: { $regex: /cash|bank/i } },
+      ],
+    }).sort({ code: 1 }).lean();
+
+    if (!cashAccounts.length) {
+      return res.status(200).json({
+        success: true,
+        startDate,
+        endDate,
+        cashAccounts: [],
+        operating: { items: [], totalInflows: 0, totalOutflows: 0, net: 0 },
+        financing: { items: [], totalInflows: 0, totalOutflows: 0, net: 0 },
+        adjustments: { items: [], totalInflows: 0, totalOutflows: 0, net: 0 },
+        summary: { openingCash: 0, netCashFromOperations: 0, netCashFromFinancing: 0, netCashFromAdjustments: 0, netChange: 0, closingCash: 0 },
+        note: "No cash or bank accounts identified. Add accounts with 'cash' or 'bank' in the name or sub-group.",
+      });
+    }
+
+    const cashAccountIds = cashAccounts.map((a) => a._id);
+
+    const openingEndDate = new Date(startDate);
+    openingEndDate.setDate(openingEndDate.getDate() - 1);
+    openingEndDate.setHours(23, 59, 59, 999);
+
+    const debitExpr = {
+      $cond: [{ $gt: ["$debit", 0] }, "$debit", {
+        $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] }, { $ifNull: ["$amount", 0] }, 0],
+      }],
+    };
+    const creditExpr = {
+      $cond: [{ $gt: ["$credit", 0] }, "$credit", {
+        $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] }, { $ifNull: ["$amount", 0] }, 0],
+      }],
+    };
+
+    const [openingAgg, periodAgg] = await Promise.all([
+      FinancialLedgerEntry.aggregate([
+        { $match: { business: businessId, accountId: { $in: cashAccountIds }, status: { $in: REPORT_LEDGER_STATUSES }, transactionDate: { $lte: openingEndDate } } },
+        { $group: { _id: "$accountId", debit: { $sum: debitExpr }, credit: { $sum: creditExpr } } },
+      ]),
+      FinancialLedgerEntry.aggregate([
+        { $match: { business: businessId, accountId: { $in: cashAccountIds }, status: { $in: REPORT_LEDGER_STATUSES }, transactionDate: { $gte: startDate, $lte: endDate } } },
+        { $group: { _id: "$sourceTransactionType", debit: { $sum: debitExpr }, credit: { $sum: creditExpr } } },
+      ]),
+    ]);
+
+    const openingMap = new Map(openingAgg.map((r) => [String(r._id), round2(r.debit - r.credit)]));
+
+    let totalOpeningCash = 0;
+    const cashAccountRows = cashAccounts.map((account) => {
+      const opening = openingMap.get(String(account._id)) || 0;
+      totalOpeningCash += opening;
+      return { _id: account._id, code: account.code, name: account.name, subGroup: account.subGroup || "", openingBalance: opening };
+    });
+
+    const operatingItems = [];
+    const financingItems = [];
+    const adjustmentItems = [];
+
+    for (const row of periodAgg) {
+      const sourceType = String(row._id || "other");
+      const inflow = round2(row.debit || 0);
+      const outflow = round2(row.credit || 0);
+      const net = round2(inflow - outflow);
+      const label = CASH_FLOW_LABELS[sourceType] || sourceType;
+      const item = { sourceType, label, inflow, outflow, net };
+
+      if (CASH_ACCOUNT_OPERATING_TYPES.has(sourceType)) {
+        operatingItems.push(item);
+      } else if (CASH_ACCOUNT_FINANCING_TYPES.has(sourceType)) {
+        financingItems.push(item);
+      } else {
+        adjustmentItems.push(item);
+      }
+    }
+
+    const sumSection = (items) => {
+      const totalInflows = round2(items.reduce((s, i) => s + i.inflow, 0));
+      const totalOutflows = round2(items.reduce((s, i) => s + i.outflow, 0));
+      return { items: items.sort((a, b) => Math.abs(b.net) - Math.abs(a.net)), totalInflows, totalOutflows, net: round2(totalInflows - totalOutflows) };
+    };
+
+    const operating = sumSection(operatingItems);
+    const financing = sumSection(financingItems);
+    const adjustments = sumSection(adjustmentItems);
+
+    const netChange = round2(operating.net + financing.net + adjustments.net);
+    const closingCash = round2(totalOpeningCash + netChange);
+
+    return res.status(200).json({
+      success: true,
+      startDate,
+      endDate,
+      cashAccounts: cashAccountRows,
+      operating,
+      financing,
+      adjustments,
+      summary: {
+        openingCash: round2(totalOpeningCash),
+        netCashFromOperations: operating.net,
+        netCashFromFinancing: financing.net,
+        netCashFromAdjustments: adjustments.net,
+        netChange,
+        closingCash,
+      },
+      note: null,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getMRITaxSummaryReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -1310,10 +1479,169 @@ export const getMRITaxSummaryReport = async (req, res, next) => {
   }
 };
 
+// ─── AR / AP Aging helpers ────────────────────────────────────────────────────
+const AGING_BUCKETS = [
+  { key: "current",   label: "Current",    min: null, max: 0   },
+  { key: "d1_30",     label: "1–30 days",  min: 1,    max: 30  },
+  { key: "d31_60",    label: "31–60 days", min: 31,   max: 60  },
+  { key: "d61_90",    label: "61–90 days", min: 61,   max: 90  },
+  { key: "d90plus",   label: "90+ days",   min: 91,   max: null },
+];
+
+const assignBucket = (daysOverdue) => {
+  if (daysOverdue <= 0) return "current";
+  if (daysOverdue <= 30) return "d1_30";
+  if (daysOverdue <= 60) return "d31_60";
+  if (daysOverdue <= 90) return "d61_90";
+  return "d90plus";
+};
+
+// ─── AR Aging ─────────────────────────────────────────────────────────────────
+export const getARAgingReport = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return res.status(400).json({ message: "Missing business" });
+
+    const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
+    asOf.setHours(23, 59, 59, 999);
+
+    // Fetch outstanding invoices with display fields (property/unit not in snapshot engine)
+    const invoices = await TenantInvoice.find({
+      business: businessId,
+      status: { $in: ["pending", "partially_paid"] },
+    })
+      .populate("tenant", "name email phone")
+      .populate("property", "propertyName")
+      .populate("unit", "unitName")
+      .lean();
+
+    if (!invoices.length) {
+      return res.status(200).json({
+        success: true,
+        asOf,
+        rows: [],
+        totals: { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90plus: 0, total: 0 },
+        buckets: AGING_BUCKETS,
+      });
+    }
+
+    const tenantIds = [
+      ...new Set(invoices.map((inv) => String(inv.tenant?._id || inv.tenant)).filter(Boolean)),
+    ];
+
+    // Use the same allocation engine as the PM module (handles legacy receipts without stored allocations)
+    const snapshotBundles = await computeTenantInvoiceSnapshotsBatch({
+      businessId,
+      tenantIds,
+      asOfDate: asOf,
+    });
+
+    const outstandingMap = new Map();
+    for (const [, bundle] of snapshotBundles) {
+      for (const snapshot of bundle.invoiceSnapshots || []) {
+        const outstanding = round2(Math.max(0, Number(snapshot.outstanding || 0)));
+        outstandingMap.set(String(snapshot._id), outstanding);
+      }
+    }
+
+    const totals = { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90plus: 0, total: 0 };
+    const rows = [];
+
+    for (const inv of invoices) {
+      const outstanding = outstandingMap.get(String(inv._id));
+      if (!outstanding || outstanding <= 0) continue;
+
+      const applied = round2(inv.amount - outstanding);
+      const daysOverdue = Math.floor((asOf - new Date(inv.dueDate)) / 86_400_000);
+      const bucket = assignBucket(daysOverdue);
+      totals[bucket] = round2(totals[bucket] + outstanding);
+      totals.total = round2(totals.total + outstanding);
+
+      rows.push({
+        invoiceId: inv._id,
+        invoiceNumber: inv.invoiceNumber,
+        tenantId: inv.tenant?._id,
+        tenantName: inv.tenant?.name || "—",
+        propertyName: inv.property?.propertyName || "—",
+        unitName: inv.unit?.unitName || "—",
+        invoiceDate: inv.invoiceDate,
+        dueDate: inv.dueDate,
+        amount: inv.amount,
+        applied,
+        outstanding,
+        daysOverdue,
+        bucket,
+        category: inv.category,
+      });
+    }
+
+    rows.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+    return res.status(200).json({ success: true, asOf, rows, totals, buckets: AGING_BUCKETS });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── AP Aging ─────────────────────────────────────────────────────────────────
+export const getAPAgingReport = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return res.status(400).json({ message: "Missing business" });
+
+    const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
+    asOf.setHours(23, 59, 59, 999);
+
+    const vouchers = await PaymentVoucher.find({
+      business: businessId,
+      status: { $in: ["draft", "approved"] },
+    })
+      .populate("property", "propertyName")
+      .populate("landlord", "name")
+      .lean();
+
+    const totals = { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90plus: 0, total: 0 };
+    const rows = [];
+
+    for (const v of vouchers) {
+      const outstanding = round2(v.amount || 0);
+      if (outstanding <= 0) continue;
+
+      const daysOverdue = Math.floor((asOf - new Date(v.dueDate)) / 86_400_000);
+      const bucket = assignBucket(daysOverdue);
+      totals[bucket] = round2(totals[bucket] + outstanding);
+      totals.total = round2(totals.total + outstanding);
+
+      rows.push({
+        voucherId: v._id,
+        reference: v.reference || v.voucherNo || String(v._id).slice(-6),
+        narration: v.narration || "—",
+        category: v.category,
+        status: v.status,
+        propertyName: v.property?.propertyName || "—",
+        landlordName: v.landlord?.name || "—",
+        dueDate: v.dueDate,
+        amount: outstanding,
+        daysOverdue,
+        bucket,
+      });
+    }
+
+    rows.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+    return res.status(200).json({ success: true, asOf, rows, totals, buckets: AGING_BUCKETS });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   getTrialBalanceReport,
   getIncomeStatementReport,
   getBalanceSheetReport,
+  getCashFlowReport,
+  getARAgingReport,
+  getAPAgingReport,
   getRentalCollectionReport,
   getTenantPaidBalanceReport,
   getPropertyIncomeSummaryReport,

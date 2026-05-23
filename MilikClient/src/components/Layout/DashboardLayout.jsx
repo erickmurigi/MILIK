@@ -27,7 +27,7 @@ import {
   getWorkspaceFromRoute,
   getWorkspaceLabel,
 } from "../../utils/workspaceRoutes";
-import { GL_ACCESS_MODULES, isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { GL_ACCESS_MODULES, hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 
 const MENU_PERMISSION_MAP = {
@@ -94,10 +94,18 @@ const MENU_PERMISSION_MAP = {
   "acc-payment-vouchers":  { resource: "paymentVouchers", action: "view", moduleKey: "accounts" },
   "acc-expenses":          { resource: "expenses",        action: "view", moduleKey: "accounts" },
   "acc-service-providers": { resource: "expenses",        action: "view", moduleKey: "accounts" },
-  "acc-trial-balance":     { resource: "financialReports", action: "view", moduleKey: "accounts" },
-  "acc-income-statement":  { resource: "financialReports", action: "view", moduleKey: "accounts" },
-  "acc-balance-sheet":     { resource: "financialReports", action: "view", moduleKey: "accounts" },
-  "acc-tax-reports":       { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-trial-balance":        { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-income-statement":     { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-balance-sheet":        { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-tax-reports":          { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-cash-flow":            { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-arrears-analysis":     { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-payment-analysis":     { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-bank-reconciliation":       { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-fixed-assets":              { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-fixed-assets-depreciation": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-budget":                    { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-creditor-ledger":           { resource: "expenses",         action: "view", moduleKey: "accounts" },
   "sale-dashboard": { resource: "sale-dashboard", action: "view", moduleKey: "propertySale" },
   "sale-listings": { resource: "sale-listings", action: "view", moduleKey: "propertySale" },
   "sale-buyers": { resource: "sale-buyers", action: "view", moduleKey: "propertySale" },
@@ -465,6 +473,14 @@ const TopToolbar = ({
         "acc-income-statement":  "/accounts/income-statement",
         "acc-balance-sheet":     "/accounts/balance-sheet",
         "acc-tax-reports":       "/accounts/tax-reports",
+        "acc-cash-flow":         "/accounts/cash-flow",
+        "acc-arrears-analysis":     "/accounts/arrears-aged-analysis",
+        "acc-payment-analysis":     "/accounts/payment-aged-analysis",
+        "acc-bank-reconciliation":       "/accounts/bank-reconciliation",
+        "acc-fixed-assets":              "/accounts/fixed-assets",
+        "acc-fixed-assets-depreciation": "/accounts/fixed-assets/depreciation",
+        "acc-budget":                    "/accounts/budget",
+        "acc-creditor-ledger":           "/accounts/creditor-ledger",
         documentation: "/help/documentation",
         support:       "/help/support",
         about:         "/help/about",
@@ -707,9 +723,19 @@ const TopToolbar = ({
           label: "General Ledger",
           icon: FaBook,
           submenu: [
-            { id: "acc-dashboard",         label: "Accounts Overview",  icon: FaChartLine },
-            { id: "acc-chart-of-accounts", label: "Chart of Accounts",  icon: FaLayerGroup },
-            { id: "acc-journals",          label: "Journal Entries",    icon: FaBook },
+            { id: "acc-dashboard",          label: "Accounts Overview",   icon: FaChartLine },
+            { id: "acc-chart-of-accounts",  label: "Chart of Accounts",   icon: FaLayerGroup },
+            { id: "acc-journals",           label: "Journal Entries",     icon: FaBook },
+            { id: "acc-bank-reconciliation", label: "Bank Reconciliation", icon: FaUniversity },
+          ],
+        },
+        {
+          id: "acc-fixed-assets-group",
+          label: "Fixed Assets",
+          icon: FaToolbox,
+          submenu: [
+            { id: "acc-fixed-assets",              label: "Asset Register",  icon: FaList },
+            { id: "acc-fixed-assets-depreciation", label: "Depreciation",    icon: FaCalculator },
           ],
         },
         {
@@ -722,17 +748,24 @@ const TopToolbar = ({
             { type: "separator" },
             { id: "acc-expenses",          label: "Expense Requisitions", icon: FaFileInvoice },
             { id: "acc-service-providers", label: "Service Providers",    icon: FaCog },
+            { id: "acc-creditor-ledger",   label: "Creditors Ledger",     icon: FaBook },
           ],
         },
         {
           id: "acc-statements",
-          label: "Statements",
+          label: "Reports",
           icon: FaFileAlt,
           submenu: [
-            { id: "acc-trial-balance",    label: "Trial Balance",         icon: FaBook },
+            { id: "acc-trial-balance",    label: "Trial Balance",          icon: FaBook },
             { id: "acc-income-statement", label: "Income Statement (P&L)", icon: FaFileAlt },
-            { id: "acc-balance-sheet",    label: "Balance Sheet",         icon: FaBalanceScale },
-            { id: "acc-tax-reports",      label: "Tax Reports",           icon: FaCalculator },
+            { id: "acc-balance-sheet",    label: "Balance Sheet",          icon: FaBalanceScale },
+            { id: "acc-cash-flow",        label: "Cash Flow Statement",    icon: FaExchangeAlt },
+            ...(hasCompanyModule(activeCompanyContext, "propertyManagement")
+              ? [{ id: "acc-arrears-analysis", label: "Arrears Aged Analysis", icon: FaChartBar }]
+              : []),
+            { id: "acc-payment-analysis", label: "Payment Aged Analysis",  icon: FaChartBar },
+            { id: "acc-budget",           label: "Budget vs Actual",       icon: FaChartPie },
+            { id: "acc-tax-reports",      label: "Tax Reports",            icon: FaCalculator },
           ],
         },
         {
@@ -1069,7 +1102,7 @@ const TopToolbar = ({
     "hr-config":      { color: "#FF8C00", label: "Setup",       icon: FaCog },
     "acc-ledger":     { color: "#0B3B2E", label: "General Ledger",        icon: FaBook },
     "acc-payables":   { color: "#b45309", label: "Payables & Expenses",   icon: FaCreditCard },
-    "acc-statements": { color: "#0f766e", label: "Financial Statements",  icon: FaFileAlt },
+    "acc-statements": { color: "#0f766e", label: "Financial Reports",     icon: FaFileAlt },
   };
 
   const ProfessionalDropdown = ({ menuId, items }) => {

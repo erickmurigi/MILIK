@@ -113,6 +113,14 @@ const TrialBalanceReport          = lazy(() => import("./pages/Reports/TrialBala
 const IncomeStatementReport       = lazy(() => import("./pages/Reports/IncomeStatementReport"));
 const BalanceSheetReport          = lazy(() => import("./pages/Reports/BalanceSheetReport"));
 const TaxReports                  = lazy(() => import("./pages/Reports/TaxReports"));
+const CashFlowReport              = lazy(() => import("./pages/Reports/CashFlowReport"));
+const ArrearsAgedAnalysis         = lazy(() => import("./pages/Reports/ArrearsAgedAnalysis"));
+const PaymentAgedAnalysis         = lazy(() => import("./pages/Reports/PaymentAgedAnalysis"));
+const BankReconciliation          = lazy(() => import("./pages/Accounts/BankReconciliation"));
+const FixedAssets                 = lazy(() => import("./pages/Accounts/FixedAssets"));
+const FixedAssetsDepreciation     = lazy(() => import("./pages/Accounts/FixedAssetsDepreciation"));
+const BudgetVsActual              = lazy(() => import("./pages/Accounts/BudgetVsActual"));
+const CreditorLedger              = lazy(() => import("./pages/Accounts/CreditorLedger"));
 
 // Help
 const SupportDocumentation = lazy(() => import("./pages/Help/SupportDocumentation"));
@@ -514,6 +522,14 @@ function App() {
             <Route path="/accounts/income-statement"  element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><IncomeStatementReport /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/accounts/balance-sheet"     element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><BalanceSheetReport /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/accounts/tax-reports"       element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><TaxReports /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/cash-flow"        element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><CashFlowReport /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/arrears-aged-analysis" element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><ArrearsAgedAnalysis /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/payment-aged-analysis" element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><PaymentAgedAnalysis /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/bank-reconciliation"   element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><BankReconciliation /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/fixed-assets"              element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><FixedAssets /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/fixed-assets/depreciation" element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><FixedAssetsDepreciation /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/budget"                    element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><BudgetVsActual /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/creditor-ledger"           element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="expenses" moduleKey="accounts"><CreditorLedger /></PermissionRoute></CompanyModuleRoute>} />
 
             {/* ── Car Wash module ───────────────────────────────────────── */}
             <Route path="/carwash/dashboard"         element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-dashboard" moduleKey="carwash"><CarWashDashboard /></PermissionRoute></CompanyModuleRoute>} />
