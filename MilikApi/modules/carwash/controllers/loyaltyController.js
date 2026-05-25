@@ -301,6 +301,56 @@ export const awardLoyaltyStamp = async ({ business, job }) => {
   return { card, rewardTriggered, program };
 };
 
+// ─── Auto-enroll plate at job creation ───────────────────────────────────────
+// Called from jobsController.createJob. Never throws — failure must not block job creation.
+export const autoEnrollPlate = async ({ business, plate, customerName, phone }) => {
+  try {
+    const normalizedPlate = String(plate || '').trim().toUpperCase();
+    if (!normalizedPlate) return null;
+
+    const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
+    if (!program) return null;
+
+    // Card already exists — nothing to do
+    const existingCard = await CarWashLoyaltyCard.findOne({ business, plate: normalizedPlate }).lean();
+    if (existingCard) return existingCard;
+
+    // 1. Try to find customer by plate
+    let customer = await CarWashCustomer.findOne({ business, plates: normalizedPlate }).lean();
+
+    // 2. Try to find customer by phone and add plate to their record
+    if (!customer && phone && String(phone).trim()) {
+      const byPhone = await CarWashCustomer.findOne({ business, phone: String(phone).trim() }).lean();
+      if (byPhone) {
+        await CarWashCustomer.updateOne({ _id: byPhone._id }, { $addToSet: { plates: normalizedPlate } });
+        customer = byPhone;
+      }
+    }
+
+    // 3. Auto-create a minimal customer record for first-time walk-ins
+    if (!customer) {
+      customer = await CarWashCustomer.create({
+        business,
+        name: String(customerName || normalizedPlate).trim(),
+        phone: String(phone || '').trim(),
+        plates: [normalizedPlate],
+        notes: 'Auto-enrolled at first visit',
+      });
+    }
+
+    const card = await CarWashLoyaltyCard.create({
+      business,
+      plate: normalizedPlate,
+      customer: customer._id,
+      program: program._id,
+    });
+
+    return card;
+  } catch (_err) {
+    return null;
+  }
+};
+
 // ─── Redeem reward on a job ───────────────────────────────────────────────────
 
 export const redeemReward = async (req, res, next) => {
@@ -356,6 +406,24 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount }) => {
     await sendLoyaltySms(business, customer.phone, body, 'carwash_payment_confirmed');
   } catch (_err) {
     // Never break the main flow
+  }
+};
+
+// ─── Manual SMS to a loyalty customer ────────────────────────────────────────
+
+export const sendCustomerSms = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const customer = await CarWashCustomer.findOne({ _id: req.params.id, business }).lean();
+    if (!customer) throw createError(404, "Car Wash customer not found");
+    const phone = String(req.body.phone || customer.phone || "").trim();
+    if (!phone) throw createError(400, "No phone number available for this customer");
+    const body = String(req.body.body || "").trim();
+    if (!body) throw createError(400, "Message body is required");
+    await sendAdHocSms({ businessId: business, phone, body, templateKey: "carwash_loyalty_manual" });
+    res.json({ success: true, message: "SMS sent" });
+  } catch (err) {
+    next(err);
   }
 };
 

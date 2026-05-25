@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   FaCar, FaCheckCircle, FaCog, FaEdit, FaGift, FaPlus,
-  FaRedoAlt, FaSearch, FaStar, FaTimes, FaUser, FaUserPlus,
+  FaRedoAlt, FaSearch, FaSms, FaStar, FaTimes, FaUser, FaUserPlus,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi } from "../../services/carWashApi";
@@ -170,6 +170,9 @@ const CarWashLoyalty = () => {
   const [tab, setTab] = useState("customers"); // "customers" | "program"
   const [expandedId, setExpandedId] = useState(null);
   const [cardData, setCardData] = useState({});
+  const [smsTarget, setSmsTarget] = useState(null);
+  const [smsBody, setSmsBody] = useState("");
+  const [smsSending, setSmsSending] = useState(false);
   const searchRef = useRef(null);
   const PAGE_SIZE = 30;
 
@@ -247,6 +250,27 @@ const CarWashLoyalty = () => {
         const res = await carWashApi.getCustomerCard(id);
         setCardData(prev => ({ ...prev, [id]: res }));
       } catch (_) {}
+    }
+  };
+
+  const openSmsModal = (customer) => {
+    setSmsTarget(customer);
+    const card = customer.loyaltyCard;
+    const stampsText = card ? `${card.currentStamps}/${program?.stampsRequired ?? 10} stamps` : "no stamps yet";
+    setSmsBody(`Hi ${customer.name}, your car wash loyalty card has ${stampsText}. Thank you for being a loyal customer!`);
+  };
+
+  const sendSms = async () => {
+    if (!smsTarget || !smsBody.trim()) return;
+    setSmsSending(true);
+    try {
+      await carWashApi.sendCustomerSms(smsTarget._id, { phone: smsTarget.phone, body: smsBody.trim() });
+      toast.success("SMS sent successfully");
+      setSmsTarget(null);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to send SMS");
+    } finally {
+      setSmsSending(false);
     }
   };
 
@@ -384,6 +408,15 @@ const CarWashLoyalty = () => {
                               )}
                             </td>
                             <td className="px-4 py-3 text-right">
+                              {c.phone && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); openSmsModal(c); }}
+                                  className="mr-2 text-slate-400 hover:text-emerald-700"
+                                  title={`Send SMS to ${c.phone}`}
+                                >
+                                  <FaSms />
+                                </button>
+                              )}
                               <button
                                 onClick={e => { e.stopPropagation(); openEdit(c); }}
                                 className="mr-2 text-slate-400 hover:text-emerald-700"
@@ -452,6 +485,39 @@ const CarWashLoyalty = () => {
           )}
         </div>
       </div>
+
+      {smsTarget && (
+        <Modal
+          title="Send SMS"
+          onClose={() => setSmsTarget(null)}
+          footer={
+            <>
+              <button onClick={() => setSmsTarget(null)} className="border border-slate-300 px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={sendSms} disabled={smsSending || !smsBody.trim()} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-50">
+                <FaSms className="text-[10px]" />
+                {smsSending ? "Sending…" : "Send SMS"}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">To</label>
+              <div className="text-sm font-semibold text-slate-800">{smsTarget.name} · <span className="text-slate-500">{smsTarget.phone}</span></div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Message *</label>
+              <textarea
+                className="min-h-24 w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                value={smsBody}
+                onChange={e => setSmsBody(e.target.value)}
+                maxLength={320}
+              />
+              <div className="mt-1 text-right text-[10px] text-slate-400">{smsBody.length}/320</div>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Customer modal */}
       {showCustomerModal && (

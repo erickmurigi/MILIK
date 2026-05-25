@@ -6,6 +6,7 @@ import CarWashPayment from "../models/CarWashPayment.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
 import { awardLoyaltyStamp, sendPaymentConfirmationSms } from "./loyaltyController.js";
+import { sendAdHocSms } from "../../../services/communicationService.js";
 
 const PAYMENT_METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const RECONCILIATION_STATUSES = new Set(["pending", "reconciled", "flagged"]);
@@ -73,7 +74,7 @@ export const listPayments = async (req, res, next) => {
     const skip = (page - 1) * limit;
     const [payments, total] = await Promise.all([
       CarWashPayment.find(filter)
-        .populate("job", "jobNumber plateNumber customerName serviceName price status paymentStatus")
+        .populate("job", "jobNumber plateNumber customerName serviceName price status paymentStatus phone")
         .populate("cashbookAccount", "code name type subGroup")
         .populate("receivedBy", "name username email")
         .populate("branch", "name")
@@ -192,7 +193,7 @@ export const updatePaymentReconciliation = async (req, res, next) => {
     }
 
     const payment = await CarWashPayment.findOneAndUpdate({ _id: req.params.id, business }, update, { new: true, runValidators: true })
-      .populate("job", "jobNumber plateNumber customerName serviceName price status paymentStatus")
+      .populate("job", "jobNumber plateNumber customerName serviceName price status paymentStatus phone")
       .populate("cashbookAccount", "code name type subGroup")
       .populate("receivedBy", "name username email")
       .populate("reconciledBy", "name username email");
@@ -200,5 +201,23 @@ export const updatePaymentReconciliation = async (req, res, next) => {
     res.status(200).json({ success: true, data: payment, payment, message: "Car Wash payment reconciliation updated" });
   } catch (error) {
     next(error);
+  }
+};
+
+export const sendPaymentSms = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const payment = await CarWashPayment.findOne({ _id: req.params.id, business })
+      .populate("job", "jobNumber customerName phone")
+      .lean();
+    if (!payment) throw createError(404, "Car Wash payment not found");
+    const phone = String(req.body.phone || payment.job?.phone || "").trim();
+    if (!phone) throw createError(400, "No phone number available for this payment");
+    const body = String(req.body.body || "").trim();
+    if (!body) throw createError(400, "Message body is required");
+    await sendAdHocSms({ businessId: business, phone, body, templateKey: "carwash_payment_manual" });
+    res.json({ success: true, message: "SMS sent" });
+  } catch (err) {
+    next(err);
   }
 };

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import { FaCar, FaChevronDown, FaChevronRight, FaGift, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSearch, FaStar, FaTimes, FaTrashAlt, FaUser } from "react-icons/fa";
+import { FaCar, FaChevronDown, FaChevronRight, FaGift, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSearch, FaSms, FaStar, FaTimes, FaTrashAlt, FaUser } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
@@ -216,6 +216,9 @@ const CarWashJobs = () => {
   const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 });
   const [loading, setLoading] = useState(false);
   const [modalUnpaidJobs, setModalUnpaidJobs] = useState([]);
+  const [smsTarget, setSmsTarget] = useState(null);
+  const [smsBody, setSmsBody] = useState("");
+  const [smsSending, setSmsSending] = useState(false);
 
   const unpaidJobs = useMemo(() => jobs.filter((job) => job.paymentStatus !== "paid"), [jobs]);
   const safeVisibleJobIds = useMemo(
@@ -405,6 +408,25 @@ const CarWashJobs = () => {
       else toast.success(`${result?.deletedCount || selectedIds.length} jobs deleted`);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to delete selected jobs");
+    }
+  };
+
+  const openSmsModal = (job) => {
+    setSmsTarget(job);
+    setSmsBody(`Hi ${job.customerName || "Customer"}, your car wash job ${job.jobNumber} is ${statusLabels[job.status] || job.status}. Thank you!`);
+  };
+
+  const sendSms = async () => {
+    if (!smsTarget || !smsBody.trim()) return;
+    setSmsSending(true);
+    try {
+      await carWashApi.sendJobSms(smsTarget._id, { phone: smsTarget.phone, body: smsBody.trim() });
+      toast.success("SMS sent successfully");
+      setSmsTarget(null);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to send SMS");
+    } finally {
+      setSmsSending(false);
     }
   };
 
@@ -643,14 +665,26 @@ const CarWashJobs = () => {
                       </td>
                       <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(job.price)}</td>
                       <td className="px-2 py-1 text-right">
-                        <button
-                          type="button"
-                          onClick={() => openPaymentModal(job)}
-                          disabled={job.paymentStatus === "paid"}
-                          className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Pay
-                        </button>
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openPaymentModal(job)}
+                            disabled={job.paymentStatus === "paid"}
+                            className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Pay
+                          </button>
+                          {job.phone && (
+                            <button
+                              type="button"
+                              onClick={() => openSmsModal(job)}
+                              className="border border-[#B7C9C0] bg-white p-1 text-[11px] text-[#0B3B2E] hover:bg-[#F1F6F3]"
+                              title={`Send SMS to ${job.phone}`}
+                            >
+                              <FaSms />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     {expanded && (
@@ -896,6 +930,42 @@ const CarWashJobs = () => {
               Cashbook: {selectedCashbook ? `${selectedCashbook.code} - ${selectedCashbook.name}` : "Select where this payment was received"}
             </div>
           </form>
+        </Modal>
+      )}
+
+      {smsTarget && (
+        <Modal
+          title="Send SMS"
+          subtitle={`To: ${smsTarget.customerName || "Customer"} · ${smsTarget.phone}`}
+          onClose={() => setSmsTarget(null)}
+          footer={
+            <>
+              <button type="button" onClick={() => setSmsTarget(null)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">
+                Cancel
+              </button>
+              <button type="button" onClick={sendSms} disabled={smsSending || !smsBody.trim()} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
+                <FaSms />
+                {smsSending ? "Sending…" : "Send SMS"}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <div>
+              <label className={labelClass}>Phone</label>
+              <input className={inputClass} value={smsTarget.phone} readOnly />
+            </div>
+            <div>
+              <label className={labelClass}>Message *</label>
+              <textarea
+                className="min-h-24 w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                value={smsBody}
+                onChange={(e) => setSmsBody(e.target.value)}
+                maxLength={320}
+              />
+              <div className="mt-1 text-right text-[10px] text-slate-400">{smsBody.length}/320</div>
+            </div>
+          </div>
         </Modal>
       )}
     </CarWashShell>

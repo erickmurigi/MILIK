@@ -72,6 +72,9 @@ export const carWashApi = {
   updateLoyaltyCustomer: async (id, payload) => unwrap(await adminRequests.put(`/carwash/loyalty/customers/${id}`, payload)),
   getCustomerCard: async (customerId) => unwrap(await adminRequests.get(`/carwash/loyalty/customers/${customerId}/card`)),
   redeemLoyaltyReward: async (jobId) => unwrap(await adminRequests.patch(`/carwash/loyalty/jobs/${jobId}/redeem`)),
+  sendJobSms: async (jobId, payload) => unwrap(await adminRequests.post(`/carwash/jobs/${jobId}/sms`, payload)),
+  sendCustomerSms: async (customerId, payload) => unwrap(await adminRequests.post(`/carwash/loyalty/customers/${customerId}/sms`, payload)),
+  sendPaymentSms: async (paymentId, payload) => unwrap(await adminRequests.post(`/carwash/payments/${paymentId}/sms`, payload)),
 };
 
 export const todayISO = () => new Date().toISOString().slice(0, 10);

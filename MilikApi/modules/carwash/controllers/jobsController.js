@@ -6,6 +6,8 @@ import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
+import { autoEnrollPlate } from "./loyaltyController.js";
+import { sendAdHocSms } from "../../../services/communicationService.js";
 
 const JOB_STATUSES = new Set(["waiting", "washing", "done", "paid", "cancelled"]);
 const JOB_TYPES = new Set(["vehicle", "carpet"]);
@@ -193,6 +195,16 @@ export const createJob = async (req, res, next) => {
       }
     }
 
+    // Auto-enroll vehicle plate into loyalty program (fire-and-forget)
+    if (job.jobType === "vehicle" && job.plateNumber) {
+      autoEnrollPlate({
+        business,
+        plate: job.plateNumber,
+        customerName: job.customerName,
+        phone: job.phone,
+      }).catch(() => {});
+    }
+
     res.status(201).json({ success: true, data: job, job, message: `${jobType === "carpet" ? "Carpet" : "Car Wash"} job created` });
   } catch (error) {
     next(error);
@@ -371,5 +383,21 @@ export const deleteJobsBulk = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+export const sendJobSms = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const job = await CarWashJob.findOne({ _id: req.params.id, business }).lean();
+    if (!job) throw createError(404, "Car Wash job not found");
+    const phone = String(req.body.phone || job.phone || "").trim();
+    if (!phone) throw createError(400, "No phone number available for this job");
+    const body = String(req.body.body || "").trim();
+    if (!body) throw createError(400, "Message body is required");
+    await sendAdHocSms({ businessId: business, phone, body, templateKey: "carwash_job_manual" });
+    res.json({ success: true, message: "SMS sent" });
+  } catch (err) {
+    next(err);
   }
 };
