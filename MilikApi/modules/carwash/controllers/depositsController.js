@@ -8,10 +8,15 @@ const DESTINATIONS = new Set(["bank", "mpesa", "safe", "other"]);
 const STATUSES = new Set(["pending", "confirmed", "cancelled"]);
 
 const generateDepositNumber = async (business) => {
-  const { start, end } = parseDateRange(new Date());
-  const count = await CarWashDeposit.countDocuments({ business, createdAt: { $gte: start, $lt: end } });
-  const stamp = start.toISOString().slice(0, 10).replace(/-/g, "");
-  return `CWD-${stamp}-${String(count + 1).padStart(4, "0")}`;
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const prefix = `CWD-${stamp}-`;
+  const latest = await CarWashDeposit.findOne(
+    { business, depositNumber: { $regex: `^${prefix}` } },
+    { depositNumber: 1 },
+    { sort: { depositNumber: -1 } }
+  ).lean();
+  const nextNum = latest ? parseInt(latest.depositNumber.slice(prefix.length), 10) + 1 : 1;
+  return `${prefix}${String(nextNum).padStart(4, "0")}`;
 };
 
 const buildFilter = (req, business) => {

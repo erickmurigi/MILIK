@@ -8,10 +8,15 @@ const METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const STATUSES = new Set(["draft", "approved", "paid", "cancelled"]);
 
 const generateExpenseNumber = async (business) => {
-  const { start, end } = parseDateRange(new Date());
-  const count = await CarWashExpense.countDocuments({ business, createdAt: { $gte: start, $lt: end } });
-  const stamp = start.toISOString().slice(0, 10).replace(/-/g, "");
-  return `CWE-${stamp}-${String(count + 1).padStart(4, "0")}`;
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const prefix = `CWE-${stamp}-`;
+  const latest = await CarWashExpense.findOne(
+    { business, expenseNumber: { $regex: `^${prefix}` } },
+    { expenseNumber: 1 },
+    { sort: { expenseNumber: -1 } }
+  ).lean();
+  const nextNum = latest ? parseInt(latest.expenseNumber.slice(prefix.length), 10) + 1 : 1;
+  return `${prefix}${String(nextNum).padStart(4, "0")}`;
 };
 
 const resolveCashbookAccount = async (business, value, required = false) => {

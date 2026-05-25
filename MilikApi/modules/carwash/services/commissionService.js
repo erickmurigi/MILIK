@@ -309,10 +309,15 @@ export const cancelJobCommissions = async ({
 };
 
 export const generatePayoutNumber = async (business) => {
-  const { start, end } = dayRange(new Date());
-  const count = await CarWashCommissionPayout.countDocuments({ business, createdAt: { $gte: start, $lt: end } });
-  const stamp = start.toISOString().slice(0, 10).replace(/-/g, "");
-  return `CWP-${stamp}-${String(count + 1).padStart(4, "0")}`;
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const prefix = `CWP-${stamp}-`;
+  const latest = await CarWashCommissionPayout.findOne(
+    { business, payoutNumber: { $regex: `^${prefix}` } },
+    { payoutNumber: 1 },
+    { sort: { payoutNumber: -1 } }
+  ).lean();
+  const nextNum = latest ? parseInt(latest.payoutNumber.slice(prefix.length), 10) + 1 : 1;
+  return `${prefix}${String(nextNum).padStart(4, "0")}`;
 };
 
 export const resolvePayoutCashbook = async (business, value) => {
