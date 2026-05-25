@@ -13,10 +13,16 @@ const JOB_STATUSES = new Set(["waiting", "washing", "done", "paid", "cancelled"]
 const JOB_TYPES = new Set(["vehicle", "carpet"]);
 
 const generateJobNumber = async (business) => {
-  const { start, end } = parseDateRange(new Date());
-  const stamp = start.toISOString().slice(0, 10).replace(/-/g, "");
-  const count = await CarWashJob.countDocuments({ business, createdAt: { $gte: start, $lt: end } });
-  return `CW-${stamp}-${String(count + 1).padStart(4, "0")}`;
+  const now = new Date();
+  const stamp = now.toISOString().slice(0, 10).replace(/-/g, "");
+  const prefix = `CW-${stamp}-`;
+  const latest = await CarWashJob.findOne(
+    { business, jobNumber: { $regex: `^${prefix}` } },
+    { jobNumber: 1 },
+    { sort: { jobNumber: -1 } }
+  ).lean();
+  const nextNum = latest ? parseInt(latest.jobNumber.slice(prefix.length), 10) + 1 : 1;
+  return `${prefix}${String(nextNum).padStart(4, "0")}`;
 };
 
 const resolveServiceSnapshot = async (business, body = {}) => {
