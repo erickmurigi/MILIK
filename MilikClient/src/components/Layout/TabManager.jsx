@@ -37,7 +37,7 @@ const buildInitialActiveTabs = () => ({
   [WORKSPACE_IDS.PROPERTY]:       'dashboard',
   [WORKSPACE_IDS.ACCOUNTS]:       'acc-dashboard',
   [WORKSPACE_IDS.CARWASH]:        'carwash-dashboard',
-  [WORKSPACE_IDS.INVENTORY]:      'inventory-dashboard',
+  [WORKSPACE_IDS.INVENTORY]:      'inventory-dashboard', 
   [WORKSPACE_IDS.HUMAN_RESOURCE]: 'hr-dashboard',
   [WORKSPACE_IDS.PROPERTY_SALE]:  'sale-dashboard',
   [WORKSPACE_IDS.SYSTEM_ADMIN]:   'system-admin-home',

@@ -197,12 +197,12 @@ export const createJob = async (req, res, next) => {
 
     // Auto-enroll vehicle plate into loyalty program (fire-and-forget)
     if (job.jobType === "vehicle" && job.plateNumber) {
-      autoEnrollPlate({
+      autoEnrollPlate?.({
         business,
         plate: job.plateNumber,
         customerName: job.customerName,
         phone: job.phone,
-      }).catch(() => {});
+      })?.catch(() => {});
     }
 
     res.status(201).json({ success: true, data: job, job, message: `${jobType === "carpet" ? "Carpet" : "Car Wash"} job created` });
