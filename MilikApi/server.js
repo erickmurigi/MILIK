@@ -57,6 +57,17 @@ import landlordAdvancementsRoutes from "./routes/propertyRoutes/landlordAdvancem
 import landlordReceiptsRoutes from "./routes/propertyRoutes/landlordReceipts.js";
 import pettyCashRoutes from "./routes/propertyRoutes/pettyCash.js";
 import auditLogRoutes from "./routes/auditLogs.js";
+import invLocationRoutes      from "./modules/inventory/routes/locations.js";
+import invCategoryRoutes      from "./modules/inventory/routes/categories.js";
+import invProductRoutes       from "./modules/inventory/routes/products.js";
+import invSupplierRoutes      from "./modules/inventory/routes/suppliers.js";
+import invStockMovementRoutes from "./modules/inventory/routes/stockMovements.js";
+import invStockTransferRoutes from "./modules/inventory/routes/stockTransfers.js";
+import invPurchaseOrderRoutes from "./modules/inventory/routes/purchaseOrders.js";
+import posSessionRoutes       from "./modules/inventory/routes/posSessions.js";
+import posSaleRoutes          from "./modules/inventory/routes/posSales.js";
+import invTillRoutes         from "./modules/inventory/routes/tills.js";
+import posTillMovementRoutes from "./modules/inventory/routes/tillMovements.js";
 import carWashServiceRoutes from "./modules/carwash/routes/services.js";
 import carWashJobRoutes from "./modules/carwash/routes/jobs.js";
 import carWashPaymentRoutes from "./modules/carwash/routes/payments.js";
@@ -557,6 +568,17 @@ app.use("/api/sale/deals", saleDealRoutes);
 app.use("/api/sale/payments", salePaymentRoutes);
 app.use("/api/sale/commissions", saleCommissionRoutes);
 app.use("/api/sale/reports", saleReportRoutes);
+app.use("/api/inventory/locations",       invLocationRoutes);
+app.use("/api/inventory/categories",      invCategoryRoutes);
+app.use("/api/inventory/products",        invProductRoutes);
+app.use("/api/inventory/suppliers",       invSupplierRoutes);
+app.use("/api/inventory/stock-movements", invStockMovementRoutes);
+app.use("/api/inventory/transfers",       invStockTransferRoutes);
+app.use("/api/inventory/purchase-orders", invPurchaseOrderRoutes);
+app.use("/api/pos/sessions",              posSessionRoutes);
+app.use("/api/pos/sales",                 posSaleRoutes);
+app.use("/api/inventory/tills",           invTillRoutes);
+app.use("/api/pos/till-movements",        posTillMovementRoutes);
 
 app.use((err, req, res, next) => {
   const errorStatus = err.status || err.statusCode || 500;

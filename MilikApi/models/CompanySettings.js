@@ -121,6 +121,37 @@ const taxSettingsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const inventoryAccountingDefaultsSchema = new mongoose.Schema(
+  {
+    inventoryAssetAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    cogsAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    salesRevenueAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    stockAdjustmentAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    purchaseClearingAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+  },
+  { _id: false }
+);
+
 const hrAccountingDefaultsSchema = new mongoose.Schema(
   {
     salaryExpenseAccount: {
@@ -256,6 +287,10 @@ const CompanySettingsSchema = new mongoose.Schema(
     },
     accountingDefaults: {
       type: accountingDefaultsSchema,
+      default: () => ({}),
+    },
+    inventoryAccountingDefaults: {
+      type: inventoryAccountingDefaultsSchema,
       default: () => ({}),
     },
     hrAccountingDefaults: {

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { FaHome, FaTimes, FaCog, FaBuilding, FaCar, FaHandshake, FaUsers, FaBook } from 'react-icons/fa';
+import { FaHome, FaTimes, FaCog, FaBuilding, FaCar, FaHandshake, FaUsers, FaBook, FaBoxes } from 'react-icons/fa';
 import {
   WORKSPACE_IDS,
   getWorkspaceDefaultRoute,
@@ -32,6 +32,14 @@ const MODULES = {
     title: 'Property Sales',
     route: '/sale/dashboard',
     icon: <FaHandshake className="w-4 h-4" />,
+    closable: true,
+  },
+  [WORKSPACE_IDS.INVENTORY]: {
+    id: WORKSPACE_IDS.INVENTORY,
+    moduleKey: 'inventory',
+    title: 'Inventory & POS',
+    route: '/inventory/dashboard',
+    icon: <FaBoxes className="w-4 h-4" />,
     closable: true,
   },
   [WORKSPACE_IDS.CARWASH]: {

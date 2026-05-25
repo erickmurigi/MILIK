@@ -1,0 +1,926 @@
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
+import { toast } from "react-toastify";
+import {
+  FaBarcode, FaCheck, FaMinus, FaPlus, FaSearch,
+  FaTimes, FaTrash, FaCashRegister, FaPrint, FaChevronDown, FaChevronUp,
+} from "react-icons/fa";
+import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { inventoryApi, formatMoney } from "../../services/inventoryApi";
+
+const round2 = (n) => Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
+
+const METHODS = ["cash", "mpesa", "card", "credit"];
+
+const emptyCart    = () => [];
+const emptyPayment = () => [{ method: "cash", amount: "" }];
+
+/* ─── Sub-components ─────────────────────────────────────────────── */
+
+const ProductSearchRow = ({ product, onAdd }) => (
+  <button
+    onClick={() => onAdd(product)}
+    className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left hover:bg-emerald-50 transition-colors"
+  >
+    <div>
+      <div className="text-xs font-bold text-slate-800">{product.name}</div>
+      <div className="text-[10px] text-slate-500">{product.sku || ""} · {product.unitOfMeasure || "Unit"}</div>
+    </div>
+    <div className="text-right shrink-0">
+      <div className="text-xs font-extrabold text-[#1a5c3a]">{formatMoney(product.sellingPrice)}</div>
+    </div>
+  </button>
+);
+
+const ProductCard = ({ product, onAdd }) => (
+  <button
+    type="button"
+    onClick={() => onAdd(product)}
+    className="flex flex-col gap-1 border border-slate-200 bg-white p-2 text-left hover:border-[#1a5c3a] hover:bg-[#EDF5F1] transition-colors active:scale-95"
+  >
+    <div className="text-[11px] font-bold text-slate-800 leading-tight line-clamp-2">{product.name}</div>
+    {product.sku && <div className="text-[9px] text-slate-400 font-mono">{product.sku}</div>}
+    <div className="mt-auto flex items-end justify-between gap-1">
+      <span className="text-xs font-extrabold text-[#1a5c3a]">{formatMoney(product.sellingPrice)}</span>
+      {product.trackStock && (
+        <span className="text-[9px] font-bold text-slate-400">{product.stockQty ?? ""}  {product.unitOfMeasure || ""}</span>
+      )}
+    </div>
+  </button>
+);
+
+const CartLine = ({ line, onQtyChange, onRemove, onDiscountChange }) => {
+  const lineTotal = round2((line.unitPrice - line.discount) * line.qty);
+  return (
+    <div className="flex items-center gap-2 border-b border-slate-100 px-2 py-1.5">
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-bold text-slate-800 truncate">{line.productName}</div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-[10px] text-slate-500">@ {formatMoney(line.unitPrice)}</span>
+          <input
+            type="number" min="0" step="0.01"
+            value={line.discount === 0 ? "" : line.discount}
+            onChange={(e) => onDiscountChange(line._key, Number(e.target.value || 0))}
+            className="w-16 border border-slate-200 px-1 py-0.5 text-[10px] outline-none focus:border-[#1a5c3a]"
+            placeholder="- Disc"
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button onClick={() => onQtyChange(line._key, line.qty - 1)} className="flex h-5 w-5 items-center justify-center border border-slate-200 hover:bg-slate-100">
+          <FaMinus className="text-[9px]" />
+        </button>
+        <input
+          type="number" min="0.001" step="0.001" value={line.qty}
+          onChange={(e) => onQtyChange(line._key, Number(e.target.value))}
+          className="w-12 border border-slate-200 text-center text-xs py-0.5 outline-none focus:border-[#1a5c3a]"
+        />
+        <button onClick={() => onQtyChange(line._key, line.qty + 1)} className="flex h-5 w-5 items-center justify-center border border-slate-200 hover:bg-slate-100">
+          <FaPlus className="text-[9px]" />
+        </button>
+      </div>
+      <div className="w-20 text-right shrink-0">
+        <div className="text-xs font-extrabold text-slate-900">{formatMoney(lineTotal)}</div>
+      </div>
+      <button onClick={() => onRemove(line._key)} className="text-red-400 hover:text-red-600 shrink-0">
+        <FaTrash className="text-[10px]" />
+      </button>
+    </div>
+  );
+};
+
+const XReadRow = ({ label, value, neg, bold }) => (
+  <div className={`flex justify-between py-0.5 text-[11px] ${bold ? "font-extrabold text-slate-900" : "text-slate-600"}`}>
+    <span>{label}</span>
+    <span className={neg ? "text-red-600" : bold ? "text-[#1a5c3a]" : ""}>{neg ? "−" : ""}{formatMoney(value)}</span>
+  </div>
+);
+
+const fmtDateTime = (iso) =>
+  iso ? new Date(iso).toLocaleString("en-KE", { dateStyle: "short", timeStyle: "short" }) : "—";
+
+/* ─── Main POS Terminal ─────────────────────────────────────────── */
+
+const POSTerminal = () => {
+  const navigate   = useNavigate();
+  const scanRef    = useRef(null);
+
+  /* Location / session state */
+  const [locations,        setLocations]        = useState([]);
+  const [selectedLocation, setSelectedLocation] = useState("");
+  const [tills,            setTills]            = useState([]);
+  const [selectedTill,     setSelectedTill]     = useState("");
+  const [session,          setSession]          = useState(null);
+  const [loadingSession,   setLoadingSession]   = useState(false);
+  const [openingFloat,     setOpeningFloat]     = useState("");
+
+  /* Product catalog state */
+  const [gridProducts,  setGridProducts]  = useState([]);
+  const [categories,    setCategories]    = useState([]);
+  const [catFilter,     setCatFilter]     = useState("all");
+  const [loadingGrid,   setLoadingGrid]   = useState(false);
+
+  /* Search state */
+  const [searchQuery,   setSearchQuery]   = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching,     setSearching]     = useState(false);
+
+  /* Cart state */
+  const [cart,       setCart]       = useState(emptyCart());
+  const [keyCounter, setKeyCounter] = useState(0);
+
+  /* Checkout state */
+  const [customerName,    setCustomerName]    = useState("");
+  const [customerPhone,   setCustomerPhone]   = useState("");
+  const [payments,        setPayments]        = useState(emptyPayment());
+  const [amountTendered,  setAmountTendered]  = useState("");
+  const [notes,           setNotes]           = useState("");
+  const [showCheckout,    setShowCheckout]    = useState(false);
+  const [submitting,      setSubmitting]      = useState(false);
+  const [lastReceipt,     setLastReceipt]     = useState(null);
+  const [showReceipt,     setShowReceipt]     = useState(false);
+
+  /* Cash In / Out modal state */
+  const [showCashModal,  setShowCashModal]  = useState(false);
+  const [cashModalType,  setCashModalType]  = useState("cash_in");
+  const [cashAmount,     setCashAmount]     = useState("");
+  const [cashReason,     setCashReason]     = useState("");
+  const [cashSubmitting, setCashSubmitting] = useState(false);
+
+  /* X-Read modal state */
+  const [showXRead,    setShowXRead]    = useState(false);
+  const [xReadData,    setXReadData]    = useState(null);
+  const [loadingXRead, setLoadingXRead] = useState(false);
+
+  /* Close-session modal state */
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [closeFloat,     setCloseFloat]     = useState("");
+  const [closingSession, setClosingSession] = useState(false);
+
+  /* Active company — used to detect company switches and reset POS state */
+  const companyId = useSelector((state) => state.company?.currentCompany?._id);
+
+  /* Totals */
+  const subtotal   = round2(cart.reduce((s, l) => s + l.unitPrice * l.qty, 0));
+  const totalDisc  = round2(cart.reduce((s, l) => s + l.discount * l.qty, 0));
+  const taxable    = round2(subtotal - totalDisc);
+  const totalVat   = round2(cart.reduce((s, l) => s + round2((l.unitPrice - l.discount) * l.qty * (l.vatRate / 100)), 0));
+  const grandTotal = round2(taxable + totalVat);
+  const payTotal   = round2(payments.reduce((s, p) => s + Number(p.amount || 0), 0));
+  const change     = round2(Number(amountTendered || payTotal) - grandTotal);
+
+  /* Reset ALL POS state when the active company changes (admin switching between companies) */
+  useEffect(() => {
+    setSession(null);
+    setSelectedLocation("");
+    setSelectedTill("");
+    setTills([]);
+    setLocations([]);
+    setCart(emptyCart());
+    setPayments(emptyPayment());
+    setGridProducts([]);
+    setCategories([]);
+    setLastReceipt(null);
+  }, [companyId]);
+
+  /* Load locations */
+  useEffect(() => {
+    inventoryApi.listLocations({ active: true }).then((res) => {
+      const list = Array.isArray(res) ? res : (res?.data ?? []);
+      setLocations(list);
+      const def = list.find((l) => l.isDefault);
+      if (def) setSelectedLocation(def._id);
+    }).catch(() => {});
+  }, [companyId]);
+
+  /* Load tills when location changes */
+  useEffect(() => {
+    if (!selectedLocation) { setTills([]); setSelectedTill(""); return; }
+    inventoryApi.listTills({ location: selectedLocation, active: true }).then((res) => {
+      const list = Array.isArray(res) ? res : (res?.data ?? []);
+      setTills(list);
+      if (list.length === 1) setSelectedTill(list[0]._id);
+      else setSelectedTill("");
+    }).catch(() => setTills([]));
+  }, [selectedLocation]);
+
+  /* Load active session when till changes */
+  useEffect(() => {
+    if (!selectedTill) { setSession(null); return; }
+    setLoadingSession(true);
+    inventoryApi.getActiveSession({ till: selectedTill })
+      .then((res) => setSession(res?.data ?? res ?? null))
+      .catch(() => setSession(null))
+      .finally(() => setLoadingSession(false));
+  }, [selectedTill]);
+
+  /* Load product catalog + categories when session opens */
+  const loadCatalog = useCallback(async () => {
+    setLoadingGrid(true);
+    try {
+      const [prods, cats] = await Promise.allSettled([
+        inventoryApi.listProducts({ active: true, limit: 200 }),
+        inventoryApi.listCategories({ active: true }),
+      ]);
+      if (prods.status === "fulfilled") {
+        const list = Array.isArray(prods.value) ? prods.value : (prods.value?.data ?? []);
+        setGridProducts(list);
+      }
+      if (cats.status === "fulfilled") {
+        const list = Array.isArray(cats.value) ? cats.value : (cats.value?.data ?? []);
+        setCategories(list);
+      }
+    } finally {
+      setLoadingGrid(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (session) loadCatalog();
+  }, [session, loadCatalog]);
+
+  /* Debounced product search */
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.length < 2) { setSearchResults([]); return; }
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res  = await inventoryApi.listProducts({ search: searchQuery, active: true, limit: 10 });
+        const list = Array.isArray(res) ? res : (res?.data ?? []);
+        setSearchResults(list);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  /* Filtered product grid */
+  const filteredProducts = catFilter === "all"
+    ? gridProducts
+    : gridProducts.filter((p) => p.category?._id === catFilter || p.category === catFilter);
+
+  /* Cart operations */
+  const addToCart = useCallback((product) => {
+    setCart((prev) => {
+      const existing = prev.find((l) => l.productId === product._id);
+      if (existing) {
+        return prev.map((l) => l.productId === product._id ? { ...l, qty: round2(l.qty + 1) } : l);
+      }
+      setKeyCounter((k) => k + 1);
+      return [...prev, {
+        _key:        keyCounter + 1,
+        productId:   product._id,
+        productName: product.name,
+        sku:         product.sku || "",
+        unitPrice:   product.sellingPrice,
+        costPrice:   product.costPrice || 0,
+        vatRate:     product.vatRate || 0,
+        discount:    0,
+        qty:         1,
+        trackStock:  product.trackStock !== false,
+      }];
+    });
+    setSearchQuery("");
+    setSearchResults([]);
+    scanRef.current?.focus();
+  }, [keyCounter]);
+
+  const updateQty      = (key, qty) => {
+    if (qty <= 0) setCart((c) => c.filter((l) => l._key !== key));
+    else          setCart((c) => c.map((l) => l._key === key ? { ...l, qty } : l));
+  };
+  const updateDiscount  = (key, discount) => setCart((c) => c.map((l) => l._key === key ? { ...l, discount: Math.max(0, discount) } : l));
+  const removeFromCart  = (key) => setCart((c) => c.filter((l) => l._key !== key));
+  const clearCart       = () => { setCart(emptyCart()); setPayments(emptyPayment()); setAmountTendered(""); setCustomerName(""); setCustomerPhone(""); setNotes(""); };
+
+  /* Payment operations */
+  const addPaymentLine    = () => setPayments((p) => [...p, { method: "cash", amount: "" }]);
+  const removePaymentLine = (idx) => setPayments((p) => p.filter((_, i) => i !== idx));
+  const setPayLine        = (idx, field, value) => setPayments((p) => p.map((l, i) => i === idx ? { ...l, [field]: value } : l));
+
+  /* Session operations */
+  const handleOpenSession = async () => {
+    try {
+      const s = await inventoryApi.openSession({ till: selectedTill, openingFloat: Number(openingFloat || 0) });
+      setSession(s?.data ?? s);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to open session");
+    }
+  };
+
+  const handleCloseSession = () => {
+    setCloseFloat("");
+    setShowCloseModal(true);
+  };
+
+  const confirmCloseSession = async () => {
+    setClosingSession(true);
+    try {
+      await inventoryApi.closeSession(session._id, { closingFloat: Number(closeFloat || 0) });
+      setShowCloseModal(false);
+      setSession(null);
+      setGridProducts([]);
+      setCategories([]);
+      setCart(emptyCart());
+      toast.success("Session closed");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to close session");
+    } finally {
+      setClosingSession(false);
+    }
+  };
+
+  /* Cash In / Out */
+  const openCashIn  = () => { setCashModalType("cash_in");  setCashAmount(""); setCashReason(""); setShowCashModal(true); };
+  const openCashOut = () => { setCashModalType("cash_out"); setCashAmount(""); setCashReason(""); setShowCashModal(true); };
+
+  const handleCashMovement = async () => {
+    const amt = Number(cashAmount);
+    if (!amt || amt <= 0) { toast.error("Amount must be greater than zero"); return; }
+    setCashSubmitting(true);
+    try {
+      if (cashModalType === "cash_in") {
+        await inventoryApi.cashIn(session._id, { amount: amt, reason: cashReason });
+      } else {
+        await inventoryApi.cashOut(session._id, { amount: amt, reason: cashReason });
+      }
+      toast.success(cashModalType === "cash_in" ? "Cash in recorded" : "Cash out recorded");
+      setShowCashModal(false);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to record movement");
+    } finally {
+      setCashSubmitting(false);
+    }
+  };
+
+  /* X-Read */
+  const handleXRead = async () => {
+    setXReadData(null);
+    setShowXRead(true);
+    setLoadingXRead(true);
+    try {
+      const res = await inventoryApi.getXRead(session._id);
+      setXReadData(res?.data ?? res);
+    } catch {
+      setXReadData(null);
+    } finally {
+      setLoadingXRead(false);
+    }
+  };
+
+  /* Checkout */
+  const handleCheckout = async () => {
+    if (!cart.length) return;
+    if (payTotal < grandTotal) {
+      toast.error(`Short by ${formatMoney(grandTotal - payTotal)} — adjust payment amount`);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const sale = await inventoryApi.createSale({
+        location:       selectedLocation,
+        session:        session._id,
+        lines:          cart.map((l) => ({ product: l.productId, qty: l.qty, unitPrice: l.unitPrice, discount: l.discount, vatRate: l.vatRate })),
+        payments:       payments.map((p) => ({ method: p.method, amount: Number(p.amount || 0) })),
+        customerName,
+        customerPhone,
+        amountTendered: Number(amountTendered || payTotal),
+        notes,
+      });
+      setLastReceipt(sale?.data ?? sale);
+      setShowReceipt(true);
+      clearCart();
+      setShowCheckout(false);
+      toast.success("Sale posted successfully");
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Sale failed";
+      toast.error(msg);
+      if (msg.toLowerCase().includes("session")) {
+        setSession(null);
+        setShowCheckout(false);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /* ── Pre-session screens ── */
+  if (!selectedLocation || !selectedTill) {
+    return (
+      <DashboardLayout lockContentScroll>
+        <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#0B3B2E] p-6">
+          <FaCashRegister className="text-6xl text-emerald-400" />
+          <h1 className="text-xl font-extrabold text-white">POS Terminal</h1>
+          <div className="w-full max-w-xs space-y-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-emerald-300">1. Select Location</label>
+              <select value={selectedLocation} onChange={(e) => setSelectedLocation(e.target.value)}
+                className="w-full bg-white px-3 py-2 text-sm outline-none">
+                <option value="">— Choose location —</option>
+                {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
+              </select>
+              {selectedLocation && !tills.length && (
+                <p className="mt-1 text-center text-[11px] text-amber-300">
+                  No tills at this location. Add one in Setup → Tills.
+                </p>
+              )}
+            </div>
+            {selectedLocation && tills.length > 0 && (
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-emerald-300">2. Select Till / Register</label>
+                <select value={selectedTill} onChange={(e) => setSelectedTill(e.target.value)}
+                  className="w-full bg-white px-3 py-2 text-sm outline-none">
+                  <option value="">— Choose till —</option>
+                  {tills.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (loadingSession) {
+    return (
+      <DashboardLayout lockContentScroll>
+        <div className="flex h-full items-center justify-center bg-[#0B3B2E] text-white">Loading session…</div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!session) {
+    const tillName = tills.find((t) => t._id === selectedTill)?.name || "";
+    const locName  = locations.find((l) => l._id === selectedLocation)?.name || "";
+    return (
+      <DashboardLayout lockContentScroll>
+        <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#0B3B2E] p-6">
+          <FaCashRegister className="text-6xl text-emerald-400" />
+          <h1 className="text-lg font-extrabold text-white">Open Session</h1>
+          <p className="text-sm text-emerald-300">{locName} — <strong>{tillName}</strong></p>
+          <div className="flex w-full max-w-xs flex-col gap-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-emerald-300">Opening Float (KES)</label>
+              <input type="number" min="0" value={openingFloat} onChange={(e) => setOpeningFloat(e.target.value)}
+                className="w-full bg-white px-3 py-2 text-sm outline-none" placeholder="0.00" />
+              <p className="mt-1 text-[10px] text-emerald-400/70">Count the cash in the drawer and enter the amount.</p>
+            </div>
+            <button onClick={handleOpenSession} className="bg-emerald-500 py-2 text-sm font-extrabold text-white hover:bg-emerald-400">
+              Open Session
+            </button>
+            <button onClick={() => setSelectedTill("")} className="text-xs text-emerald-300 hover:text-white">← Change Till</button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const locationName = locations.find((l) => l._id === selectedLocation)?.name || "";
+  const tillName     = session.till?.name || tills.find((t) => t._id === selectedTill)?.name || "";
+
+  /* ── Active cashier UI ── */
+  return (
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full overflow-hidden bg-[#F4F7F5]">
+
+        {/* ── Left: Cart ─────────────────────────────────────────── */}
+        <div className="flex w-[420px] shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-[#0B3B2E] px-3 py-2">
+            <div className="flex items-center gap-2">
+              <FaCashRegister className="text-emerald-400" />
+              <span className="text-xs font-extrabold text-white">{locationName}</span>
+              <span className="text-[10px] text-emerald-300">· {tillName}</span>
+              <span className="text-[10px] text-emerald-300/60">#{session.sessionNumber}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button onClick={openCashIn}  className="border border-emerald-600/60 px-2 py-1 text-[10px] font-bold text-emerald-300 hover:bg-emerald-900/60">Cash In</button>
+              <button onClick={openCashOut} className="border border-amber-500/50 px-2 py-1 text-[10px] font-bold text-amber-300 hover:bg-amber-900/30">Cash Out</button>
+              <button onClick={handleXRead} className="border border-slate-500/50 px-2 py-1 text-[10px] font-bold text-slate-300 hover:bg-slate-700/30">X-Read</button>
+              <button onClick={() => navigate("/pos/sales")} className="border border-emerald-700 px-2 py-1 text-[10px] font-bold text-emerald-300 hover:bg-emerald-900">Sales</button>
+              <button onClick={handleCloseSession} className="border border-red-400/50 px-2 py-1 text-[10px] font-bold text-red-300 hover:bg-red-900/30">Close</button>
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="relative border-b border-slate-200 bg-white px-2 py-2">
+            <div className="flex items-center gap-2 border border-slate-300 bg-white px-2.5 py-1.5 focus-within:border-[#1a5c3a]">
+              <FaSearch className="text-slate-400 text-xs shrink-0" />
+              <input
+                ref={scanRef}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search name, SKU or scan barcode…"
+                className="flex-1 text-sm outline-none"
+                autoFocus
+              />
+              {searching && <span className="text-[10px] text-slate-400">Searching…</span>}
+              {searchQuery && (
+                <button onClick={() => { setSearchQuery(""); setSearchResults([]); }}><FaTimes className="text-slate-400 text-xs" /></button>
+              )}
+            </div>
+            {searchResults.length > 0 && (
+              <div className="absolute left-2 right-2 top-full z-20 border border-slate-200 bg-white shadow-lg max-h-64 overflow-y-auto">
+                {searchResults.map((p) => <ProductSearchRow key={p._id} product={p} onAdd={addToCart} />)}
+              </div>
+            )}
+          </div>
+
+          {/* Cart items — min-h-0 prevents flex overflow pushing footer off-screen */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {!cart.length ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-16 text-slate-300">
+                <FaBarcode className="text-4xl" />
+                <span className="text-sm font-semibold text-slate-400">Cart is empty</span>
+                <span className="text-xs text-slate-400">Search or click a product →</span>
+              </div>
+            ) : cart.map((line) => (
+              <CartLine key={line._key} line={line} onQtyChange={updateQty} onRemove={removeFromCart} onDiscountChange={updateDiscount} />
+            ))}
+          </div>
+
+          {/* Totals + Charge — shrink-0 keeps it always visible */}
+          <div className="shrink-0 border-t-2 border-slate-200 bg-white px-3 pt-2 pb-2">
+            {/* Breakdown rows — compact, only shown when relevant */}
+            {cart.length > 0 && (
+              <div className="mb-1.5 space-y-0.5">
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span>Subtotal</span><span className="font-semibold">{formatMoney(subtotal)}</span>
+                </div>
+                {totalDisc > 0 && (
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <span>Discount</span><span className="font-semibold text-red-500">-{formatMoney(totalDisc)}</span>
+                  </div>
+                )}
+                {totalVat > 0 && (
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <span>VAT</span><span className="font-semibold">{formatMoney(totalVat)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Total row + clear */}
+            <div className="flex items-center justify-between mb-2">
+              <button onClick={clearCart} disabled={!cart.length} className="flex items-center gap-1 text-[11px] font-bold text-red-400 hover:text-red-600 disabled:opacity-30">
+                <FaTrash className="text-[9px]" /> Clear
+              </button>
+              <span className="text-xl font-extrabold text-[#1a5c3a]">{formatMoney(grandTotal)}</span>
+            </div>
+            {/* Charge button — always prominent */}
+            <button
+              onClick={() => { if (cart.length) { setPayments([{ method: "cash", amount: String(grandTotal) }]); setAmountTendered(String(grandTotal)); setShowCheckout(true); } }}
+              disabled={!cart.length}
+              className="w-full bg-[#1a5c3a] py-3 text-sm font-extrabold text-white hover:bg-[#154d30] disabled:bg-slate-200 disabled:text-slate-400 transition-colors"
+            >
+              {cart.length ? `Charge — ${formatMoney(grandTotal)}` : "Add items to charge"}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Right: Product Catalog ──────────────────────────────── */}
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {/* Last receipt strip */}
+          {lastReceipt && (
+            <div className="border-b border-emerald-200 bg-emerald-50">
+              <button
+                type="button"
+                onClick={() => setShowReceipt((v) => !v)}
+                className="flex w-full items-center justify-between px-3 py-1.5 text-left"
+              >
+                <span className="text-xs font-bold text-emerald-700">
+                  ✓ Sale posted — {lastReceipt.receiptNumber} · {formatMoney(lastReceipt.grandTotal)}
+                </span>
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
+                  {showReceipt ? <><FaChevronUp className="text-[8px]" /> Hide</> : <><FaChevronDown className="text-[8px]" /> Details</>}
+                </span>
+              </button>
+              {showReceipt && (
+                <div className="border-t border-emerald-200 bg-white px-3 py-2 text-[10px] text-slate-600">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-mono font-bold text-[#1a5c3a]">{lastReceipt.receiptNumber}</span>
+                    <div className="flex gap-2">
+                      <button className="flex items-center gap-1 border border-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50">
+                        <FaPrint className="text-[8px]" /> Print
+                      </button>
+                      <button onClick={() => { setLastReceipt(null); setShowReceipt(false); }} className="text-slate-400 hover:text-slate-600">
+                        <FaTimes className="text-[9px]" />
+                      </button>
+                    </div>
+                  </div>
+                  {lastReceipt.lines?.map((l, i) => (
+                    <div key={i} className="flex justify-between py-0.5">
+                      <span className="truncate pr-2">{l.productName} ×{l.qty}</span>
+                      <span className="font-bold">{formatMoney(l.lineTotal)}</span>
+                    </div>
+                  ))}
+                  <div className="mt-1 flex justify-between border-t border-slate-100 pt-1 font-bold text-slate-800">
+                    <span>Change</span><span>{formatMoney(lastReceipt.change)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Category filter */}
+          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-2 py-1.5 scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setCatFilter("all")}
+              className={`shrink-0 border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${catFilter === "all" ? "border-[#1a5c3a] bg-[#1a5c3a] text-white" : "border-slate-200 text-slate-600 hover:border-[#1a5c3a] hover:text-[#1a5c3a]"}`}
+            >
+              All
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat._id}
+                type="button"
+                onClick={() => setCatFilter(cat._id)}
+                className={`shrink-0 border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${catFilter === cat._id ? "border-[#1a5c3a] bg-[#1a5c3a] text-white" : "border-slate-200 text-slate-600 hover:border-[#1a5c3a] hover:text-[#1a5c3a]"}`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Product grid */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-2">
+            {loadingGrid ? (
+              <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading products…</div>
+            ) : !filteredProducts.length ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-16 text-slate-400">
+                <FaBarcode className="text-3xl" />
+                <p className="text-sm font-semibold">No products found</p>
+                {catFilter !== "all" && (
+                  <button type="button" onClick={() => setCatFilter("all")} className="text-xs text-[#1a5c3a] hover:underline">Clear category filter</button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                {filteredProducts.map((p) => (
+                  <ProductCard key={p._id} product={p} onAdd={addToCart} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Product count footer */}
+          <div className="border-t border-slate-200 bg-slate-50 px-3 py-1 text-[10px] text-slate-500">
+            {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""}
+            {catFilter !== "all" && " in this category"} · {cart.length} item{cart.length !== 1 ? "s" : ""} in cart
+          </div>
+        </div>
+      </div>
+
+      {/* ── Close Session modal ────────────────────────────────────── */}
+      {showCloseModal && session && (
+        <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="w-full max-w-sm border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-red-700 px-4 py-3 text-white">
+              <h2 className="text-sm font-extrabold uppercase tracking-wide">Close Session — #{session.sessionNumber}</h2>
+              <button type="button" onClick={() => setShowCloseModal(false)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-slate-600">
+                <strong>{tillName}</strong> · {locationName} — count the cash in the drawer and enter the total below.
+              </p>
+              <div>
+                <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Closing Float (KES)</label>
+                <input
+                  type="number" min="0" step="0.01" autoFocus
+                  value={closeFloat} onChange={(e) => setCloseFloat(e.target.value)} placeholder="0.00"
+                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none"
+                />
+              </div>
+              <div className="rounded border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                Once closed, no further sales can be posted until a new session is opened on this till.
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button type="button" onClick={() => setShowCloseModal(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
+              <button type="button" onClick={confirmCloseSession} disabled={closingSession} className="bg-red-700 px-4 py-2 text-xs font-bold text-white hover:bg-red-800 disabled:opacity-50">
+                {closingSession ? "Closing…" : "Close Session"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cash In / Out modal ────────────────────────────────────── */}
+      {showCashModal && (
+        <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="w-full max-w-sm border border-slate-200 bg-white shadow-2xl">
+            <div className={`flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-white ${cashModalType === "cash_in" ? "bg-emerald-700" : "bg-amber-700"}`}>
+              <h2 className="text-sm font-extrabold uppercase tracking-wide">
+                {cashModalType === "cash_in" ? "Cash In" : "Cash Out"} — #{session.sessionNumber}
+              </h2>
+              <button type="button" onClick={() => setShowCashModal(false)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-slate-500">{tillName} · Record cash {cashModalType === "cash_in" ? "added to" : "removed from"} the drawer outside of sales.</p>
+              <div>
+                <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Amount (KES) *</label>
+                <input
+                  type="number" min="0.01" step="0.01" autoFocus
+                  value={cashAmount} onChange={(e) => setCashAmount(e.target.value)} placeholder="0.00"
+                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Reason</label>
+                <input
+                  value={cashReason} onChange={(e) => setCashReason(e.target.value)}
+                  placeholder={cashModalType === "cash_in" ? "e.g. Petty cash top-up" : "e.g. Supplier payment, banking"}
+                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button type="button" onClick={() => setShowCashModal(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
+              <button
+                type="button" onClick={handleCashMovement} disabled={cashSubmitting}
+                className={`px-4 py-2 text-xs font-bold text-white disabled:opacity-50 ${cashModalType === "cash_in" ? "bg-emerald-700 hover:bg-emerald-800" : "bg-amber-700 hover:bg-amber-800"}`}
+              >
+                {cashSubmitting ? "Saving…" : cashModalType === "cash_in" ? "Record Cash In" : "Record Cash Out"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── X-Read modal ───────────────────────────────────────────── */}
+      {showXRead && (
+        <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="w-full max-w-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h2 className="text-sm font-extrabold uppercase tracking-wide">
+                X-Read — {xReadData?.session?.sessionNumber || session.sessionNumber}
+              </h2>
+              <button type="button" onClick={() => setShowXRead(false)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
+            </div>
+            {loadingXRead ? (
+              <div className="flex items-center justify-center py-12 text-sm text-slate-400">Loading…</div>
+            ) : xReadData ? (
+              <>
+                <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] text-slate-600">
+                  {xReadData.session.location?.name} · <strong>{xReadData.session.till?.name}</strong> · {xReadData.session.openedBy?.name}
+                  <span className="ml-2 text-slate-400">Opened {fmtDateTime(xReadData.session.openedAt)}</span>
+                </div>
+                <div className="divide-y divide-slate-100 px-4 py-3 space-y-3">
+                  {/* Cash summary */}
+                  <div>
+                    <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Cash Summary</p>
+                    <XReadRow label="Opening Float" value={xReadData.summary.openingFloat} />
+                    <XReadRow label="Cash Sales"    value={xReadData.summary.cashSales} />
+                    {xReadData.summary.totalCashIn  > 0 && <XReadRow label="(+) Cash In"  value={xReadData.summary.totalCashIn} />}
+                    {xReadData.summary.totalCashOut > 0 && <XReadRow label="(−) Cash Out" value={xReadData.summary.totalCashOut} neg />}
+                    <div className="mt-1 border-t border-slate-200 pt-1">
+                      <XReadRow label="Expected Cash" value={xReadData.summary.expectedCash} bold />
+                    </div>
+                  </div>
+                  {/* Sales summary */}
+                  <div className="pt-2">
+                    <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Sales Summary</p>
+                    {xReadData.summary.cashSales  > 0 && <XReadRow label="Cash"   value={xReadData.summary.cashSales} />}
+                    {xReadData.summary.mpesaSales > 0 && <XReadRow label="M-Pesa" value={xReadData.summary.mpesaSales} />}
+                    {xReadData.summary.cardSales  > 0 && <XReadRow label="Card"   value={xReadData.summary.cardSales} />}
+                    <div className="mt-1 border-t border-slate-200 pt-1">
+                      <XReadRow label="Total Sales" value={xReadData.summary.totalSales} bold />
+                    </div>
+                    <div className="flex justify-between py-0.5 text-[11px] text-slate-600">
+                      <span>Sales Count</span>
+                      <span className="font-bold text-slate-800">{xReadData.summary.salesCount}</span>
+                    </div>
+                    {xReadData.summary.voidCount > 0 && (
+                      <div className="flex justify-between py-0.5 text-[11px] text-slate-600">
+                        <span>Voids</span>
+                        <span className="font-bold text-red-600">{xReadData.summary.voidCount}</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Movements log */}
+                  {xReadData.movements?.length > 0 && (
+                    <div className="pt-2">
+                      <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Movements Log</p>
+                      <table className="w-full text-[10px]">
+                        <thead>
+                          <tr className="text-left text-slate-400">
+                            <th className="pb-1 font-bold">Type</th>
+                            <th className="pb-1 font-bold text-right">Amount</th>
+                            <th className="pb-1 font-bold">Reason</th>
+                            <th className="pb-1 font-bold whitespace-nowrap">Time</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {xReadData.movements.map((m) => (
+                            <tr key={m._id} className="border-t border-slate-100">
+                              <td className="py-0.5 capitalize text-slate-700 font-semibold">{m.type.replace(/_/g, " ")}</td>
+                              <td className={`py-0.5 text-right font-bold ${m.type === "cash_out" ? "text-red-600" : "text-emerald-700"}`}>
+                                {m.type === "cash_out" ? "−" : ""}{formatMoney(m.amount)}
+                              </td>
+                              <td className="py-0.5 text-slate-500">{m.reason || "—"}</td>
+                              <td className="py-0.5 text-slate-400 whitespace-nowrap">{fmtDateTime(m.createdAt)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-center py-12 text-sm text-slate-400">Failed to load X-Read data.</div>
+            )}
+            <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button type="button" onClick={() => setShowXRead(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Checkout modal ─────────────────────────────────────────── */}
+      {showCheckout && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-[#0B3B2E] px-4 py-3">
+              <span className="text-sm font-extrabold text-white">Checkout — {formatMoney(grandTotal)}</span>
+              <button onClick={() => setShowCheckout(false)}><FaTimes className="text-slate-300" /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              {/* Customer */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Customer Name</label>
+                  <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#1a5c3a]" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Phone</label>
+                  <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#1a5c3a]" />
+                </div>
+              </div>
+
+              {/* Payments */}
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Payment</label>
+                  <button type="button" onClick={addPaymentLine} className="text-[10px] font-bold text-[#1a5c3a] hover:underline">+ Add Method</button>
+                </div>
+                {payments.map((p, idx) => (
+                  <div key={idx} className="mb-1.5 flex items-center gap-2">
+                    <select value={p.method} onChange={(e) => setPayLine(idx, "method", e.target.value)}
+                      className="border border-slate-200 px-1.5 py-1.5 text-xs outline-none focus:border-[#1a5c3a]">
+                      {METHODS.map((m) => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
+                    </select>
+                    <input type="number" min="0" step="0.01" value={p.amount} onChange={(e) => setPayLine(idx, "amount", e.target.value)}
+                      className="flex-1 border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-[#1a5c3a]" placeholder="Amount" />
+                    {payments.length > 1 && (
+                      <button onClick={() => removePaymentLine(idx)}><FaTimes className="text-red-400 text-xs" /></button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Tendered & Change */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Amount Tendered</label>
+                  <input type="number" min="0" step="0.01" value={amountTendered} onChange={(e) => setAmountTendered(e.target.value)}
+                    className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#1a5c3a]" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Change</label>
+                  <div className={`border px-2.5 py-1.5 text-xs font-extrabold ${change < 0 ? "border-red-300 text-red-600 bg-red-50" : "border-emerald-300 text-emerald-700 bg-emerald-50"}`}>
+                    {formatMoney(Math.max(0, change))}
+                  </div>
+                </div>
+              </div>
+
+              {payTotal < grandTotal && (
+                <div className="text-xs font-bold text-red-600">Short by {formatMoney(grandTotal - payTotal)}</div>
+              )}
+
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Notes</label>
+                <input value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#1a5c3a]" />
+              </div>
+
+              <button
+                onClick={handleCheckout}
+                disabled={submitting || payTotal < grandTotal}
+                className="flex w-full items-center justify-center gap-2 bg-[#1a5c3a] py-3 text-sm font-extrabold text-white hover:bg-[#154d30] disabled:opacity-50"
+              >
+                <FaCheck />
+                {submitting ? "Processing…" : `Complete Sale — ${formatMoney(grandTotal)}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardLayout>
+  );
+};
+
+export default POSTerminal;

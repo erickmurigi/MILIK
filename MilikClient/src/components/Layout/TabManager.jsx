@@ -22,19 +22,27 @@ const getTabsStorageKey = (companyKey) => `${TABS_STORAGE_KEY_PREFIX}-${companyK
 const getActiveStorageKey = (companyKey) => `${ACTIVE_STORAGE_KEY_PREFIX}-${companyKey}`;
 
 const buildInitialTabsByWorkspace = () => ({
-  [WORKSPACE_IDS.PROPERTY]: [getWorkspaceDefaultTab(WORKSPACE_IDS.PROPERTY)],
-  [WORKSPACE_IDS.ACCOUNTS]: [getWorkspaceDefaultTab(WORKSPACE_IDS.ACCOUNTS)],
-  [WORKSPACE_IDS.CARWASH]: [getWorkspaceDefaultTab(WORKSPACE_IDS.CARWASH)],
-  [WORKSPACE_IDS.SYSTEM_ADMIN]: [getWorkspaceDefaultTab(WORKSPACE_IDS.SYSTEM_ADMIN)],
-  [WORKSPACE_IDS.COMPANY_SETUP]: [getWorkspaceDefaultTab(WORKSPACE_IDS.COMPANY_SETUP)],
+  [WORKSPACE_IDS.PROPERTY]:       [getWorkspaceDefaultTab(WORKSPACE_IDS.PROPERTY)],
+  [WORKSPACE_IDS.ACCOUNTS]:       [getWorkspaceDefaultTab(WORKSPACE_IDS.ACCOUNTS)],
+  [WORKSPACE_IDS.CARWASH]:        [getWorkspaceDefaultTab(WORKSPACE_IDS.CARWASH)],
+  [WORKSPACE_IDS.INVENTORY]:      [getWorkspaceDefaultTab(WORKSPACE_IDS.INVENTORY)],
+  [WORKSPACE_IDS.HUMAN_RESOURCE]: [getWorkspaceDefaultTab(WORKSPACE_IDS.HUMAN_RESOURCE)],
+  [WORKSPACE_IDS.PROPERTY_SALE]:  [getWorkspaceDefaultTab(WORKSPACE_IDS.PROPERTY_SALE)],
+  [WORKSPACE_IDS.SYSTEM_ADMIN]:   [getWorkspaceDefaultTab(WORKSPACE_IDS.SYSTEM_ADMIN)],
+  [WORKSPACE_IDS.COMPANY_SETUP]:  [getWorkspaceDefaultTab(WORKSPACE_IDS.COMPANY_SETUP)],
+  [WORKSPACE_IDS.COMMUNICATIONS]: [getWorkspaceDefaultTab(WORKSPACE_IDS.COMMUNICATIONS)],
 });
 
 const buildInitialActiveTabs = () => ({
-  [WORKSPACE_IDS.PROPERTY]: 'dashboard',
-  [WORKSPACE_IDS.ACCOUNTS]: 'acc-dashboard',
-  [WORKSPACE_IDS.CARWASH]: 'carwash-dashboard',
-  [WORKSPACE_IDS.SYSTEM_ADMIN]: 'system-admin-home',
-  [WORKSPACE_IDS.COMPANY_SETUP]: 'company-setup-home',
+  [WORKSPACE_IDS.PROPERTY]:       'dashboard',
+  [WORKSPACE_IDS.ACCOUNTS]:       'acc-dashboard',
+  [WORKSPACE_IDS.CARWASH]:        'carwash-dashboard',
+  [WORKSPACE_IDS.INVENTORY]:      'inventory-dashboard',
+  [WORKSPACE_IDS.HUMAN_RESOURCE]: 'hr-dashboard',
+  [WORKSPACE_IDS.PROPERTY_SALE]:  'sale-dashboard',
+  [WORKSPACE_IDS.SYSTEM_ADMIN]:   'system-admin-home',
+  [WORKSPACE_IDS.COMPANY_SETUP]:  'company-setup-home',
+  [WORKSPACE_IDS.COMMUNICATIONS]: 'communications-home',
 });
 
 const getPageTitle = (pathname) => {
@@ -130,7 +138,27 @@ const getPageTitle = (pathname) => {
     '/meter-readings': 'Meter Readings',
     '/invoices/late-penalties': 'Late Penalties',
     '/settings': 'Operational Settings',
+    '/communications/sms':   'SMS Manager',
+    '/communications/email': 'Email Manager',
   };
+
+  const inventoryRouteNames = {
+    '/inventory/dashboard':      'Dashboard',
+    '/inventory/locations':      'Locations',
+    '/inventory/categories':     'Categories',
+    '/inventory/products':       'Products',
+    '/inventory/suppliers':      'Suppliers',
+    '/inventory/purchase-orders':'Purchase Orders',
+    '/inventory/transfers':      'Transfers',
+    '/inventory/stock-movements':'Stock Movements',
+    '/inventory/adjustments':   'Stock Adjustments',
+    '/inventory/valuation':     'Stock Valuation',
+    '/inventory/tills':          'Tills & Registers',
+    '/pos/terminal':             'POS Terminal',
+    '/pos/sales':                'Sales History',
+    '/pos/sessions':             'Sessions',
+  };
+  if (inventoryRouteNames[pathname]) return inventoryRouteNames[pathname];
 
   const hrRouteNames = {
     '/hr/dashboard':          'Dashboard',

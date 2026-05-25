@@ -1,20 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FaArrowLeft,
+  FaBan,
   FaBuilding,
   FaCheckCircle,
+  FaChevronDown,
+  FaChevronUp,
+  FaEye,
   FaKey,
   FaLock,
   FaSave,
   FaShieldAlt,
-  FaUserPlus,
-  FaBan,
-  FaEye,
   FaUnlockAlt,
+  FaUserPlus,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { adminRequests } from '../../utils/requestMethods';
 import { createUser, updateUser } from '../../redux/apiCalls';
@@ -34,26 +36,7 @@ const emptyPermissionMap = () => buildEmptyPermissionMap();
 const makeDefaultAssignment = (company) => {
   const moduleAccess = {};
   getEnabledCompanyModuleKeys(company).forEach((key) => {
-    const accessKey = {
-      propertyManagement: 'propertyMgmt',
-      accounts: 'accounts',
-      inventory: 'inventory',
-      procurement: 'procurement',
-      hr: 'humanResource',
-      propertySale: 'propertySale',
-      facilityManagement: 'facilityManagement',
-      hotelManagement: 'hotelManagement',
-      telcoDealership: 'telcoDealership',
-      dms: 'dms',
-      academics: 'academics',
-      projectManagement: 'projectManagement',
-      assetValuation: 'assetValuation',
-      revenueRecognition: 'revenueRecognition',
-      crm: 'crm',
-      incidentManagement: 'incidentManagement',
-      sacco: 'sacco',
-      pos: 'inventory',
-    }[key] || key;
+    const accessKey = MODULE_KEY_MAP[key] || key;
     moduleAccess[accessKey] = 'View only';
   });
   return {
@@ -115,9 +98,65 @@ const normalizeUserToForm = (user, companies) => {
 const sectionPermissionCount = (permissions = {}, items = []) =>
   items.reduce((count, item) => count + (permissions?.[item.resource]?.[item.action] ? 1 : 0), 0);
 
+const SECTION_META = {
+  workspace:      { bar: 'bg-indigo-500'  },
+  users:          { bar: 'bg-purple-500'  },
+  property:       { bar: 'bg-emerald-600' },
+  leases:         { bar: 'bg-green-500'   },
+  collections:    { bar: 'bg-orange-500'  },
+  accounts:       { bar: 'bg-teal-600'    },
+  pmReports:      { bar: 'bg-cyan-600'    },
+  operations:     { bar: 'bg-amber-500'   },
+  propertySale:   { bar: 'bg-blue-600'    },
+  humanResource:  { bar: 'bg-rose-500'    },
+  carwash:        { bar: 'bg-sky-500'     },
+  inventory:      { bar: 'bg-lime-600'    },
+  pos:            { bar: 'bg-yellow-500'  },
+  communications: { bar: 'bg-violet-500'  },
+};
+
+const DANGER_ACTIONS = new Set(['delete', 'reverse', 'lock', 'approve', 'pay', 'process']);
+
+const MODULE_KEY_MAP = {
+  propertyManagement: 'propertyMgmt',
+  accounts:           'accounts',
+  inventory:          'inventory',
+  procurement:        'procurement',
+  hr:                 'humanResource',
+  propertySale:       'propertySale',
+  facilityManagement: 'facilityManagement',
+  hotelManagement:    'hotelManagement',
+  telcoDealership:    'telcoDealership',
+  dms:                'dms',
+  academics:          'academics',
+  projectManagement:  'projectManagement',
+  assetValuation:     'assetValuation',
+  revenueRecognition: 'revenueRecognition',
+  crm:                'crm',
+  incidentManagement: 'incidentManagement',
+  sacco:              'sacco',
+  securityServices:   'securityServices',
+  billing:            'billing',
+  pos:                'inventory',
+};
+
+const applyPreset = (preset, enabledModuleKeys, assignment) => {
+  const allPerms = ACCESS_SECTIONS.flatMap((s) =>
+    s.permissions.filter((p) => !p.moduleKey || enabledModuleKeys.includes(p.moduleKey))
+  );
+  if (preset === 'full') return setPermissionGroupValue(assignment.permissions, allPerms, true);
+  if (preset === 'none') return setPermissionGroupValue(assignment.permissions, allPerms, false);
+  // Read-only: only view actions
+  const viewPerms = allPerms.filter((p) => p.action === 'view');
+  const cleared = setPermissionGroupValue(assignment.permissions, allPerms, false);
+  return setPermissionGroupValue(cleared, viewPerms, true);
+};
+
 export default function AddUserPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { state: locationState } = useLocation();
+  const returnTo = locationState?.returnTo || '/system-setup/users';
   const dispatch = useDispatch();
   const { currentUser } = useSelector((state) => state.auth);
   const { currentCompany } = useSelector((state) => state.company);
@@ -128,6 +167,8 @@ export default function AddUserPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [branchesByCompany, setBranchesByCompany] = useState({});
+  const [openSections, setOpenSections] = useState(() => new Set(ACCESS_SECTIONS.map((s) => s.id)));
+  const toggleSection = (id) => setOpenSections((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const [form, setForm] = useState({
     surname: '',
     otherNames: '',
@@ -322,7 +363,7 @@ export default function AddUserPage() {
           toast.success('User created successfully');
         }
       }
-      navigate('/system-setup/users');
+      navigate(returnTo);
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || 'Failed to save user');
     } finally {
@@ -338,7 +379,7 @@ export default function AddUserPage() {
         <div className="flex-shrink-0 border-b border-slate-200 bg-white px-4 py-2 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <button onClick={() => navigate('/system-setup/users')} className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0B3B2E] hover:underline"><FaArrowLeft /> Back</button>
+              <button onClick={() => navigate(returnTo)} className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0B3B2E] hover:underline"><FaArrowLeft /> Back</button>
               <div className="h-4 w-px bg-slate-300" />
               <h1 className="text-sm font-black text-slate-900">{isEditing ? 'Update User Access' : 'New User'}</h1>
             </div>
@@ -470,175 +511,218 @@ export default function AddUserPage() {
               </div>
 
               {/* Modules & privileges */}
-              <section className="mt-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                <div className="mb-2 flex items-center gap-2 text-slate-900"><FaShieldAlt className="text-emerald-700 text-xs" /><h2 className="text-xs font-black uppercase tracking-wide">Modules & privileges per company</h2></div>
+              <section className="mt-3 rounded-xl border border-slate-200 bg-white shadow-sm">
+                {/* Section header */}
+                <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
+                  <FaShieldAlt className="text-emerald-700 text-xs" />
+                  <h2 className="flex-1 text-xs font-black uppercase tracking-wide text-slate-900">Modules &amp; Action Privileges</h2>
+                  <p className="text-[10px] text-slate-400">Configure per-company access level and granular action permissions</p>
+                </div>
 
-                <div className="space-y-3">
+                <div className="divide-y divide-slate-100">
                   {form.companyAssignments.map((assignment) => {
                     const company = availableCompanies.find((item) => item._id === assignment.company);
                     const enabledModuleKeys = getEnabledCompanyModuleKeys(company);
+
+                    // Total granted across all enabled sections
+                    const allEnabledPerms = ACCESS_SECTIONS.flatMap((s) =>
+                      s.permissions.filter((p) => !p.moduleKey || enabledModuleKeys.includes(p.moduleKey))
+                    );
+                    const totalGranted = sectionPermissionCount(assignment.permissions, allEnabledPerms);
+
                     return (
-                      <div key={assignment.company} className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <h3 className="text-xs font-black text-slate-900">{company?.companyName || 'Company'}</h3>
-                          <span className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{enabledModuleKeys.length} modules</span>
+                      <div key={assignment.company} className="p-4">
+                        {/* Company bar */}
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <FaBuilding className="text-[10px] text-slate-400" />
+                            <span className="text-xs font-black text-slate-900">{company?.companyName || 'Company'}</span>
+                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500">{enabledModuleKeys.length} modules</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-semibold text-slate-400">{totalGranted} permission{totalGranted !== 1 ? 's' : ''} granted</span>
+                            <div className="h-3 w-px bg-slate-200" />
+                            <span className="text-[10px] font-bold text-slate-500">Quick set:</span>
+                            {[
+                              { key: 'none',     label: 'None',      cls: 'border-red-200 text-red-600 hover:bg-red-50'     },
+                              { key: 'readonly',  label: 'Read Only', cls: 'border-blue-200 text-blue-600 hover:bg-blue-50'  },
+                              { key: 'full',      label: 'Full',      cls: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' },
+                            ].map(({ key, label, cls }) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => updateAssignment(assignment.company, (current) => ({
+                                  ...current,
+                                  permissions: applyPreset(key, enabledModuleKeys, current),
+                                }))}
+                                className={`rounded border px-2 py-0.5 text-[10px] font-extrabold transition-colors ${cls}`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
-                        <div className="grid gap-3 lg:grid-cols-[0.95fr,1.05fr]">
-                          {/* Module access */}
-                          <div className="rounded-lg border border-slate-200 bg-white p-3">
-                            <div className="mb-2 flex items-center gap-2">
-                              <FaShieldAlt className="text-emerald-600" size={11} />
-                              <span className="text-[11px] font-black text-slate-900">Module access levels</span>
-                            </div>
-                            <div className="mb-2 flex items-center gap-3 text-[10px] text-slate-500">
-                              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-red-400" />Not allowed</span>
-                              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-blue-400" />View only</span>
-                              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />Full access</span>
-                            </div>
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              {enabledModuleKeys.map((moduleKey) => {
-                                const mappedKey = {
-                                  propertyManagement: 'propertyMgmt',
-                                  accounts: 'accounts',
-                                  inventory: 'inventory',
-                                  procurement: 'procurement',
-                                  hr: 'humanResource',
-                                  propertySale: 'propertySale',
-                                  facilityManagement: 'facilityManagement',
-                                  hotelManagement: 'hotelManagement',
-                                  telcoDealership: 'telcoDealership',
-                                  dms: 'dms',
-                                  academics: 'academics',
-                                  projectManagement: 'projectManagement',
-                                  assetValuation: 'assetValuation',
-                                  revenueRecognition: 'revenueRecognition',
-                                  crm: 'crm',
-                                  incidentManagement: 'incidentManagement',
-                                  sacco: 'sacco',
-                                  pos: 'inventory',
-                                }[moduleKey] || moduleKey;
-                                const currentAccess = assignment.moduleAccess?.[mappedKey] || 'View only';
-                                const setAccess = (val) => updateAssignment(assignment.company, (current) => ({ ...current, moduleAccess: { ...current.moduleAccess, [mappedKey]: val } }));
-                                return (
-                                  <div key={moduleKey} className={`rounded-lg border p-2 transition-all ${
-                                    currentAccess === 'Not allowed' ? 'border-red-200 bg-red-50/40' :
-                                    currentAccess === 'Full access' ? 'border-emerald-200 bg-emerald-50/40' :
-                                    'border-blue-200 bg-blue-50/30'
-                                  }`}>
-                                    <div className="mb-1.5 text-[10px] font-bold text-slate-700">{MODULE_LABELS[moduleKey] || moduleKey}</div>
-                                    <div className="flex gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => setAccess('Not allowed')}
-                                        className={`flex flex-1 items-center justify-center gap-1 rounded px-1 py-1 text-[9px] font-semibold transition-all ${
-                                          currentAccess === 'Not allowed'
-                                            ? 'bg-red-500 text-white shadow-sm'
-                                            : 'bg-white text-red-400 border border-red-200 hover:bg-red-50'
-                                        }`}
-                                        title="Not allowed"
-                                      >
-                                        <FaBan size={9} />
-                                        <span>None</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setAccess('View only')}
-                                        className={`flex flex-1 items-center justify-center gap-1 rounded px-1 py-1 text-[9px] font-semibold transition-all ${
-                                          currentAccess === 'View only'
-                                            ? 'bg-blue-500 text-white shadow-sm'
-                                            : 'bg-white text-blue-400 border border-blue-200 hover:bg-blue-50'
-                                        }`}
-                                        title="View only"
-                                      >
-                                        <FaEye size={9} />
-                                        <span>View</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setAccess('Full access')}
-                                        className={`flex flex-1 items-center justify-center gap-1 rounded px-1 py-1 text-[9px] font-semibold transition-all ${
-                                          currentAccess === 'Full access'
-                                            ? 'bg-emerald-500 text-white shadow-sm'
-                                            : 'bg-white text-emerald-500 border border-emerald-200 hover:bg-emerald-50'
-                                        }`}
-                                        title="Full access"
-                                      >
-                                        <FaUnlockAlt size={9} />
-                                        <span>Full</span>
-                                      </button>
-                                    </div>
+                        {/* ── Module access levels ──────────────────────── */}
+                        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                          <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Module Access Levels</p>
+                          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                            {enabledModuleKeys.map((moduleKey) => {
+                              const mappedKey = MODULE_KEY_MAP[moduleKey] || moduleKey;
+                              const currentAccess = assignment.moduleAccess?.[mappedKey] || 'View only';
+                              const setAccess = (val) => updateAssignment(assignment.company, (current) => ({
+                                ...current,
+                                moduleAccess: { ...current.moduleAccess, [mappedKey]: val },
+                              }));
+                              const accessColor =
+                                currentAccess === 'Not allowed' ? 'border-red-200 bg-white'
+                                : currentAccess === 'Full access' ? 'border-emerald-300 bg-emerald-50/50'
+                                : 'border-blue-200 bg-blue-50/30';
+                              const barColor =
+                                currentAccess === 'Not allowed' ? 'bg-red-400'
+                                : currentAccess === 'Full access' ? 'bg-emerald-500'
+                                : 'bg-blue-400';
+                              return (
+                                <div key={moduleKey} className={`rounded-lg border p-2.5 transition-all ${accessColor}`}>
+                                  <div className="mb-2 flex items-center gap-1.5">
+                                    <span className={`h-2 w-2 rounded-full ${barColor}`} />
+                                    <span className="text-[11px] font-black text-slate-800">{MODULE_LABELS[moduleKey] || moduleKey}</span>
                                   </div>
-                                );
-                              })}
-                            </div>
-                            {/* Branch lock — shown per module when branches exist */}
-                            {enabledModuleKeys.includes("carwash") && assignment.moduleAccess?.carwash !== "Not allowed" && (
-                              <div className="mt-2 border-t border-slate-100 pt-2">
-                                <div className="mb-1 text-[11px] font-black text-slate-700">Branch Restrictions</div>
-                                <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
-                                  <span className="flex-1 text-[11px] font-semibold text-slate-800">Car Wash Branch</span>
-                                  <select
-                                    value={assignment.carwashBranch || ""}
-                                    onChange={(e) => updateAssignment(assignment.company, (current) => ({ ...current, carwashBranch: e.target.value || null }))}
-                                    className="h-6 rounded border border-slate-200 px-1 text-[10px] outline-none focus:border-emerald-500"
-                                  >
-                                    <option value="">All branches (admin view)</option>
-                                    {(branchesByCompany[assignment.company] || []).map((b) => (
-                                      <option key={b._id} value={b._id}>{b.name}</option>
+                                  <div className="flex overflow-hidden rounded-md border border-slate-200 bg-white text-[10px] font-bold shadow-sm">
+                                    {[
+                                      { val: 'Not allowed', icon: <FaBan size={8} />, label: 'None',  active: 'bg-red-500 text-white',     idle: 'text-slate-400 hover:bg-slate-50' },
+                                      { val: 'View only',   icon: <FaEye size={8} />, label: 'View',  active: 'bg-blue-500 text-white',    idle: 'text-slate-400 hover:bg-slate-50' },
+                                      { val: 'Full access', icon: <FaUnlockAlt size={8} />, label: 'Full', active: 'bg-emerald-500 text-white', idle: 'text-slate-400 hover:bg-slate-50' },
+                                    ].map(({ val, icon, label, active, idle }) => (
+                                      <button
+                                        key={val}
+                                        type="button"
+                                        onClick={() => setAccess(val)}
+                                        title={val}
+                                        className={`flex flex-1 items-center justify-center gap-1 px-1.5 py-1.5 transition-colors ${currentAccess === val ? active : idle}`}
+                                      >
+                                        {icon}<span>{label}</span>
+                                      </button>
                                     ))}
-                                  </select>
+                                  </div>
                                 </div>
-                                <p className="mt-1 text-[10px] text-slate-500">Assign a branch to lock this user to that branch only. Leave blank for all-branch access.</p>
-                              </div>
-                            )}
+                              );
+                            })}
                           </div>
 
-                          {/* Action permissions */}
-                          <div className="rounded-lg border border-slate-200 bg-white p-2">
-                            <div className="mb-1.5 text-[11px] font-black text-slate-900">Action permissions</div>
-                            <div className="space-y-2">
-                              {ACCESS_SECTIONS.map((section) => {
-                                const enabledPermissions = section.permissions.filter((permission) => !permission.moduleKey || enabledModuleKeys.includes(permission.moduleKey));
-                                if (!enabledPermissions.length) return null;
-                                const granted = sectionPermissionCount(assignment.permissions, enabledPermissions);
-                                return (
-                                  <div key={section.id} className="rounded border border-slate-200 p-2">
-                                    <div className="mb-1.5 flex items-center justify-between gap-2">
-                                      <div>
-                                        <span className="text-[11px] font-black text-slate-900">{section.label}</span>
-                                        <span className="ml-1.5 text-[10px] text-slate-500">{granted}/{enabledPermissions.length}</span>
-                                      </div>
-                                      <div className="flex gap-1 text-[10px] font-bold">
-                                        <button type="button" onClick={() => updateAssignment(assignment.company, (current) => ({ ...current, permissions: setPermissionGroupValue(current.permissions, enabledPermissions, true) }))} className="rounded border border-emerald-200 px-2 py-0.5 text-emerald-700">All</button>
-                                        <button type="button" onClick={() => updateAssignment(assignment.company, (current) => ({ ...current, permissions: setPermissionGroupValue(current.permissions, enabledPermissions, false) }))} className="rounded border border-slate-200 px-2 py-0.5 text-slate-600">Clear</button>
-                                      </div>
-                                    </div>
-                                    <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-                                      {enabledPermissions.map((permission) => (
-                                        <label key={`${permission.resource}.${permission.action}`} className="flex items-center gap-1.5 rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700">
-                                          <input
-                                            type="checkbox"
-                                            checked={Boolean(assignment.permissions?.[permission.resource]?.[permission.action])}
-                                            onChange={(e) => updateAssignment(assignment.company, (current) => ({
-                                              ...current,
-                                              permissions: {
-                                                ...normalizePermissionMap(current.permissions || {}),
-                                                [permission.resource]: {
-                                                  ...normalizePermissionMap(current.permissions || {})[permission.resource],
-                                                  [permission.action]: e.target.checked,
-                                                },
-                                              },
-                                            }))}
-                                          />
-                                          {permission.label}
-                                        </label>
-                                      ))}
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                          {/* Branch lock */}
+                          {enabledModuleKeys.includes('carwash') && assignment.moduleAccess?.carwash !== 'Not allowed' && (
+                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+                              <div className="mb-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-amber-700">Car Wash Branch Restriction</div>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={assignment.carwashBranch || ''}
+                                  onChange={(e) => updateAssignment(assignment.company, (current) => ({ ...current, carwashBranch: e.target.value || null }))}
+                                  className="h-7 flex-1 rounded border border-amber-200 bg-white px-2 text-[11px] outline-none focus:border-emerald-500"
+                                >
+                                  <option value="">All branches (admin — no restriction)</option>
+                                  {(branchesByCompany[assignment.company] || []).map((b) => (
+                                    <option key={b._id} value={b._id}>{b.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <p className="mt-1 text-[10px] text-amber-700/70">Blank = full multi-branch access. Select a branch to lock this user to it only.</p>
                             </div>
+                          )}
+                        </div>
+
+                        {/* ── Action Permissions ────────────────────────── */}
+                        <div className="rounded-lg border border-slate-200 bg-white">
+                          <div className="border-b border-slate-100 px-3 py-2">
+                            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Granular Action Permissions</p>
+                          </div>
+                          <div className="divide-y divide-slate-100">
+                            {ACCESS_SECTIONS.map((section) => {
+                              const enabledPermissions = section.permissions.filter(
+                                (p) => !p.moduleKey || enabledModuleKeys.includes(p.moduleKey)
+                              );
+                              if (!enabledPermissions.length) return null;
+                              const granted = sectionPermissionCount(assignment.permissions, enabledPermissions);
+                              const isOpen = openSections.has(section.id);
+                              const meta = SECTION_META[section.id] || SECTION_META.workspace;
+                              const allGranted = granted === enabledPermissions.length;
+
+                              return (
+                                <div key={section.id}>
+                                  {/* Accordion header */}
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSection(section.id)}
+                                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-slate-50"
+                                  >
+                                    <span className={`h-2.5 w-1 shrink-0 rounded-full ${meta.bar}`} />
+                                    <span className="flex-1 text-[11px] font-black text-slate-800">{section.label}</span>
+                                    <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${allGranted ? 'bg-emerald-100 text-emerald-700' : granted > 0 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                                      {granted}/{enabledPermissions.length}
+                                    </span>
+                                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateAssignment(assignment.company, (current) => ({ ...current, permissions: setPermissionGroupValue(current.permissions, enabledPermissions, true) }))}
+                                        className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-700 hover:bg-emerald-100"
+                                      >
+                                        All
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateAssignment(assignment.company, (current) => ({ ...current, permissions: setPermissionGroupValue(current.permissions, enabledPermissions, false) }))}
+                                        className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-extrabold text-slate-500 hover:bg-slate-50"
+                                      >
+                                        Clear
+                                      </button>
+                                    </div>
+                                    {isOpen ? <FaChevronUp className="shrink-0 text-[10px] text-slate-400" /> : <FaChevronDown className="shrink-0 text-[10px] text-slate-400" />}
+                                  </button>
+
+                                  {/* Accordion body */}
+                                  {isOpen && (
+                                    <div className="grid gap-1.5 border-t border-slate-100 bg-slate-50/40 px-3 py-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                                      {enabledPermissions.map((permission) => {
+                                        const checked = Boolean(assignment.permissions?.[permission.resource]?.[permission.action]);
+                                        const isDanger = DANGER_ACTIONS.has(permission.action);
+                                        return (
+                                          <label
+                                            key={`${permission.resource}.${permission.action}`}
+                                            className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-all ${
+                                              checked
+                                                ? isDanger
+                                                  ? 'border-red-200 bg-red-50 text-red-800'
+                                                  : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                                            }`}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={checked}
+                                              onChange={(e) => updateAssignment(assignment.company, (current) => ({
+                                                ...current,
+                                                permissions: {
+                                                  ...normalizePermissionMap(current.permissions || {}),
+                                                  [permission.resource]: {
+                                                    ...normalizePermissionMap(current.permissions || {})[permission.resource],
+                                                    [permission.action]: e.target.checked,
+                                                  },
+                                                },
+                                              }))}
+                                              className="accent-emerald-600"
+                                            />
+                                            <span className="leading-tight">{permission.label}</span>
+                                            {isDanger && checked && (
+                                              <span className="ml-auto rounded bg-red-100 px-1 text-[8px] font-extrabold uppercase text-red-600">sensitive</span>
+                                            )}
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -647,7 +731,7 @@ export default function AddUserPage() {
 
                   {!form.companyAssignments.length && (
                     <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs text-slate-500">
-                      Select at least one company to define modules and action permissions.
+                      Select at least one company above to configure modules and action permissions.
                     </div>
                   )}
                 </div>
@@ -657,7 +741,7 @@ export default function AddUserPage() {
             {/* ── Sticky footer ─────────────────────────────────────── */}
             <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2 shadow-sm">
               <div className="flex items-center justify-end gap-2">
-                <button type="button" onClick={() => navigate('/system-setup/users')} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+                <button type="button" onClick={() => navigate(returnTo)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
                 <button type="submit" disabled={isSaving} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60">
                   <FaSave /> {isSaving ? 'Saving...' : (isEditing ? 'Update user access' : 'Create user')}
                 </button>

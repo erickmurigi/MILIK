@@ -1,11 +1,13 @@
 export const WORKSPACE_IDS = {
-  PROPERTY: 'property-management',
-  ACCOUNTS: 'financial-accounts',
-  CARWASH: 'carwash',
-  PROPERTY_SALE: 'property-sale',
+  PROPERTY:       'property-management',
+  ACCOUNTS:       'financial-accounts',
+  CARWASH:        'carwash',
+  INVENTORY:      'inventory',
+  PROPERTY_SALE:  'property-sale',
   HUMAN_RESOURCE: 'human-resource',
-  SYSTEM_ADMIN: 'system-admin',
-  COMPANY_SETUP: 'company-setup',
+  SYSTEM_ADMIN:   'system-admin',
+  COMPANY_SETUP:  'company-setup',
+  COMMUNICATIONS: 'communications',
 };
 
 export const WORKSPACE_CONFIG = {
@@ -39,6 +41,17 @@ export const WORKSPACE_CONFIG = {
       id: 'carwash-dashboard',
       title: 'Dashboard',
       route: '/carwash/dashboard',
+      closable: false,
+    },
+  },
+  [WORKSPACE_IDS.INVENTORY]: {
+    id: WORKSPACE_IDS.INVENTORY,
+    label: 'Inventory & POS',
+    defaultRoute: '/inventory/dashboard',
+    defaultTab: {
+      id: 'inventory-dashboard',
+      title: 'Dashboard',
+      route: '/inventory/dashboard',
       closable: false,
     },
   },
@@ -86,6 +99,17 @@ export const WORKSPACE_CONFIG = {
       closable: false,
     },
   },
+  [WORKSPACE_IDS.COMMUNICATIONS]: {
+    id: WORKSPACE_IDS.COMMUNICATIONS,
+    label: 'Communications',
+    defaultRoute: '/communications/sms',
+    defaultTab: {
+      id: 'communications-home',
+      title: 'SMS Manager',
+      route: '/communications/sms',
+      closable: false,
+    },
+  },
 };
 
 const SYSTEM_ADMIN_ROUTE_MATCHERS = [
@@ -107,12 +131,21 @@ export const getWorkspaceFromRoute = (pathname = '') => {
     return WORKSPACE_IDS.CARWASH;
   }
 
+  if (pathname === '/inventory' || pathname.startsWith('/inventory/') ||
+      pathname === '/pos' || pathname.startsWith('/pos/')) {
+    return WORKSPACE_IDS.INVENTORY;
+  }
+
   if (pathname === '/sale' || pathname.startsWith('/sale/')) {
     return WORKSPACE_IDS.PROPERTY_SALE;
   }
 
   if (pathname === '/hr' || pathname.startsWith('/hr/')) {
     return WORKSPACE_IDS.HUMAN_RESOURCE;
+  }
+
+  if (pathname === '/communications' || pathname.startsWith('/communications/')) {
+    return WORKSPACE_IDS.COMMUNICATIONS;
   }
 
   if (SYSTEM_ADMIN_ROUTE_MATCHERS.some((matches) => matches(pathname))) {

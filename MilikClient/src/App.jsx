@@ -41,6 +41,7 @@ const CompanySetupPage  = lazy(() => import("./pages/companySetup/CompanySetupPa
 const SystemSetupPage   = lazy(() => import("./pages/SystemSetup/SystemSetup"));
 const AddCompanyWizard  = lazy(() => import("./pages/SystemSetup/AddCompanyWizard"));
 const AddUserPage       = lazy(() => import("./pages/SystemSetup/AddUsers"));
+const CompanyUsers      = lazy(() => import("./pages/Users/CompanyUsers"));
 const CompanySettings   = lazy(() => import("./pages/SystemSetup/CompanySettings"));
 
 // Landlords
@@ -142,6 +143,22 @@ const CarWashCommissions    = lazy(() => import("./pages/CarWash/CarWashCommissi
 const CarWashLoyalty        = lazy(() => import("./pages/CarWash/CarWashLoyalty"));
 const CarWashFinancials     = lazy(() => import("./pages/CarWash/CarWashFinancials"));
 const CarWashBranches       = lazy(() => import("./pages/CarWash/CarWashBranches"));
+
+// Inventory & POS module
+const InventoryDashboard    = lazy(() => import("./pages/Inventory/InventoryDashboard"));
+const InvLocations          = lazy(() => import("./pages/Inventory/InvLocations"));
+const InvCategories         = lazy(() => import("./pages/Inventory/InvCategories"));
+const InvProducts           = lazy(() => import("./pages/Inventory/InvProducts"));
+const InvSuppliers          = lazy(() => import("./pages/Inventory/InvSuppliers"));
+const InvPurchaseOrders     = lazy(() => import("./pages/Inventory/InvPurchaseOrders"));
+const InvStockTransfers     = lazy(() => import("./pages/Inventory/InvStockTransfers"));
+const InvStockMovements     = lazy(() => import("./pages/Inventory/InvStockMovements"));
+const InvStockAdjustments  = lazy(() => import("./pages/Inventory/InvStockAdjustments"));
+const InvStockValuation    = lazy(() => import("./pages/Inventory/InvStockValuation"));
+const InvTills              = lazy(() => import("./pages/Inventory/InvTills"));
+const POSTerminal           = lazy(() => import("./pages/Inventory/POSTerminal"));
+const POSSalesHistory       = lazy(() => import("./pages/Inventory/POSSalesHistory"));
+const POSSessions           = lazy(() => import("./pages/Inventory/POSSessions"));
 
 // HR module
 const HRFinancials       = lazy(() => import("./pages/HR/HRFinancials"));
@@ -550,6 +567,22 @@ function App() {
             <Route path="/carwash/loyalty"           element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-loyalty" moduleKey="carwash"><CarWashLoyalty /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/branches"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-branches" moduleKey="carwash"><CarWashBranches /></PermissionRoute></CompanyModuleRoute>} />
 
+            {/* ── Inventory & POS module ────────────────────────────────── */}
+            <Route path="/inventory/dashboard"       element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-dashboard"       moduleKey="inventory"><InventoryDashboard /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/locations"       element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-locations"       moduleKey="inventory"><InvLocations /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/categories"      element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-categories"      moduleKey="inventory"><InvCategories /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/products"        element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-products"        moduleKey="inventory"><InvProducts /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/suppliers"       element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-suppliers"       moduleKey="inventory"><InvSuppliers /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/purchase-orders" element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-purchase-orders" moduleKey="inventory"><InvPurchaseOrders /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/transfers"       element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-transfers"       moduleKey="inventory"><InvStockTransfers /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/stock-movements" element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-stock"     moduleKey="inventory"><InvStockMovements /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/adjustments"    element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-stock"     moduleKey="inventory"><InvStockAdjustments /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/valuation"      element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-reports"   moduleKey="inventory"><InvStockValuation /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/pos/terminal"              element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="pos-terminal"  moduleKey="inventory"><POSTerminal /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/pos/sales"                 element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="pos-sales"           moduleKey="inventory"><POSSalesHistory /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/tills"           element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-tills"           moduleKey="inventory"><InvTills /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/pos/sessions"              element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="pos-sessions"        moduleKey="inventory"><POSSessions /></PermissionRoute></CompanyModuleRoute>} />
+
             {/* ── HR module ─────────────────────────────────────────────── */}
             <Route path="/hr/dashboard"           element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRDashboard /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/employees"           element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HREmployees /></ProtectedRoute></CompanyModuleRoute>} />
@@ -602,6 +635,11 @@ function App() {
             <Route path="/add-company/:id"       element={<SuperAdminRoute><AddCompanyWizard /></SuperAdminRoute>} />
             <Route path="/add-user"              element={<SuperAdminRoute><AddUserPage /></SuperAdminRoute>} />
             <Route path="/add-user/:id"          element={<SuperAdminRoute><AddUserPage /></SuperAdminRoute>} />
+
+            {/* ── Company Users (Tools > Users) ─────────────────────── */}
+            <Route path="/users"             element={<ProtectedRoute><CompanyUsers /></ProtectedRoute>} />
+            <Route path="/users/new"         element={<ProtectedRoute><AddUserPage /></ProtectedRoute>} />
+            <Route path="/users/:id/edit"    element={<ProtectedRoute><AddUserPage /></ProtectedRoute>} />
 
             {/* ── Landlords ─────────────────────────────────────────────── */}
             <Route path="/landlords"                    element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlords" moduleKey="propertyManagement"><Landlords /></PermissionRoute></CompanyModeRoute>} />

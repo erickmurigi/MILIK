@@ -173,6 +173,54 @@ const HR_ACCOUNTING_DEFAULT_KEYS = {
   },
 };
 
+const INV_ACCOUNTING_DEFAULT_KEYS = {
+  inventoryAssetAccount: {
+    label: "Inventory Asset (Stock on Hand) Account",
+    allowedTypes: ["asset"],
+    fallbackCandidates: [
+      { code: "1300", type: "asset" },
+      { nameRegex: "^inventory$", type: "asset" },
+      { nameRegex: "stock on hand", type: "asset" },
+      { nameRegex: "inventory asset", type: "asset" },
+    ],
+  },
+  cogsAccount: {
+    label: "Cost of Goods Sold (COGS) Account",
+    allowedTypes: ["expense"],
+    fallbackCandidates: [
+      { code: "5000", type: "expense" },
+      { nameRegex: "cost of goods sold", type: "expense" },
+      { nameRegex: "^cogs$", type: "expense" },
+    ],
+  },
+  salesRevenueAccount: {
+    label: "Sales Revenue / POS Revenue Account",
+    allowedTypes: ["income"],
+    fallbackCandidates: [
+      { code: "4000", type: "income" },
+      { nameRegex: "sales revenue", type: "income" },
+      { nameRegex: "^sales$", type: "income" },
+    ],
+  },
+  stockAdjustmentAccount: {
+    label: "Stock Adjustments & Write-offs Account",
+    allowedTypes: ["expense"],
+    fallbackCandidates: [
+      { nameRegex: "stock adjustment", type: "expense" },
+      { nameRegex: "inventory write", type: "expense" },
+    ],
+  },
+  purchaseClearingAccount: {
+    label: "Purchase Clearing / Accounts Payable Account",
+    allowedTypes: ["liability"],
+    fallbackCandidates: [
+      { code: "2000", type: "liability" },
+      { nameRegex: "accounts payable", type: "liability" },
+      { nameRegex: "trade creditors", type: "liability" },
+    ],
+  },
+};
+
 const normalizeType = (value = "") => String(value || "").trim().toLowerCase();
 
 const buildCandidateQuery = (businessId, candidate = {}) => {
@@ -284,6 +332,45 @@ export const validateHrAccountingDefaultAccount = async ({ businessId, field, ra
   return validateAccountingDefaultAccountForDefinition({ businessId, field, rawValue, definition });
 };
 
+export const getInvAccountingDefaultDefinition = (field) => INV_ACCOUNTING_DEFAULT_KEYS[field] || null;
+
+export const validateInvAccountingDefaultAccount = async ({ businessId, field, rawValue }) => {
+  const definition = getInvAccountingDefaultDefinition(field);
+  return validateAccountingDefaultAccountForDefinition({ businessId, field, rawValue, definition });
+};
+
+export const resolveConfiguredInvAccountingDefaultAccount = async ({ businessId, field, fallbackCandidates = null } = {}) => {
+  if (!businessId || !field) return null;
+
+  const definition = getInvAccountingDefaultDefinition(field);
+  if (!definition) return null;
+
+  await ensureSystemChartOfAccounts(businessId);
+
+  const settings = await CompanySettings.findOne({ company: businessId })
+    .select(`inventoryAccountingDefaults.${field}`)
+    .lean();
+
+  const configuredAccountId = settings?.inventoryAccountingDefaults?.[field] || null;
+  if (configuredAccountId) {
+    const query = {
+      business: businessId,
+      _id: configuredAccountId,
+      isPosting: { $ne: false },
+      isHeader: { $ne: true },
+    };
+
+    if (Array.isArray(definition.allowedTypes) && definition.allowedTypes.length > 0) {
+      query.type = definition.allowedTypes.length === 1 ? definition.allowedTypes[0] : { $in: definition.allowedTypes };
+    }
+
+    const configuredAccount = await ChartOfAccount.findOne(query).lean();
+    if (configuredAccount) return configuredAccount;
+  }
+
+  return findFirstAccount(businessId, fallbackCandidates || definition.fallbackCandidates || []);
+};
+
 export const resolveConfiguredHrAccountingDefaultAccount = async ({ businessId, field, fallbackCandidates = null } = {}) => {
   if (!businessId || !field) return null;
 
@@ -319,8 +406,11 @@ export const resolveConfiguredHrAccountingDefaultAccount = async ({ businessId, 
 export default {
   getAccountingDefaultDefinition,
   getHrAccountingDefaultDefinition,
+  getInvAccountingDefaultDefinition,
   resolveConfiguredAccountingDefaultAccount,
   resolveConfiguredHrAccountingDefaultAccount,
+  resolveConfiguredInvAccountingDefaultAccount,
   validateAccountingDefaultAccount,
   validateHrAccountingDefaultAccount,
+  validateInvAccountingDefaultAccount,
 };

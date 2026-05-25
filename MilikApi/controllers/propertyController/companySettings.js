@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import {
   validateAccountingDefaultAccount,
   validateHrAccountingDefaultAccount,
+  validateInvAccountingDefaultAccount,
 } from "../../services/companyAccountingDefaultsService.js";
 import {
   DEFAULT_TAX_CODES,
@@ -182,6 +183,14 @@ const HR_ACCOUNTING_DEFAULT_FIELDS = [
   "employerNhifExpenseAccount",
   "employerNssfExpenseAccount",
   "employerAhlExpenseAccount",
+];
+
+const INV_ACCOUNTING_DEFAULT_FIELDS = [
+  "inventoryAssetAccount",
+  "cogsAccount",
+  "salesRevenueAccount",
+  "stockAdjustmentAccount",
+  "purchaseClearingAccount",
 ];
 
 const DEFAULT_DEPOSIT_TYPES = [
@@ -893,6 +902,53 @@ export const updateHrAccountingDefaults = async (req, res, next) => {
     return res.status(200).json({
       message: "HR accounting defaults updated successfully",
       hrAccountingDefaults: settings.hrAccountingDefaults,
+      settings,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateInventoryAccountingDefaults = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    let settings = await findCompanySettings(businessId);
+    if (!settings) {
+      settings = new CompanySettings({ company: businessId });
+      ensureSettingsTaxConfiguration(settings);
+    }
+
+    const incomingDefaults = req.body?.inventoryAccountingDefaults || {};
+    const nextDefaults = { ...(settings.inventoryAccountingDefaults?.toObject?.() || settings.inventoryAccountingDefaults || {}) };
+
+    for (const field of INV_ACCOUNTING_DEFAULT_FIELDS) {
+      if (!(field in incomingDefaults)) continue;
+      const account = await validateInvAccountingDefaultAccount({
+        businessId,
+        field,
+        rawValue: incomingDefaults[field],
+      });
+      nextDefaults[field] = account?._id || null;
+    }
+
+    settings.inventoryAccountingDefaults = nextDefaults;
+    await settings.save();
+    await logAuditEvent({
+      req,
+      company: businessId,
+      action: "settings.inventory_accounting_defaults.update",
+      category: "settings",
+      severity: "critical",
+      targetType: "CompanySettings",
+      targetId: settings._id,
+      targetName: "Inventory accounting defaults",
+      message: "Updated inventory accounting defaults",
+      metadata: { fields: Object.keys(incomingDefaults || {}) },
+    });
+
+    return res.status(200).json({
+      message: "Inventory accounting defaults updated successfully",
+      inventoryAccountingDefaults: settings.inventoryAccountingDefaults,
       settings,
     });
   } catch (err) {

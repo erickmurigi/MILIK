@@ -82,7 +82,7 @@ const TAB_CONFIG = {
   accounting: {
     label: "Accounting Defaults",
     icon: FaCheck,
-    requiredModules: ["propertyManagement", "hr"],
+    requiredModules: ["propertyManagement", "hr", "inventory"],
   },
 };
 
@@ -207,6 +207,14 @@ const normalizeAccountingDefaults = (settings = {}) => ({
     settings?.accountingDefaults?.leaseAgreementFeeIncomeAccount || "",
 });
 
+const normalizeInvAccountingDefaults = (settings = {}) => ({
+  inventoryAssetAccount: settings?.inventoryAccountingDefaults?.inventoryAssetAccount || "",
+  cogsAccount: settings?.inventoryAccountingDefaults?.cogsAccount || "",
+  salesRevenueAccount: settings?.inventoryAccountingDefaults?.salesRevenueAccount || "",
+  stockAdjustmentAccount: settings?.inventoryAccountingDefaults?.stockAdjustmentAccount || "",
+  purchaseClearingAccount: settings?.inventoryAccountingDefaults?.purchaseClearingAccount || "",
+});
+
 const normalizeHrAccountingDefaults = (settings = {}) => ({
   salaryExpenseAccount: settings?.hrAccountingDefaults?.salaryExpenseAccount || "",
   netPayableAccount: settings?.hrAccountingDefaults?.netPayableAccount || "",
@@ -280,6 +288,39 @@ const HR_ACCOUNTING_DEFAULT_FIELDS = [
     label: "Employer AHL Expense",
     description: "Expense account for employer-side Affordable Housing Levy.",
     type: "expense",
+  },
+];
+
+const INV_ACCOUNTING_DEFAULT_FIELDS = [
+  {
+    key: "inventoryAssetAccount",
+    label: "Inventory Asset (Stock on Hand)",
+    description: "Asset account credited when stock is purchased and debited on COGS entries. Represents the current value of inventory held.",
+    type: "asset",
+  },
+  {
+    key: "cogsAccount",
+    label: "Cost of Goods Sold (COGS)",
+    description: "Expense account debited when inventory items are sold or consumed. Offsets the inventory asset account on sales.",
+    type: "expense",
+  },
+  {
+    key: "salesRevenueAccount",
+    label: "Sales Revenue / POS Revenue",
+    description: "Income account credited when inventory sales or POS transactions are posted.",
+    type: "income",
+  },
+  {
+    key: "stockAdjustmentAccount",
+    label: "Stock Adjustments & Write-offs",
+    description: "Expense account used for inventory adjustments, write-downs and write-offs that do not correspond to a sale.",
+    type: "expense",
+  },
+  {
+    key: "purchaseClearingAccount",
+    label: "Purchase Clearing / Accounts Payable",
+    description: "Liability account credited when goods are received on credit from suppliers and cleared when supplier invoices are settled.",
+    type: "liability",
   },
 ];
 
@@ -455,6 +496,7 @@ const CompanySettings = () => {
   const hasPM   = hasCompanyModule(currentCompany, "propertyManagement");
   const hasHR   = hasCompanyModule(currentCompany, "hr");
   const hasSale = hasCompanyModule(currentCompany, "propertySale");
+  const hasInv  = hasCompanyModule(currentCompany, "inventory");
 
   const visibleTabEntries = useMemo(() =>
     Object.entries(TAB_CONFIG).filter(([, cfg]) => {
@@ -475,7 +517,9 @@ const CompanySettings = () => {
   const [taxConfig, setTaxConfig] = useState(normalizeTaxConfiguration());
   const [accountingDefaults, setAccountingDefaults] = useState(normalizeAccountingDefaults());
   const [hrAccountingDefaults, setHrAccountingDefaults] = useState(normalizeHrAccountingDefaults());
+  const [invAccountingDefaults, setInvAccountingDefaults] = useState(normalizeInvAccountingDefaults());
   const [savingHrAccounting, setSavingHrAccounting] = useState(false);
+  const [savingInvAccounting, setSavingInvAccounting] = useState(false);
   const [chartAccounts, setChartAccounts] = useState([]);
   const [loadedChartAccountCompanyId, setLoadedChartAccountCompanyId] = useState("");
   const requestedTab = searchParams.get("tab");
@@ -514,6 +558,7 @@ const CompanySettings = () => {
       setTaxConfig(normalizeTaxConfiguration());
       setAccountingDefaults(normalizeAccountingDefaults());
       setHrAccountingDefaults(normalizeHrAccountingDefaults());
+      setInvAccountingDefaults(normalizeInvAccountingDefaults());
       return;
     }
 
@@ -524,6 +569,7 @@ const CompanySettings = () => {
       setTaxConfig(normalizeTaxConfiguration(response.data || {}));
       setAccountingDefaults(normalizeAccountingDefaults(response.data || {}));
       setHrAccountingDefaults(normalizeHrAccountingDefaults(response.data || {}));
+      setInvAccountingDefaults(normalizeInvAccountingDefaults(response.data || {}));
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
@@ -598,6 +644,13 @@ const CompanySettings = () => {
 
   const setHrAccountingDefaultField = (field, value) => {
     setHrAccountingDefaults((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const setInvAccountingDefaultField = (field, value) => {
+    setInvAccountingDefaults((prev) => ({
       ...prev,
       [field]: value,
     }));
@@ -851,6 +904,23 @@ const CompanySettings = () => {
       toast.error(extractErrorMessage(error));
     } finally {
       setSavingHrAccounting(false);
+    }
+  };
+
+  const saveInvAccountingDefaults = async () => {
+    if (!currentCompany?._id) return;
+
+    setSavingInvAccounting(true);
+    try {
+      await adminRequests.put(`/company-settings/${currentCompany._id}/inventory-accounting-defaults`, {
+        inventoryAccountingDefaults: invAccountingDefaults,
+      });
+      toast.success("Inventory accounting defaults saved. New inventory and POS posting flows will use these accounts.");
+      await loadSettings({ silent: true });
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSavingInvAccounting(false);
     }
   };
 
@@ -1275,7 +1345,31 @@ const CompanySettings = () => {
         </Card>
       )}
 
-      {!hasPM && !hasHR && (
+      {hasInv && (
+        <Card
+          title="Inventory & POS Accounting Defaults"
+          subtitle="Default posting accounts for inventory movements, sales revenue, COGS, and purchase clearing. These accounts drive journal entries when stock is bought, sold, or adjusted."
+          action={
+            <ActionButton variant="primary" onClick={saveInvAccountingDefaults} disabled={savingInvAccounting || loadingAccounts}>
+              {savingInvAccounting ? <FaSpinner className="animate-spin" /> : <FaSave />} Save Inventory Defaults
+            </ActionButton>
+          }
+        >
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs leading-5 text-emerald-800">
+            These accounts are used when inventory and POS transactions post journal entries. Inventory Asset is debited on purchase and credited on sale (offset by COGS). Sales Revenue is credited on every POS sale.
+          </div>
+
+          {loadingAccounts ? (
+            <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
+              <FaSpinner className="animate-spin" /> Loading Chart of Accounts...
+            </div>
+          ) : (
+            renderAccountingDefaultsGrid(INV_ACCOUNTING_DEFAULT_FIELDS, invAccountingDefaults, setInvAccountingDefaultField)
+          )}
+        </Card>
+      )}
+
+      {!hasPM && !hasHR && !hasInv && (
         <div className="flex h-40 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm text-slate-400">
           No accounting defaults are configured for your active modules.
         </div>

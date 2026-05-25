@@ -16,6 +16,7 @@ import {
   FaToolbox, FaDatabase, FaWrench, FaHeadset, FaInfoCircle, FaList,
   FaBuilding, FaKey, FaUserSlash, FaRedoAlt, FaCar, FaUserPlus, FaUserCheck,
   FaLayerGroup, FaStar, FaCodeBranch,
+  FaBoxes, FaWarehouse, FaCashRegister, FaEnvelope, FaSms,
 } from "react-icons/fa";
 import "./dashboard.css";
 import TabManager from "../../components/Layout/TabManager";
@@ -89,6 +90,20 @@ const MENU_PERMISSION_MAP = {
   "carwash-commissions": { resource: "carwash-commissions", action: "view", moduleKey: "carwash" },
   "carwash-loyalty": { resource: "carwash-loyalty", action: "view", moduleKey: "carwash" },
   "carwash-branches": { resource: "carwash-branches", action: "view", moduleKey: "carwash" },
+  "inv-dashboard":       { resource: "inv-dashboard",       action: "view", moduleKey: "inventory" },
+  "inv-products":        { resource: "inv-products",        action: "view", moduleKey: "inventory" },
+  "inv-stock-movements": { resource: "inv-stock",           action: "view", moduleKey: "inventory" },
+  "inv-transfers":       { resource: "inv-transfers",       action: "view", moduleKey: "inventory" },
+  "inv-purchase-orders": { resource: "inv-purchase-orders", action: "view", moduleKey: "inventory" },
+  "inv-locations":       { resource: "inv-locations",       action: "view", moduleKey: "inventory" },
+  "inv-categories":      { resource: "inv-categories",      action: "view", moduleKey: "inventory" },
+  "inv-suppliers":       { resource: "inv-suppliers",       action: "view", moduleKey: "inventory" },
+  "inv-tills":           { resource: "inv-tills",           action: "view", moduleKey: "inventory" },
+  "pos-terminal":        { resource: "pos-terminal",        action: "view",   moduleKey: "inventory" },
+  "pos-sales":           { resource: "pos-sales",           action: "view",   moduleKey: "inventory" },
+  "pos-sessions":        { resource: "pos-sessions",        action: "view",   moduleKey: "inventory" },
+  "inv-adjustments":     { resource: "inv-stock",           action: "adjust", moduleKey: "inventory" },
+  "inv-valuation":       { resource: "inv-reports",         action: "view",   moduleKey: "inventory" },
   "acc-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: "accounts" },
   "acc-journals":          { resource: "journals",        action: "view", moduleKey: "accounts" },
   "acc-payment-vouchers":  { resource: "paymentVouchers", action: "view", moduleKey: "accounts" },
@@ -107,6 +122,10 @@ const MENU_PERMISSION_MAP = {
   "acc-budget":                    { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-budget-analysis":           { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-creditor-ledger":           { resource: "expenses",         action: "view", moduleKey: "accounts" },
+  "comm-sms-manager":     { resource: "sms",   action: "view"   },
+  "comm-sms-templates":   { resource: "sms",   action: "manage" },
+  "comm-email-manager":   { resource: "email", action: "view"   },
+  "comm-email-templates": { resource: "email", action: "manage" },
   "sale-dashboard": { resource: "sale-dashboard", action: "view", moduleKey: "propertySale" },
   "sale-listings": { resource: "sale-listings", action: "view", moduleKey: "propertySale" },
   "sale-buyers": { resource: "sale-buyers", action: "view", moduleKey: "propertySale" },
@@ -457,12 +476,14 @@ const TopToolbar = ({
     }, 120);
   };
 
-  const isSystemAdminWorkspace = currentWorkspace === WORKSPACE_IDS.SYSTEM_ADMIN;
-  const isCompanySetupWorkspace = currentWorkspace === WORKSPACE_IDS.COMPANY_SETUP;
-  const isAccountsWorkspace = currentWorkspace === WORKSPACE_IDS.ACCOUNTS;
-  const isCarWashWorkspace = currentWorkspace === WORKSPACE_IDS.CARWASH;
-  const isPropertySaleWorkspace = currentWorkspace === WORKSPACE_IDS.PROPERTY_SALE;
-  const isHumanResourceWorkspace = currentWorkspace === WORKSPACE_IDS.HUMAN_RESOURCE;
+  const isSystemAdminWorkspace    = currentWorkspace === WORKSPACE_IDS.SYSTEM_ADMIN;
+  const isCompanySetupWorkspace   = currentWorkspace === WORKSPACE_IDS.COMPANY_SETUP;
+  const isAccountsWorkspace       = currentWorkspace === WORKSPACE_IDS.ACCOUNTS;
+  const isCarWashWorkspace        = currentWorkspace === WORKSPACE_IDS.CARWASH;
+  const isInventoryWorkspace      = currentWorkspace === WORKSPACE_IDS.INVENTORY;
+  const isPropertySaleWorkspace   = currentWorkspace === WORKSPACE_IDS.PROPERTY_SALE;
+  const isHumanResourceWorkspace  = currentWorkspace === WORKSPACE_IDS.HUMAN_RESOURCE;
+  const isCommunicationsWorkspace = currentWorkspace === WORKSPACE_IDS.COMMUNICATIONS;
 
   const routeConfig = useMemo(() => {
     if (isSystemAdminWorkspace) {
@@ -505,6 +526,28 @@ const TopToolbar = ({
         "carwash-commissions": "/carwash/commissions",
         "carwash-loyalty": "/carwash/loyalty",
         "carwash-branches": "/carwash/branches",
+        documentation: "/help/documentation",
+        support: "/help/support",
+        about: "/help/about",
+      };
+    }
+
+    if (isInventoryWorkspace) {
+      return {
+        "inv-dashboard":       "/inventory/dashboard",
+        "inv-products":        "/inventory/products",
+        "inv-stock-movements": "/inventory/stock-movements",
+        "inv-transfers":       "/inventory/transfers",
+        "inv-purchase-orders": "/inventory/purchase-orders",
+        "inv-locations":       "/inventory/locations",
+        "inv-categories":      "/inventory/categories",
+        "inv-suppliers":       "/inventory/suppliers",
+        "inv-tills":           "/inventory/tills",
+        "inv-adjustments":     "/inventory/adjustments",
+        "inv-valuation":       "/inventory/valuation",
+        "pos-terminal":        "/pos/terminal",
+        "pos-sales":           "/pos/sales",
+        "pos-sessions":        "/pos/sessions",
         documentation: "/help/documentation",
         support: "/help/support",
         about: "/help/about",
@@ -561,6 +604,15 @@ const TopToolbar = ({
         documentation: "/help/documentation",
         support:       "/help/support",
         about:         "/help/about",
+      };
+    }
+
+    if (isCommunicationsWorkspace) {
+      return {
+        "comm-sms-manager":     "/communications/sms",
+        "comm-sms-templates":   "/communications/sms/templates",
+        "comm-email-manager":   "/communications/email",
+        "comm-email-templates": "/communications/email/templates",
       };
     }
 
@@ -650,7 +702,7 @@ const TopToolbar = ({
       support: "/help/support",
       about: "/help/about",
     };
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const mainMenuItems = useMemo(() => {
     if (isSystemAdminWorkspace) {
@@ -821,6 +873,30 @@ const TopToolbar = ({
       ];
     }
 
+    if (isCommunicationsWorkspace) {
+      const commItems = [
+        {
+          id: "comm-sms",
+          label: "SMS",
+          icon: FaSms,
+          submenu: [
+            { id: "comm-sms-manager",   label: "SMS Manager",   icon: FaSms },
+            { id: "comm-sms-templates", label: "SMS Templates", icon: FaFileAlt },
+          ],
+        },
+        {
+          id: "comm-email",
+          label: "Email",
+          icon: FaEnvelope,
+          submenu: [
+            { id: "comm-email-manager",   label: "Email Manager",   icon: FaEnvelope },
+            { id: "comm-email-templates", label: "Email Templates", icon: FaFileAlt },
+          ],
+        },
+      ];
+      return filterMenuByPermissions(commItems, currentUser, activeCompanyContext);
+    }
+
     if (isAccountsWorkspace) {
       const accountsItems = [
         {
@@ -942,6 +1018,71 @@ const TopToolbar = ({
       ];
 
       return filterMenuByPermissions(carWashItems, currentUser, activeCompanyContext);
+    }
+
+    if (isInventoryWorkspace) {
+      const inventoryItems = [
+        {
+          id: "inv-pos",
+          label: "Point of Sale",
+          icon: FaCashRegister,
+          submenu: [
+            { id: "pos-terminal", label: "POS Terminal",  icon: FaCashRegister },
+            { id: "pos-sales",    label: "Sales History", icon: FaFileInvoice },
+          ],
+        },
+        {
+          id: "inv-catalog",
+          label: "Products",
+          icon: FaBoxes,
+          submenu: [
+            { id: "inv-products",   label: "Product Catalogue", icon: FaBoxes },
+            { id: "inv-categories", label: "Categories",        icon: FaTag },
+          ],
+        },
+        {
+          id: "inv-stock-ops",
+          label: "Stock",
+          icon: FaExchangeAlt,
+          submenu: [
+            { id: "inv-dashboard",       label: "Stock Overview",    icon: FaChartBar },
+            { type: "separator" },
+            { id: "inv-stock-movements", label: "Movements Ledger",  icon: FaList },
+            { id: "inv-adjustments",     label: "Adjustments",       icon: FaClipboard },
+            { id: "inv-transfers",       label: "Stock Transfers",   icon: FaExchangeAlt },
+            { type: "separator" },
+            { id: "inv-valuation",       label: "Stock Valuation",   icon: FaChartPie },
+          ],
+        },
+        {
+          id: "inv-purchasing",
+          label: "Purchasing",
+          icon: FaFileInvoice,
+          submenu: [
+            { id: "inv-purchase-orders", label: "Purchase Orders", icon: FaFileInvoice },
+            { id: "inv-suppliers",       label: "Suppliers",       icon: FaUsers },
+          ],
+        },
+        {
+          id: "inv-tills-sessions",
+          label: "Tills & Sessions",
+          icon: FaCashRegister,
+          submenu: [
+            { id: "inv-tills",    label: "Tills / Registers", icon: FaCashRegister },
+            { type: "separator" },
+            { id: "pos-sessions", label: "Sessions",          icon: FaList },
+          ],
+        },
+        {
+          id: "inv-setup",
+          label: "Setup",
+          icon: FaCog,
+          submenu: [
+            { id: "inv-locations", label: "Locations / Branches", icon: FaWarehouse },
+          ],
+        },
+      ];
+      return filterMenuByPermissions(inventoryItems, currentUser, activeCompanyContext);
     }
 
     const landlordModeHiddenMainMenuIds = isLandlordMode ? new Set(["landlord"]) : new Set();
@@ -1106,10 +1247,10 @@ const TopToolbar = ({
       });
 
     return filterMenuByPermissions(items, currentUser, activeCompanyContext);
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const nestedSubmenus = useMemo(() => {
-    if (isSystemAdminWorkspace || isCompanySetupWorkspace || isAccountsWorkspace || isCarWashWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace) {
+    if (isSystemAdminWorkspace || isCompanySetupWorkspace || isAccountsWorkspace || isCarWashWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace || isCommunicationsWorkspace) {
       return {};
     }
 
@@ -1170,7 +1311,7 @@ const TopToolbar = ({
     });
 
     return submenus;
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const handleMenuItemClick = (menuId) => {
     const route = routeConfig[menuId];
@@ -1213,9 +1354,17 @@ const TopToolbar = ({
     "hr-reports":     { color: "#059669", label: "Reports",     icon: FaChartBar },
     "hr-appraisals":  { color: "#b45309", label: "Appraisals",  icon: FaChartLine },
     "hr-config":      { color: "#FF8C00", label: "Setup",       icon: FaCog },
+    "inv-pos":            { color: "#0B3B2E", label: "Point of Sale",    icon: FaCashRegister },
+    "inv-catalog":        { color: "#1a5c3a", label: "Products",          icon: FaBoxes },
+    "inv-stock-ops":      { color: "#0B3B2E", label: "Stock",             icon: FaExchangeAlt },
+    "inv-purchasing":     { color: "#374151", label: "Purchasing",        icon: FaFileInvoice },
+    "inv-tills-sessions": { color: "#0B3B2E", label: "Tills & Sessions",  icon: FaCashRegister },
+    "inv-setup":          { color: "#4B5563", label: "Setup",             icon: FaCog },
     "acc-ledger":     { color: "#0B3B2E", label: "General Ledger",        icon: FaBook },
     "acc-payables":   { color: "#b45309", label: "Payables & Expenses",   icon: FaCreditCard },
     "acc-statements": { color: "#0f766e", label: "Financial Reports",     icon: FaFileAlt },
+    "comm-sms":       { color: "#0d9488", label: "SMS Messaging",         icon: FaSms },
+    "comm-email":     { color: "#1d4ed8", label: "Email Messaging",       icon: FaEnvelope },
   };
 
   const ProfessionalDropdown = ({ menuId, items }) => {

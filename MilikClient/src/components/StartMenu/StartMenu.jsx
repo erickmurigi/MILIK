@@ -69,9 +69,10 @@ const moduleRegistry = [
   {
     id: "inventory",
     moduleKey: "inventory",
-    label: "Inventory Management",
+    label: "Inventory & POS",
     icon: <FaBoxes />,
-    status: "coming",
+    to: "/inventory/dashboard",
+    status: "active",
   },
   {
     id: "procurement",
