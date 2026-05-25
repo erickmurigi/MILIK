@@ -4,7 +4,7 @@ const carWashCustomerSchema = new mongoose.Schema(
   {
     business: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
     name: { type: String, required: true, trim: true },
-    phone: { type: String, required: true, trim: true },
+    phone: { type: String, trim: true, default: null },
     plates: {
       type: [{ type: String, trim: true, uppercase: true }],
       default: [],
@@ -16,7 +16,7 @@ const carWashCustomerSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-carWashCustomerSchema.index({ business: 1, phone: 1 }, { unique: true });
+carWashCustomerSchema.index({ business: 1, phone: 1 }, { unique: true, sparse: true });
 carWashCustomerSchema.index({ business: 1, plates: 1 });
 carWashCustomerSchema.index({ business: 1, name: 1 });
 

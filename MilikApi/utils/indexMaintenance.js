@@ -1,6 +1,7 @@
 import Company from "../models/Company.js";
 import Landlord from "../models/Landlord.js";
 import ProcessedStatement from "../models/ProcessedStatement.js";
+import CarWashCustomer from "../modules/carwash/models/CarWashCustomer.js";
 
 async function readIndexes(model) {
   try {
@@ -65,13 +66,26 @@ export async function syncCriticalIndexes() {
     dropped.push("processedstatements.business_1_sourceStatement_1");
   }
 
+  // Drop the non-sparse phone index on CarWashCustomer so it can be recreated as sparse
+  // (allows multiple walk-in customers without a phone number per business)
+  if (
+    await dropStaleIndexIfNeeded(
+      CarWashCustomer,
+      "business_1_phone_1",
+      (index) => Boolean(index?.unique) && !index?.sparse
+    )
+  ) {
+    dropped.push("carwashcustomers.business_1_phone_1");
+  }
+
   await Company.syncIndexes();
   await Landlord.syncIndexes();
   await ProcessedStatement.syncIndexes();
+  await CarWashCustomer.syncIndexes();
 
   return {
     dropped,
-    synced: ["Company", "Landlord", "ProcessedStatement"],
+    synced: ["Company", "Landlord", "ProcessedStatement", "CarWashCustomer"],
   };
 }
 

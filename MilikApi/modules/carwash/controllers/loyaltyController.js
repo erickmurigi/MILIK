@@ -329,10 +329,11 @@ export const autoEnrollPlate = async ({ business, plate, customerName, phone }) 
 
     // 3. Auto-create a minimal customer record for first-time walk-ins
     if (!customer) {
+      const cleanPhone = String(phone || '').trim() || null;
       customer = await CarWashCustomer.create({
         business,
-        name: String(customerName || normalizedPlate).trim(),
-        phone: String(phone || '').trim(),
+        name: String(customerName || normalizedPlate).trim() || normalizedPlate,
+        phone: cleanPhone,
         plates: [normalizedPlate],
         notes: 'Auto-enrolled at first visit',
       });
