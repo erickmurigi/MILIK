@@ -7,18 +7,22 @@ import {
   FaBolt,
   FaBook,
   FaBuilding,
+  FaCar,
   FaChartLine,
   FaCheckCircle,
   FaClipboardList,
   FaCoins,
   FaFileInvoice,
+  FaHandshake,
   FaHeadset,
   FaHome,
   FaLayerGroup,
   FaMobileAlt,
   FaPhoneAlt,
   FaShieldAlt,
+  FaUsers,
   FaUserFriends,
+  FaWarehouse,
   FaWallet,
   FaWhatsapp,
 } from "react-icons/fa";
@@ -30,10 +34,48 @@ import heroStatementImage from "../../assets/landing/hero-landlord-statement.web
 import "./home.css";
 
 const heroHighlights = [
-  "AUTOMATED Tenant billing and receipting",
-  "LANDLORD statements and remittances",
-  "Chart of Accounts, Trial Balance and Income Statement",
-  "M-PESA INTEGRATION and bank-ready collections workflow",
+  "PROPERTY management — billing, statements and M-PESA",
+  "CAR WASH operations — jobs, payments and loyalty",
+  "HUMAN RESOURCES — payroll, leave and appraisals",
+  "INVENTORY & POS — stock, orders and point of sale",
+];
+
+const modules = [
+  {
+    icon: <FaBuilding />,
+    title: "Property Management",
+    description: "Tenant billing, M-PESA rent collection, landlord statements, Trial Balance and full financial reporting.",
+    color: "text-[#0B3B2E]",
+    bg: "bg-[#0B3B2E]/10",
+  },
+  {
+    icon: <FaCar />,
+    title: "Car Wash",
+    description: "Job tracking, payments, staff commissions, customer loyalty program and branch management.",
+    color: "text-sky-700",
+    bg: "bg-sky-50",
+  },
+  {
+    icon: <FaUsers />,
+    title: "Human Resources",
+    description: "Employee records, leave management, payroll processing, KPI tracking and staff appraisals.",
+    color: "text-violet-700",
+    bg: "bg-violet-50",
+  },
+  {
+    icon: <FaWarehouse />,
+    title: "Inventory & POS",
+    description: "Stock management, purchase orders, supplier tracking, POS sessions and till reconciliation.",
+    color: "text-orange-700",
+    bg: "bg-orange-50",
+  },
+  {
+    icon: <FaHandshake />,
+    title: "Property Sales",
+    description: "Listings, buyer management, agent commissions, deal tracking and sales performance reports.",
+    color: "text-emerald-700",
+    bg: "bg-emerald-50",
+  },
 ];
 
 const features = [
@@ -44,12 +86,12 @@ const features = [
   },
   {
     icon: <FaFileInvoice />,
-    title: "AUTOMATED Tenant billing",
+    title: "Automated tenant billing",
     description: "Create invoices, manage recurring charges, record receipts and keep tenant balances clean.",
   },
   {
     icon: <FaCoins />,
-    title: "LANDLORD reporting",
+    title: "Landlord reporting",
     description: "Prepare owner statements, commissions, remittances and reconciled reporting from one controlled flow.",
   },
   {
@@ -80,38 +122,46 @@ const steps = [
   },
   {
     title: "3. Subscribe when ready",
-    description: "Move from DEMO preview workspace to your own live workspace once you are ready to onboard real company data.",
+    description: "Move from demo preview workspace to your own live workspace once you are ready to onboard real company data.",
   },
 ];
 
 const faqs = [
   {
-    question: "What is Milik property management software?",
-    answer: "Milik is a cloud-based property management system built for Kenya. It automates tenant billing, M-PESA rent collection, landlord statements and financial reporting — Trial Balance, Income Statement and Balance Sheet — all in one workspace.",
+    question: "What is Milik?",
+    answer: "Milik is a cloud-based business management platform built for Kenya. It brings property management, car wash operations, HR, inventory and property sales into one workspace — all sharing a single accounting backbone, user management system and reporting layer.",
+  },
+  {
+    question: "What modules does Milik include?",
+    answer: "Milik includes five modules: Property Management (tenant billing, M-PESA, landlord statements), Car Wash (jobs, payments, loyalty, commissions), Human Resources (payroll, leave, appraisals), Inventory & POS (stock, purchase orders, point of sale) and Property Sales (listings, buyers, agents, deals). Modules are activated based on your business needs.",
   },
   {
     question: "Does Milik support M-PESA for rent collection?",
     answer: "Yes. Milik integrates with M-PESA Paybill numbers so tenants can pay rent directly. Collections are automatically matched to invoices and receipts are generated instantly, keeping tenant balances accurate without manual entry.",
   },
   {
-    question: "How much does property management software cost in Kenya?",
-    answer: "Milik starts at KES 3,500 per month for up to 60 units. The Growth plan is KES 7,500/month for 61–250 units and Portfolio Plus is KES 9,000/month for 251–800 units. Enterprise custom pricing is available for 800+ units.",
+    question: "How much does Milik cost?",
+    answer: "Milik starts at KES 3,500 per month for up to 60 rental units. The Growth plan is KES 7,500/month for 61–250 units and Portfolio Plus is KES 9,000/month for 251–800 units. Enterprise custom pricing is available for 800+ units. Contact us for current bundle pricing when combining multiple modules.",
   },
   {
     question: "Can I manage multiple properties and landlords in Milik?",
     answer: "Yes. Milik supports unlimited properties and landlords in a single workspace. You can manage bedsitters, apartments, commercial units and mixed-use portfolios with per-landlord statements and remittances generated automatically.",
   },
   {
+    question: "Does the car wash module support loyalty programs?",
+    answer: "Yes. The car wash module includes a built-in customer loyalty program — track stamps per vehicle plate, set reward thresholds, and send automated SMS notifications when customers earn stamps or unlock rewards.",
+  },
+  {
     question: "What financial reports does Milik generate?",
-    answer: "Milik generates Trial Balance, Income Statement, Balance Sheet, landlord remittance statements, rental collection reports, aged receivables analysis, paid balance reports and MRI tax summaries — all from the system's accounting core.",
+    answer: "Milik generates Trial Balance, Income Statement, Balance Sheet, landlord remittance statements, rental collection reports, aged receivables analysis, paid balance reports and MRI tax summaries — all from the system's accounting core without manual exports.",
   },
   {
     question: "Does Milik work for bedsitters, apartments and commercial properties?",
     answer: "Yes. Milik handles bedsitters, single-rooms, apartments, commercial units, gated communities and mixed-use properties. It supports multiple unit types, utility billing (water, electricity) and variable charge structures per tenant.",
   },
   {
-    question: "Does the demo include accounting reports?",
-    answer: "Yes. The demo showcases Chart of Accounts, Trial Balance and Income Statement so prospects can see the financial backbone clearly before subscribing.",
+    question: "Can multiple users access the same Milik workspace?",
+    answer: "Yes. Milik supports multiple user accounts per company with role-based access control. You can assign roles like Administrator, Manager, Accountant, Agent and Viewer — each with their own permission levels across modules.",
   },
   {
     question: "Can I enter my own records during the Milik trial?",
@@ -153,8 +203,7 @@ const pricingTiers = [
     units: "Up to 60 units",
     price: "KES 3,500",
     meta: "/ month",
-    helper:
-      "An early-adopter price for smaller teams that need disciplined billing, receipts, landlord workflows and credible reports.",
+    helper: "An early-adopter price for smaller teams that need disciplined billing, receipts, landlord workflows and credible reports.",
     cta: "Get free trial",
     featured: false,
   },
@@ -163,8 +212,7 @@ const pricingTiers = [
     units: "61 to 250 units",
     price: "KES 7,500",
     meta: "/ month",
-    helper:
-      "Best starting commercial tier for active property managers who want an affordable but serious ERP step-up.",
+    helper: "Best starting commercial tier for active property managers who want an affordable but serious ERP step-up.",
     cta: "Request demo",
     featured: true,
   },
@@ -173,8 +221,7 @@ const pricingTiers = [
     units: "251 to 800 units",
     price: "KES 9,000",
     meta: "/ month",
-    helper:
-      "Designed for firms with heavier monthly operations, more users, deeper reporting and landlord processing volume.",
+    helper: "Designed for firms with heavier monthly operations, more users, deeper reporting and landlord processing volume.",
     cta: "Talk to sales",
     featured: false,
   },
@@ -183,8 +230,7 @@ const pricingTiers = [
     units: "801+ units",
     price: "Custom",
     meta: "pricing",
-    helper:
-      "Use tailored commercial terms when onboarding needs, workflow complexity and support expectations are broader.",
+    helper: "Use tailored commercial terms when onboarding needs, workflow complexity and support expectations are broader.",
     cta: "Request quote",
     featured: false,
   },
@@ -198,7 +244,6 @@ const PUBLIC_SITE_URL = "https://milikproperty.com";
 
 const ensureHeadElement = (selector, tagName, attributes = {}) => {
   let element = document.head.querySelector(selector);
-
   if (!element) {
     element = document.createElement(tagName);
     Object.entries(attributes).forEach(([key, value]) => {
@@ -206,7 +251,6 @@ const ensureHeadElement = (selector, tagName, attributes = {}) => {
     });
     document.head.appendChild(element);
   }
-
   return element;
 };
 
@@ -316,28 +360,28 @@ function Home() {
     const hasUtilityQuery = params.has("demoAccess") || params.has("token");
     const canonicalUrl = `${PUBLIC_SITE_URL}/`;
 
-    document.title = "Milik | Property Management Software Kenya – Billing, Statements & Reports";
+    document.title = "Milik | Business Management Software Kenya — Property, Car Wash, HR & Inventory";
     setDocumentDescription(
-      "Milik is Kenya's property management software for automated tenant billing, receipts, landlord statements, Trial Balance, Balance Sheet and Income Statement. Start your free demo today."
+      "Milik is Kenya's business management platform — property management, car wash operations, HR, inventory and property sales in one workspace. Start your free demo today."
     );
     setDocumentRobots(hasUtilityQuery ? "noindex,nofollow" : "index,follow");
     setCanonicalHref(canonicalUrl);
     setOpenGraphContent("og:type", "website");
     setOpenGraphContent("og:site_name", "Milik");
     setOpenGraphContent("og:locale", "en_KE");
-    setOpenGraphContent("og:title", "Milik | Property Management Software Kenya");
+    setOpenGraphContent("og:title", "Milik | Business Management Software Kenya");
     setOpenGraphContent(
       "og:description",
-      "Kenya's property management software for automated tenant billing, landlord statements and accounting reports — all in one workspace."
+      "Kenya's business management platform — property management, car wash, HR, inventory and property sales in one professional workspace."
     );
     setOpenGraphContent("og:url", canonicalUrl);
     setOpenGraphContent("og:image", `${PUBLIC_SITE_URL}/logo.png`);
     setTwitterContent("twitter:card", "summary_large_image");
     setTwitterContent("twitter:site", "@milikproperty");
-    setTwitterContent("twitter:title", "Milik | Property Management Software Kenya");
+    setTwitterContent("twitter:title", "Milik | Business Management Software Kenya");
     setTwitterContent(
       "twitter:description",
-      "Kenya's property management software for billing, receipting, landlord statements and financial reporting."
+      "Property management, car wash, HR, inventory and property sales in one workspace. Built for Kenya."
     );
     setTwitterContent("twitter:image", `${PUBLIC_SITE_URL}/logo.png`);
   }, [location.search]);
@@ -383,7 +427,10 @@ function Home() {
 
         params.delete("demoAccess");
         const nextSearch = params.toString();
-        navigate(data.redirectTo || "/dashboard", { replace: true, state: { restoredFromDemoEmail: true, homeSearch: nextSearch ? `?${nextSearch}` : "" } });
+        navigate(data.redirectTo || "/dashboard", {
+          replace: true,
+          state: { restoredFromDemoEmail: true, homeSearch: nextSearch ? `?${nextSearch}` : "" },
+        });
       } catch (error) {
         if (cancelled) return;
         const message = error?.message || "Failed to restore demo access.";
@@ -391,24 +438,16 @@ function Home() {
         params.delete("demoAccess");
         const nextSearch = params.toString();
         navigate(
-          {
-            pathname: location.pathname,
-            search: nextSearch ? `?${nextSearch}` : "",
-          },
+          { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
           { replace: true }
         );
       } finally {
-        if (!cancelled) {
-          setRestoringDemoAccess(false);
-        }
+        if (!cancelled) setRestoringDemoAccess(false);
       }
     };
 
     restoreDemoAccess();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [dispatch, location.pathname, location.search, navigate]);
 
   React.useEffect(() => {
@@ -416,7 +455,6 @@ function Home() {
     const queryRequestsExpiredNotice = params.get("demoExpired") === "1";
 
     let nextNotice = "";
-
     try {
       nextNotice = sessionStorage.getItem(DEMO_EXPIRED_NOTICE_KEY) || "";
       if (!nextNotice && queryRequestsExpiredNotice) {
@@ -433,10 +471,7 @@ function Home() {
       params.delete("demoExpired");
       const nextSearch = params.toString();
       navigate(
-        {
-          pathname: location.pathname,
-          search: nextSearch ? `?${nextSearch}` : "",
-        },
+        { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
         { replace: true }
       );
     }
@@ -444,11 +479,7 @@ function Home() {
 
   const dismissDemoExpiredNotice = () => {
     setDemoExpiredNotice("");
-    try {
-      sessionStorage.removeItem(DEMO_EXPIRED_NOTICE_KEY);
-    } catch (_error) {
-      // Ignore storage cleanup issues.
-    }
+    try { sessionStorage.removeItem(DEMO_EXPIRED_NOTICE_KEY); } catch (_error) {}
   };
 
   return (
@@ -483,16 +514,19 @@ function Home() {
           </div>
         </div>
       ) : null}
+
+      {/* Nav */}
       <nav className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Milik" className="h-11 w-11 object-contain" />
             <div>
               <p className="text-lg font-extrabold tracking-wide text-[#0B3B2E]">Milik</p>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Property Management System</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Business Suite</p>
             </div>
           </div>
           <div className="hidden items-center gap-8 md:flex">
+            <a href="#modules" className="text-sm font-semibold text-slate-600 transition hover:text-[#0B3B2E]">Modules</a>
             <a href="#features" className="text-sm font-semibold text-slate-600 transition hover:text-[#0B3B2E]">Features</a>
             <a href="#pricing" className="text-sm font-semibold text-slate-600 transition hover:text-[#0B3B2E]">Pricing</a>
             <a href="#how-it-works" className="text-sm font-semibold text-slate-600 transition hover:text-[#0B3B2E]">How it works</a>
@@ -519,6 +553,7 @@ function Home() {
         </div>
       </nav>
 
+      {/* Hero */}
       <section className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(11,59,46,0.18),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(255,140,0,0.15),_transparent_26%),linear-gradient(135deg,#ffffff_0%,#f7fbf8_45%,#eef5f1_100%)]">
         <div className="hero-gridlines" aria-hidden="true" />
         <div className="hero-orb hero-orb-left" aria-hidden="true" />
@@ -526,13 +561,13 @@ function Home() {
         <div className="mx-auto grid max-w-[1720px] gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[0.94fr_1.06fr] lg:items-center xl:gap-16 2xl:gap-20 lg:px-8 xl:px-10 2xl:px-14 lg:py-20">
           <div className="relative z-10 max-w-[760px]">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#0B3B2E]/10 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.28em] text-[#0B3B2E] shadow-sm">
-              <FaBolt className="text-[#FF8C00]" /> Built for managers and landlords
+              <FaBolt className="text-[#FF8C00]" /> Built for Kenyan businesses
             </div>
             <h1 className="mt-6 max-w-4xl text-4xl font-extrabold leading-[0.98] tracking-[-0.04em] text-slate-950 sm:text-5xl lg:text-[4.7rem] xl:text-[5.2rem]">
-              Property management ERP for teams that need control over portfolios, landlords, collections and reporting.
+              One business management platform — property, car wash, HR and inventory in one workspace.
             </h1>
             <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-600 xl:text-[1.15rem]">
-              Milik gives property managers and self-managing landlords one serious workspace for portfolio control, billing, receipting, statements and finance execution without the confusion of scattered tools.
+              Milik brings your core business operations together — property management, car wash, HR, inventory and property sales — all sharing one accounting backbone, without scattered tools.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -591,6 +626,7 @@ function Home() {
         </div>
       </section>
 
+      {/* Demo entry cards */}
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -602,8 +638,7 @@ function Home() {
               onClick={() => openTrialModal("property_manager")}
               className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#0B3B2E] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#0A3127]"
             >
-              Enter Demo
-              <FaArrowRight />
+              Enter Demo <FaArrowRight />
             </button>
           </div>
           <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -615,8 +650,7 @@ function Home() {
               onClick={() => openTrialModal("landlord")}
               className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#0B3B2E] px-5 py-3 text-sm font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E] hover:text-white"
             >
-              Enter Demo
-              <FaArrowRight />
+              Enter Demo <FaArrowRight />
             </button>
           </div>
           <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -627,18 +661,18 @@ function Home() {
               to="/login"
               className="mt-5 inline-flex items-center gap-2 rounded-full border border-slate-300 px-5 py-3 text-sm font-bold text-slate-800 transition hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
             >
-              Open Login
-              <FaArrowRight />
+              Open Login <FaArrowRight />
             </Link>
           </div>
         </div>
       </section>
 
+      {/* ERP snapshots */}
       <section className="mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
         <div className="rounded-[34px] border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-8">
           <div className="max-w-2xl">
             <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What makes it feel like ERP</p>
-            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A SYSTEM that connects properties, Landlords, tenants, cash and reports.</h2>
+            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A system that connects properties, landlords, tenants, cash and reports.</h2>
           </div>
           <div className="mt-8 grid gap-5 lg:grid-cols-3">
             {erpSnapshots.map((snapshot, index) => (
@@ -656,9 +690,28 @@ function Home() {
         </div>
       </section>
 
+      {/* Modules section */}
+      <section id="modules" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="max-w-2xl">
+          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Everything in one platform</p>
+          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Five business modules. One workspace. One subscription.</h2>
+          <p className="mt-4 text-base leading-7 text-slate-600">Milik covers your entire business operation — from property portfolios and car wash to HR, inventory and property sales — all under one login and one shared accounting layer.</p>
+        </div>
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {modules.map((mod) => (
+            <div key={mod.title} className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+              <div className={`inline-flex rounded-2xl p-3 text-2xl ${mod.bg} ${mod.color}`}>{mod.icon}</div>
+              <h3 className="mt-4 text-base font-extrabold text-slate-900">{mod.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{mod.description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Features */}
       <section id="features" className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
         <div className="max-w-2xl">
-          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Why teams choose Milik</p>
+          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Property management — the flagship module</p>
           <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A system built to feel operationally sharp and financially credible.</h2>
         </div>
         <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -672,12 +725,14 @@ function Home() {
         </div>
       </section>
 
+      {/* Pricing */}
       <section id="pricing" className="bg-white py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Pricing</p>
               <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Simple portfolio-based pricing.</h2>
+              <p className="mt-3 text-sm leading-7 text-slate-600">Property management pricing below. Car wash, HR, inventory and property sales modules available as add-ons — <a href="mailto:miliksystem@gmail.com" className="font-bold text-[#0B3B2E] underline underline-offset-2">contact us</a> for bundle pricing.</p>
             </div>
           </div>
 
@@ -697,9 +752,7 @@ function Home() {
                     <h3 className="mt-3 text-lg font-extrabold text-slate-950">{tier.units}</h3>
                   </div>
                   {tier.featured ? (
-                    <span className="rounded-full bg-[#0B3B2E] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white">
-                      Popular
-                    </span>
+                    <span className="rounded-full bg-[#0B3B2E] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white">Popular</span>
                   ) : null}
                 </div>
                 <p className="mt-5 text-3xl font-extrabold text-slate-950">{tier.price}</p>
@@ -713,8 +766,7 @@ function Home() {
                       : "border border-slate-300 bg-white text-slate-800 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
                   }`}
                 >
-                  {tier.cta}
-                  <FaArrowRight />
+                  {tier.cta} <FaArrowRight />
                 </button>
               </div>
             ))}
@@ -722,6 +774,7 @@ function Home() {
         </div>
       </section>
 
+      {/* How it works */}
       <section id="how-it-works" className="bg-white py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
@@ -739,6 +792,7 @@ function Home() {
         </div>
       </section>
 
+      {/* CTA banner */}
       <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
         <div className="rounded-[36px] bg-gradient-to-r from-[#0B3B2E] via-[#104F3E] to-[#0A3127] px-8 py-10 text-white shadow-2xl">
           <div className="grid gap-8 lg:grid-cols-[1fr_0.8fr] lg:items-center">
@@ -753,7 +807,7 @@ function Home() {
               <div className="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
                 <FaChartLine className="text-2xl text-[#F8C471]" />
                 <p className="mt-4 text-lg font-extrabold">Financial clarity</p>
-                <p className="mt-2 text-sm text-white/80">Trial Balance and Income Statement reinforce Reports.</p>
+                <p className="mt-2 text-sm text-white/80">Trial Balance and Income Statement reinforce reports.</p>
               </div>
               <div className="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
                 <FaClipboardList className="text-2xl text-[#F8C471]" />
@@ -765,6 +819,7 @@ function Home() {
         </div>
       </section>
 
+      {/* FAQ */}
       <section id="faq" className="bg-white py-20">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
@@ -792,6 +847,7 @@ function Home() {
         </div>
       </section>
 
+      {/* Bottom CTA */}
       <section className="px-4 pb-20 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl rounded-[36px] border border-slate-200 bg-white px-8 py-10 shadow-sm">
           <div className="grid gap-8 lg:grid-cols-[1fr_0.7fr] lg:items-center">
@@ -808,8 +864,7 @@ function Home() {
                 onClick={() => openTrialModal("property_manager")}
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0B3B2E] px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#0B3B2E]/20 transition hover:bg-[#0A3127]"
               >
-                Get Free Trial
-                <FaArrowRight />
+                Get Free Trial <FaArrowRight />
               </button>
               <Link
                 to="/login"
@@ -822,19 +877,19 @@ function Home() {
         </div>
       </section>
 
+      {/* Footer */}
       <footer className="border-t border-slate-200 bg-[#0B3B2E] py-8 text-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 text-sm text-white/80 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Milik" className="h-10 w-10 object-contain" />
             <div>
-              <p className="font-bold text-white">Milik Property Management System</p>
-              <p className="text-xs uppercase tracking-[0.2em] text-white/60">Operations • Landlords • Accounting</p>
+              <p className="font-bold text-white">Milik Business Suite</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/60">Property · Car Wash · HR · Inventory · Sales</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-4 text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
             <span>Professional demo workspace</span>
-            <span>Read-only Demo preview</span>
-            <span>Built for confidence</span>
+            <span>Built for Kenya</span>
             <a href="mailto:miliksystem@gmail.com" className="text-white/65 hover:text-white transition">Contact Us</a>
             <Link to="/login" className="text-white/65 hover:text-white transition">Sign In</Link>
           </div>
