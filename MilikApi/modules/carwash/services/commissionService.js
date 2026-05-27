@@ -276,6 +276,7 @@ export const cancelJobCommissions = async ({
   const actorUserId = await resolveAuditActorUserId({ req, businessId: business });
   const accountIds = new Set();
 
+  const bulkOps = [];
   for (const commission of commissions) {
     const reversalEntryIds = [];
     for (const entryId of commission.accrualLedgerEntries || []) {
@@ -293,14 +294,25 @@ export const cancelJobCommissions = async ({
       }
     }
 
-    commission.status = "cancelled";
-    commission.notes = reason;
-    commission.accrualReversalLedgerEntries = [
-      ...(commission.accrualReversalLedgerEntries || []),
-      ...reversalEntryIds,
-    ];
-    commission.updatedBy = actorUserId;
-    await commission.save();
+    bulkOps.push({
+      updateOne: {
+        filter: { _id: commission._id },
+        update: {
+          $set: {
+            status: "cancelled",
+            notes: reason,
+            updatedBy: actorUserId,
+          },
+          $push: {
+            accrualReversalLedgerEntries: { $each: reversalEntryIds },
+          },
+        },
+      },
+    });
+  }
+
+  if (bulkOps.length) {
+    await CarWashStaffCommission.bulkWrite(bulkOps);
   }
 
   if (accountIds.size) {

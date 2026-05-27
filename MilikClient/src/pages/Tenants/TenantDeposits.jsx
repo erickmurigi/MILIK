@@ -32,6 +32,11 @@ import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtil
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
+const DEPOSIT_STATUS_FILTERS = [
+  { val: "ACTIVE", label: "All" },
+  { val: "Issued", label: "Issued" },
+  { val: "Paid", label: "Paid" },
+];
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 const ITEMS_PER_PAGE = 50;
@@ -745,7 +750,7 @@ const TenantDeposits = () => {
                 <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{formatCurrency(totals.amount)}</span>
                 <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">O/S: {formatCurrency(totals.outstanding)}</span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                {[{val:"ACTIVE",label:"All"},{val:"Issued",label:"Issued"},{val:"Paid",label:"Paid"}].map(({val,label}) => (
+                {DEPOSIT_STATUS_FILTERS.map(({val,label}) => (
                   <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}`}>{label}</button>
                 ))}
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />

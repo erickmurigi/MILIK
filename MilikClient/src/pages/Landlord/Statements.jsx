@@ -887,19 +887,21 @@ const Statements = () => {
         existing[field] = Number(existing[field] || 0) + Number(row[field] || 0);
       });
 
-      const mergedUtilityMap = { ...(existing.__utilityMap || {}) };
+      const utilityMap = existing.__utilityMap;
       Object.entries(row.__utilityMap || {}).forEach(([utilityKey, utilityPhases]) => {
-        const currentUtility = mergedUtilityMap[utilityKey] || {
-          invoiced: 0,
-          paid: 0,
-          label: utilityPhases?.label || utilityKey,
-        };
-        currentUtility.invoiced = Number(currentUtility.invoiced || 0) + Number(utilityPhases?.invoiced || 0);
-        currentUtility.paid = Number(currentUtility.paid || 0) + Number(utilityPhases?.paid || 0);
-        currentUtility.label = currentUtility.label || utilityPhases?.label || utilityKey;
-        mergedUtilityMap[utilityKey] = currentUtility;
+        const curr = utilityMap[utilityKey];
+        if (curr) {
+          curr.invoiced += Number(utilityPhases?.invoiced || 0);
+          curr.paid += Number(utilityPhases?.paid || 0);
+          if (!curr.label) curr.label = utilityPhases?.label || utilityKey;
+        } else {
+          utilityMap[utilityKey] = {
+            invoiced: Number(utilityPhases?.invoiced || 0),
+            paid: Number(utilityPhases?.paid || 0),
+            label: utilityPhases?.label || utilityKey,
+          };
+        }
       });
-      existing.__utilityMap = mergedUtilityMap;
     });
 
     return Array.from(grouped.values())

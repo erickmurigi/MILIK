@@ -1,14 +1,15 @@
 // routes/tenant.js
 import express from "express"
-import { 
-  createTenant, 
-  getTenant, 
-  getTenants, 
-  updateTenant, 
+import mongoose from "mongoose"
+import {
+  createTenant,
+  getTenant,
+  getTenants,
+  updateTenant,
   deleteTenant,
   updateTenantStatus,
   getTenantPayments,
-  getTenantBalance, 
+  getTenantBalance,
   getTenantTotalDue,
   migrateTenantCodes,
   bulkImportTenants,
@@ -52,6 +53,9 @@ router.get("/balance/:id", verifyUser, getTenantBalance)
 router.post("/migrate-codes", verifyUser, migrateTenantCodes)
 
 router.get('/:id/total-due', verifyUser, async (req, res, next) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ message: "Invalid tenant ID" });
+  }
   try {
     const totalDue = await getTenantTotalDue(req.params.id);
     res.status(200).json(totalDue);

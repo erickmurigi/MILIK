@@ -1,4 +1,5 @@
 // controllers/notificationController.js
+import mongoose from "mongoose";
 import Notification from "../../models/Notification.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 
@@ -82,6 +83,9 @@ export const markAsRead = async (req, res, next) => {
 // Mark all as read
 export const markAllAsRead = async (req, res, next) => {
   const { recipient } = req.body;
+  if (!recipient || !mongoose.Types.ObjectId.isValid(recipient)) {
+    return res.status(400).json({ message: "Valid recipient ID is required" });
+  }
   try {
     const business = resolveBusinessId(req);
     await Notification.updateMany({ recipient, business, isRead: false }, { $set: { isRead: true } });
@@ -105,13 +109,18 @@ export const deleteNotification = async (req, res, next) => {
 // Get notification stats
 export const getNotificationStats = async (req, res, next) => {
   const { recipient } = req.query;
+  if (!recipient || !mongoose.Types.ObjectId.isValid(recipient)) {
+    return res.status(400).json({ message: "Valid recipient ID is required" });
+  }
   try {
     const business = resolveBusinessId(req);
-    const total = await Notification.countDocuments({ recipient, business });
-    const unread = await Notification.countDocuments({ recipient, business, isRead: false });
-    const byType = await Notification.aggregate([
-      { $match: { recipient, business } },
-      { $group: { _id: "$type", count: { $sum: 1 } } },
+    const [total, unread, byType] = await Promise.all([
+      Notification.countDocuments({ recipient, business }),
+      Notification.countDocuments({ recipient, business, isRead: false }),
+      Notification.aggregate([
+        { $match: { recipient: new mongoose.Types.ObjectId(recipient), business } },
+        { $group: { _id: "$type", count: { $sum: 1 } } },
+      ]),
     ]);
 
     res.status(200).json({ total, unread, byType });

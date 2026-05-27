@@ -106,9 +106,13 @@ const PaidBalanceReport = () => {
 
   const balanceInsights = useMemo(() => {
     const rows = Array.isArray(report.rows) ? report.rows : [];
-    const owingRows = rows.filter((row) => String(row?.status) === 'owing');
-    const creditRows = rows.filter((row) => String(row?.status) === 'credit');
-    const settledRows = rows.filter((row) => String(row?.status) === 'settled');
+    const owingRows = [], creditRows = [], settledRows = [];
+    rows.forEach(row => {
+      const s = String(row?.status);
+      if (s === 'owing') owingRows.push(row);
+      else if (s === 'credit') creditRows.push(row);
+      else if (s === 'settled') settledRows.push(row);
+    });
     const largestOwing = [...owingRows].sort((a, b) => Number(b?.netBalance || 0) - Number(a?.netBalance || 0))[0] || null;
     const largestCredit = [...creditRows].sort((a, b) => Number(a?.netBalance || 0) - Number(b?.netBalance || 0))[0] || null;
     const earliestArrear = [...owingRows]
@@ -145,7 +149,7 @@ const PaidBalanceReport = () => {
     { label: 'Search', value: filters.search || 'No free-text filter' },
   ]), [filters, propertyNameMap]);
 
-  const printGeneratedAt = useMemo(() => new Date().toLocaleString(), [report, filters]);
+  const printGeneratedAt = useMemo(() => new Date().toLocaleString(), []);
 
   const handleExportCSV = () => {
     if (!canExportReports) {

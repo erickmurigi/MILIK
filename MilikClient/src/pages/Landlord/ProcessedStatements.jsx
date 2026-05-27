@@ -170,23 +170,29 @@ const ProcessedStatements = () => {
   }, [currentPage, safeCurrentPage]);
 
   const stats = useMemo(() => {
-    const reversed = statements.filter((statement) => statement?.status === "reversed");
-    const active = statements.filter((statement) => statement?.status !== "reversed");
-    const recoveries = active.filter((statement) => isNegativeProcessedStatement(statement));
-    const paid = active.filter((statement) => !isNegativeProcessedStatement(statement) && statement.status === "paid");
-    const unpaid = active.filter(
-      (statement) => !isNegativeProcessedStatement(statement) && ["unpaid", "part_paid"].includes(statement.status)
-    );
+    let totalPaid = 0, totalUnpaid = 0, totalRecoveries = 0, totalReversed = 0;
+    let totalAmountPaid = 0, totalAmountUnpaid = 0, totalRecoveryAmount = 0;
 
-    return {
-      totalPaid: paid.length,
-      totalUnpaid: unpaid.length,
-      totalRecoveries: recoveries.length,
-      totalReversed: reversed.length,
-      totalAmountPaid: paid.reduce((sum, s) => sum + Number(s.amountPaid || s.netAmountDue || 0), 0),
-      totalAmountUnpaid: unpaid.reduce((sum, s) => sum + Number(s.balanceDue ?? s.netAmountDue ?? 0), 0),
-      totalRecoveryAmount: recoveries.reduce((sum, s) => sum + getOutstandingRecoveryBalance(s), 0),
-    };
+    statements.forEach((s) => {
+      if (s?.status === "reversed") {
+        totalReversed++;
+        return;
+      }
+      if (isNegativeProcessedStatement(s)) {
+        totalRecoveries++;
+        totalRecoveryAmount += getOutstandingRecoveryBalance(s);
+        return;
+      }
+      if (s.status === "paid") {
+        totalPaid++;
+        totalAmountPaid += Number(s.amountPaid || s.netAmountDue || 0);
+      } else if (["unpaid", "part_paid"].includes(s.status)) {
+        totalUnpaid++;
+        totalAmountUnpaid += Number(s.balanceDue ?? s.netAmountDue ?? 0);
+      }
+    });
+
+    return { totalPaid, totalUnpaid, totalRecoveries, totalReversed, totalAmountPaid, totalAmountUnpaid, totalRecoveryAmount };
   }, [statements]);
 
   const reloadStatements = () => {

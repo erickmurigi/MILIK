@@ -7,9 +7,47 @@ import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, re
 import { accrueCommissionForJob, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
 import { awardLoyaltyStamp, sendPaymentConfirmationSms } from "./loyaltyController.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
+import { postEntry } from "../../../services/ledgerPostingService.js";
+import { findSystemAccountByCode } from "../../../services/chartOfAccountsService.js";
+import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
 
 const PAYMENT_METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const RECONCILIATION_STATUSES = new Set(["pending", "reconciled", "flagged"]);
+
+const cwDayRange = (value = new Date()) => {
+  const safe = value instanceof Date && !Number.isNaN(value.getTime()) ? value : new Date();
+  const start = new Date(safe); start.setHours(0, 0, 0, 0);
+  const end = new Date(start); end.setDate(end.getDate() + 1);
+  return { start, end };
+};
+
+const postCwPaymentLedger = async ({ business, payment, cashbookAccountId, job, userId }) => {
+  try {
+    const revenueAccount = await findSystemAccountByCode(business, "4400");
+    if (!revenueAccount?._id) return;
+    const { start, end } = cwDayRange(payment.paymentDate || new Date());
+    const base = {
+      business,
+      sourceTransactionType: "carwash_payment",
+      sourceTransactionId: String(payment._id),
+      transactionDate: payment.paymentDate || new Date(),
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "CARWASH_PAYMENT",
+      amount: Number(payment.amount),
+      payer: job?.customerName || "customer",
+      receiver: "n/a",
+      createdBy: userId,
+      approvedBy: userId,
+      allowUnscoped: true,
+    };
+    await postEntry({ ...base, accountId: cashbookAccountId, direction: "debit", notes: `CW payment received – Job #${job?.jobNumber || ""} (${payment.method})` });
+    await postEntry({ ...base, accountId: revenueAccount._id, direction: "credit", notes: `CW service income – Job #${job?.jobNumber || ""}` });
+    await aggregateChartOfAccountBalances(business, [String(cashbookAccountId), String(revenueAccount._id)]);
+  } catch {
+    // ledger failure must not block the payment
+  }
+};
 
 const resolveCashbookAccount = async (business, value) => {
   const accountId = String(value || "").trim();
@@ -132,10 +170,10 @@ export const recordPayment = async (req, res, next) => {
     await accrueCommissionForJob({ req, job: updatedJob });
     if (updatedJob.paymentStatus === "paid") {
       await markJobCommissionsPayable({ business, jobId: updatedJob._id });
-      // Award loyalty stamp and send payment confirmation SMS (failures are silenced inside)
       await awardLoyaltyStamp({ business, job: updatedJob });
       await sendPaymentConfirmationSms({ business, job: updatedJob, amount });
     }
+    await postCwPaymentLedger({ business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId });
     res.status(201).json({ success: true, data: payment, payment, job: updatedJob, message: "Car Wash payment recorded" });
   } catch (error) {
     next(error);

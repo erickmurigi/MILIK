@@ -51,6 +51,10 @@ const Properties = () => {
   const landlords = useSelector((state) => state?.landlord?.landlords || state?.landlords?.items || state?.landlords?.landlords || []);
   const { currentCompany } = useSelector((state) => state.company);
 
+  const landlordOptions = useMemo(() =>
+    landlords.map(l => ({ id: l._id || l.id, label: l.fullName || l.name || l.landlordName || "Unnamed" })),
+  [landlords]);
+
   // Pagination
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
@@ -477,6 +481,18 @@ const Properties = () => {
 
   const totalPages = Math.max(1, Math.ceil((pagination?.total || 0) / pageSize));
 
+  const visiblePages = useMemo(() => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const items = [1];
+    if (currentPage > 3) items.push('…');
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = start; i <= end; i++) items.push(i);
+    if (currentPage < totalPages - 2) items.push('…end');
+    items.push(totalPages);
+    return items;
+  }, [currentPage, totalPages]);
+
   // Archive/Restore properties
   const archiveSelected = () => {
     if (selectedProperties.length === 0) {
@@ -612,8 +628,8 @@ const Properties = () => {
             <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
               value={draftFilters.landlord} onChange={(e) => setDraftFilters((p) => ({ ...p, landlord: e.target.value }))}>
               <option value="">All Landlords</option>
-              {landlords && landlords.length > 0 ? landlords.map((l) => (
-                <option key={l._id || l.id} value={l._id || l.id || ""}>{l.fullName || l.name || l.landlordName || "Unnamed"}</option>
+              {landlordOptions.length > 0 ? landlordOptions.map((l) => (
+                <option key={l.id} value={l.id || ""}>{l.label}</option>
               )) : <option disabled>No landlords</option>}
             </select>
 
@@ -1012,32 +1028,23 @@ const Properties = () => {
                       </button>
 
                       <div className="flex items-center gap-1">
-                        {[...Array(totalPages)].map((_, i) => {
-                          const page = i + 1;
-                          if (page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)) {
-                            return (
-                              <button
-                                key={page}
-                                onClick={() => setCurrentPage(page)}
-                                className={`px-3 py-1.5 min-w-[32px] text-xs rounded-lg border transition-colors font-bold ${
-                                  currentPage === page
-                                    ? "bg-[#0B3B2E] text-white border-[#0B3B2E] hover:bg-[#0A3127]"
-                                    : "border-gray-300 hover:bg-gray-50"
-                                }`}
-                              >
-                                {page}
-                              </button>
-                            );
-                          }
-                          if (page === currentPage - 2 || page === currentPage + 2) {
-                            return (
-                              <span key={page} className="px-1 text-gray-400 text-xs">
-                                ...
-                              </span>
-                            );
-                          }
-                          return null;
-                        })}
+                        {visiblePages.map((item) =>
+                          typeof item === 'number' ? (
+                            <button
+                              key={item}
+                              onClick={() => setCurrentPage(item)}
+                              className={`px-3 py-1.5 min-w-[32px] text-xs rounded-lg border transition-colors font-bold ${
+                                currentPage === item
+                                  ? "bg-[#0B3B2E] text-white border-[#0B3B2E] hover:bg-[#0A3127]"
+                                  : "border-gray-300 hover:bg-gray-50"
+                              }`}
+                            >
+                              {item}
+                            </button>
+                          ) : (
+                            <span key={item} className="px-1 text-gray-400 text-xs">...</span>
+                          )
+                        )}
                       </div>
 
                       <button

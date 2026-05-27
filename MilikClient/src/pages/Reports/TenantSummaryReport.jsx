@@ -57,28 +57,50 @@ const TenantSummaryReport = () => {
     loadData();
   }, [businessId]);
 
+  const propertyById = useMemo(() => {
+    const m = new Map();
+    properties.forEach((p) => m.set(String(p._id), p));
+    return m;
+  }, [properties]);
+
+  const invoicesByTenant = useMemo(() => {
+    const m = new Map();
+    invoices.forEach((inv) => {
+      const id = String(inv?.tenant?._id || inv?.tenant || "");
+      if (!id) return;
+      const arr = m.get(id) || [];
+      arr.push(inv);
+      m.set(id, arr);
+    });
+    return m;
+  }, [invoices]);
+
+  const paymentsByTenant = useMemo(() => {
+    const m = new Map();
+    payments.forEach((pay) => {
+      const id = String(pay?.tenant?._id || pay?.tenant || "");
+      if (!id) return;
+      const arr = m.get(id) || [];
+      arr.push(pay);
+      m.set(id, arr);
+    });
+    return m;
+  }, [payments]);
+
   const rows = useMemo(() => {
     return tenants.map((tenant) => {
-      // Property comes through unit (tenant.unit is populated with unit.property)
       const unitProp = tenant.unit?.property;
-      const propertyId = unitProp?._id || (typeof unitProp === "string" ? unitProp : "");
-      const propFallback = properties.find((p) => String(p._id) === String(propertyId));
+      const propertyId = String(unitProp?._id || (typeof unitProp === "string" ? unitProp : ""));
+      const propFallback = propertyId ? propertyById.get(propertyId) : null;
       const propertyName = unitProp?.propertyName || propFallback?.propertyName || "—";
 
       const tenantId = String(tenant._id);
-
-      const tenantInvoices = invoices.filter((inv) => {
-        const id = inv?.tenant?._id || inv?.tenant;
-        return String(id) === tenantId;
-      });
-      const tenantPayments = payments.filter((pay) => {
-        const id = pay?.tenant?._id || pay?.tenant;
-        return String(id) === tenantId;
-      });
+      const tenantInvoices = invoicesByTenant.get(tenantId) || [];
+      const tenantPayments = paymentsByTenant.get(tenantId) || [];
 
       const totalInvoiced = tenantInvoices.reduce((sum, inv) => sum + Number(inv?.amount || 0), 0);
       const totalPaid = tenantPayments.reduce((sum, p) => sum + Number(p?.amount || 0), 0);
-      const balance = totalInvoiced - totalPaid; // positive = tenant owes money
+      const balance = totalInvoiced - totalPaid;
 
       return {
         tenantId,
@@ -96,7 +118,7 @@ const TenantSummaryReport = () => {
         status: String(tenant.status || "").toLowerCase() === "active" ? "active" : "inactive",
       };
     });
-  }, [tenants, properties, invoices, payments]);
+  }, [tenants, propertyById, invoicesByTenant, paymentsByTenant]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -110,7 +132,10 @@ const TenantSummaryReport = () => {
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const paginatedRows = useMemo(
+    () => filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE),
+    [filteredRows, startIndex]
+  );
 
   useEffect(() => {
     setCurrentPage(1);
@@ -184,7 +209,7 @@ const TenantSummaryReport = () => {
               <h1 className="ts-print-title">Tenant Summary Report</h1>
             </div>
             <div className="ts-print-meta">
-              <div><strong>Property:</strong> {filters.propertyId === "all" ? "All properties" : (properties.find((p) => String(p._id) === filters.propertyId)?.propertyName || "Selected")}</div>
+              <div><strong>Property:</strong> {filters.propertyId === "all" ? "All properties" : (propertyById.get(filters.propertyId)?.propertyName || "Selected")}</div>
               <div><strong>Status:</strong> {filters.status === "all" ? "All tenants" : filters.status}</div>
               <div><strong>Generated:</strong> {new Date().toLocaleString()}</div>
               <div><strong>Prepared by:</strong> {preparedBy}</div>

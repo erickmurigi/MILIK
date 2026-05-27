@@ -243,30 +243,36 @@ const Units = () => {
     return `Ksh ${numericAmount.toLocaleString("en-KE")}`;
   };
 
+  const propertyById = useMemo(() => {
+    const m = new Map();
+    (properties || []).forEach(p => { if (p?._id) m.set(String(p._id), p); });
+    return m;
+  }, [properties]);
+
+  const unitIndexByProperty = useMemo(() => {
+    const countByProp = new Map();
+    const indexMap = new Map();
+    (unitsData || []).forEach(unit => {
+      const propObj = typeof unit.property === 'string' ? propertyById.get(unit.property) : unit.property;
+      const propId = String(propObj?._id || unit.property || '');
+      const idx = (countByProp.get(propId) || 0) + 1;
+      countByProp.set(propId, idx);
+      indexMap.set(String(unit._id), idx);
+    });
+    return indexMap;
+  }, [unitsData, propertyById]);
+
   const transformedUnits = useMemo(() => {
-    return (unitsData || []).map((unit, index) => {
-      // unit.property is already populated from backend with {_id, propertyName, address}
-      // Extract the property data whether it's a string ID or populated object
-      const propertyObj = typeof unit.property === 'string' 
-        ? properties.find((p) => p._id === unit.property)
+    return (unitsData || []).map((unit) => {
+      const propertyObj = typeof unit.property === 'string'
+        ? propertyById.get(unit.property)
         : unit.property;
-      
-      // Get property display name - prioritize populated data, fallback to Redux
+
       const propertyDisplayName = propertyObj?.propertyName || "Unknown Property";
       const propertyCode = propertyObj?.propertyCode || "XX";
       const propertyId = propertyObj?._id || unit.property;
-      
-      // Get first 2 letters from property name
       const first2Letters = propertyDisplayName.substring(0, 2).toUpperCase();
-      
-      // Count how many units with the same propertyId come before this one to get index within property
-      const unitIndexInProperty = (unitsData || []).reduce((count, u, i) => {
-        const uProperty = typeof u.property === 'string' 
-          ? properties.find((p) => p._id === u.property)
-          : u.property;
-        const uPropertyId = uProperty?._id || u.property;
-        return i < index && uPropertyId === propertyId ? count + 1 : count;
-      }, 0) + 1;
+      const unitIndexInProperty = unitIndexByProperty.get(String(unit._id)) || 1;
       
       // Generate unit code: first 2 letters of property name + 4 digit index within property
       const unitCode = `${first2Letters}${String(unitIndexInProperty).padStart(4, '0')}`;
@@ -308,7 +314,7 @@ const Units = () => {
         blockedReason,
       };
     });
-  }, [unitsData, properties]);
+  }, [unitsData, propertyById, unitIndexByProperty]);
 
   // For filter dropdown property list
   const uniqueProperties = useMemo(() => {
@@ -409,6 +415,18 @@ const Units = () => {
   // Pagination is per UNIT row (max 50 entries per page)
   const totalPages = Math.max(1, Math.ceil(filteredUnits.length / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const visiblePages = useMemo(() => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const items = [1];
+    if (safeCurrentPage > 3) items.push('…');
+    const start = Math.max(2, safeCurrentPage - 1);
+    const end = Math.min(totalPages - 1, safeCurrentPage + 1);
+    for (let i = start; i <= end; i++) items.push(i);
+    if (safeCurrentPage < totalPages - 2) items.push('…end');
+    items.push(totalPages);
+    return items;
+  }, [safeCurrentPage, totalPages]);
   const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentUnits = filteredUnits.slice(startIndex, endIndex);
@@ -1231,32 +1249,23 @@ const Units = () => {
                   </button>
 
                   <div className="flex items-center gap-1">
-                    {[...Array(totalPages)].map((_, i) => {
-                      const page = i + 1;
-                      if (page === 1 || page === totalPages || (page >= safeCurrentPage - 1 && page <= safeCurrentPage + 1)) {
-                        return (
-                          <button
-                            key={page}
-                            onClick={() => setCurrentPage(page)}
-                            className={`px-3 py-1.5 min-w-[32px] text-xs rounded-lg border transition-colors font-bold ${
-                              safeCurrentPage === page
-                                ? "bg-[#0B3B2E] text-white border-[#0B3B2E] hover:bg-[#0A3127]"
-                                : "border-gray-300 hover:bg-gray-50"
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        );
-                      }
-                      if (page === safeCurrentPage - 2 || page === safeCurrentPage + 2) {
-                        return (
-                          <span key={page} className="px-1 text-gray-400 text-xs">
-                            ...
-                          </span>
-                        );
-                      }
-                      return null;
-                    })}
+                    {visiblePages.map((item) =>
+                      typeof item === 'number' ? (
+                        <button
+                          key={item}
+                          onClick={() => setCurrentPage(item)}
+                          className={`px-3 py-1.5 min-w-[32px] text-xs rounded-lg border transition-colors font-bold ${
+                            safeCurrentPage === item
+                              ? "bg-[#0B3B2E] text-white border-[#0B3B2E] hover:bg-[#0A3127]"
+                              : "border-gray-300 hover:bg-gray-50"
+                          }`}
+                        >
+                          {item}
+                        </button>
+                      ) : (
+                        <span key={item} className="px-1 text-gray-400 text-xs">...</span>
+                      )
+                    )}
                   </div>
 
                   <button

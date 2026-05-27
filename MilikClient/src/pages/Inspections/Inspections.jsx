@@ -224,20 +224,31 @@ const Inspections = () => {
   }, [inspections, searchTerm, statusFilter, typeFilter]);
 
   const stats = useMemo(() => {
-    const total = inspections.length;
-    const scheduled = inspections.filter((i) => i?.status === "scheduled").length;
-    const completed = inspections.filter((i) => i?.status === "completed").length;
-    const withScores = inspections.filter((i) => Number.isFinite(Number(i?.score)));
-    const avgScore = withScores.length > 0
-      ? (withScores.reduce((s, i) => s + Number(i.score), 0) / withScores.length).toFixed(1)
-      : "—";
-    const totalIssues = inspections.reduce((s, i) => s + Number(i?.issuesFound || 0), 0);
-    return { total, scheduled, completed, avgScore, totalIssues };
+    let scheduled = 0, completed = 0, totalIssues = 0, scoreSum = 0, scoreCount = 0;
+    inspections.forEach(i => {
+      if (i?.status === "scheduled") scheduled++;
+      if (i?.status === "completed") completed++;
+      totalIssues += Number(i?.issuesFound || 0);
+      const s = Number(i?.score);
+      if (Number.isFinite(s)) { scoreSum += s; scoreCount++; }
+    });
+    return { total: inspections.length, scheduled, completed, totalIssues, avgScore: scoreCount > 0 ? (scoreSum / scoreCount).toFixed(1) : "—" };
   }, [inspections]);
+
+  const statsCards = useMemo(() => [
+    { label: "Total",        value: stats.total,       cls: "bg-slate-900 text-white",                                  icon: <FaClipboardCheck /> },
+    { label: "Scheduled",    value: stats.scheduled,   cls: "bg-amber-50 text-amber-800 border border-amber-200",       icon: <FaCalendarAlt /> },
+    { label: "Completed",    value: stats.completed,   cls: "bg-emerald-50 text-emerald-800 border border-emerald-200", icon: <FaCheckCircle /> },
+    { label: "Avg Score",    value: stats.avgScore,    cls: "bg-blue-50 text-blue-800 border border-blue-200",          icon: <FaClipboardCheck /> },
+    { label: "Total Issues", value: stats.totalIssues, cls: "bg-rose-50 text-rose-800 border border-rose-200",          icon: <FaExclamationTriangle /> },
+  ], [stats]);
 
   const totalPages = Math.max(1, Math.ceil(filteredInspections.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
-  const pageRows = filteredInspections.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const pageRows = useMemo(
+    () => filteredInspections.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filteredInspections, safePage, pageSize]
+  );
 
   useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, typeFilter, pageSize]);
 
@@ -365,13 +376,7 @@ const Inspections = () => {
 
           {/* KPI Strip */}
           <div className="grid flex-shrink-0 grid-cols-2 gap-2 md:grid-cols-5">
-            {[
-              { label: "Total", value: stats.total, cls: "bg-slate-900 text-white", icon: <FaClipboardCheck /> },
-              { label: "Scheduled", value: stats.scheduled, cls: "bg-amber-50 text-amber-800 border border-amber-200", icon: <FaCalendarAlt /> },
-              { label: "Completed", value: stats.completed, cls: "bg-emerald-50 text-emerald-800 border border-emerald-200", icon: <FaCheckCircle /> },
-              { label: "Avg Score", value: stats.avgScore, cls: "bg-blue-50 text-blue-800 border border-blue-200", icon: <FaClipboardCheck /> },
-              { label: "Total Issues", value: stats.totalIssues, cls: "bg-rose-50 text-rose-800 border border-rose-200", icon: <FaExclamationTriangle /> },
-            ].map((card) => (
+            {statsCards.map((card) => (
               <div key={card.label} className={`flex items-center gap-2 rounded-lg px-3 py-2 shadow-sm ${card.cls}`}>
                 <span className="text-base opacity-35">{card.icon}</span>
                 <div className="flex flex-1 items-center justify-between">

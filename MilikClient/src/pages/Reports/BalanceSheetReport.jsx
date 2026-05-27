@@ -22,6 +22,47 @@ const formatSignedMoney = (value) => {
   return amount < 0 ? `(${formatted})` : formatted;
 };
 
+const renderSectionCard = (title, sections, total, accentClass = "text-gray-900") => (
+  <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="bg-[#0B3B2E] text-white px-6 py-4">
+      <h3 className="text-sm font-extrabold tracking-wide">{title}</h3>
+    </div>
+    <div className="p-3 space-y-6">
+      {sections.length ? (
+        sections.map((section) => (
+          <div key={section.label}>
+            <div className="flex items-center justify-between border-b pb-2 mb-3">
+              <h4 className="text-base font-extrabold text-gray-900">{section.label}</h4>
+              <span className="text-sm font-bold text-gray-700">
+                KES {formatSignedMoney(section.total)}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {section.rows.map((row) => (
+                <div key={row._id || `${row.code}-${row.name}`} className="flex items-center justify-between gap-4 text-sm">
+                  <div className="text-gray-800 font-semibold">
+                    <span className="font-bold mr-2">{row.code}</span>
+                    {row.name}
+                  </div>
+                  <div className="font-bold text-gray-900 whitespace-nowrap">
+                    KES {formatSignedMoney(row.amount)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))
+      ) : (
+        <div className="text-sm font-medium text-gray-600">No balances found for this section.</div>
+      )}
+      <div className="border-t pt-4 flex items-center justify-between">
+        <span className={`text-lg font-extrabold ${accentClass}`}>Total {title}</span>
+        <span className={`text-lg font-extrabold ${accentClass}`}>KES {formatSignedMoney(total)}</span>
+      </div>
+    </div>
+  </div>
+);
+
 const todayString = () => new Date().toISOString().split("T")[0];
 
 const escapeHtml = (value) =>
@@ -564,47 +605,6 @@ const BalanceSheetReport = () => {
       printWindow.onload = () => setTimeout(triggerPrint, 300);
     }
   };
-
-  const renderSectionCard = (title, sections, total, accentClass = "text-gray-900") => (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
-      <div className="bg-[#0B3B2E] text-white px-6 py-4">
-        <h3 className="text-sm font-extrabold tracking-wide">{title}</h3>
-      </div>
-      <div className="p-3 space-y-6">
-        {sections.length ? (
-          sections.map((section) => (
-            <div key={section.label}>
-              <div className="flex items-center justify-between border-b pb-2 mb-3">
-                <h4 className="text-base font-extrabold text-gray-900">{section.label}</h4>
-                <span className="text-sm font-bold text-gray-700">
-                  KES {formatSignedMoney(section.total)}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {section.rows.map((row) => (
-                  <div key={row._id || `${row.code}-${row.name}`} className="flex items-center justify-between gap-4 text-sm">
-                    <div className="text-gray-800 font-semibold">
-                      <span className="font-bold mr-2">{row.code}</span>
-                      {row.name}
-                    </div>
-                    <div className="font-bold text-gray-900 whitespace-nowrap">
-                      KES {formatSignedMoney(row.amount)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="text-sm font-medium text-gray-600">No balances found for this section.</div>
-        )}
-        <div className="border-t pt-4 flex items-center justify-between">
-          <span className={`text-lg font-extrabold ${accentClass}`}>Total {title}</span>
-          <span className={`text-lg font-extrabold ${accentClass}`}>KES {formatSignedMoney(total)}</span>
-        </div>
-      </div>
-    </div>
-  );
 
   const preparedBy = currentUser?.name || currentUser?.username || currentUser?.email || "System";
 

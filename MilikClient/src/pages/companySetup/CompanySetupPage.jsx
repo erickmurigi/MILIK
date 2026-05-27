@@ -43,15 +43,28 @@ const EMAIL_DRAFT_ID = "__new_email_profile__";
 const SMS_DRAFT_ID = "__new_sms_profile__";
 const validSmsSections = new Set(["configuration", "templates", "sent", "failed", "pending"]);
 
-const tabs = [
-  { key: "details", label: "PROFILE", icon: <FaBuilding /> },
-  { key: "payments", label: "PAYMENTS", icon: <FaMoneyCheckAlt /> },
-  { key: "email", label: "EMAIL", icon: <FaEnvelope /> },
-  { key: "sms", label: "SMS", icon: <FaSms /> },
-  { key: "activities", label: "ACTIVITIES", icon: <FaHistory /> },
-];
+const ALL_VALID_TAB_KEYS = new Set(["details", "structure", "modules", "payments", "email", "sms", "activities"]);
 
-const validTabKeys = new Set(tabs.map((tab) => tab.key));
+const TEMPLATE_MODULE_MAP = {
+  receipt_sms_tenant: "propertyManagement",
+  invoice_sms_tenant: "propertyManagement",
+  overdue_reminder_tenant: "propertyManagement",
+  landlord_statement_ready: "propertyManagement",
+  landlord_payment_sms: "propertyManagement",
+  maintenance_update_tenant: "propertyManagement",
+  maintenance_update_landlord: "propertyManagement",
+  tenant_notice_sms: "propertyManagement",
+  landlord_notice_sms: "propertyManagement",
+  penalty_notice_sms: "propertyManagement",
+  meter_usage_notification_sms: "propertyManagement",
+  carwash_stamp_earned: "carwash",
+  carwash_reward_ready: "carwash",
+  carwash_reward_redeemed: "carwash",
+  carwash_payment_confirmed: "carwash",
+  carwash_loyalty_manual: "carwash",
+  carwash_job_manual: "carwash",
+  carwash_payment_manual: "carwash",
+};
 
 const primaryModuleKeys = ["propertyManagement", "accounts"];
 const companyOperatingModeOptions = [
@@ -391,14 +404,6 @@ const formatDateTime = (value) => {
   }).format(date);
 };
 
-const emailUsageOptions = [
-  { value: "receipts", label: "Receipts" },
-  { value: "invoices", label: "Invoices" },
-  { value: "landlord_statements", label: "Landlord Statements" },
-  { value: "system_alerts", label: "System Alerts" },
-  { value: "demo_requests", label: "Demo Requests" },
-  { value: "onboarding", label: "Onboarding" },
-];
 
 const buildEmailStatus = (config = {}) => {
   const senderName = String(config.senderName || "").trim();
@@ -536,6 +541,7 @@ const smsProviderHints = {
 const smsRecipientLabels = {
   tenant: "Tenant",
   landlord: "Landlord",
+  customer: "Customer",
   internal: "Internal",
 };
 
@@ -672,6 +678,90 @@ const defaultSmsTemplates = [
     messageBody: "Hello {tenantName}, your {utilityType} reading for {propertyName} Unit {unitNumber} ({billingPeriod}): {previousReading}→{currentReading} ({unitsConsumed} units). Charge: {amount}. - {companyName}",
     placeholders: ["tenantName", "tenantCode", "utilityType", "meterNumber", "propertyName", "unitNumber", "billingPeriod", "readingDate", "previousReading", "currentReading", "unitsConsumed", "rate", "amount", "companyName", "companyPhone"],
   },
+  {
+    _id: "sms-template-carwash_stamp_earned",
+    key: "carwash_stamp_earned",
+    name: "Loyalty Stamp Earned",
+    description: "Sent automatically after a paid job when a loyalty stamp is awarded to the customer.",
+    recipientType: "customer",
+    enabled: false,
+    sendMode: "automatic",
+    profileId: "",
+    messageBody: "Hi {customerName}! You've earned stamp {currentStamps}/{stampsRequired} for {plate}. {remaining} more wash(es) to go for your reward! - {companyName}",
+    placeholders: ["customerName", "plate", "currentStamps", "stampsRequired", "remaining", "companyName", "companyPhone"],
+  },
+  {
+    _id: "sms-template-carwash_reward_ready",
+    key: "carwash_reward_ready",
+    name: "Loyalty Reward Unlocked",
+    description: "Sent when a customer completes a full loyalty card and earns a reward on their next visit.",
+    recipientType: "customer",
+    enabled: false,
+    sendMode: "automatic",
+    profileId: "",
+    messageBody: "Hi {customerName}! Congratulations! You've earned {rewardDescription} for vehicle {plate}. Redeem it on your next visit. Thank you for your loyalty! - {companyName}",
+    placeholders: ["customerName", "plate", "rewardDescription", "companyName", "companyPhone"],
+  },
+  {
+    _id: "sms-template-carwash_reward_redeemed",
+    key: "carwash_reward_redeemed",
+    name: "Loyalty Reward Redeemed",
+    description: "Sent when a loyalty reward is applied and redeemed on a job.",
+    recipientType: "customer",
+    enabled: false,
+    sendMode: "automatic",
+    profileId: "",
+    messageBody: "Hi {customerName}! Your loyalty reward has been redeemed for {plate}. Thank you for your continued support! - {companyName}",
+    placeholders: ["customerName", "plate", "jobNumber", "companyName", "companyPhone"],
+  },
+  {
+    _id: "sms-template-carwash_payment_confirmed",
+    key: "carwash_payment_confirmed",
+    name: "Payment Confirmed",
+    description: "Sent to the customer when a full job payment is received and recorded.",
+    recipientType: "customer",
+    enabled: false,
+    sendMode: "automatic",
+    profileId: "",
+    messageBody: "Hi {customerName}! Payment of KES {amount} received for {plate} wash. Thank you! - {companyName}",
+    placeholders: ["customerName", "plate", "amount", "companyName", "companyPhone"],
+  },
+  {
+    _id: "sms-template-carwash_loyalty_manual",
+    key: "carwash_loyalty_manual",
+    name: "Loyalty Customer Notice",
+    description: "Manual SMS sent directly to a loyalty customer from the customer management panel.",
+    recipientType: "customer",
+    enabled: false,
+    sendMode: "manual",
+    profileId: "",
+    messageBody: "Hi {customerName}, this is a message from {companyName}. {message}",
+    placeholders: ["customerName", "plate", "message", "companyName", "companyPhone"],
+  },
+  {
+    _id: "sms-template-carwash_job_manual",
+    key: "carwash_job_manual",
+    name: "Job Notice SMS",
+    description: "Manual SMS sent about a specific car wash job from the jobs panel.",
+    recipientType: "customer",
+    enabled: false,
+    sendMode: "manual",
+    profileId: "",
+    messageBody: "Hi {customerName}, your vehicle {plate} (Job #{jobNumber}): {message} - {companyName}",
+    placeholders: ["customerName", "plate", "jobNumber", "serviceName", "price", "status", "message", "companyName", "companyPhone"],
+  },
+  {
+    _id: "sms-template-carwash_payment_manual",
+    key: "carwash_payment_manual",
+    name: "Payment Notice SMS",
+    description: "Manual SMS sent about a specific car wash payment from the payments panel.",
+    recipientType: "customer",
+    enabled: false,
+    sendMode: "manual",
+    profileId: "",
+    messageBody: "Hi {customerName}, your payment of KES {amount} ({method}) for {plate} has been recorded. Ref: {reference}. Job #{jobNumber}. - {companyName}",
+    placeholders: ["customerName", "plate", "amount", "method", "reference", "jobNumber", "companyName", "companyPhone"],
+  },
 ];
 
 const countSmsInfo = (text = "") => {
@@ -741,11 +831,12 @@ const normalizeSmsConfigs = (company = {}) => {
 };
 
 const normalizeSmsTemplates = (company = {}) => {
-  const templates = company?.communication?.smsTemplates;
-  if (Array.isArray(templates) && templates.length > 0) {
-    return templates;
-  }
-  return defaultSmsTemplates;
+  const stored = company?.communication?.smsTemplates;
+  if (!Array.isArray(stored) || stored.length === 0) return defaultSmsTemplates;
+
+  const storedKeys = new Set(stored.map((t) => t.key));
+  const missing = defaultSmsTemplates.filter((t) => !storedKeys.has(t.key));
+  return missing.length > 0 ? [...stored, ...missing] : stored;
 };
 
 const createBlankSmsForm = (sequence = 1) => ({
@@ -851,7 +942,7 @@ export default function CompanySetupPage() {
   const ACTIVITIES_PAGE_SIZE = 25;
   const SESSIONS_PAGE_SIZE = 20;
 
-  const activeTab = validTabKeys.has(searchParams.get("tab")) ? searchParams.get("tab") : "details";
+  const activeTab = ALL_VALID_TAB_KEYS.has(searchParams.get("tab")) ? searchParams.get("tab") : "details";
   const activeSmsSection = validSmsSections.has(searchParams.get("smsTab")) ? searchParams.get("smsTab") : "configuration";
   const paymentConfigs = useMemo(() => normalizePaymentConfigs(currentCompany), [currentCompany]);
   const emailProfiles = useMemo(() => normalizeEmailConfigs(currentCompany), [currentCompany]);
@@ -859,7 +950,7 @@ export default function CompanySetupPage() {
   const smsTemplates = useMemo(() => normalizeSmsTemplates(currentCompany), [currentCompany]);
 
   useEffect(() => {
-    if (!validTabKeys.has(searchParams.get("tab"))) {
+    if (!ALL_VALID_TAB_KEYS.has(searchParams.get("tab"))) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("tab", "details");
       setSearchParams(nextParams, { replace: true });
@@ -1379,14 +1470,24 @@ export default function CompanySetupPage() {
   const smsStatus = useMemo(() => buildSmsStatus(smsForm), [smsForm]);
   const smsTheme = statusTheme[smsStatus.code] || statusTheme.not_configured;
 
+  const hasPM   = hasCompanyModule(currentCompany, "propertyManagement");
+  const hasHR   = hasCompanyModule(currentCompany, "hr");
+  const hasCW   = hasCompanyModule(currentCompany, "carwash");
+  const hasSale = hasCompanyModule(currentCompany, "propertySale");
+
   const smsSummary = useMemo(() => {
     const total = smsProfiles.length;
     const active = smsProfiles.filter((profile) => profile.enabled).length;
     const configured = smsProfiles.filter((profile) => ["configured", "active"].includes(buildSmsStatus(profile).code)).length;
     const defaults = smsProfiles.filter((profile) => profile.isDefault).length;
-    const automatedTemplates = smsTemplates.filter((template) => template.enabled && template.sendMode === "automatic").length;
+    const automatedTemplates = smsTemplates.filter((template) => {
+      const moduleKey = TEMPLATE_MODULE_MAP[template.key];
+      if (moduleKey === "propertyManagement" && !hasPM) return false;
+      if (moduleKey === "carwash" && !hasCW) return false;
+      return template.enabled && template.sendMode === "automatic";
+    }).length;
     return { total, active, configured, defaults, automatedTemplates };
-  }, [smsProfiles, smsTemplates]);
+  }, [smsProfiles, smsTemplates, hasPM, hasCW]);
 
   const taxSetupSummary = useMemo(() => {
     const taxableCategoryCount = Object.values(taxConfig?.taxSettings?.invoiceTaxabilityByCategory || {}).filter(Boolean).length;
@@ -1402,10 +1503,24 @@ export default function CompanySetupPage() {
     };
   }, [taxConfig]);
 
-  const hasPM   = hasCompanyModule(currentCompany, "propertyManagement");
-  const hasHR   = hasCompanyModule(currentCompany, "hr");
-  const hasCW   = hasCompanyModule(currentCompany, "carwash");
-  const hasSale = hasCompanyModule(currentCompany, "propertySale");
+  const tabs = useMemo(() => [
+    { key: "details",    label: "PROFILE",    icon: <FaBuilding /> },
+    ...(hasPM ? [{ key: "structure", label: "STRUCTURE", icon: <FaSitemap /> }] : []),
+    { key: "modules",   label: "MODULES",    icon: <FaThLarge /> },
+    { key: "payments",  label: "PAYMENTS",   icon: <FaMoneyCheckAlt /> },
+    { key: "email",     label: "EMAIL",      icon: <FaEnvelope /> },
+    { key: "sms",       label: "SMS",        icon: <FaSms /> },
+    { key: "activities",label: "ACTIVITIES", icon: <FaHistory /> },
+  ], [hasPM]);
+
+  const emailUsageOptions = useMemo(() => [
+    { value: "receipts",           label: "Receipts" },
+    { value: "invoices",           label: "Invoices" },
+    ...(hasPM ? [{ value: "landlord_statements", label: "Landlord Statements" }] : []),
+    { value: "system_alerts",      label: "System Alerts" },
+    { value: "demo_requests",      label: "Demo Requests" },
+    { value: "onboarding",         label: "Onboarding" },
+  ], [hasPM]);
 
   const handleRefreshSetup = async () => {
     if (!currentCompany?._id) return;
@@ -3298,7 +3413,16 @@ export default function CompanySetupPage() {
 
   const renderSmsTemplatesTab = () => {
     const tplSearch = smsTemplateSearch.trim().toLowerCase();
-    const filteredTemplates = smsTemplates.filter((t) => {
+
+    const moduleVisibleTemplates = smsTemplates.filter((t) => {
+      const moduleKey = TEMPLATE_MODULE_MAP[t.key];
+      if (!moduleKey) return true;
+      if (moduleKey === "propertyManagement") return hasPM;
+      if (moduleKey === "carwash") return hasCW;
+      return true;
+    });
+
+    const filteredTemplates = moduleVisibleTemplates.filter((t) => {
       if (smsTemplateRecipientFilter !== "all" && t.recipientType !== smsTemplateRecipientFilter) return false;
       if (smsTemplateStatusFilter === "enabled" && !t.enabled) return false;
       if (smsTemplateStatusFilter === "disabled" && t.enabled) return false;
@@ -3306,8 +3430,8 @@ export default function CompanySetupPage() {
       if (tplSearch && !`${t.name} ${t.description} ${t.key}`.toLowerCase().includes(tplSearch)) return false;
       return true;
     });
-    const enabledCount = smsTemplates.filter((t) => t.enabled).length;
-    const autoCount = smsTemplates.filter((t) => t.sendMode === "automatic").length;
+    const enabledCount = moduleVisibleTemplates.filter((t) => t.enabled).length;
+    const autoCount = moduleVisibleTemplates.filter((t) => t.sendMode === "automatic").length;
 
     return (
       <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -3329,8 +3453,10 @@ export default function CompanySetupPage() {
               className="h-8 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
             >
               <option value="all">All Recipients</option>
-              <option value="tenant">Tenant</option>
-              <option value="landlord">Landlord</option>
+              {hasPM && <option value="tenant">Tenant</option>}
+              {hasPM && <option value="landlord">Landlord</option>}
+              {hasCW && <option value="customer">Customer</option>}
+              {!hasPM && !hasCW && <option value="internal">Internal</option>}
             </select>
             <select
               value={smsTemplateStatusFilter}
@@ -3352,7 +3478,7 @@ export default function CompanySetupPage() {
             </select>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 font-semibold">{filteredTemplates.length} / {smsTemplates.length} templates</span>
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 font-semibold">{filteredTemplates.length} / {moduleVisibleTemplates.length} templates</span>
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">{enabledCount} enabled</span>
             <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 font-semibold text-blue-700">{autoCount} automatic</span>
             <button
@@ -3464,7 +3590,7 @@ export default function CompanySetupPage() {
   const renderSmsTab = () => {
     const smsNavItems = [
       { key: "configuration", label: "Configuration", icon: <FaServer className="text-[9px]" /> },
-      { key: "templates", label: "SMS Templates", icon: <FaListAlt className="text-[9px]" /> },
+      ...(hasPM || hasCW ? [{ key: "templates", label: "SMS Templates", icon: <FaListAlt className="text-[9px]" /> }] : []),
       { key: "sent", label: "Sent", icon: <FaPaperPlane className="text-[9px]" /> },
       { key: "failed", label: "Failed", icon: <FaExclamationTriangle className="text-[9px]" /> },
       { key: "pending", label: "Inbox / Pending", icon: <FaHistory className="text-[9px]" /> },
@@ -3837,6 +3963,10 @@ export default function CompanySetupPage() {
     switch (activeTab) {
       case "details":
         return renderDetailsTab();
+      case "structure":
+        return renderStructureTab();
+      case "modules":
+        return renderModulesTab();
       case "payments":
         return renderPaymentsTab();
       case "email":

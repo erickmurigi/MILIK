@@ -130,10 +130,10 @@ export const createDeposit = async (req, res, next) => {
 
     const userId = currentUserId(req);
     const branchId = resolveActiveBranchId(req);
-    const deposit = await CarWashDeposit.create({
+    const manualDepositNumber = String(req.body.depositNumber || "").trim();
+    const depositBase = {
       business,
       branch: branchId || null,
-      depositNumber: String(req.body.depositNumber || "").trim() || (await generateDepositNumber(business)),
       depositDate: req.body.depositDate ? new Date(req.body.depositDate) : new Date(),
       amount,
       destination,
@@ -144,7 +144,18 @@ export const createDeposit = async (req, res, next) => {
       depositedBy: userId,
       createdBy: userId,
       updatedBy: userId,
-    });
+    };
+    let deposit;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const depositNumber = manualDepositNumber || (await generateDepositNumber(business));
+      try {
+        deposit = await CarWashDeposit.create({ ...depositBase, depositNumber });
+        break;
+      } catch (err) {
+        if (err.code === 11000 && err.keyPattern?.depositNumber && !manualDepositNumber && attempt < 2) continue;
+        throw err;
+      }
+    }
     res.status(201).json({ success: true, data: deposit, deposit, message: "Car Wash deposit recorded" });
   } catch (error) {
     next(error);

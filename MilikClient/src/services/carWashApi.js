@@ -24,6 +24,7 @@ export const carWashApi = {
   getMonthlySummary: async (month) => unwrap(await adminRequests.get("/carwash/reports/monthly-summary", { params: bp({ month }) })),
   getServiceReport: async (params = {}) => unwrap(await adminRequests.get("/carwash/reports/service-report", { params: bp(params) })),
   getStaffReport: async (params = {}) => unwrap(await adminRequests.get("/carwash/reports/staff-report", { params: bp(params) })),
+  listLedgerEntries: async (params = {}) => unwrap(await adminRequests.get("/carwash/reports/ledger", { params: bp(params) })),
   listJobs: async (params = {}) => unwrap(await adminRequests.get("/carwash/jobs", { params: bp(params) })),
   createJob: async (payload) => unwrap(await adminRequests.post("/carwash/jobs", bb(payload))),
   updateJob: async (id, payload) => unwrap(await adminRequests.put(`/carwash/jobs/${id}`, payload)),

@@ -221,6 +221,15 @@ const CarWashJobs = () => {
   const [smsSending, setSmsSending] = useState(false);
 
   const unpaidJobs = useMemo(() => jobs.filter((job) => job.paymentStatus !== "paid"), [jobs]);
+  const jobStats = useMemo(() => {
+    let unpaid = 0, washing = 0, done = 0;
+    jobs.forEach((job) => {
+      if (job.paymentStatus !== "paid") unpaid++;
+      if (job.status === "washing") washing++;
+      if (job.status === "done") done++;
+    });
+    return { unpaid, washing, done };
+  }, [jobs]);
   const safeVisibleJobIds = useMemo(
     () => jobs.filter((job) => job.paymentStatus === "unpaid" && job.status !== "paid").map((job) => job._id),
     [jobs]
@@ -576,9 +585,9 @@ const CarWashJobs = () => {
         <div className="flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{jobs.length}</strong> / {pagination.total}</span>
           <span>Page: <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
-          <span>Unpaid: <strong className="text-[#FF8C00]">{jobs.filter((job) => job.paymentStatus !== "paid").length}</strong></span>
-          <span>Washing: <strong className="text-slate-900">{jobs.filter((job) => job.status === "washing").length}</strong></span>
-          <span>Done: <strong className="text-slate-900">{jobs.filter((job) => job.status === "done").length}</strong></span>
+          <span>Unpaid: <strong className="text-[#FF8C00]">{jobStats.unpaid}</strong></span>
+          <span>Washing: <strong className="text-slate-900">{jobStats.washing}</strong></span>
+          <span>Done: <strong className="text-slate-900">{jobStats.done}</strong></span>
           <span>Selected: <strong className="text-[#0B3B2E]">{selectedIds.length}</strong></span>
         </div>
         <table className="w-full min-w-[1120px] text-xs">

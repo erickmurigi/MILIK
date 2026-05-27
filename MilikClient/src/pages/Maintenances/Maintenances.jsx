@@ -215,17 +215,31 @@ const Maintenances = () => {
     });
   }, [priorityFilter, requests, searchTerm, statusFilter]);
 
-  const stats = useMemo(() => ({
-    total: requests.length,
-    pending: requests.filter((r) => r?.status === "pending").length,
-    inProgress: requests.filter((r) => r?.status === "in_progress").length,
-    completed: requests.filter((r) => r?.status === "completed").length,
-    emergency: requests.filter((r) => r?.priority === "emergency").length,
-  }), [requests]);
+  const stats = useMemo(() => {
+    const acc = { total: requests.length, pending: 0, inProgress: 0, completed: 0, emergency: 0 };
+    requests.forEach(r => {
+      if (r?.status === "pending") acc.pending++;
+      if (r?.status === "in_progress") acc.inProgress++;
+      if (r?.status === "completed") acc.completed++;
+      if (r?.priority === "emergency") acc.emergency++;
+    });
+    return acc;
+  }, [requests]);
+
+  const statsCards = useMemo(() => [
+    { label: "Total",     value: stats.total,     cls: "bg-slate-900 text-white",                                  icon: <FaTools /> },
+    { label: "Pending",   value: stats.pending,   cls: "bg-amber-50 text-amber-800 border border-amber-200",       icon: <FaClock /> },
+    { label: "In Progress", value: stats.inProgress, cls: "bg-blue-50 text-blue-800 border border-blue-200",       icon: <FaTools /> },
+    { label: "Completed", value: stats.completed, cls: "bg-emerald-50 text-emerald-800 border border-emerald-200", icon: <FaCheckCircle /> },
+    { label: "Emergency", value: stats.emergency, cls: "bg-rose-50 text-rose-800 border border-rose-200",          icon: <FaExclamationTriangle /> },
+  ], [stats]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
-  const pageRows = filteredRequests.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const pageRows = useMemo(
+    () => filteredRequests.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filteredRequests, safePage, pageSize]
+  );
 
   useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, priorityFilter, pageSize]);
 
@@ -363,13 +377,7 @@ const Maintenances = () => {
 
           {/* KPI Strip */}
           <div className="grid flex-shrink-0 grid-cols-2 gap-2 md:grid-cols-5">
-            {[
-              { label: "Total", value: stats.total, cls: "bg-slate-900 text-white", icon: <FaTools /> },
-              { label: "Pending", value: stats.pending, cls: "bg-amber-50 text-amber-800 border border-amber-200", icon: <FaClock /> },
-              { label: "In Progress", value: stats.inProgress, cls: "bg-blue-50 text-blue-800 border border-blue-200", icon: <FaTools /> },
-              { label: "Completed", value: stats.completed, cls: "bg-emerald-50 text-emerald-800 border border-emerald-200", icon: <FaCheckCircle /> },
-              { label: "Emergency", value: stats.emergency, cls: "bg-rose-50 text-rose-800 border border-rose-200", icon: <FaExclamationTriangle /> },
-            ].map((card) => (
+            {statsCards.map((card) => (
               <div key={card.label} className={`flex items-center gap-2 rounded-lg px-3 py-2 shadow-sm ${card.cls}`}>
                 <span className="text-base opacity-35">{card.icon}</span>
                 <div className="flex flex-1 items-center justify-between">

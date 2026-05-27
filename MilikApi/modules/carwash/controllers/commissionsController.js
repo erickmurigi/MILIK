@@ -166,10 +166,10 @@ export const createCommissionPayout = async (req, res, next) => {
     const now = req.body.payoutDate ? new Date(req.body.payoutDate) : new Date();
     const branchId = resolveActiveBranchId(req);
 
-    const payout = await CarWashCommissionPayout.create({
+    const manualPayoutNumber = String(req.body.payoutNumber || "").trim();
+    const payoutBase = {
       business,
       branch: branchId || null,
-      payoutNumber: String(req.body.payoutNumber || "").trim() || (await generatePayoutNumber(business)),
       staff,
       amount,
       method,
@@ -180,7 +180,18 @@ export const createCommissionPayout = async (req, res, next) => {
       notes: String(req.body.notes || "").trim(),
       createdBy: currentUserId(req),
       updatedBy: currentUserId(req),
-    });
+    };
+    let payout;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const payoutNumber = manualPayoutNumber || (await generatePayoutNumber(business));
+      try {
+        payout = await CarWashCommissionPayout.create({ ...payoutBase, payoutNumber });
+        break;
+      } catch (err) {
+        if (err.code === 11000 && err.keyPattern?.payoutNumber && !manualPayoutNumber && attempt < 2) continue;
+        throw err;
+      }
+    }
 
     await postCommissionPayoutLedger({ req, payout, cashbookAccount });
 

@@ -8,6 +8,7 @@ import CarWashShell from "./CarWashShell";
 const defaultFilters = { date: todayISO(), method: "", cashbookAccount: "", reference: "", reconciliationStatus: "" };
 const PAGE_SIZE = 30;
 const reconciliationStatuses = ["pending", "reconciled", "flagged"];
+const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
 
 const reconciliationBadgeClass = {
   pending: "border-orange-200 bg-orange-50 text-orange-700",
@@ -63,10 +64,18 @@ const CarWashPayments = () => {
     loadCashbooks();
   }, [currentCompany?._id]);
 
-  const totalAmount = useMemo(() => rows.reduce((sum, row) => sum + Number(row.amount || 0), 0), [rows]);
-  const pendingCount = useMemo(() => rows.filter((row) => (row.reconciliationStatus || "pending") === "pending").length, [rows]);
-  const reconciledCount = useMemo(() => rows.filter((row) => row.reconciliationStatus === "reconciled").length, [rows]);
-  const flaggedCount = useMemo(() => rows.filter((row) => row.reconciliationStatus === "flagged").length, [rows]);
+  const rowStats = useMemo(() => {
+    let totalAmount = 0, pendingCount = 0, reconciledCount = 0, flaggedCount = 0;
+    rows.forEach((row) => {
+      totalAmount += Number(row.amount || 0);
+      const status = row.reconciliationStatus || "pending";
+      if (status === "pending") pendingCount++;
+      else if (status === "reconciled") reconciledCount++;
+      else if (status === "flagged") flaggedCount++;
+    });
+    return { totalAmount, pendingCount, reconciledCount, flaggedCount };
+  }, [rows]);
+  const { totalAmount, pendingCount, reconciledCount, flaggedCount } = rowStats;
 
   const openSmsModal = (row) => {
     setSmsTarget(row);
@@ -137,7 +146,7 @@ const CarWashPayments = () => {
           onChange={(event) => setFilters((prev) => ({ ...prev, method: event.target.value }))}
         >
           <option value="">All methods</option>
-          {["cash", "mpesa", "bank", "card", "other"].map((method) => (
+          {paymentMethods.map((method) => (
             <option key={method} value={method}>{method.toUpperCase()}</option>
           ))}
         </select>

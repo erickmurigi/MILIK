@@ -112,45 +112,56 @@ const LandlordPayments = ({ mode = "payments" }) => {
   }, [currentCompany?._id]);
 
   // Calculate landlord financial data
+  const tenantsByPropertyId = useMemo(() => {
+    const m = new Map();
+    tenants.forEach((tenant) => {
+      const propId = String(tenant.unit?.property?._id || tenant.unit?.property || "");
+      if (!propId) return;
+      const arr = m.get(propId) || [];
+      arr.push(tenant);
+      m.set(propId, arr);
+    });
+    return m;
+  }, [tenants]);
+
+  const confirmedPaymentsByTenantId = useMemo(() => {
+    const m = new Map();
+    rentPayments.forEach((payment) => {
+      if (!payment.isConfirmed || payment.isCancelled || payment.isReversed) return;
+      const tenantId = String(payment.tenant?._id || payment.tenant || "");
+      if (!tenantId) return;
+      const arr = m.get(tenantId) || [];
+      arr.push(payment);
+      m.set(tenantId, arr);
+    });
+    return m;
+  }, [rentPayments]);
+
   const landlordData = useMemo(() => {
     return landlords.map((landlord) => {
-      // Get properties owned by this landlord
       const landlordProperties = properties.filter((prop) =>
         propertyBelongsToLandlord(prop, landlord._id, landlord.landlordName)
       );
 
-      // Calculate total rent from all properties
       let totalRentExpected = 0;
       let totalRentCollected = 0;
+      let totalTenantsCount = 0;
       const propertyBreakdown = [];
 
       landlordProperties.forEach((property) => {
-        // Get tenants in this property (unit.property is populated by backend)
-        const propertyTenants = tenants.filter((tenant) => {
-          const tenantPropertyId = String(tenant.unit?.property?._id || tenant.unit?.property || '');
-          return tenantPropertyId && tenantPropertyId === String(property._id);
-        });
+        const propId = String(property._id);
+        const propertyTenants = tenantsByPropertyId.get(propId) || [];
 
-        // Calculate rent expected (rent lives on tenant, not unit)
-        const rentExpected = propertyTenants.reduce((sum, tenant) => {
-          return sum + (tenant.rent || tenant.unit?.rent || 0);
+        const rentExpected = propertyTenants.reduce((sum, tenant) => sum + (tenant.rent || tenant.unit?.rent || 0), 0);
+
+        const rentCollected = propertyTenants.reduce((sum, tenant) => {
+          const tenantPayments = confirmedPaymentsByTenantId.get(String(tenant._id)) || [];
+          return sum + tenantPayments.reduce((s, p) => s + (p.amount || 0), 0);
         }, 0);
-
-        // Calculate rent collected (confirmed, non-cancelled, non-reversed payments)
-        const rentCollected = rentPayments
-          .filter((payment) => {
-            const paymentTenantId = payment.tenant?._id || payment.tenant;
-            return (
-              propertyTenants.some((t) => String(t._id) === String(paymentTenantId)) &&
-              payment.isConfirmed === true &&
-              !payment.isCancelled &&
-              !payment.isReversed
-            );
-          })
-          .reduce((sum, payment) => sum + (payment.amount || 0), 0);
 
         totalRentExpected += rentExpected;
         totalRentCollected += rentCollected;
+        totalTenantsCount += propertyTenants.length;
 
         propertyBreakdown.push({
           propertyId: property._id,
@@ -162,24 +173,16 @@ const LandlordPayments = ({ mode = "payments" }) => {
         });
       });
 
-      // Real payments to landlord from backend
+      const landlordIdStr = String(landlord._id);
       const paymentsMade = landlordPayments
-        .filter((p) => String(p?.landlord?._id || p?.landlord || p?.landlordId || "") === String(landlord._id) && p.status !== "reversed")
+        .filter((p) => String(p?.landlord?._id || p?.landlord || p?.landlordId || "") === landlordIdStr && p.status !== "reversed")
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       const balance = Number(landlord.balance ?? landlord.payableBalance ?? Math.max(totalRentCollected - paymentsMade, 0));
 
       return {
         ...landlord,
         propertiesCount: landlordProperties.length,
-        tenantsCount: landlordProperties.reduce((sum, prop) => {
-          return (
-            sum +
-            tenants.filter((t) => {
-              const tPropId = String(t.unit?.property?._id || t.unit?.property || '');
-              return tPropId && tPropId === String(prop._id);
-            }).length
-          );
-        }, 0),
+        tenantsCount: totalTenantsCount,
         rentExpected: totalRentExpected,
         rentCollected: totalRentCollected,
         paymentsMade,
@@ -187,7 +190,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
         propertyBreakdown,
       };
     });
-  }, [landlords, properties, tenants, rentPayments, landlordPayments]);
+  }, [landlords, properties, tenantsByPropertyId, confirmedPaymentsByTenantId, landlordPayments]);
 
   // Filter landlords
   const filteredLandlords = useMemo(() => {

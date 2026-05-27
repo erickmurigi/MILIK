@@ -750,7 +750,6 @@ export const createTenant = async (req, res, next) => {
       }
     }
 
-    const tenantCode = normalizedTenantCode || (await generateNextTenantCode(businessId));
     const defaultDepositAmount = Number(
       req.body.depositAmount ?? unit.deposit ?? req.body.rent ?? unit.rent ?? 0
     );
@@ -798,7 +797,7 @@ export const createTenant = async (req, res, next) => {
       return Math.round((feeValue / 100) * assignedRent * 100) / 100;
     })();
 
-    const newTenant = new Tenant({
+    const tenantBase = {
       ...req.body,
       name: normalizedName,
       phone: normalizedPhone,
@@ -806,7 +805,6 @@ export const createTenant = async (req, res, next) => {
       paymentMethod: normalizedPaymentMethod,
       leaseType,
       moveOutDate: leaseType === "fixed" ? req.body.moveOutDate : null,
-      tenantCode,
       business: businessId,
       unit: unit._id,
       additionalUnits: requestedUnits.additional,
@@ -824,9 +822,19 @@ export const createTenant = async (req, res, next) => {
           : deriveAssignedUtilitiesFromUnitDocs(unitDocs)
       ),
       emergencyContact: sanitizeEmergencyContact(req.body.emergencyContact),
-    });
+    };
 
-    const savedTenant = await newTenant.save();
+    let savedTenant;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const tenantCode = normalizedTenantCode || (await generateNextTenantCode(businessId));
+      try {
+        savedTenant = await new Tenant({ ...tenantBase, tenantCode }).save();
+        break;
+      } catch (err) {
+        if (err.code === 11000 && err.keyPattern?.tenantCode && !normalizedTenantCode && attempt < 2) continue;
+        throw err;
+      }
+    }
 
     await syncTenantAssignedUnitOccupancy({
       previousUnitIds: [],
@@ -1101,11 +1109,15 @@ export const updateTenant = async (req, res, next) => {
     }
 
     if (normalizedPayload.depositAmount !== undefined) {
-      normalizedPayload.depositAmount = Number(normalizedPayload.depositAmount || 0);
+      const depositAmount = Number(normalizedPayload.depositAmount || 0);
+      if (depositAmount < 0) {
+        return res.status(400).json({ success: false, message: "Deposit amount cannot be negative" });
+      }
+      normalizedPayload.depositAmount = depositAmount;
     }
 
     if (normalizedPayload.depositRefundAmount !== undefined) {
-      normalizedPayload.depositRefundAmount = Number(normalizedPayload.depositRefundAmount || 0);
+      normalizedPayload.depositRefundAmount = Math.max(0, Number(normalizedPayload.depositRefundAmount || 0));
     }
 
     if (normalizedPayload.documents !== undefined) {
@@ -1556,10 +1568,9 @@ export const updateTenantStatus = async (req, res, next) => {
       },
     });
 
-    return res.status(200).json({
-      ...updatedTenant,
-      status: computeOperationalTenantStatus({ tenant: updatedTenant }),
-    });
+    const tenantObj = updatedTenant.toObject({ virtuals: true });
+    tenantObj.status = computeOperationalTenantStatus({ tenant: updatedTenant });
+    return res.status(200).json(tenantObj);
   } catch (err) {
     next(err);
   }

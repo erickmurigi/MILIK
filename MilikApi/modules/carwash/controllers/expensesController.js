@@ -3,9 +3,50 @@ import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashExpense from "../models/CarWashExpense.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
+import { postEntry } from "../../../services/ledgerPostingService.js";
+import { findSystemAccountByCode } from "../../../services/chartOfAccountsService.js";
+import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
 
 const METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const STATUSES = new Set(["draft", "approved", "paid", "cancelled"]);
+
+const cwDayRange = (value = new Date()) => {
+  const safe = value instanceof Date && !Number.isNaN(value.getTime()) ? value : new Date(value);
+  const d = Number.isNaN(safe.getTime()) ? new Date() : safe;
+  const start = new Date(d); start.setHours(0, 0, 0, 0);
+  const end = new Date(start); end.setDate(end.getDate() + 1);
+  return { start, end };
+};
+
+const postCwExpenseLedger = async ({ business, expense, cashbookAccountId, userId }) => {
+  try {
+    const expenseAccount = await findSystemAccountByCode(business, "5310");
+    if (!expenseAccount?._id || !cashbookAccountId) return;
+    const txDate = expense.expenseDate || expense.paidAt || new Date();
+    const { start, end } = cwDayRange(txDate);
+    const base = {
+      business,
+      sourceTransactionType: "carwash_expense",
+      sourceTransactionId: String(expense._id),
+      transactionDate: new Date(txDate),
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "CARWASH_EXPENSE",
+      amount: Number(expense.amount),
+      payer: "n/a",
+      receiver: "vendor",
+      createdBy: userId,
+      approvedBy: userId,
+      allowUnscoped: true,
+    };
+    const desc = expense.payee || expense.category || expense.expenseNumber || "";
+    await postEntry({ ...base, accountId: expenseAccount._id, direction: "debit", notes: `CW expense – ${desc}` });
+    await postEntry({ ...base, accountId: cashbookAccountId, direction: "credit", notes: `CW expense paid – ${expense.expenseNumber || ""}` });
+    await aggregateChartOfAccountBalances(business, [String(expenseAccount._id), String(cashbookAccountId)]);
+  } catch {
+    // ledger failure must not block the expense
+  }
+};
 
 const generateExpenseNumber = async (business) => {
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -172,10 +213,10 @@ export const createExpense = async (req, res, next) => {
     const cashbookAccount = await resolveCashbookAccount(business, req.body.cashbookAccount, status === "paid");
     const userId = currentUserId(req);
     const branchId = resolveActiveBranchId(req);
-    const expense = await CarWashExpense.create({
+    const manualExpenseNumber = String(req.body.expenseNumber || "").trim();
+    const expenseBase = {
       business,
       branch: branchId || null,
-      expenseNumber: String(req.body.expenseNumber || "").trim() || (await generateExpenseNumber(business)),
       expenseDate: req.body.expenseDate ? new Date(req.body.expenseDate) : new Date(),
       payee: String(req.body.payee || "").trim(),
       category,
@@ -192,7 +233,21 @@ export const createExpense = async (req, res, next) => {
       paidBy: status === "paid" ? userId : null,
       paidAt: status === "paid" ? new Date() : null,
       updatedBy: userId,
-    });
+    };
+    let expense;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const expenseNumber = manualExpenseNumber || (await generateExpenseNumber(business));
+      try {
+        expense = await CarWashExpense.create({ ...expenseBase, expenseNumber });
+        break;
+      } catch (err) {
+        if (err.code === 11000 && err.keyPattern?.expenseNumber && !manualExpenseNumber && attempt < 2) continue;
+        throw err;
+      }
+    }
+    if (status === "paid" && cashbookAccount) {
+      await postCwExpenseLedger({ business, expense, cashbookAccountId: cashbookAccount, userId });
+    }
     res.status(201).json({ success: true, data: expense, expense, message: "Car Wash expense recorded" });
   } catch (error) {
     next(error);
@@ -235,10 +290,15 @@ export const updateExpenseStatus = async (req, res, next) => {
       expense.approvedAt = new Date();
     }
 
+    const wasAlreadyPaid = expense.status === "paid";
     expense.status = status;
     expense.notes = String(req.body.notes ?? expense.notes ?? "").trim();
     expense.updatedBy = userId;
     await expense.save();
+
+    if (status === "paid" && !wasAlreadyPaid && expense.cashbookAccount) {
+      await postCwExpenseLedger({ business, expense, cashbookAccountId: String(expense.cashbookAccount), userId });
+    }
 
     const populated = await CarWashExpense.findById(expense._id)
       .populate("cashbookAccount", "code name type subGroup balance")

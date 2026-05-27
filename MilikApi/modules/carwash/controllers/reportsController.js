@@ -3,7 +3,55 @@ import CarWashExpense from "../models/CarWashExpense.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
+import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
+
+const CW_LEDGER_SOURCE_TYPES = ["carwash_payment", "carwash_expense", "carwash_commission", "carwash_commission_payout"];
+
+const CATEGORY_LABELS = {
+  CARWASH_PAYMENT:           "Payment Revenue",
+  CARWASH_EXPENSE:           "Operating Expense",
+  CARWASH_COMMISSION_ACCRUAL: "Commission Accrual",
+  CARWASH_COMMISSION_PAYOUT:  "Commission Payout",
+  REVERSAL:                   "Reversal",
+};
+
+export const listLedgerEntries = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const businessOid = new mongoose.Types.ObjectId(String(business));
+
+    const filter = { business: businessOid, sourceTransactionType: { $in: CW_LEDGER_SOURCE_TYPES } };
+
+    if (req.query.status && req.query.status !== "all") filter.status = req.query.status;
+    if (req.query.category && req.query.category !== "all") filter.category = req.query.category;
+    if (req.query.direction && req.query.direction !== "all") filter.direction = req.query.direction;
+    if (req.query.sourceType) filter.sourceTransactionType = req.query.sourceType;
+
+    if (req.query.startDate || req.query.endDate) {
+      filter.transactionDate = {};
+      if (req.query.startDate) filter.transactionDate.$gte = new Date(new Date(req.query.startDate).setHours(0, 0, 0, 0));
+      if (req.query.endDate)   filter.transactionDate.$lte = new Date(new Date(req.query.endDate).setHours(23, 59, 59, 999));
+    }
+
+    const page  = Math.max(parseInt(req.query.page  || 1,   10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || 100, 10) || 100, 1), 500);
+
+    const [entries, total] = await Promise.all([
+      FinancialLedgerEntry.find(filter)
+        .populate("accountId", "code name type subGroup")
+        .sort({ transactionDate: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      FinancialLedgerEntry.countDocuments(filter),
+    ]);
+
+    res.status(200).json({ success: true, data: { entries, total, page, pages: Math.ceil(total / limit) }, entries, total });
+  } catch (error) {
+    next(error);
+  }
+};
 
 const parseDateRangePair = (fromRaw, toRaw) => {
   const now = new Date();

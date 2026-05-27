@@ -80,11 +80,10 @@ const CarWashCommissions = () => {
     () => payableCommissions.filter((item) => item.status === "payable" && (!payoutForm.staff || String(item.staff?._id || item.staff) === String(payoutForm.staff))),
     [payableCommissions, payoutForm.staff]
   );
+  const commissionIdSet = useMemo(() => new Set(payoutForm.commissionIds), [payoutForm.commissionIds]);
   const selectedPayoutTotal = useMemo(
-    () => selectedStaffPayable
-      .filter((item) => payoutForm.commissionIds.includes(item._id))
-      .reduce((sum, item) => sum + Number(item.commissionAmount || 0), 0),
-    [payoutForm.commissionIds, selectedStaffPayable]
+    () => selectedStaffPayable.reduce((sum, item) => commissionIdSet.has(item._id) ? sum + Number(item.commissionAmount || 0) : sum, 0),
+    [commissionIdSet, selectedStaffPayable]
   );
 
   const load = async () => {
@@ -440,7 +439,7 @@ const CarWashCommissions = () => {
               <div className="max-h-60 overflow-auto border border-slate-200">
                 {selectedStaffPayable.length ? selectedStaffPayable.map((item) => (
                   <label key={item._id} className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
-                    <span className="flex items-center gap-2"><input type="checkbox" checked={payoutForm.commissionIds.includes(item._id)} onChange={() => togglePayoutCommission(item._id)} /> {item.jobNumber || item.job?.jobNumber} - {item.serviceName || item.service?.name}</span>
+                    <span className="flex items-center gap-2"><input type="checkbox" checked={commissionIdSet.has(item._id)} onChange={() => togglePayoutCommission(item._id)} /> {item.jobNumber || item.job?.jobNumber} - {item.serviceName || item.service?.name}</span>
                     <span className="font-extrabold">{formatMoney(item.commissionAmount)}</span>
                   </label>
                 )) : <div className="px-3 py-8 text-center text-xs font-semibold text-slate-500">No payable commissions for this staff member.</div>}

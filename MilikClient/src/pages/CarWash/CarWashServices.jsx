@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FaChevronDown, FaChevronRight, FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
@@ -39,6 +39,12 @@ const CarWashServices = () => {
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState([]);
   const [categoryMode, setCategoryMode] = useState("select");
+
+  const rowStats = useMemo(() => {
+    let active = 0, inactive = 0;
+    rows.forEach((row) => { if (row.active !== false) active++; else inactive++; });
+    return { active, inactive };
+  }, [rows]);
 
   const loadCategories = async () => {
     try {
@@ -179,8 +185,8 @@ const CarWashServices = () => {
         <div className="flex flex-wrap min-h-8 items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{rows.length}</strong> / {pagination.total}</span>
           <span>Page: <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
-          <span>Active: <strong className="text-[#0B3B2E]">{rows.filter((row) => row.active !== false).length}</strong></span>
-          <span>Inactive: <strong className="text-[#FF8C00]">{rows.filter((row) => row.active === false).length}</strong></span>
+          <span>Active: <strong className="text-[#0B3B2E]">{rowStats.active}</strong></span>
+          <span>Inactive: <strong className="text-[#FF8C00]">{rowStats.inactive}</strong></span>
         </div>
         <table className="w-full min-w-[940px] text-xs">
           <thead className="bg-[#0B3B2E] text-white">

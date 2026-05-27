@@ -170,18 +170,14 @@ const RentalAgedAnalysisReport = () => {
 
 
 
-  const printGeneratedAt = useMemo(() => new Date().toLocaleString(), [filteredRows, filters]);
+  const printGeneratedAt = useMemo(() => new Date().toLocaleString(), []);
 
   const handlePrint = () => {
     if (!canExportReports) {
       toast.warning("You do not have permission to print reports");
       return;
     }
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        window.print();
-      });
-    });
+    window.requestAnimationFrame(() => window.print());
   };
 
   const exportCsv = () => {

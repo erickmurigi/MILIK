@@ -282,6 +282,18 @@ const Landlords = () => {
   const totalPages = Math.max(1, Math.ceil(filteredLandlords.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
 
+  const visiblePages = useMemo(() => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const items = [1];
+    if (safeCurrentPage > 3) items.push('…');
+    const start = Math.max(2, safeCurrentPage - 1);
+    const end = Math.min(totalPages - 1, safeCurrentPage + 1);
+    for (let i = start; i <= end; i++) items.push(i);
+    if (safeCurrentPage < totalPages - 2) items.push('…end');
+    items.push(totalPages);
+    return items;
+  }, [safeCurrentPage, totalPages]);
+
   const startIndex = (safeCurrentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
   const currentLandlords = filteredLandlords.slice(startIndex, endIndex);
@@ -1185,36 +1197,23 @@ const Landlords = () => {
                   </button>
 
                   <div className="flex items-center gap-1">
-                    {[...Array(totalPages)].map((_, i) => {
-                      const page = i + 1;
-                      if (
-                        page === 1 ||
-                        page === totalPages ||
-                        (page >= safeCurrentPage - 1 && page <= safeCurrentPage + 1)
-                      ) {
-                        return (
-                          <button
-                            key={page}
-                            onClick={() => goToPage(page)}
-                            className={`px-2 py-0.5 min-w-[24px] text-xs rounded border transition-colors font-bold ${
-                              safeCurrentPage === page
-                                ? "bg-[#0B3B2E] text-white border-[#0B3B2E] hover:bg-[#0A3127]"
-                                : "border-gray-300 hover:bg-gray-50"
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        );
-                      }
-                      if (page === safeCurrentPage - 2 || page === safeCurrentPage + 2) {
-                        return (
-                          <span key={page} className="px-1 text-gray-400 text-xs">
-                            ...
-                          </span>
-                        );
-                      }
-                      return null;
-                    })}
+                    {visiblePages.map((item) =>
+                      typeof item === 'number' ? (
+                        <button
+                          key={item}
+                          onClick={() => goToPage(item)}
+                          className={`px-2 py-0.5 min-w-[24px] text-xs rounded border transition-colors font-bold ${
+                            safeCurrentPage === item
+                              ? "bg-[#0B3B2E] text-white border-[#0B3B2E] hover:bg-[#0A3127]"
+                              : "border-gray-300 hover:bg-gray-50"
+                          }`}
+                        >
+                          {item}
+                        </button>
+                      ) : (
+                        <span key={item} className="px-1 text-gray-400 text-xs">...</span>
+                      )
+                    )}
                   </div>
 
                   <button

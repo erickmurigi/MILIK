@@ -380,6 +380,7 @@ const findFirstAccount = async (businessId, candidates = []) => {
     if (account) return account;
   }
 
+  console.warn("[findFirstAccount] No matching account found for candidates:", JSON.stringify(candidates));
   return null;
 };
 

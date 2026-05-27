@@ -11,6 +11,7 @@ import {
   getCustomerCard,
   sendCustomerSms,
 } from '../controllers/loyaltyController.js';
+import { validateParamId } from '../middleware/validateObjectId.js';
 
 const router = express.Router();
 
@@ -24,11 +25,11 @@ router.get('/plate/:plate', requireCompanyPermission('carwash-jobs', 'view', 'ca
 // Customers
 router.get('/customers', requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), listCustomers);
 router.post('/customers', requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), registerCustomer);
-router.put('/customers/:id', requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), updateCustomer);
-router.get('/customers/:customerId/card', requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), getCustomerCard);
-router.post('/customers/:id/sms', requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), sendCustomerSms);
+router.put('/customers/:id', validateParamId(), requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), updateCustomer);
+router.get('/customers/:customerId/card', validateParamId('customerId'), requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), getCustomerCard);
+router.post('/customers/:id/sms', validateParamId(), requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), sendCustomerSms);
 
 // Redeem a reward on a specific job
-router.patch('/jobs/:jobId/redeem', requireCompanyPermission('carwash-jobs', 'update', 'carwash'), redeemReward);
+router.patch('/jobs/:jobId/redeem', validateParamId('jobId'), requireCompanyPermission('carwash-jobs', 'update', 'carwash'), redeemReward);
 
 export default router;

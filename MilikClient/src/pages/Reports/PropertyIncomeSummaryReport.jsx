@@ -153,7 +153,7 @@ const PropertyIncomeSummaryReport = () => {
       toast.warning ? toast.warning('You do not have permission to print reports') : toast.error('You do not have permission to print reports');
       return;
     }
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => window.print()));
+    window.requestAnimationFrame(() => window.print());
   };
 
   return (
