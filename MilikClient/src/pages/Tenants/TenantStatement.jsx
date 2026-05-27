@@ -1044,27 +1044,23 @@ const TenantStatement = () => {
       t.balance = runningBalance;
     });
 
-    const totalCharges = transactions
-      .filter((t) => ["CHARGE", "DEBIT_NOTE"].includes(t.type))
-      .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
-    const totalCreditNotes = transactions
-      .filter((t) => ["CREDIT_NOTE"].includes(t.type))
-      .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
-    const totalPayments = transactions
-      .filter((t) => ["PAYMENT", "CREDIT_NOTE"].includes(t.type))
-      .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
-    const totalAllocatedReceipts = activeTenantReceipts.reduce((sum, receipt) => {
+    let totalCharges = 0, totalCreditNotes = 0, totalPayments = 0;
+    transactions.forEach((t) => {
+      const abs = Math.abs(Number(t.amount || 0));
+      if (t.type === "CHARGE" || t.type === "DEBIT_NOTE") totalCharges += abs;
+      if (t.type === "CREDIT_NOTE") { totalCreditNotes += abs; totalPayments += abs; }
+      if (t.type === "PAYMENT") totalPayments += abs;
+    });
+    const { totalAllocatedReceipts, unappliedCredits } = activeTenantReceipts.reduce((acc, receipt) => {
       const summary = receipt?.allocationSummary || {};
       const allocated = Number(summary?.rent || 0) + Number(summary?.utility || 0) + Number(summary?.deposit || 0) + Number(summary?.latePenalty || 0) + Number(summary?.debitNote || 0);
-      return sum + Math.abs(allocated);
-    }, 0);
-    const unappliedCredits = activeTenantReceipts.reduce((sum, receipt) => {
-      const summary = receipt?.allocationSummary || {};
+      const absAllocated = Math.abs(allocated);
+      acc.totalAllocatedReceipts += absAllocated;
       const direct = summary?.unapplied;
-      const allocated = Number(summary?.rent || 0) + Number(summary?.utility || 0) + Number(summary?.deposit || 0) + Number(summary?.latePenalty || 0) + Number(summary?.debitNote || 0);
-      const derived = Math.max(0, Math.abs(Number(receipt?.amount || 0)) - Math.abs(allocated));
-      return sum + Math.abs(Number((direct ?? derived) || 0));
-    }, 0);
+      const derived = Math.max(0, Math.abs(Number(receipt?.amount || 0)) - absAllocated);
+      acc.unappliedCredits += Math.abs(Number((direct ?? derived) || 0));
+      return acc;
+    }, { totalAllocatedReceipts: 0, unappliedCredits: 0 });
     const operationalOutstanding = round2(totalCharges - totalCreditNotes - totalAllocatedReceipts);
     const netPosition = round2(operationalOutstanding - unappliedCredits);
 
@@ -1081,8 +1077,8 @@ const TenantStatement = () => {
     };
   }, [validTenantInvoices, tenantInvoiceNotes, activeTenantReceipts, maintenanceFromStore, tenantId]);
 
-  const allocationTraceData = useMemo(() => {
-    const receiptRows = activeTenantReceipts.map((receipt) => {
+  const allocationReceiptRows = useMemo(() => {
+    return activeTenantReceipts.map((receipt) => {
       const allocations = getReceiptAllocationRows(receipt).map((row) => ({
         receiptId: safeId(receipt),
         receiptNumber: receipt?.receiptNumber || receipt?.referenceNumber || "-",
@@ -1093,19 +1089,10 @@ const TenantStatement = () => {
         appliedAmount: round2(Math.abs(Number(row?.appliedAmount || 0))),
         afterOutstanding: round2(Math.abs(Number(row?.afterOutstanding || 0))),
       }));
-
       const allocatedAmount = round2(allocations.reduce((sum, row) => sum + Number(row?.appliedAmount || 0), 0));
-      const unappliedAmount = round2(
-        Math.max(
-          0,
-          Math.abs(
-            Number(
-              receipt?.allocationSummary?.unapplied ?? Math.abs(Number(receipt?.amount || 0)) - allocatedAmount
-            )
-          )
-        )
-      );
-
+      const unappliedAmount = round2(Math.max(0, Math.abs(Number(
+        receipt?.allocationSummary?.unapplied ?? Math.abs(Number(receipt?.amount || 0)) - allocatedAmount
+      ))));
       return {
         receiptId: safeId(receipt),
         receiptNumber: receipt?.receiptNumber || receipt?.referenceNumber || "-",
@@ -1118,17 +1105,22 @@ const TenantStatement = () => {
         allocations,
       };
     });
+  }, [activeTenantReceipts]);
 
-    const appliedByInvoice = new Map();
-    receiptRows.forEach((receipt) => {
+  const appliedByInvoice = useMemo(() => {
+    const map = new Map();
+    allocationReceiptRows.forEach((receipt) => {
       receipt.allocations.forEach((row) => {
         if (!row.invoiceId) return;
-        const current = appliedByInvoice.get(row.invoiceId) || [];
+        const current = map.get(row.invoiceId) || [];
         current.push(row);
-        appliedByInvoice.set(row.invoiceId, current);
+        map.set(row.invoiceId, current);
       });
     });
+    return map;
+  }, [allocationReceiptRows]);
 
+  const allocationTraceData = useMemo(() => {
     const invoiceRows = validTenantInvoices.map((invoice) => {
       const invoiceId = safeId(invoice);
       const receiptApplications = (appliedByInvoice.get(invoiceId) || []).sort(
@@ -1147,17 +1139,16 @@ const TenantStatement = () => {
         receiptApplications,
       };
     });
-
     return {
-      receipts: receiptRows,
+      receipts: allocationReceiptRows,
       invoices: invoiceRows,
-      receiptMap: new Map(receiptRows.map((item) => [item.receiptId, item])),
+      receiptMap: new Map(allocationReceiptRows.map((item) => [item.receiptId, item])),
       invoiceMap: new Map(invoiceRows.map((item) => [item.invoiceId, item])),
-      receiptCount: receiptRows.length,
-      unappliedReceipts: receiptRows.filter((item) => item.unappliedAmount > 0),
-      partiallyAllocatedReceipts: receiptRows.filter((item) => item.allocatedAmount > 0 || item.unappliedAmount > 0),
+      receiptCount: allocationReceiptRows.length,
+      unappliedReceipts: allocationReceiptRows.filter((item) => item.unappliedAmount > 0),
+      partiallyAllocatedReceipts: allocationReceiptRows.filter((item) => item.allocatedAmount > 0 || item.unappliedAmount > 0),
     };
-  }, [activeTenantReceipts, validTenantInvoices]);
+  }, [allocationReceiptRows, appliedByInvoice, validTenantInvoices]);
 
   const selectedAllocationTrace = useMemo(() => {
     if (allocationTraceTarget?.kind === "receipt") {
@@ -1469,6 +1460,25 @@ const TenantStatement = () => {
       { key: "monthly", name: "Monthly", durationInMonths: 1 };
     const paymentDueDay = Math.max(1, Math.min(28, Number(tenantLease?.paymentDueDay || 5)));
 
+    // Pre-group invoices by periodKey/description to avoid O(n_periods × n_invoices) inside the loop
+    const SCHEDULE_CATEGORIES = new Set(["RENT_CHARGE", "UTILITY_CHARGE"]);
+    const invoicesByPeriodKey = new Map();
+    const invoicesByPeriodDesc = new Map();
+    tenantInvoices.forEach(inv => {
+      const status = String(inv?.status || "").toLowerCase();
+      if (["cancelled", "reversed"].includes(status)) return;
+      if (!SCHEDULE_CATEGORIES.has(String(inv?.category || "").toUpperCase())) return;
+      const metaKey = String(inv?.metadata?.periodKey || "").trim();
+      if (metaKey) {
+        if (!invoicesByPeriodKey.has(metaKey)) invoicesByPeriodKey.set(metaKey, []);
+        invoicesByPeriodKey.get(metaKey).push(inv);
+      } else {
+        const desc = formatPeriodLabel(inv?.invoiceDate || inv?.createdAt);
+        if (!invoicesByPeriodDesc.has(desc)) invoicesByPeriodDesc.set(desc, []);
+        invoicesByPeriodDesc.get(desc).push(inv);
+      }
+    });
+
     let currentDate = new Date(scheduleStartDate);
     currentDate.setHours(0, 0, 0, 0);
 
@@ -1485,14 +1495,10 @@ const TenantStatement = () => {
 
       const resolvedFromDate = adjustment?.fromDate || currentDate;
       const resolvedToDate = adjustment?.toDate || periodEnd;
-      const periodInvoices = getInvoicesForPeriod({
-        periodKey,
-        description: buildScheduleLabel({
-          startDate: resolvedFromDate,
-          endDate: resolvedToDate,
-          billingPeriod: selectedBillingPeriod,
-        }),
-      });
+      const scheduleDesc = buildScheduleLabel({ startDate: resolvedFromDate, endDate: resolvedToDate, billingPeriod: selectedBillingPeriod });
+      const periodInvoices = invoicesByPeriodKey.has(periodKey)
+        ? invoicesByPeriodKey.get(periodKey)
+        : (invoicesByPeriodDesc.get(scheduleDesc) || []);
       const createdInvoiceNumber = periodInvoices
         .map((item) => item.invoiceNumber)
         .filter(Boolean)
@@ -1516,7 +1522,7 @@ const TenantStatement = () => {
         fromRaw: formatInputDate(resolvedFromDate),
         toRaw: formatInputDate(resolvedToDate),
         dueDateRaw: formatInputDate(dueDate),
-        description: buildScheduleLabel({ startDate: resolvedFromDate, endDate: resolvedToDate, billingPeriod: selectedBillingPeriod }),
+        description: scheduleDesc,
         rent: resolvedRent,
         utility: resolvedUtility,
         utilityNames: resolvedUtilityNames.length > 0 ? resolvedUtilityNames : [],

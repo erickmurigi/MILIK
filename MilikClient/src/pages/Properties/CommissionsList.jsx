@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { getProperties, updateProperty } from '../../redux/propertyRedux';
@@ -47,31 +47,33 @@ const CommissionsList = () => {
     }
   }, [currentCompany?._id, currentUser?.company, dispatch]);
 
-  // Filter properties
-  const filteredProperties = properties?.filter(prop => {
-    const matchesSearch = 
-      (prop.propertyCode?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-      (prop.propertyName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
-    
-    const hasCommission = prop.commissionPercentage && prop.commissionPercentage > 0;
-    
-    if (filterMode === 'configured') return matchesSearch && hasCommission;
-    if (filterMode === 'unconfigured') return matchesSearch && !hasCommission;
-    return matchesSearch;
-  }) || [];
+  const filteredProperties = useMemo(() => {
+    const q = searchTerm.toLowerCase();
+    return (properties || []).filter(prop => {
+      const matchesSearch =
+        (prop.propertyCode?.toLowerCase() || '').includes(q) ||
+        (prop.propertyName?.toLowerCase() || '').includes(q);
+      const hasCommission = Number(prop.commissionPercentage) > 0;
+      if (filterMode === 'configured') return matchesSearch && hasCommission;
+      if (filterMode === 'unconfigured') return matchesSearch && !hasCommission;
+      return matchesSearch;
+    });
+  }, [properties, searchTerm, filterMode]);
 
-  // Stats
-  const stats = {
+  const stats = useMemo(() => ({
     total: properties?.length || 0,
-    configured: properties?.filter(p => p.commissionPercentage && p.commissionPercentage > 0).length || 0,
-    unconfigured: properties?.filter(p => !p.commissionPercentage || p.commissionPercentage === 0).length || 0,
-  };
+    configured: (properties || []).filter(p => Number(p.commissionPercentage) > 0).length,
+    unconfigured: (properties || []).filter(p => !(Number(p.commissionPercentage) > 0)).length,
+  }), [properties]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProperties.length / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
-  const paginatedProperties = filteredProperties.slice(startIndex, endIndex);
+  const paginatedProperties = useMemo(
+    () => filteredProperties.slice(startIndex, endIndex),
+    [filteredProperties, startIndex, endIndex]
+  );
 
   useEffect(() => {
     setCurrentPage(1);
@@ -348,7 +350,7 @@ const CommissionsList = () => {
                                 <div className="font-semibold text-slate-900">{property.propertyName || property.name || '-'}</div>
                               </td>
                               <td className="px-2 py-1 text-[10px]">
-                                {property.commissionPercentage && property.commissionPercentage > 0 ? (
+                                {Number(property.commissionPercentage) > 0 ? (
                                   <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-orange-700">
                                     {property.commissionPercentage}%
                                   </span>

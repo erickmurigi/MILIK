@@ -17,7 +17,7 @@ if (!MONGO_URL) {
 const ALL_MODULES_ON = {
   propertyManagement: true,
   accounts: true,
-  billing: true,
+  billing: false,
   inventory: true,
   telcoDealership: false,
   procurement: false,

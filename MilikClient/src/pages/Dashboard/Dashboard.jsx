@@ -39,6 +39,7 @@ const Dashboard = ({ darkMode }) => {
   const [paymentVouchers, setPaymentVouchers] = useState([]);
   const [processedStatements, setProcessedStatements] = useState([]);
   const [operationalLoading, setOperationalLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState(null);
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -53,11 +54,13 @@ const Dashboard = ({ darkMode }) => {
     let active = true;
 
     const refreshDashboardData = async () => {
+      setOperationalLoading(true);
+      setDashboardError(null);
+
       dispatch(getProperties({ business: businessId, status: 'active', limit: 1000 }));
       dispatch(getUnits({ business: businessId }));
       dispatch(getTenants({ business: businessId }));
 
-      setOperationalLoading(true);
       try {
         const results = await Promise.allSettled([
           adminRequests.get(`/tenant-invoices?business=${businessId}&includeSnapshots=true`),
@@ -74,6 +77,8 @@ const Dashboard = ({ darkMode }) => {
         setInvoices(normalizeArr(results[0], 'invoices', 'data'));
         setPaymentVouchers(normalizeArr(results[1], 'vouchers', 'paymentVouchers', 'data'));
         setProcessedStatements(normalizeArr(results[2], 'statements', 'data'));
+      } catch (err) {
+        if (active) setDashboardError(err?.response?.data?.message || err?.message || 'Failed to load dashboard data');
       } finally {
         if (active) setOperationalLoading(false);
       }
@@ -119,6 +124,11 @@ const Dashboard = ({ darkMode }) => {
     <DashboardLayout>
       <div className="flex min-h-0 flex-1 bg-white">
         <div className={`flex-1 overflow-auto px-2 pt-2 pb-3 space-y-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+          {dashboardError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              ⚠ {dashboardError}
+            </div>
+          )}
           <MetricsGrid darkMode={darkMode} />
 
           <div className="dashboard-main-grid gap-2">

@@ -240,7 +240,10 @@ function isAllowedLocalhostOrigin(origin) {
 }
 
 function isAllowedOrigin(origin) {
-  if (!origin) return true;
+  // Null origin = same-origin browser request or server-to-server call.
+  // In production allow it only when not a credentialed cross-site request;
+  // browsers always send Origin for cross-site requests, so null here is safe.
+  if (!origin) return !isProduction;
   if (allowedOrigins.includes(origin)) return true;
   if (allowLocalhostOrigins && isAllowedLocalhostOrigin(origin)) return true;
   return false;
@@ -368,7 +371,24 @@ io.on("connection", (socket) => {
 setIO(io);
 
 app.use(compression());
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+        upgradeInsecureRequests: isProduction ? [] : null,
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  })
+);
 app.use(morgan(isProduction ? "combined" : "common"));
 
 const buildStore = (prefix) => {

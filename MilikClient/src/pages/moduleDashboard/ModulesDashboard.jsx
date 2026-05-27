@@ -10,11 +10,11 @@ import {
   FaHandshake,
   FaStore,
   FaArrowRight,
-  FaEnvelope,
   FaLock,
   FaCar,
   FaBuilding,
   FaSearch,
+  FaCity,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import {
@@ -35,7 +35,7 @@ const moduleRegistry = [
     subtitle: "Property Management",
     status: "active",
     route: "/dashboard",
-    icon: null,
+    icon: FaCity,
     color: "#0b3b2e",
     category: "Core",
   },
@@ -48,16 +48,6 @@ const moduleRegistry = [
     route: "/accounts/dashboard",
     icon: FaChartLine,
     color: "#b45309",
-    category: "Finance",
-  },
-  {
-    id: "billing",
-    moduleKey: "billing",
-    title: "Billing",
-    subtitle: "Invoices & Payments",
-    status: "coming",
-    icon: FaEnvelope,
-    color: "#ca8a04",
     category: "Finance",
   },
   {
@@ -140,6 +130,7 @@ const ModulesDashboard = () => {
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany || null);
   const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const isFetchingCompany = useSelector((state) => state.company?.isFetching || false);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
 
@@ -204,7 +195,11 @@ const ModulesDashboard = () => {
       {/* ── Top bar ── */}
       <header className="odoo-topbar">
         <div className="odoo-topbar-left">
-          <img src="/MILIK CUBES.png" alt="Milik" className="odoo-topbar-logo" />
+          <img
+            src={activeCompanyContext?.logo || "/MILIK CUBES.png"}
+            alt={activeCompanyContext?.companyName || "Milik"}
+            className="odoo-topbar-logo"
+          />
           <div className="odoo-topbar-company">
             <span className="odoo-topbar-name">{activeCompanyContext?.companyName || "Milik"}</span>
             {operatingModeLabel && <span className="odoo-topbar-mode">{operatingModeLabel}</span>}
@@ -244,7 +239,19 @@ const ModulesDashboard = () => {
 
       {/* ── App grid ── */}
       <main className="odoo-main">
-        {filteredModules.length > 0 ? (
+        {isFetchingCompany && filteredModules.length === 0 ? (
+          <div className="odoo-grid">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="odoo-tile odoo-tile-skeleton" aria-hidden="true">
+                <div className="odoo-icon-panel odoo-skeleton-block" />
+                <div className="odoo-tile-body">
+                  <div className="odoo-skeleton-line odoo-skeleton-line-title" />
+                  <div className="odoo-skeleton-line odoo-skeleton-line-sub" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredModules.length > 0 ? (
           <div className="odoo-grid">
             {filteredModules.map((m, i) => (
               <button
@@ -286,7 +293,7 @@ const ModulesDashboard = () => {
           <div className="odoo-empty">
             <div className="odoo-empty-ico"><FaLock /></div>
             <p className="odoo-empty-title">{search ? "No apps match your search" : "No modules available"}</p>
-            <p className="odoo-empty-sub">{search ? `Try searching something else` : "No business modules are assigned to this company."}</p>
+            <p className="odoo-empty-sub">{search ? "Try searching something else" : "No business modules are assigned to this company."}</p>
           </div>
         )}
       </main>

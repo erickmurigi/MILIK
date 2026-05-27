@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FaHome,
   FaKey,
@@ -26,6 +26,7 @@ import {
   FaCog,
   FaCar,
   FaUserTie,
+  FaCity,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -47,7 +48,7 @@ const moduleRegistry = [
     id: "milik",
     moduleKey: "propertyManagement",
     label: "Property Management",
-    icon: <FaHome />,
+    icon: <FaCity />,
     to: "/dashboard",
     status: "active",
   },
@@ -58,13 +59,6 @@ const moduleRegistry = [
     icon: <FaChartLine />,
     to: "/accounts/dashboard",
     status: "active",
-  },
-  {
-    id: "billing",
-    moduleKey: "billing",
-    label: "Billing",
-    icon: <FaEnvelope />,
-    status: "coming",
   },
   {
     id: "inventory",
@@ -202,7 +196,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
 
   const secondaryTop = useMemo(() => [], []);
 
-  const openSwitchCompany = async ({ forceRefresh = false } = {}) => {
+  const openSwitchCompany = useCallback(async ({ forceRefresh = false } = {}) => {
     setSearch("");
     setShowSwitchModal(true);
 
@@ -224,7 +218,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
     } finally {
       setLoadingCompanies(false);
     }
-  };
+  }, [companies, companiesLoadedAt]);
 
   const secondaryBottom = useMemo(() => {
     const items = [
@@ -267,7 +261,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
     });
 
     return items;
-  }, [isSystemAdmin, navigate]);
+  }, [isSystemAdmin, navigate, openSwitchCompany]);
 
   const filteredCompanies = useMemo(() => {
     const activeCompanyId = String(currentCompany?._id || currentUser?.company?._id || "");
@@ -299,7 +293,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
     window.location.replace("/login");
   };
 
-  const handlePrimaryModuleClick = (item) => {
+  const handlePrimaryModuleClick = useCallback((item) => {
     setOpen(false);
 
     if (item?.status === "active" && item?.to) {
@@ -311,9 +305,9 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
     }
 
     toast.info(`${item?.label || "This module"} is enabled for this company but its workspace is not yet live.`);
-  };
+  }, [navigate]);
 
-  const handleSwitchCompany = async (company) => {
+  const handleSwitchCompany = useCallback(async (company) => {
     if (!company?._id) return;
 
     const activeCompanyId = String(currentCompany?._id || currentUser?.company?._id || "");
@@ -324,7 +318,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
       return;
     }
 
-    if (isCompanySwitching) return;
+    if (isCompanySwitching || switchLoading) return;
 
     setSwitchLoading(true);
     try {
@@ -338,7 +332,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
     } finally {
       setSwitchLoading(false);
     }
-  };
+  }, [currentCompany?._id, currentUser?.company?._id, isCompanySwitching, switchLoading, dispatch, navigate]);
 
   const isBusySwitching = switchLoading || isCompanySwitching;
 

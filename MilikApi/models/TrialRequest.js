@@ -3,7 +3,15 @@ import mongoose from "mongoose";
 const trialRequestSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      sparse: true,
+      lowercase: true,
+      trim: true,
+      match: [/^\S+@\S+\.\S+$/, "Please provide a valid email address"],
+    },
     phone: { type: String, trim: true, default: "" },
     company: { type: String, trim: true, default: "" },
     role: {
@@ -33,5 +41,8 @@ const trialRequestSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+trialRequestSchema.index({ status: 1, demoExpiresAt: 1 });
+trialRequestSchema.index({ demoCompany: 1 });
 
 export default mongoose.model("TrialRequest", trialRequestSchema);

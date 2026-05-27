@@ -71,9 +71,8 @@
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  object-fit: contain;
+  object-fit: cover;
   background: #fff;
-  padding: 3px;
   flex-shrink: 0;
 }
 
@@ -430,4 +429,44 @@
 @media (max-width: 480px) {
   .odoo-grid { grid-template-columns: repeat(2, 1fr); }
   .odoo-topbar-search { display: none; }
+}
+
+/* ─────────────────────────────────────────────
+   Skeleton loading tiles
+───────────────────────────────────────────── */
+@keyframes odoo-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.odoo-tile-skeleton {
+  pointer-events: none;
+  cursor: default;
+  border: 1px solid #e2ece8;
+  background: #fff;
+}
+
+.odoo-skeleton-block {
+  background: linear-gradient(90deg, #e8f0ec 25%, #d4e4dc 50%, #e8f0ec 75%);
+  background-size: 800px 100%;
+  animation: odoo-shimmer 1.4s infinite linear;
+}
+
+.odoo-skeleton-line {
+  border-radius: 6px;
+  background: linear-gradient(90deg, #e8f0ec 25%, #d4e4dc 50%, #e8f0ec 75%);
+  background-size: 800px 100%;
+  animation: odoo-shimmer 1.4s infinite linear;
+  margin-bottom: 6px;
+}
+
+.odoo-skeleton-line-title {
+  height: 12px;
+  width: 70%;
+}
+
+.odoo-skeleton-line-sub {
+  height: 10px;
+  width: 50%;
+  margin-bottom: 0;
 }

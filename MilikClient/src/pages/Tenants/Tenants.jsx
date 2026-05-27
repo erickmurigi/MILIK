@@ -406,60 +406,89 @@ const Tenants = ({ listingMode = "active" }) => {
     return map;
   }, [leases]);
 
+  const paymentsByTenant = useMemo(() => {
+    const map = new Map();
+    rentPayments.forEach(p => {
+      const id = normalizeId(p?.tenant);
+      if (!id) return;
+      if (!map.has(id)) map.set(id, []);
+      map.get(id).push(p);
+    });
+    return map;
+  }, [rentPayments]);
+
+  const invoicesByTenant = useMemo(() => {
+    const map = new Map();
+    tenantInvoices.forEach(inv => {
+      const id = normalizeId(inv?.tenant);
+      if (!id) return;
+      if (!map.has(id)) map.set(id, []);
+      map.get(id).push(inv);
+    });
+    return map;
+  }, [tenantInvoices]);
+
+  const notesByTenant = useMemo(() => {
+    const map = new Map();
+    tenantInvoiceNotes.forEach(n => {
+      const id = normalizeId(n?.tenant);
+      if (!id) return;
+      if (!map.has(id)) map.set(id, []);
+      map.get(id).push(n);
+    });
+    return map;
+  }, [tenantInvoiceNotes]);
+
+  const leaseCountByTenant = useMemo(() => {
+    const map = new Map();
+    (Array.isArray(leases) ? leases : []).forEach(lease => {
+      const id = normalizeId(lease?.tenant?._id || lease?.tenant);
+      if (!id) return;
+      map.set(id, (map.get(id) || 0) + 1);
+    });
+    return map;
+  }, [leases]);
+
   const calculateTenantBalance = useCallback(
     (tenantId) => {
       const tenantIdStr = String(tenantId);
 
-      const confirmedReceiptTotal = rentPayments
-        .filter((payment) => {
-          const paymentTenantId = normalizeId(payment?.tenant);
-          return (
-            paymentTenantId === tenantIdStr &&
-            String(payment?.ledgerType || "").toLowerCase() === "receipts" &&
-            payment?.isConfirmed === true &&
-            payment?.isCancelled !== true &&
-            payment?.isReversed !== true &&
-            !payment?.reversalOf &&
-            String(payment?.postingStatus || "").toLowerCase() !== "reversed" &&
-            ["rent", "utility", "deposit", "late_fee", "other"].includes(
-              String(payment?.paymentType || "").toLowerCase()
-            )
-          );
-        })
-        .reduce((sum, payment) => sum + Math.abs(Number(payment?.amount || 0)), 0);
+      const tenantPayments = paymentsByTenant.get(tenantIdStr) || [];
+      const confirmedReceiptTotal = tenantPayments
+        .filter(p =>
+          String(p?.ledgerType || "").toLowerCase() === "receipts" &&
+          p?.isConfirmed === true &&
+          p?.isCancelled !== true &&
+          p?.isReversed !== true &&
+          !p?.reversalOf &&
+          String(p?.postingStatus || "").toLowerCase() !== "reversed" &&
+          ["rent", "utility", "deposit", "late_fee", "other"].includes(String(p?.paymentType || "").toLowerCase())
+        )
+        .reduce((sum, p) => sum + Math.abs(Number(p?.amount || 0)), 0);
 
-      const activeInvoiceTotal = tenantInvoices
-        .filter((invoice) => {
-          const invoiceTenantId = normalizeId(invoice?.tenant);
-          return invoiceTenantId === tenantIdStr && isActiveInvoice(invoice);
-        })
-        .reduce(
-          (sum, invoice) =>
-            sum + Number((invoice?.netAmount ?? invoice?.adjustedAmount ?? invoice?.amount) || 0),
-          0
-        );
+      const tenantInvoiceList = invoicesByTenant.get(tenantIdStr) || [];
+      const activeInvoiceTotal = tenantInvoiceList
+        .filter(isActiveInvoice)
+        .reduce((sum, inv) => sum + Number((inv?.netAmount ?? inv?.adjustedAmount ?? inv?.amount) || 0), 0);
 
-      const activeNoteEffect = tenantInvoiceNotes
-        .filter((note) => {
-          const noteTenantId = normalizeId(note?.tenant);
-          const status = String(note?.status || "").toLowerCase();
-          return noteTenantId === tenantIdStr && !["cancelled", "reversed"].includes(status);
-        })
-        .reduce((sum, note) => {
-          const amount = Math.abs(Number(note?.amount || 0));
-          const noteType = String(note?.noteType || note?.documentType || "").toUpperCase();
+      const tenantNoteList = notesByTenant.get(tenantIdStr) || [];
+      const activeNoteEffect = tenantNoteList
+        .filter(n => !["cancelled", "reversed"].includes(String(n?.status || "").toLowerCase()))
+        .reduce((sum, n) => {
+          const amount = Math.abs(Number(n?.amount || 0));
+          const noteType = String(n?.noteType || n?.documentType || "").toUpperCase();
           if (noteType === "CREDIT_NOTE") return sum - amount;
           if (noteType === "DEBIT_NOTE") return sum + amount;
           return sum;
         }, 0);
 
-      const effectiveInvoiceTotal = tenantInvoices.some((invoice) => Number((invoice?.adjustedAmount ?? invoice?.netAmount ?? invoice?.amount) || 0) !== Number(invoice?.amount || 0))
-        ? activeInvoiceTotal
-        : activeInvoiceTotal + activeNoteEffect;
+      const effectiveInvoiceTotal = tenantInvoiceList.some(
+        inv => Number((inv?.adjustedAmount ?? inv?.netAmount ?? inv?.amount) || 0) !== Number(inv?.amount || 0)
+      ) ? activeInvoiceTotal : activeInvoiceTotal + activeNoteEffect;
 
       return effectiveInvoiceTotal - confirmedReceiptTotal;
     },
-    [rentPayments, tenantInvoices, tenantInvoiceNotes]
+    [paymentsByTenant, invoicesByTenant, notesByTenant]
   );
 
   const transformedTenants = useMemo(() => {
@@ -471,12 +500,10 @@ const Tenants = ({ listingMode = "active" }) => {
       const expiryWarning = buildExpiryWarning({ tenant, lease: tenantLease });
       const balance = paymentsSnapshotReady ? calculateTenantBalance(tenant._id) : Number(tenant?.balance || 0);
       const tenantOperationalStatus = computeOperationalStatus({ tenant });
-      const leaseCount = (Array.isArray(leases) ? leases : []).filter(
-        (lease) => normalizeId(lease?.tenant?._id || lease?.tenant) === tenantId
-      ).length;
-      const invoiceCount = tenantInvoices.filter((invoice) => normalizeId(invoice?.tenant) === tenantId).length;
-      const invoiceNoteCount = tenantInvoiceNotes.filter((note) => normalizeId(note?.tenant) === tenantId).length;
-      const paymentCount = rentPayments.filter((payment) => normalizeId(payment?.tenant) === tenantId).length;
+      const leaseCount = leaseCountByTenant.get(tenantId) || 0;
+      const invoiceCount = (invoicesByTenant.get(tenantId) || []).length;
+      const invoiceNoteCount = (notesByTenant.get(tenantId) || []).length;
+      const paymentCount = (paymentsByTenant.get(tenantId) || []).length;
       const hasBalance = Math.abs(Number(balance || 0)) > 0.009;
       const canTerminate = tenantOperationalStatus === "active";
       const canTransfer = tenantOperationalStatus === "active";
@@ -530,7 +557,7 @@ const Tenants = ({ listingMode = "active" }) => {
         deleteBlockedReason,
       };
     });
-  }, [tenantsData, units, properties, leaseByTenantId, calculateTenantBalance, paymentsSnapshotReady, leases, tenantInvoices, tenantInvoiceNotes, rentPayments]);
+  }, [tenantsData, units, properties, leaseByTenantId, calculateTenantBalance, paymentsSnapshotReady, leaseCountByTenant, invoicesByTenant, notesByTenant, paymentsByTenant]);
 
   // ===== FILTER TENANTS =====
   const filteredTenants = useMemo(() => {

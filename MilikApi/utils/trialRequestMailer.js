@@ -15,6 +15,14 @@ function buildMailUnavailableResponse(error) {
   };
 }
 
+function escHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export async function sendTrialRequestNotification(trialRequest) {
   if (!hasSmtpConfig()) {
     return buildMailUnavailableResponse("SMTP environment variables are incomplete");
@@ -67,28 +75,32 @@ export async function sendTrialRequestNotification(trialRequest) {
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827; max-width: 720px;">
       <h2 style="margin: 0 0 16px; color: #0B3B2E;">New Milik Demo Request</h2>
       <table cellpadding="8" cellspacing="0" border="0" style="border-collapse: collapse; width: 100%; max-width: 680px;">
-        <tr><td style="font-weight: 700; width: 180px;">Name</td><td>${trialRequest?.name || ""}</td></tr>
-        <tr><td style="font-weight: 700;">Email</td><td>${trialRequest?.email || ""}</td></tr>
-        <tr><td style="font-weight: 700;">Phone</td><td>${phone}</td></tr>
-        <tr><td style="font-weight: 700;">Company</td><td>${company}</td></tr>
-        <tr style="background:#f0fdf4;"><td style="font-weight: 700;">Modules Selected</td><td style="font-weight:600;color:#0B3B2E;">${selectedModulesText}</td></tr>
-        <tr><td style="font-weight: 700;">Role</td><td>${role}</td></tr>
-        <tr><td style="font-weight: 700;">Portfolio Size</td><td>${portfolioSize}</td></tr>
-        <tr><td style="font-weight: 700;">City</td><td>${city}</td></tr>
-        <tr><td style="font-weight: 700;">Country</td><td>${country}</td></tr>
-        <tr><td style="font-weight: 700;">Notes</td><td>${notes}</td></tr>
+        <tr><td style="font-weight: 700; width: 180px;">Name</td><td>${escHtml(trialRequest?.name)}</td></tr>
+        <tr><td style="font-weight: 700;">Email</td><td>${escHtml(trialRequest?.email)}</td></tr>
+        <tr><td style="font-weight: 700;">Phone</td><td>${escHtml(phone)}</td></tr>
+        <tr><td style="font-weight: 700;">Company</td><td>${escHtml(company)}</td></tr>
+        <tr style="background:#f0fdf4;"><td style="font-weight: 700;">Modules Selected</td><td style="font-weight:600;color:#0B3B2E;">${escHtml(selectedModulesText)}</td></tr>
+        <tr><td style="font-weight: 700;">Role</td><td>${escHtml(role)}</td></tr>
+        <tr><td style="font-weight: 700;">Portfolio Size</td><td>${escHtml(portfolioSize)}</td></tr>
+        <tr><td style="font-weight: 700;">City</td><td>${escHtml(city)}</td></tr>
+        <tr><td style="font-weight: 700;">Country</td><td>${escHtml(country)}</td></tr>
+        <tr><td style="font-weight: 700;">Notes</td><td>${escHtml(notes)}</td></tr>
       </table>
     </div>
   `;
 
-  await transporter.sendMail({
-    from,
-    to,
-    subject,
-    text,
-    html,
-    replyTo: trialRequest?.email || undefined,
-  });
+  try {
+    await transporter.sendMail({
+      from,
+      to,
+      subject,
+      text,
+      html,
+      replyTo: trialRequest?.email || undefined,
+    });
+  } catch (mailErr) {
+    return { attempted: true, sent: false, skipped: false, error: mailErr.message };
+  }
 
   return { attempted: true, sent: true, skipped: false, error: null, recipient: to };
 }
@@ -112,7 +124,7 @@ export async function sendTrialAccessEmail({ trialRequest, accessToken, demoExpi
         dateStyle: "medium",
         timeStyle: "short",
       })
-    : "within 3 days";
+    : "within the demo period";
 
   const subject = resumedDemo
     ? "Resume your MILIK workspace"
@@ -138,22 +150,22 @@ export async function sendTrialAccessEmail({ trialRequest, accessToken, demoExpi
           <h2 style="margin: 10px 0 0; font-size: 24px; line-height: 1.25; color: #ffffff;">${resumedDemo ? "Resume your demo workspace" : "Your demo workspace is ready"}</h2>
           <p style="margin: 12px 0 0; color: rgba(255,255,255,0.88); font-size: 14px;">
             ${resumedDemo
-              ? "Your 3-day demo window is still active. Use the secure link below to return directly to the MILIK dashboard."
+              ? "Your demo window is still active. Use the secure link below to return directly to the MILIK dashboard."
               : "Enter the guided MILIK dashboard preview using the secure access link below. The environment remains read-only and separated from live company data."}
           </p>
         </div>
         <div style="padding: 24px 28px 28px; background: #ffffff;">
           <div style="margin: 0 0 18px; padding: 14px 16px; border-radius: 14px; background: #f6faf8; border: 1px solid #dbe9e2;">
             <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; color: #4a6b5e;">Access window</div>
-            <div style="margin-top: 6px; font-size: 15px; font-weight: 700; color: #0B3B2E;">Available until ${expiresLabel}</div>
+            <div style="margin-top: 6px; font-size: 15px; font-weight: 700; color: #0B3B2E;">Available until ${escHtml(expiresLabel)}</div>
           </div>
 
           <p style="margin: 0 0 18px;">
-            <a href="${accessLink}" style="display: inline-block; background: #0B3B2E; color: #ffffff !important; text-decoration: none; padding: 13px 22px; border-radius: 999px; font-weight: 700;">${resumedDemo ? "Resume Demo" : "Open Demo Workspace"}</a>
+            <a href="${escHtml(accessLink)}" style="display: inline-block; background: #0B3B2E; color: #ffffff !important; text-decoration: none; padding: 13px 22px; border-radius: 999px; font-weight: 700;">${resumedDemo ? "Resume Demo" : "Open Demo Workspace"}</a>
           </p>
 
           <p style="margin: 0 0 10px; color: #334155; font-size: 14px;">If the button does not open directly, use this secure link:</p>
-          <p style="margin: 0 0 18px; word-break: break-word; font-size: 13px; color: #0B3B2E;">${accessLink}</p>
+          <p style="margin: 0 0 18px; word-break: break-word; font-size: 13px; color: #0B3B2E;">${escHtml(accessLink)}</p>
 
           <div style="padding: 14px 16px; border-radius: 14px; background: #fff8f1; border: 1px solid #f6d2bb;">
             <div style="font-size: 12px; font-weight: 700; color: #c2410c; text-transform: uppercase; letter-spacing: 0.12em;">Important</div>
@@ -166,18 +178,22 @@ export async function sendTrialAccessEmail({ trialRequest, accessToken, demoExpi
     </div>
   `;
 
-  await transporter.sendMail({
-    from,
-    to,
-    subject,
-    text,
-    html,
-    replyTo,
-    headers: {
-      "X-Auto-Response-Suppress": "OOF, AutoReply",
-      "Auto-Submitted": "auto-generated",
-    },
-  });
+  try {
+    await transporter.sendMail({
+      from,
+      to,
+      subject,
+      text,
+      html,
+      replyTo,
+      headers: {
+        "X-Auto-Response-Suppress": "OOF, AutoReply",
+        "Auto-Submitted": "auto-generated",
+      },
+    });
+  } catch (mailErr) {
+    return { attempted: true, sent: false, skipped: false, error: mailErr.message, recipient: to };
+  }
 
   return {
     attempted: true,

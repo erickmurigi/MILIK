@@ -53,7 +53,7 @@ const tabs = [
 
 const validTabKeys = new Set(tabs.map((tab) => tab.key));
 
-const primaryModuleKeys = ["propertyManagement", "accounts", "billing"];
+const primaryModuleKeys = ["propertyManagement", "accounts"];
 const companyOperatingModeOptions = [
   { value: COMPANY_OPERATING_MODES.PROPERTY_MANAGER, label: "Property Manager", description: "Use property-manager wording, landlord workflows, and multi-landlord operations across the workspace." },
   { value: COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD, label: "Self-Managing Landlord", description: "Use owner-managed wording and defaults while preserving the same accounting-safe transaction engine." },

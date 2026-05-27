@@ -687,13 +687,7 @@ const buildJournalEntriesForInvoice = (invoice) => {
 };
 
 const buildInvoiceRows = ({ invoices = [], tenantLookup = {}, unitsFromStore = [], propertiesFromStore = [] }) => {
-  const sortedInvoices = [...(Array.isArray(invoices) ? invoices : [])].sort((a, b) => {
-    const aTime = a?.invoiceDate ? new Date(a.invoiceDate).getTime() : new Date(a?.createdAt || 0).getTime();
-    const bTime = b?.invoiceDate ? new Date(b.invoiceDate).getTime() : new Date(b?.createdAt || 0).getTime();
-    return aTime - bTime;
-  });
-
-  return sortedInvoices
+  return (Array.isArray(invoices) ? invoices : [])
     .map((invoice, idx) => {
       const invoiceTenantId = String(invoice?.tenant?._id || invoice?.tenant || "");
       const tenant = tenantLookup[invoiceTenantId] || invoice?.tenant || {};
@@ -938,6 +932,7 @@ function areEqual(prev, next) {
     prev.invoice.amount === next.invoice.amount &&
     prev.invoice.appliedAmount === next.invoice.appliedAmount &&
     prev.invoice.updatedAt === next.invoice.updatedAt &&
+    prev.invoice.receiptApplications?.length === next.invoice.receiptApplications?.length &&
     prev.isSelected === next.isSelected &&
     prev.idx === next.idx &&
     prev.showTenantColumns === next.showTenantColumns &&
@@ -1446,13 +1441,19 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
     return lookup;
   }, [tenantsFromStore]);
 
+  const unitLookupById = useMemo(() => {
+    const m = new Map();
+    unitsFromStore.forEach(u => { if (u?._id) m.set(String(u._id), u); });
+    return m;
+  }, [unitsFromStore]);
+
 
 const getAssignedUnitContexts = (tenant) => {
   const rawUnits = [tenant?.unit, ...(Array.isArray(tenant?.additionalUnits) ? tenant.additionalUnits : [])]
     .filter(Boolean)
     .map((unitRef) => {
       const unitId = unitRef?._id || unitRef;
-      const matchedUnit = unitsFromStore.find((unit) => String(unit?._id) === String(unitId));
+      const matchedUnit = unitLookupById.get(String(unitId));
       return matchedUnit || unitRef || null;
     })
     .filter(Boolean);
@@ -1588,35 +1589,27 @@ const getTenantPropertyId = (tenant) => {
 
   const singleBookingTenantOptions = useMemo(() => {
     const normalizedSearch = String(singleBookingTenantSearch || "").trim().toLowerCase();
-
     const BOOKABLE_STATUSES = new Set(["active", "overdue"]);
-    return tenantsFromStore
-      .filter((tenant) => {
-        const isActive = BOOKABLE_STATUSES.has(String(tenant?.status || "active").toLowerCase());
-        if (!isActive) return false;
 
-        const tenantPropertyId = getTenantPropertyId(tenant);
-        if (singleBookingPropertyFilter !== "all" && String(tenantPropertyId || "") !== String(singleBookingPropertyFilter)) {
-          return false;
-        }
-
-        if (!normalizedSearch) return true;
-
-        const tenantName = getTenantDisplayName(tenant);
-        const tenantCode = tenant?.tenantCode || tenant?.code || tenant?.tenantNo || "";
-        const propertyName = resolveTenantPropertyName(tenant, unitsFromStore, propertiesFromStore);
-        const unitName = getUnitDisplayName(tenant);
-        const haystack = `${tenantName} ${tenantCode} ${propertyName} ${unitName}`.toLowerCase();
-        return haystack.includes(normalizedSearch);
+    const mapped = tenantsFromStore
+      .filter(tenant => {
+        if (!BOOKABLE_STATUSES.has(String(tenant?.status || "active").toLowerCase())) return false;
+        if (singleBookingPropertyFilter !== "all" && String(getTenantPropertyId(tenant) || "") !== String(singleBookingPropertyFilter)) return false;
+        return true;
       })
-      .map((tenant) => ({
+      .map(tenant => ({
         id: tenant._id,
         name: getTenantDisplayName(tenant),
         tenantCode: tenant?.tenantCode || tenant?.code || tenant?.tenantNo || "",
         propertyName: resolveTenantPropertyName(tenant, unitsFromStore, propertiesFromStore),
         unitName: getUnitDisplayName(tenant),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      }));
+
+    const filtered = normalizedSearch
+      ? mapped.filter(o => `${o.name} ${o.tenantCode} ${o.propertyName} ${o.unitName}`.toLowerCase().includes(normalizedSearch))
+      : mapped;
+
+    return filtered.sort((a, b) => a.name.localeCompare(b.name));
   }, [tenantsFromStore, unitsFromStore, propertiesFromStore, singleBookingPropertyFilter, singleBookingTenantSearch]);
 
   const selectedSingleBookingTenant = useMemo(() => {

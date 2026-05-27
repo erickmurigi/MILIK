@@ -107,16 +107,19 @@ const RecentActivity = ({ darkMode }) => {
     }));
 
     const billingItems = tenants
-      .filter(t => t?.moveOutDate && Math.ceil((new Date(t.moveOutDate) - now) / ONE_DAY) >= 0 && Math.ceil((new Date(t.moveOutDate) - now) / ONE_DAY) <= 30)
-      .slice(0, 3).map(t => {
+      .reduce((acc, t) => {
+        if (!t?.moveOutDate) return acc;
         const days = Math.ceil((new Date(t.moveOutDate) - now) / ONE_DAY);
-        return {
-          id: `billing-${t._id}`, type: 'billing',
-          title: 'Billing Schedule Expiring',
-          desc: `${t.name || 'Tenant'} ends in ${days} day${days !== 1 ? 's' : ''}`,
-          time: t.updatedAt || t.moveOutDate, unread: true,
-        };
-      });
+        if (days >= 0 && days <= 30) acc.push({ t, days });
+        return acc;
+      }, [])
+      .slice(0, 3)
+      .map(({ t, days }) => ({
+        id: `billing-${t._id}`, type: 'billing',
+        title: 'Billing Schedule Expiring',
+        desc: `${t.name || 'Tenant'} ends in ${days} day${days !== 1 ? 's' : ''}`,
+        time: t.updatedAt || t.moveOutDate, unread: true,
+      }));
 
     const leaseItems = leases
       .filter(l => {

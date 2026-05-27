@@ -48,13 +48,6 @@ const MODULE_OPTIONS = [
     core: false,
   },
   {
-    key: "billing",
-    label: "Billing",
-    description: "Tenant invoicing, receipting and rent collection.",
-    icon: FaEnvelope,
-    core: false,
-  },
-  {
     key: "accounts",
     label: "Accounting",
     description: "General ledger, journals, vouchers and financial reports.",
@@ -117,7 +110,7 @@ const COMPANY_MODE_OPTIONS = [
 ];
 
 const ALL_MODULE_KEYS = [
-  "propertyManagement", "accounts", "billing", "inventory",
+  "propertyManagement", "accounts", "inventory",
   "telcoDealership", "procurement", "hr", "facilityManagement",
   "hotelManagement", "propertySale", "frontOffice", "dms",
   "academics", "projectManagement", "assetValuation", "pos", "securityServices",

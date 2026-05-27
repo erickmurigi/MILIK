@@ -75,7 +75,13 @@ export function buildCompanySmtpTransporter(profile = {}) {
   const port = Number(profile?.smtpPort || 0);
   const encryption = String(profile?.encryption || "ssl").trim().toLowerCase();
   const username = String(profile?.username || "").trim();
-  const password = decryptStoredSecret(profile?.passwordEncrypted || profile?.password || "");
+
+  let password = "";
+  try {
+    password = decryptStoredSecret(profile?.passwordEncrypted || profile?.password || "");
+  } catch (decryptErr) {
+    throw new Error(`SMTP password could not be decrypted: ${decryptErr.message}`);
+  }
 
   if (!host || !port || !username || !password) {
     throw new Error("SMTP profile is incomplete");

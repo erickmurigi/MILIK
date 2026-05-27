@@ -356,9 +356,10 @@ const setTwitterContent = (name, content) => {
   ensureHeadElement(`meta[name="${name}"]`, "meta", { name }).setAttribute("content", content);
 };
 
-function AnimatedNumber({ target, suffix = "", formatK = false }) {
+const AnimatedNumber = React.memo(function AnimatedNumber({ target, suffix = "", formatK = false }) {
   const [val, setVal] = React.useState(0);
   const ref = React.useRef(null);
+  const rafRef = React.useRef(null);
   React.useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -371,19 +372,22 @@ function AnimatedNumber({ target, suffix = "", formatK = false }) {
         const t = Math.min((now - start) / dur, 1);
         const ease = 1 - Math.pow(1 - t, 3);
         setVal(Math.floor(ease * target));
-        if (t < 1) requestAnimationFrame(run);
+        if (t < 1) rafRef.current = requestAnimationFrame(run);
         else setVal(target);
       };
-      requestAnimationFrame(run);
+      rafRef.current = requestAnimationFrame(run);
     }, { threshold: 0.5 });
     ob.observe(el);
-    return () => ob.disconnect();
+    return () => {
+      ob.disconnect();
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, [target]);
   const display = formatK && val >= 1000 ? `${Math.round(val / 1000)}K` : val.toLocaleString();
   return <span ref={ref}>{display}{suffix}</span>;
-}
+});
 
-function HeroWorkspaceVisual() {
+const HeroWorkspaceVisual = React.memo(function HeroWorkspaceVisual() {
   return (
     <div className="hero-person-shell" aria-hidden="true">
       {/* Floating stat chip — top left */}
@@ -445,7 +449,7 @@ function HeroWorkspaceVisual() {
       </div>
     </div>
   );
-}
+});
 
 function Home() {
   const dispatch = useDispatch();
@@ -1043,6 +1047,7 @@ function Home() {
                     type="button"
                     className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
                     onClick={() => setActiveFaq(isOpen ? null : index)}
+                    aria-expanded={isOpen}
                   >
                     <span className="text-base font-bold text-slate-900">{faq.question}</span>
                     <span className="text-xl font-bold text-[#0B3B2E]">{isOpen ? "−" : "+"}</span>

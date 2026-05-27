@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 function env(name, fallback = "") {
   return String(process.env[name] || fallback).trim();
 }
@@ -104,7 +106,7 @@ export function buildTemporaryPassword(email = "") {
     .split("@")[0]
     .replace(/[^a-zA-Z0-9]/g, "")
     .toLowerCase();
-  const random = String(Math.floor(100 + Math.random() * 900));
+  const random = String(crypto.randomInt(100, 1000));
   const base = localPart || "milikuser";
   const candidate = `${base}${random}`;
   if (candidate.length >= 8) return candidate;
