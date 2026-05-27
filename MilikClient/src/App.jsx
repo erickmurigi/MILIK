@@ -27,6 +27,13 @@ const PageLoader = () => (
 const NotFound          = lazy(() => import("./pages/NotFound/NotFound"));
 const Home              = lazy(() => import("./pages/Home/Home"));
 const DemoAccessEntry   = lazy(() => import("./pages/Home/DemoAccessEntry"));
+
+// Module landing pages (public, SEO-indexed)
+const PropertyPage      = lazy(() => import("./pages/Modules/PropertyPage"));
+const CarWashPage       = lazy(() => import("./pages/Modules/CarWashPage"));
+const HRPage            = lazy(() => import("./pages/Modules/HRPage"));
+const InventoryPage     = lazy(() => import("./pages/Modules/InventoryPage"));
+const PropertySalesPage = lazy(() => import("./pages/Modules/PropertySalesPage"));
 const Login             = lazy(() => import("./pages/Login/Login"));
 const SetupAdmin        = lazy(() => import("./pages/Login/SetupAdmin"));
 const FirstTimePassword = lazy(() => import("./pages/Login/FirstTimePassword"));
@@ -513,6 +520,11 @@ function App() {
             {/* ── Public ────────────────────────────────────────────────── */}
             <Route path="/" element={<PublicEntryRoute />} />
             <Route path="/home" element={<Navigate to="/" replace />} />
+            <Route path="/property-management" element={<PropertyPage />} />
+            <Route path="/car-wash" element={<CarWashPage />} />
+            <Route path="/human-resources" element={<HRPage />} />
+            <Route path="/inventory-pos" element={<InventoryPage />} />
+            <Route path="/property-sales" element={<PropertySalesPage />} />
             <Route path="/trial-access" element={<PublicOnlyRoute><DemoAccessEntry /></PublicOnlyRoute>} />
             <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
             <Route path="/setup-admin" element={<SetupAdmin />} />

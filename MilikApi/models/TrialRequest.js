@@ -15,6 +15,7 @@ const trialRequestSchema = new mongoose.Schema(
     city: { type: String, trim: true, default: "" },
     country: { type: String, trim: true, default: "" },
     notes: { type: String, trim: true, default: "" },
+    selectedModules: { type: [String], default: [] },
     status: {
       type: String,
       enum: ["pending", "contacted", "converted", "demo_started", "demo_expired"],

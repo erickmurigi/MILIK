@@ -29,15 +29,16 @@ import {
 import FreeTrialModal from "../../components/FreeTrialModal";
 import { loginSuccess } from "../../redux/authSlice";
 import { getCompanySuccess } from "../../redux/companiesRedux";
-import heroDashboardImage from "../../assets/landing/hero-dashboard.webp";
-import heroStatementImage from "../../assets/landing/hero-landlord-statement.webp";
+import landingPageImg from "../../assets/landing/LANDING PAGE.png";
 import "./home.css";
 
 const heroHighlights = [
-  "PROPERTY management — billing, statements and M-PESA",
-  "CAR WASH operations — jobs, payments and loyalty",
-  "HUMAN RESOURCES — payroll, leave and appraisals",
-  "INVENTORY & POS — stock, orders and point of sale",
+  "PROPERTY management — billing, M-PESA and landlord reports",
+  "CAR WASH — jobs, loyalty programs and staff commissions",
+  "HR & PAYROLL — employees, leave and appraisals",
+  "INVENTORY & POS — stock, purchase orders and point of sale",
+  "ACCOUNTING — Chart of Accounts, Trial Balance and reports included with every module",
+  "PROPERTY SALES — listings, buyers and agent commissions",
 ];
 
 const modules = [
@@ -47,6 +48,7 @@ const modules = [
     description: "Tenant billing, M-PESA rent collection, landlord statements, Trial Balance and full financial reporting.",
     color: "text-[#0B3B2E]",
     bg: "bg-[#0B3B2E]/10",
+    href: "/property-management",
   },
   {
     icon: <FaCar />,
@@ -54,6 +56,7 @@ const modules = [
     description: "Job tracking, payments, staff commissions, customer loyalty program and branch management.",
     color: "text-sky-700",
     bg: "bg-sky-50",
+    href: "/car-wash",
   },
   {
     icon: <FaUsers />,
@@ -61,6 +64,7 @@ const modules = [
     description: "Employee records, leave management, payroll processing, KPI tracking and staff appraisals.",
     color: "text-violet-700",
     bg: "bg-violet-50",
+    href: "/human-resources",
   },
   {
     icon: <FaWarehouse />,
@@ -68,6 +72,7 @@ const modules = [
     description: "Stock management, purchase orders, supplier tracking, POS sessions and till reconciliation.",
     color: "text-orange-700",
     bg: "bg-orange-50",
+    href: "/inventory-pos",
   },
   {
     icon: <FaHandshake />,
@@ -75,6 +80,7 @@ const modules = [
     description: "Listings, buyer management, agent commissions, deal tracking and sales performance reports.",
     color: "text-emerald-700",
     bg: "bg-emerald-50",
+    href: "/property-sales",
   },
 ];
 
@@ -197,6 +203,75 @@ const erpSnapshots = [
   },
 ];
 
+const modulePricing = [
+  {
+    icon: <FaBuilding />,
+    title: "Property Management",
+    desc: "Tenant billing, M-PESA rent collection, landlord statements and full financial reporting.",
+    price: "From KES 3,500",
+    priceMeta: "/ month",
+    note: "Tiered by rental unit count — see plans below",
+    color: "text-[#0B3B2E]",
+    bg: "bg-[#0B3B2E]/10",
+    featured: true,
+    contact: false,
+    cta: "See plans ↓",
+    href: "#pricing-pm",
+  },
+  {
+    icon: <FaCar />,
+    title: "Car Wash",
+    desc: "Job tracking, vehicle plates, customer loyalty program and staff commission calculations.",
+    price: "Tailored pricing",
+    priceMeta: "",
+    note: "Priced per business",
+    color: "text-sky-700",
+    bg: "bg-sky-50",
+    featured: false,
+    contact: true,
+    cta: "Request quote",
+  },
+  {
+    icon: <FaUsers />,
+    title: "Human Resources",
+    desc: "Employee records, payroll processing, leave management and KPI appraisals.",
+    price: "Tailored pricing",
+    priceMeta: "",
+    note: "Priced per business",
+    color: "text-violet-700",
+    bg: "bg-violet-50",
+    featured: false,
+    contact: true,
+    cta: "Request quote",
+  },
+  {
+    icon: <FaWarehouse />,
+    title: "Inventory & POS",
+    desc: "Stock management, purchase orders, POS sessions and end-of-day till reconciliation.",
+    price: "Tailored pricing",
+    priceMeta: "",
+    note: "Priced per business",
+    color: "text-orange-700",
+    bg: "bg-orange-50",
+    featured: false,
+    contact: true,
+    cta: "Request quote",
+  },
+  {
+    icon: <FaHandshake />,
+    title: "Property Sales",
+    desc: "Listings, buyer management, deal progression, agent commissions and pipeline reporting.",
+    price: "Tailored pricing",
+    priceMeta: "",
+    note: "Priced per business",
+    color: "text-emerald-700",
+    bg: "bg-emerald-50",
+    featured: false,
+    contact: true,
+    cta: "Request quote",
+  },
+];
+
 const pricingTiers = [
   {
     label: "Launch",
@@ -234,6 +309,13 @@ const pricingTiers = [
     cta: "Request quote",
     featured: false,
   },
+];
+
+const statItems = [
+  { target: 1500, suffix: "+", label: "Units managed" },
+  { target: 50000, suffix: "+", label: "Receipts generated", formatK: true },
+  { target: 200, suffix: "+", label: "Active businesses" },
+  { target: 99, suffix: "%", label: "Platform uptime" },
 ];
 
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
@@ -274,71 +356,91 @@ const setTwitterContent = (name, content) => {
   ensureHeadElement(`meta[name="${name}"]`, "meta", { name }).setAttribute("content", content);
 };
 
+function AnimatedNumber({ target, suffix = "", formatK = false }) {
+  const [val, setVal] = React.useState(0);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ob = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return;
+      ob.disconnect();
+      const start = performance.now();
+      const dur = 1600;
+      const run = (now) => {
+        const t = Math.min((now - start) / dur, 1);
+        const ease = 1 - Math.pow(1 - t, 3);
+        setVal(Math.floor(ease * target));
+        if (t < 1) requestAnimationFrame(run);
+        else setVal(target);
+      };
+      requestAnimationFrame(run);
+    }, { threshold: 0.5 });
+    ob.observe(el);
+    return () => ob.disconnect();
+  }, [target]);
+  const display = formatK && val >= 1000 ? `${Math.round(val / 1000)}K` : val.toLocaleString();
+  return <span ref={ref}>{display}{suffix}</span>;
+}
+
 function HeroWorkspaceVisual() {
   return (
-    <div className="hero-workspace-visual" aria-hidden="true">
-      <div className="hero-scene-glow hero-scene-glow-left" />
-      <div className="hero-scene-glow hero-scene-glow-right" />
+    <div className="hero-person-shell" aria-hidden="true">
+      {/* Floating stat chip — top left */}
+      <div className="hero-float-stat">
+        <span className="hero-float-stat-dot" />
+        50+ Active businesses
+      </div>
 
-      <div className="hero-device-stage">
-        <div className="hero-device-badge">
-          <span className="hero-device-badge-dot" />
-          Live dashboard and landlord statement
+      {/* Main person photo */}
+      <div className="hero-person-frame">
+        <img
+          src={landingPageImg}
+          alt="Business professional using Milik"
+          className="hero-person-img"
+          loading="eager"
+        />
+        <div className="hero-person-overlay" />
+      </div>
+
+      {/* Floating software metrics card */}
+      <div className="hero-float-software">
+        <p className="hero-float-software-title">Live metrics</p>
+        <div className="hero-float-software-row">
+          <span className="hero-float-software-label">Collected</span>
+          <span className="hero-float-software-value hero-float-software-value-green">KES 4.8M</span>
         </div>
+        <div className="hero-float-software-row">
+          <span className="hero-float-software-label">Units</span>
+          <span className="hero-float-software-value">1,500+</span>
+        </div>
+        <div className="hero-float-software-row">
+          <span className="hero-float-software-label">Receipts</span>
+          <span className="hero-float-software-value">50K+</span>
+        </div>
+        <div className="hero-float-software-row">
+          <span className="hero-float-software-label">Uptime</span>
+          <span className="hero-float-software-value hero-float-software-value-green">99%</span>
+        </div>
+      </div>
 
-        <div className="hero-visual-grid">
-          <div className="hero-device-column">
-            <div className="hero-proof-chip hero-proof-chip-top">Desktop workspace</div>
-
-            <div className="hero-device-shell">
-              <div className="hero-device-frame">
-                <div className="hero-device-topbar">
-                  <div className="hero-device-controls">
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                  <div className="hero-device-title">MILIK operations desk</div>
-                </div>
-
-                <div className="hero-device-screen">
-                  <img
-                    src={heroDashboardImage}
-                    alt="Milik dashboard preview"
-                    className="hero-device-screen-image"
-                    loading="eager"
-                  />
-                </div>
-              </div>
-
-              <div className="hero-device-base">
-                <span className="hero-device-base-strip" />
-              </div>
-            </div>
-
-            <div className="hero-proof-chip hero-proof-chip-bottom">Dashboard, collections and statements</div>
-          </div>
-
-          <div className="hero-proof-column">
-            <div className="hero-proof-card">
-              <div className="hero-proof-card-header">
-                <div>
-                  <p className="hero-proof-eyebrow">Landlord reporting proof</p>
-                  <h3 className="hero-proof-title">Statement ready for review and remittance</h3>
-                </div>
-                <div className="hero-proof-status">Live sample</div>
-              </div>
-
-              <div className="hero-proof-paper">
-                <img
-                  src={heroStatementImage}
-                  alt="Landlord statement preview"
-                  className="hero-proof-paper-image"
-                  loading="eager"
-                />
-              </div>
-            </div>
-          </div>
+      {/* Activity feed — bottom left, overlapping frame */}
+      <div className="hero-person-activity">
+        <p className="hero-activity-title">Live activity</p>
+        <div className="hero-activity-item">
+          <span className="hero-activity-dot hero-activity-dot-green" />
+          <span className="hero-activity-text">KES 45,000 received — John K.</span>
+          <span className="hero-activity-time">2m</span>
+        </div>
+        <div className="hero-activity-item">
+          <span className="hero-activity-dot hero-activity-dot-blue" />
+          <span className="hero-activity-text">Invoice #INV-034 generated</span>
+          <span className="hero-activity-time">7m</span>
+        </div>
+        <div className="hero-activity-item">
+          <span className="hero-activity-dot hero-activity-dot-amber" />
+          <span className="hero-activity-text">Statement ready — ABRI REALTORS</span>
+          <span className="hero-activity-time">18m</span>
         </div>
       </div>
     </div>
@@ -360,7 +462,7 @@ function Home() {
     const hasUtilityQuery = params.has("demoAccess") || params.has("token");
     const canonicalUrl = `${PUBLIC_SITE_URL}/`;
 
-    document.title = "Milik | Business Management Software Kenya — Property, Car Wash, HR & Inventory";
+    document.title = "ilik | Business Management Software Kenya — Property, Car Wash, HR & Inventory";
     setDocumentDescription(
       "Milik is Kenya's business management platform — property management, car wash operations, HR, inventory and property sales in one workspace. Start your free demo today."
     );
@@ -477,6 +579,17 @@ function Home() {
     }
   }, [location.pathname, location.search, navigate]);
 
+  React.useEffect(() => {
+    const ob = new IntersectionObserver(
+      (entries) => entries.forEach((e) => {
+        if (e.isIntersecting) { e.target.classList.add("is-visible"); ob.unobserve(e.target); }
+      }),
+      { threshold: 0.08, rootMargin: "0px 0px -44px 0px" }
+    );
+    document.querySelectorAll(".reveal").forEach((el) => ob.observe(el));
+    return () => ob.disconnect();
+  }, []);
+
   const dismissDemoExpiredNotice = () => {
     setDemoExpiredNotice("");
     try { sessionStorage.removeItem(DEMO_EXPIRED_NOTICE_KEY); } catch (_error) {}
@@ -517,13 +630,10 @@ function Home() {
 
       {/* Nav */}
       <nav className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Milik" className="h-11 w-11 object-contain" />
-            <div>
-              <p className="text-lg font-extrabold tracking-wide text-[#0B3B2E]">Milik</p>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Business Suite</p>
-            </div>
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6 lg:px-8">
+          <div className="relative">
+            <img src="/logo.png" alt="Milik" className="h-20 w-20 object-contain" />
+            <span className="nav-logo-live-dot" title="System live" />
           </div>
           <div className="hidden items-center gap-8 md:flex">
             <a href="#modules" className="text-sm font-semibold text-slate-600 transition hover:text-[#0B3B2E]">Modules</a>
@@ -567,7 +677,7 @@ function Home() {
               One business management platform — property, car wash, HR and inventory in one workspace.
             </h1>
             <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-600 xl:text-[1.15rem]">
-              Milik brings your core business operations together — property management, car wash, HR, inventory and property sales — all sharing one accounting backbone, without scattered tools.
+              Choose the module your business needs — property management, car wash, HR, inventory or property sales. Every module activates independently and includes a full accounting backbone — Chart of Accounts, Trial Balance and financial reports — at no extra cost.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -626,10 +736,26 @@ function Home() {
         </div>
       </section>
 
+      {/* Stats bar */}
+      <section className="border-y border-slate-200/80 bg-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 lg:grid-cols-4 lg:divide-y-0">
+            {statItems.map((s) => (
+              <div key={s.label} className="stat-count-card px-6 py-7 text-center">
+                <p className="stat-gradient-text text-4xl font-extrabold tracking-tight sm:text-5xl">
+                  <AnimatedNumber target={s.target} suffix={s.suffix} formatK={s.formatK} />
+                </p>
+                <p className="mt-1.5 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Demo entry cards */}
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm reveal reveal-d1">
             <FaBuilding className="text-2xl text-[#0B3B2E]" />
             <h3 className="mt-4 text-xl font-extrabold text-slate-900">Property Manager</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">Explore the guided demo workspace with properties, tenants, receipts, owner statements and finance reports.</p>
@@ -641,7 +767,7 @@ function Home() {
               Enter Demo <FaArrowRight />
             </button>
           </div>
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm reveal reveal-d2">
             <FaUserFriends className="text-2xl text-[#FF8C00]" />
             <h3 className="mt-4 text-xl font-extrabold text-slate-900">Landlord</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">Explore the self-managing landlord demo workspace with statements, remittances, advancements and reporting flows.</p>
@@ -653,7 +779,7 @@ function Home() {
               Enter Demo <FaArrowRight />
             </button>
           </div>
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm reveal reveal-d3">
             <FaHeadset className="text-2xl text-[#0B3B2E]" />
             <h3 className="mt-4 text-xl font-extrabold text-slate-900">Existing User</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">Go straight to the live app login when your company has already been onboarded into MILIK.</p>
@@ -670,13 +796,13 @@ function Home() {
       {/* ERP snapshots */}
       <section className="mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
         <div className="rounded-[34px] border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-8">
-          <div className="max-w-2xl">
-            <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What makes it feel like ERP</p>
-            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A system that connects properties, landlords, tenants, cash and reports.</h2>
+          <div className="max-w-2xl reveal">
+            <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What every module shares</p>
+            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">One accounting core underneath every module you activate.</h2>
           </div>
           <div className="mt-8 grid gap-5 lg:grid-cols-3">
             {erpSnapshots.map((snapshot, index) => (
-              <div key={snapshot.title} className={`erp-snapshot-card erp-snapshot-card-${index + 1} rounded-[28px] border border-slate-200 p-6 shadow-sm`}>
+              <div key={snapshot.title} className={`erp-snapshot-card erp-snapshot-card-${index + 1} rounded-[28px] border border-slate-200 p-6 shadow-sm reveal reveal-d${index + 1}`}>
                 <div className={`inline-flex rounded-2xl bg-slate-50 p-3 text-2xl ${snapshot.accent}`}>{snapshot.icon}</div>
                 <p className="mt-5 text-xs font-bold uppercase tracking-[0.22em] text-slate-500">{snapshot.title}</p>
                 <h3 className="mt-3 text-2xl font-extrabold text-slate-900">{snapshot.value}</h3>
@@ -692,31 +818,38 @@ function Home() {
 
       {/* Modules section */}
       <section id="modules" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="max-w-2xl">
-          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Everything in one platform</p>
-          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Five business modules. One workspace. One subscription.</h2>
-          <p className="mt-4 text-base leading-7 text-slate-600">Milik covers your entire business operation — from property portfolios and car wash to HR, inventory and property sales — all under one login and one shared accounting layer.</p>
+        <div className="max-w-2xl reveal">
+          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Choose your module</p>
+          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Pick the module your business needs. Accounting is always included.</h2>
+          <p className="mt-4 text-base leading-7 text-slate-600">Each module activates independently — take property management, car wash, HR, inventory or property sales on its own. Every module ships with a complete accounting layer: Chart of Accounts, journals, Trial Balance and financial reports.</p>
         </div>
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {modules.map((mod) => (
-            <div key={mod.title} className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 reveal">
+          {modules.map((mod, idx) => (
+            <Link
+              key={mod.title}
+              to={mod.href}
+              className={`module-card group rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm transition reveal reveal-d${idx + 1}`}
+            >
               <div className={`inline-flex rounded-2xl p-3 text-2xl ${mod.bg} ${mod.color}`}>{mod.icon}</div>
               <h3 className="mt-4 text-base font-extrabold text-slate-900">{mod.title}</h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">{mod.description}</p>
-            </div>
+              <p className={`mt-4 inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.16em] ${mod.color}`}>
+                Explore module <FaArrowRight className="text-[10px]" />
+              </p>
+            </Link>
           ))}
         </div>
       </section>
 
       {/* Features */}
       <section id="features" className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-        <div className="max-w-2xl">
-          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Property management — the flagship module</p>
-          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A system built to feel operationally sharp and financially credible.</h2>
+        <div className="max-w-2xl reveal">
+          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What every module includes</p>
+          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Every module ships with a full accounting backbone — not as an add-on.</h2>
         </div>
         <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {features.map((feature) => (
-            <div key={feature.title} className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+          {features.map((feature, idx) => (
+            <div key={feature.title} className={`feature-card rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm reveal reveal-d${idx + 1}`}>
               <div className="inline-flex rounded-2xl bg-[#0B3B2E]/10 p-3 text-2xl text-[#0B3B2E]">{feature.icon}</div>
               <h3 className="mt-5 text-xl font-extrabold text-slate-900">{feature.title}</h3>
               <p className="mt-3 text-sm leading-7 text-slate-600">{feature.description}</p>
@@ -728,49 +861,124 @@ function Home() {
       {/* Pricing */}
       <section id="pricing" className="bg-white py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Pricing</p>
-              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Simple portfolio-based pricing.</h2>
-              <p className="mt-3 text-sm leading-7 text-slate-600">Property management pricing below. Car wash, HR, inventory and property sales modules available as add-ons — <a href="mailto:miliksystem@gmail.com" className="font-bold text-[#0B3B2E] underline underline-offset-2">contact us</a> for bundle pricing.</p>
-            </div>
+
+          {/* Section header */}
+          <div className="max-w-3xl reveal">
+            <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Pricing</p>
+            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">One price per module. Accounting always included.</h2>
+            <p className="mt-4 text-base leading-7 text-slate-600">Choose the module your business needs. Every module activates independently and ships with a full accounting backbone — Chart of Accounts, Trial Balance and financial reports — at no extra cost.</p>
           </div>
 
-          <div className="mt-10 grid gap-5 xl:grid-cols-5 md:grid-cols-2">
-            {pricingTiers.map((tier) => (
+          {/* Module pricing overview cards */}
+          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {modulePricing.map((mod, idx) => (
               <div
-                key={tier.label}
-                className={`flex h-full flex-col rounded-[28px] border p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl ${
-                  tier.featured
+                key={mod.title}
+                className={`flex flex-col rounded-[28px] border p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl reveal reveal-d${idx + 1} ${
+                  mod.featured
                     ? "border-[#0B3B2E] bg-[linear-gradient(180deg,rgba(11,59,46,0.06)_0%,#ffffff_100%)] ring-1 ring-[#0B3B2E]/10"
                     : "border-slate-200 bg-[#f8faf9]"
                 }`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#FF8C00]">{tier.label}</p>
-                    <h3 className="mt-3 text-lg font-extrabold text-slate-950">{tier.units}</h3>
-                  </div>
-                  {tier.featured ? (
-                    <span className="rounded-full bg-[#0B3B2E] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white">Popular</span>
-                  ) : null}
+                <div className={`inline-flex rounded-2xl p-3 text-2xl ${mod.bg} ${mod.color}`}>{mod.icon}</div>
+                <h3 className="mt-4 text-base font-extrabold text-slate-900">{mod.title}</h3>
+                <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">{mod.desc}</p>
+                <div className="mt-5">
+                  <p className={`text-xl font-extrabold ${mod.featured ? "text-[#0B3B2E]" : "text-slate-800"}`}>{mod.price}</p>
+                  {mod.priceMeta ? <p className="text-xs text-slate-500">{mod.priceMeta}</p> : null}
+                  <p className="mt-1 text-xs text-slate-400">{mod.note}</p>
                 </div>
-                <p className="mt-5 text-3xl font-extrabold text-slate-950">{tier.price}</p>
-                <p className="mt-4 flex-1 text-sm leading-7 text-slate-600">{tier.helper}</p>
-                <button
-                  type="button"
-                  onClick={() => openTrialModal("property_manager")}
-                  className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-bold transition ${
-                    tier.featured
-                      ? "bg-[#0B3B2E] text-white hover:bg-[#0A3127]"
-                      : "border border-slate-300 bg-white text-slate-800 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
-                  }`}
-                >
-                  {tier.cta} <FaArrowRight />
-                </button>
+                {mod.contact ? (
+                  <a
+                    href="mailto:miliksystem@gmail.com?subject=Milik%20Module%20Pricing%20Enquiry"
+                    className={`mt-5 inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition ${mod.color} border-current hover:opacity-80`}
+                  >
+                    {mod.cta} <FaArrowRight className="text-[10px]" />
+                  </a>
+                ) : (
+                  <a
+                    href="#pricing-pm"
+                    className="mt-5 inline-flex items-center justify-center gap-2 rounded-full bg-[#0B3B2E] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-[#0A3127]"
+                  >
+                    {mod.cta} <FaArrowRight className="text-[10px]" />
+                  </a>
+                )}
               </div>
             ))}
           </div>
+
+          {/* PM detailed tiers */}
+          <div id="pricing-pm" className="mt-16 scroll-mt-24">
+            <div className="mb-8 flex items-center gap-4">
+              <div className="h-px flex-1 bg-slate-200" />
+              <p className="flex-shrink-0 rounded-full border border-[#0B3B2E]/20 bg-[#0B3B2E]/5 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-[#0B3B2E]">Property Management — Detailed Plans</p>
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
+            <p className="mb-8 max-w-2xl text-sm leading-7 text-slate-600">All plans include the full accounting backbone — Chart of Accounts, journals, Trial Balance and financial reports. Pricing is tiered by the number of rental units you manage.</p>
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+              {pricingTiers.map((tier, idx) => (
+                <div
+                  key={tier.label}
+                  className={`flex h-full flex-col rounded-[28px] border p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl reveal reveal-d${idx + 1} ${
+                    tier.featured
+                      ? "pricing-featured border-[#0B3B2E] bg-[linear-gradient(180deg,rgba(11,59,46,0.06)_0%,#ffffff_100%)] ring-1 ring-[#0B3B2E]/10"
+                      : "border-slate-200 bg-[#f8faf9]"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#FF8C00]">{tier.label}</p>
+                      <h3 className="mt-3 text-lg font-extrabold text-slate-950">{tier.units}</h3>
+                    </div>
+                    {tier.featured ? (
+                      <span className="rounded-full bg-[#0B3B2E] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white">Popular</span>
+                    ) : null}
+                  </div>
+                  <p className="mt-5 text-3xl font-extrabold text-slate-950">{tier.price}</p>
+                  <p className="mt-4 flex-1 text-sm leading-7 text-slate-600">{tier.helper}</p>
+                  <button
+                    type="button"
+                    onClick={() => openTrialModal("property_manager")}
+                    className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-bold transition ${
+                      tier.featured
+                        ? "bg-[#0B3B2E] text-white hover:bg-[#0A3127]"
+                        : "border border-slate-300 bg-white text-slate-800 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+                    }`}
+                  >
+                    {tier.cta} <FaArrowRight />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Other modules contact banner */}
+          <div className="mt-12 rounded-[28px] border border-slate-200 bg-gradient-to-r from-slate-900 via-[#0B3B2E] to-slate-900 px-8 py-10 text-white shadow-lg">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Car Wash · HR · Inventory &amp; POS · Property Sales</p>
+                <h3 className="mt-2 text-xl font-extrabold sm:text-2xl">Need pricing for another module? Talk to us.</h3>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-white/80">Each module is priced per business based on size, usage and whether you're bundling multiple modules. Contact us for a tailored quote — same-day response.</p>
+              </div>
+              <div className="flex flex-shrink-0 flex-wrap gap-3">
+                <a
+                  href="mailto:miliksystem@gmail.com?subject=Milik%20Module%20Pricing%20Enquiry"
+                  className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-[#0B3B2E] transition hover:bg-slate-100"
+                >
+                  Email us <FaArrowRight />
+                </a>
+                <a
+                  href="https://wa.me/254141455841?text=Hello%20Milik,%20I%27d%20like%20a%20pricing%20quote."
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/30 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                >
+                  <FaWhatsapp /> WhatsApp
+                </a>
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
 
@@ -822,7 +1030,7 @@ function Home() {
       {/* FAQ */}
       <section id="faq" className="bg-white py-20">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
+          <div className="reveal text-center">
             <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">FAQ</p>
             <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Questions prospects often ask before they buy.</h2>
           </div>
@@ -878,20 +1086,76 @@ function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 bg-[#0B3B2E] py-8 text-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 text-sm text-white/80 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Milik" className="h-10 w-10 object-contain" />
+      <footer className="border-t border-slate-200 bg-[#0B3B2E] text-white">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+          <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
             <div>
-              <p className="font-bold text-white">Milik Business Suite</p>
-              <p className="text-xs uppercase tracking-[0.2em] text-white/60">Property · Car Wash · HR · Inventory · Sales</p>
+              <div className="flex items-center gap-3">
+                <img src="/logo.png" alt="Milik" className="h-10 w-10 object-contain" />
+                <div>
+                  <p className="font-extrabold text-white">Milik Business Suite</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-white/50">Built for Kenya</p>
+                </div>
+              </div>
+              <p className="mt-4 max-w-xs text-sm leading-7 text-white/60">Kenya's business management platform — property, car wash, HR, inventory and property sales in one professional workspace.</p>
+              <div className="mt-5 flex gap-3">
+                <a href="tel:+254141455841" className="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/80 transition hover:border-white/50 hover:text-white">
+                  <FaPhoneAlt className="text-[10px]" /> 0141 455 841
+                </a>
+                <a href="mailto:miliksystem@gmail.com" className="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/80 transition hover:border-white/50 hover:text-white">
+                  Email us
+                </a>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/40">Modules</p>
+              <ul className="mt-4 space-y-3">
+                {[
+                  { label: "Property Management", href: "/property-management" },
+                  { label: "Car Wash", href: "/car-wash" },
+                  { label: "Human Resources", href: "/human-resources" },
+                  { label: "Inventory & POS", href: "/inventory-pos" },
+                  { label: "Property Sales", href: "/property-sales" },
+                ].map((l) => (
+                  <li key={l.href}>
+                    <Link to={l.href} className="text-sm font-semibold text-white/65 transition hover:text-white">{l.label}</Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/40">Platform</p>
+              <ul className="mt-4 space-y-3">
+                {[
+                  { label: "Pricing", href: "/#pricing" },
+                  { label: "How it works", href: "/#how-it-works" },
+                  { label: "FAQ", href: "/#faq" },
+                  { label: "Get Free Trial", href: "/#" },
+                  { label: "Sign In", href: "/login" },
+                ].map((l) => (
+                  <li key={l.label}>
+                    <Link to={l.href} className="text-sm font-semibold text-white/65 transition hover:text-white">{l.label}</Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/40">Contact</p>
+              <ul className="mt-4 space-y-3 text-sm font-semibold text-white/65">
+                <li>Nairobi, Kenya</li>
+                <li><a href="tel:+254141455841" className="transition hover:text-white">+254 141 455 841</a></li>
+                <li><a href="mailto:miliksystem@gmail.com" className="transition hover:text-white">miliksystem@gmail.com</a></li>
+                <li>
+                  <a href="https://wa.me/254141455841" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 transition hover:text-white">
+                    <FaWhatsapp /> WhatsApp us
+                  </a>
+                </li>
+              </ul>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-4 text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
-            <span>Professional demo workspace</span>
-            <span>Built for Kenya</span>
-            <a href="mailto:miliksystem@gmail.com" className="text-white/65 hover:text-white transition">Contact Us</a>
-            <Link to="/login" className="text-white/65 hover:text-white transition">Sign In</Link>
+          <div className="mt-10 flex flex-col items-start gap-3 border-t border-white/10 pt-8 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-white/40">© {new Date().getFullYear()} Milik Business Suite. All rights reserved.</p>
+            <p className="text-xs text-white/40">Property · Car Wash · HR · Inventory · Sales</p>
           </div>
         </div>
       </footer>

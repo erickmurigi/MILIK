@@ -195,7 +195,7 @@ function Login() {
       <img
         src="/logo.png"
         alt="Milik watermark"
-        className="pointer-events-none select-none absolute inset-0 m-auto w-[70vw] max-w-[760px] opacity-[0.13]"
+        className="pointer-events-none select-none absolute inset-0 m-auto h-[65vh] w-auto opacity-[0.13]"
       />
 
       <div className="relative w-full max-w-md">
@@ -203,7 +203,7 @@ function Login() {
           <div className="bg-gradient-to-r from-[#0B3B2E] to-[#0A3127] p-8 text-center">
             <div className="flex items-center justify-center gap-3 mb-2">
               <img
-                src="/logo.png"
+                src="/MILIK CUBES.png"
                 alt="Milik logo"
                 className="w-12 h-12 md:w-14 md:h-14 object-contain drop-shadow-md"
               />

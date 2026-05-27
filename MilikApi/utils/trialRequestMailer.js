@@ -34,6 +34,16 @@ export async function sendTrialRequestNotification(trialRequest) {
   const city = trialRequest?.city || "Not provided";
   const country = trialRequest?.country || "Not provided";
   const notes = trialRequest?.notes || "Not provided";
+  const moduleLabels = {
+    property_management: "Property Management",
+    car_wash: "Car Wash",
+    human_resources: "Human Resources",
+    inventory_pos: "Inventory & POS",
+    property_sales: "Property Sales",
+  };
+  const selectedModulesText = Array.isArray(trialRequest?.selectedModules) && trialRequest.selectedModules.length > 0
+    ? trialRequest.selectedModules.map((m) => moduleLabels[m] || m).join(", ")
+    : "Not specified";
 
   const subject = `New Milik demo request - ${trialRequest?.name || "Unknown lead"}`;
 
@@ -44,6 +54,7 @@ export async function sendTrialRequestNotification(trialRequest) {
     `Email: ${trialRequest?.email || ""}`,
     `Phone: ${phone}`,
     `Company: ${company}`,
+    `Modules Selected: ${selectedModulesText}`,
     `Role: ${role}`,
     `Portfolio Size: ${portfolioSize}`,
     `City: ${city}`,
@@ -60,6 +71,7 @@ export async function sendTrialRequestNotification(trialRequest) {
         <tr><td style="font-weight: 700;">Email</td><td>${trialRequest?.email || ""}</td></tr>
         <tr><td style="font-weight: 700;">Phone</td><td>${phone}</td></tr>
         <tr><td style="font-weight: 700;">Company</td><td>${company}</td></tr>
+        <tr style="background:#f0fdf4;"><td style="font-weight: 700;">Modules Selected</td><td style="font-weight:600;color:#0B3B2E;">${selectedModulesText}</td></tr>
         <tr><td style="font-weight: 700;">Role</td><td>${role}</td></tr>
         <tr><td style="font-weight: 700;">Portfolio Size</td><td>${portfolioSize}</td></tr>
         <tr><td style="font-weight: 700;">City</td><td>${city}</td></tr>

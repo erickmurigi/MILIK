@@ -329,7 +329,7 @@ function buildDemoResponseUser(user, company, role, demoExpiresAt) {
   };
 }
 
-async function upsertTrialLead({ existingTrial, payload, name, email, phone, company, role, portfolioSize, city, country, notes }) {
+async function upsertTrialLead({ existingTrial, payload, name, email, phone, company, role, portfolioSize, city, country, notes, selectedModules = [] }) {
   const trial = existingTrial || new TrialRequest({ email });
 
   trial.name = name;
@@ -343,6 +343,7 @@ async function upsertTrialLead({ existingTrial, payload, name, email, phone, com
   trial.notes = notes;
   trial.rawPayload = payload;
   trial.status = trial.status || "pending";
+  if (selectedModules.length > 0) trial.selectedModules = selectedModules;
 
   await trial.save();
   return trial;
@@ -537,6 +538,13 @@ router.post("/", async (req, res) => {
     const country = normalizeText(payload.country) || "Kenya";
     const notes = normalizeText(payload.notes);
 
+    const VALID_MODULES = new Set([
+      "property_management", "car_wash", "human_resources", "inventory_pos", "property_sales",
+    ]);
+    const selectedModules = Array.isArray(payload.modules)
+      ? payload.modules.filter((m) => VALID_MODULES.has(String(m).trim()))
+      : [];
+
     if (!isValidName(name)) {
       return res.status(400).json({ success: false, message: "Please provide your full name (at least 3 characters)" });
     }
@@ -567,6 +575,7 @@ router.post("/", async (req, res) => {
       city,
       country,
       notes,
+      selectedModules,
     });
 
     const persistedDemoExpiresAt = trial.demoExpiresAt ? new Date(trial.demoExpiresAt) : null;

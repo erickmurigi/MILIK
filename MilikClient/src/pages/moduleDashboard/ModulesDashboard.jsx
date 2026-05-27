@@ -204,7 +204,7 @@ const ModulesDashboard = () => {
       {/* ── Top bar ── */}
       <header className="odoo-topbar">
         <div className="odoo-topbar-left">
-          <img src="/logo.png" alt="Milik" className="odoo-topbar-logo" />
+          <img src="/MILIK CUBES.png" alt="Milik" className="odoo-topbar-logo" />
           <div className="odoo-topbar-company">
             <span className="odoo-topbar-name">{activeCompanyContext?.companyName || "Milik"}</span>
             {operatingModeLabel && <span className="odoo-topbar-mode">{operatingModeLabel}</span>}
