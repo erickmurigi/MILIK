@@ -34,7 +34,8 @@ const populateReceiptQuery = (query) =>
     })
     .populate("confirmedBy", "surname otherNames email")
     .populate("reversedBy", "surname otherNames email")
-    .populate("ledgerEntries");
+    .populate("ledgerEntries")
+    .lean();
 
 const populateReceiptListQuery = (query) =>
   query
@@ -45,7 +46,8 @@ const populateReceiptListQuery = (query) =>
       populate: { path: "property", select: "propertyName propertyCode business" },
     })
     .populate("confirmedBy", "surname otherNames email")
-    .populate("reversedBy", "surname otherNames email");
+    .populate("reversedBy", "surname otherNames email")
+    .lean();
 
 const safeLower = (value = "") => String(value || "").trim().toLowerCase();
 
@@ -1256,10 +1258,18 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
     postingGroups.push({ key: "unapplied", total: amount, rows: [] });
   }
 
+  const _directGroupAccountMap = new Map(
+    await Promise.all(
+      [...new Set(postingGroups.map((g) => g.key))].map(async (key) => [
+        key, await resolveCreditAccountForAllocationGroup(payment.business, key),
+      ])
+    )
+  );
+
   for (const group of postingGroups) {
     const category = getReceiptStatementCategoryForGroup(group.key, true);
     const postingRole = getPostingRoleForAllocationGroup(group.key);
-    const creditAccount = await resolveCreditAccountForAllocationGroup(payment.business, group.key);
+    const creditAccount = _directGroupAccountMap.get(group.key);
     const includeGroupInStatement = ["rent", "utility"].includes(String(group.key || "").toLowerCase());
 
     const leg = await postEntry({
@@ -1400,10 +1410,18 @@ const postReceiptJournal = async (payment, actorId) => {
     postingGroups.push({ key: "unapplied", total: amount, rows: [] });
   }
 
+  const _normalGroupAccountMap = new Map(
+    await Promise.all(
+      [...new Set(postingGroups.map((g) => g.key))].map(async (key) => [
+        key, await resolveCreditAccountForAllocationGroup(payment.business, key),
+      ])
+    )
+  );
+
   for (const group of postingGroups) {
     const category = getReceiptStatementCategoryForGroup(group.key, !!payment?.paidDirectToLandlord);
     const postingRole = getPostingRoleForAllocationGroup(group.key);
-    const creditAccount = await resolveCreditAccountForAllocationGroup(payment.business, group.key);
+    const creditAccount = _normalGroupAccountMap.get(group.key);
     const includeGroupInStatement = ["rent", "utility"].includes(String(group.key || "").toLowerCase());
 
     const leg = await postEntry({
@@ -1709,8 +1727,16 @@ const postReceiptUnappliedAllocationReleaseJournal = async ({
     createdEntries.push(debitLeg);
     if (debitLeg?.accountId) touchedAccountIds.add(String(debitLeg.accountId));
 
+    const _releaseGroupAccountMap = new Map(
+      await Promise.all(
+        [...new Set(postingGroups.map((g) => g.key))].map(async (key) => [
+          key, await resolveCreditAccountForAllocationGroup(payment.business, key),
+        ])
+      )
+    );
+
     for (const group of postingGroups) {
-      const creditAccount = await resolveCreditAccountForAllocationGroup(payment.business, group.key);
+      const creditAccount = _releaseGroupAccountMap.get(group.key);
       const leg = await postEntry({
         session,
         business: payment.business,

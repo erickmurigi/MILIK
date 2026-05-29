@@ -1330,7 +1330,12 @@ export const getLandlordReceipts = async (params = {}) => {
   });
   const query = search.toString();
   const res = await adminRequests.get(`/landlord-receipts${query ? `?${query}` : ""}`);
-  return extractList(res.data);
+  return {
+    data: extractList(res.data),
+    total: res.data?.total ?? 0,
+    page: res.data?.page ?? 1,
+    pages: res.data?.pages ?? 1,
+  };
 };
 
 export const getLandlordReceipt = async (id, params = {}) => {
@@ -1432,10 +1437,17 @@ export const getPaymentVouchers = async (filters = {}) => {
   if (filters.propertyId && filters.propertyId !== "all") params.append("property", filters.propertyId);
   if (filters.landlordId && filters.landlordId !== "all") params.append("landlord", filters.landlordId);
   if (filters.search) params.append("search", filters.search);
+  if (filters.page) params.append("page", filters.page);
+  if (filters.limit) params.append("limit", filters.limit);
 
   const query = params.toString();
   const res = await adminRequests.get(`/payment-vouchers${query ? `?${query}` : ""}`);
-  return extractList(res.data);
+  return {
+    data: extractList(res.data),
+    total: res.data?.total ?? 0,
+    page: res.data?.page ?? 1,
+    pages: res.data?.pages ?? 1,
+  };
 };
 
 // Create a landlord payment voucher
@@ -1762,6 +1774,12 @@ export const createLease = async (dispatch, leaseData) => {
     dispatch(createLeaseFailure());
     throw err;
   }
+};
+
+// Update rent reviews / escalations only (dedicated lightweight endpoint)
+export const updateLeaseReviews = async (id, payload) => {
+  const res = await adminRequests.patch(`/leases/${id}/reviews`, payload);
+  return res.data;
 };
 
 // Update lease
@@ -2321,6 +2339,50 @@ export const downloadStatementPdf = async (statementId) => {
   }
 };
 
+// Download receipt PDF
+export const downloadReceiptPdf = async (paymentId, { preview = false, filename } = {}) => {
+  const res = await adminRequests.get(`/rent-payments/${paymentId}/pdf${preview ? "?preview=true" : ""}`, {
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  if (preview) {
+    window.open(url, "_blank");
+    setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  } else {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename || `Receipt-${paymentId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }
+  return true;
+};
+
+// Download invoice PDF
+export const downloadInvoicePdf = async (invoiceId, { preview = false, filename } = {}) => {
+  const res = await adminRequests.get(`/tenant-invoices/${invoiceId}/pdf${preview ? "?preview=true" : ""}`, {
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  if (preview) {
+    window.open(url, "_blank");
+    setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  } else {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename || `Invoice-${invoiceId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }
+  return true;
+};
+
 // Get notification stats
 export const getNotificationStats = async (recipient) => {
   try {
@@ -2567,10 +2629,17 @@ export const getJournalEntries = async (filters = {}) => {
   if (filters.startDate) params.append("startDate", filters.startDate);
   if (filters.endDate) params.append("endDate", filters.endDate);
   if (filters.search) params.append("search", filters.search);
+  if (filters.page) params.append("page", filters.page);
+  if (filters.limit) params.append("limit", filters.limit);
 
   const query = params.toString();
   const res = await adminRequests.get(`/journals${query ? `?${query}` : ""}`);
-  return extractList(res.data);
+  return {
+    data: extractList(res.data),
+    total: res.data?.total ?? 0,
+    page: res.data?.page ?? 1,
+    pages: res.data?.pages ?? 1,
+  };
 };
 
 export const createJournalEntry = async (journalData) => {

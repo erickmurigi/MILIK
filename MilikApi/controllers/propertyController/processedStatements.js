@@ -404,15 +404,15 @@ const reverseProcessedStatementLedgerEntries = async ({ statement, userId, reaso
 
   if (!originalEntries.length) return [];
 
-  const results = [];
-  for (const entry of originalEntries) {
-    const result = await postReversal({
-      entryId: entry._id,
-      reason: reason || `Processed statement ${statement._id} reversed`,
-      userId,
-    });
-    results.push(result);
-  }
+  const results = await Promise.all(
+    originalEntries.map((entry) =>
+      postReversal({
+        entryId: entry._id,
+        reason: reason || `Processed statement ${statement._id} reversed`,
+        userId,
+      })
+    )
+  );
 
   const touchedAccountIds = new Set();
   originalEntries.forEach((entry) => {

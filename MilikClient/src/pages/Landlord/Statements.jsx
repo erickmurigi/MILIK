@@ -760,35 +760,34 @@ const Statements = () => {
   const advanceRecoveryRows = workspace?.advanceRecoveryRows || [];
   const earlyPayoutRows = workspace?.earlyPayoutRows || [];
   const settlement = useMemo(() => getStatementSettlement(summary), [summary]);
-  const basisCollectionsLabel = summary?.basisCollectionsLabel || "Collections";
-  const basisCollectionsAmount = Number(
-    summary?.basisCollections ?? summary?.managerCollections ?? summary?.totalCollections ?? 0
-  );
-  const additionsAmount = Number(
-    summary?.additions ?? summary?.totalAdditions ?? sumSectionAmounts(additionRows)
-  );
-  const commissionAmount = Number(summary?.commissionAmount || 0);
-  const commissionTaxAmount = Number(summary?.commissionTaxAmount || 0);
-  const invoiceVatPassThroughLabel =
-    summary?.invoiceVatPassThroughLabel || "Invoice VAT (pass-through)";
-  const invoiceVatPassThroughAmount = Number(
-    summary?.invoiceVatPassThroughAmount ?? summary?.totalInvoiceVatInvoiced ?? 0
-  );
-  const totalInvoiceVatReceived = Number(summary?.totalInvoiceVatReceived ?? totals?.paidTax ?? 0);
-  const nonCommissionDeductions = Number(
-    summary?.nonCommissionDeductions ??
-      summary?.totalExpenses ??
-      Math.max(sumSectionAmounts(expenseRows) - commissionAmount, 0)
-  );
-  const directToLandlordAmount = Number(
-    summary?.directToLandlordCollections ??
-      summary?.directToLandlordOffsets ??
-      summary?.totalDirectToLandlordCollections ??
-      sumSectionAmounts(directToLandlordRows)
-  );
-  const openingLandlordSettlementBalance = Number(
-    summary?.openingLandlordSettlementBalance ?? summary?.openingSettlementBalance ?? 0
-  );
+  const {
+    basisCollectionsLabel,
+    basisCollectionsAmount,
+    additionsAmount,
+    commissionAmount,
+    commissionTaxAmount,
+    invoiceVatPassThroughLabel,
+    invoiceVatPassThroughAmount,
+    totalInvoiceVatReceived,
+    nonCommissionDeductions,
+    directToLandlordAmount,
+    openingLandlordSettlementBalance,
+  } = useMemo(() => {
+    const commission = Number(summary?.commissionAmount || 0);
+    return {
+      basisCollectionsLabel: summary?.basisCollectionsLabel || "Collections",
+      basisCollectionsAmount: Number(summary?.basisCollections ?? summary?.managerCollections ?? summary?.totalCollections ?? 0),
+      additionsAmount: Number(summary?.additions ?? summary?.totalAdditions ?? sumSectionAmounts(additionRows)),
+      commissionAmount: commission,
+      commissionTaxAmount: Number(summary?.commissionTaxAmount || 0),
+      invoiceVatPassThroughLabel: summary?.invoiceVatPassThroughLabel || "Invoice VAT (pass-through)",
+      invoiceVatPassThroughAmount: Number(summary?.invoiceVatPassThroughAmount ?? summary?.totalInvoiceVatInvoiced ?? 0),
+      totalInvoiceVatReceived: Number(summary?.totalInvoiceVatReceived ?? totals?.paidTax ?? 0),
+      nonCommissionDeductions: Number(summary?.nonCommissionDeductions ?? summary?.totalExpenses ?? Math.max(sumSectionAmounts(expenseRows) - commission, 0)),
+      directToLandlordAmount: Number(summary?.directToLandlordCollections ?? summary?.directToLandlordOffsets ?? summary?.totalDirectToLandlordCollections ?? sumSectionAmounts(directToLandlordRows)),
+      openingLandlordSettlementBalance: Number(summary?.openingLandlordSettlementBalance ?? summary?.openingSettlementBalance ?? 0),
+    };
+  }, [summary, totals, additionRows, expenseRows, directToLandlordRows]);
   const utilityColumns = useMemo(() => buildUtilityColumns(workspace, rows), [workspace, rows]);
   const statementColumns = useMemo(
     () => buildStatementColumns(workspace, utilityColumns),

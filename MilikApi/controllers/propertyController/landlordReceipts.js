@@ -302,8 +302,15 @@ export const getLandlordReceipts = async (req, res, next) => {
       return next(createError(400, "Business context is required to fetch landlord receipts."));
     }
 
-    const receipts = await populateQuery(LandlordReceipt.find(buildListFilter(req, businessId)).sort({ receiptDate: -1, createdAt: -1 }));
-    return res.status(200).json({ success: true, data: receipts });
+    const filter = buildListFilter(req, businessId);
+    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+
+    const [receipts, total] = await Promise.all([
+      populateQuery(LandlordReceipt.find(filter).sort({ receiptDate: -1, createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum)),
+      LandlordReceipt.countDocuments(filter),
+    ]);
+    return res.status(200).json({ success: true, data: receipts, total, page: pageNum, pages: Math.max(1, Math.ceil(total / limitNum)) });
   } catch (error) {
     next(error);
   }

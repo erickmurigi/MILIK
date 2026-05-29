@@ -162,13 +162,13 @@ const LandlordReceipts = () => {
     try {
       const [chartRows, receiptRows] = await Promise.all([
         getChartOfAccounts({ business: currentCompany._id, type: "asset" }),
-        getLandlordReceipts({ business: currentCompany._id }),
+        getLandlordReceipts({ business: currentCompany._id, limit: 500 }),
         dispatch(getLandlords({ company: currentCompany._id })),
         dispatch(getProperties({ business: currentCompany._id })),
       ]);
 
       setCashbooks(ensureArray(chartRows).filter(isCashbookAccount));
-      setReceipts(ensureArray(receiptRows));
+      setReceipts(ensureArray(receiptRows?.data ?? receiptRows));
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to load landlord receipts");
     } finally {

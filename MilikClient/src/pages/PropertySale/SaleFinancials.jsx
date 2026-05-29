@@ -95,7 +95,7 @@ export default function SaleFinancials() {
     if (!currentCompany?._id) return;
     setJournalsLoading(true);
     try {
-      const rows = await getJournalEntries({
+      const { data: rows } = await getJournalEntries({
         business:     currentCompany._id,
         sourceModule: "propertySale",
         status:       statusFilter !== "all" ? statusFilter : undefined,

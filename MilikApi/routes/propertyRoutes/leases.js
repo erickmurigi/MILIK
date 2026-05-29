@@ -5,6 +5,7 @@ import {
   getLease,
   getLeases,
   updateLease,
+  updateLeaseReviews,
   deleteLease,
   signLease,
   getExpiringLeases,
@@ -32,6 +33,9 @@ router.put("/sign/:id", verifyUser, signLease)
 
 // Renew lease (must be before /:id to avoid being intercepted)
 router.put("/renew/:id", verifyUser, renewLease)
+
+// Update rent reviews / escalations only (lightweight — no full lease validation)
+router.patch("/:id/reviews", verifyUser, updateLeaseReviews)
 
 // Update lease
 router.put("/:id", verifyUser, updateLease)

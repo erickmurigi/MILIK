@@ -128,7 +128,7 @@ const buildHtml = (lease) => {
   <style>
     @page { size: A4 portrait; margin: 15mm 14mm 15mm 14mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5px; color: #111827; background: #fff; line-height: 1.5; }
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 9.5px; color: #111827; background: #fff; line-height: 1.5; }
 
     .sheet { max-width: 182mm; margin: 0 auto; }
 

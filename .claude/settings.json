@@ -4,7 +4,11 @@
       "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:5173\" -Method GET -TimeoutSec 5 -ErrorAction Stop; Write-Output \"Frontend up - Status: $\\($r.StatusCode\\), Length: $\\($r.Content.Length\\) bytes\" } catch { Write-Output \"Frontend error: $_\" })",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\" -Directory)",
       "Bash(Select-Object Name)",
-      "Bash(xargs grep -l \"cashbook\\\\|Journal\")"
+      "Bash(xargs grep -l \"cashbook\\\\|Journal\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\" -Recurse -Name)",
+      "Bash(Get-ChildItem \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\" -Directory)",
+      "Bash(xargs grep -l \"receipt\\\\|invoice\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\" -Filter \"*.jsx\")"
     ]
   }
 }

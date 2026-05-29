@@ -119,7 +119,7 @@ export default function HRFinancials() {
     if (!currentCompany?._id) return;
     setJournalsLoading(true);
     try {
-      const rows = await getJournalEntries({
+      const { data: rows } = await getJournalEntries({
         business:     currentCompany._id,
         sourceModule: "hr",
         status:       statusFilter !== "all" ? statusFilter : undefined,

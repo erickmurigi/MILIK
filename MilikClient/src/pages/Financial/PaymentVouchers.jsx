@@ -119,6 +119,8 @@ const PaymentVouchers = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [serverPages, setServerPages] = useState(1);
   const [pendingPayVoucher, setPendingPayVoucher] = useState(null);
   const [pendingPaySettlementId, setPendingPaySettlementId] = useState("");
   const showModal = Boolean(voucherDraft.showModal);
@@ -199,8 +201,17 @@ const PaymentVouchers = () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
-      const rows = await getPaymentVouchers({ ...filters, search: debouncedSearch, business: currentCompany._id, company: currentCompany._id });
+      const { data: rows, total, pages } = await getPaymentVouchers({
+        ...filters,
+        search: debouncedSearch,
+        business: currentCompany._id,
+        company: currentCompany._id,
+        page: currentPage,
+        limit: pageSize,
+      });
       setVouchers((Array.isArray(rows) ? rows : []).map(normalizeVoucher));
+      setServerTotal(total ?? 0);
+      setServerPages(pages ?? 1);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load payment vouchers");
     } finally {
@@ -210,7 +221,7 @@ const PaymentVouchers = () => {
 
   useEffect(() => {
     loadVouchers();
-  }, [currentCompany?._id, debouncedSearch, filters.category, filters.status, filters.propertyId]);
+  }, [currentCompany?._id, debouncedSearch, filters.category, filters.status, filters.propertyId, currentPage, pageSize]);
 
   const filtered = useMemo(() => vouchers, [vouchers]);
 
@@ -223,19 +234,13 @@ const PaymentVouchers = () => {
 
   const selectedRows = useMemo(() => filtered.filter((voucher) => selectedIds.includes(voucher._id)), [filtered, selectedIds]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, serverPages);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = filtered.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const currentPageRows = filtered.slice(startIndex, endIndex);
+  const currentPageRows = vouchers;
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, filters.category, filters.status, filters.propertyId, filtered.length, pageSize]);
-
-  useEffect(() => {
-    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
-  }, [currentPage, safeCurrentPage]);
+  }, [debouncedSearch, filters.category, filters.status, filters.propertyId, pageSize]);
 
 
   const openCreate = (prefill = null) => {
@@ -644,7 +649,7 @@ const PaymentVouchers = () => {
             </div>
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-600">
               <div className="font-semibold">
-                Showing <span className="font-bold text-slate-900">{filtered.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filtered.length)}</span> of <span className="font-bold text-slate-900">{filtered.length}</span> voucher(s)
+                Showing <span className="font-bold text-slate-900">{vouchers.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> voucher(s)
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">

@@ -52,11 +52,11 @@ const AccountsDashboard = () => {
       getJournalEntries({ business: businessId, company: businessId, status: "draft",  startDate, endDate }),
       getJournalEntries({ business: businessId, company: businessId, status: "posted", startDate, endDate }),
     ])
-      .then(([coa, drafts, posted]) => {
+      .then(([coa, draftsRes, postedRes]) => {
         setStats({
-          accounts:      Array.isArray(coa)    ? coa.length    : 0,
-          draftJournals: Array.isArray(drafts)  ? drafts.length  : 0,
-          postedJournals:Array.isArray(posted)  ? posted.length  : 0,
+          accounts:      Array.isArray(coa)              ? coa.length              : 0,
+          draftJournals: draftsRes.total  ?? draftsRes.data?.length  ?? 0,
+          postedJournals:postedRes.total  ?? postedRes.data?.length  ?? 0,
         });
       })
       .catch(() => {});

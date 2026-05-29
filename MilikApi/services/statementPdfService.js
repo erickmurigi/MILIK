@@ -717,7 +717,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
         <style>
           @page { size: A4 landscape; margin: 8mm 6mm; }
           * { box-sizing: border-box; }
-          body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; color: #111827; background: #ffffff; font-size: 9px; }
+          body { margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111827; background: #ffffff; font-size: 9px; }
           .sheet { width: 100%; max-width: 285mm; margin: 0 auto; }
           .header-table, .statement-table, .simple-table, .summary-table { width: 100%; border-collapse: collapse; }
           .header-table td { vertical-align: top; }

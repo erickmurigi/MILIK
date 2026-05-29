@@ -165,7 +165,7 @@ export const generateInvoicePdf = async (invoiceId, businessId) => {
   .invoice-title-block { text-align: right; }
   .invoice-label { font-size: 28px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; text-transform: uppercase; }
   .invoice-number { font-size: 13px; color: #64748b; margin-top: 4px; }
-  .divider { height: 2px; background: linear-gradient(90deg, #0ea5e9, #6366f1); border-radius: 1px; margin-bottom: 32px; }
+  .divider { height: 2px; background: linear-gradient(90deg, #0B3B2E, #E65F1A); border-radius: 1px; margin-bottom: 32px; }
   .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
   .meta-section { }
   .meta-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #94a3b8; margin-bottom: 10px; }

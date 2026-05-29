@@ -393,6 +393,33 @@ export const updateLease = async (req, res, next) => {
   }
 };
 
+export const updateLeaseReviews = async (req, res, next) => {
+  try {
+    const business = resolveBusinessId(req);
+    const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id });
+    if (!lease) return res.status(404).json({ message: "Lease not found" });
+
+    const updates = {};
+    if (req.body.rentReviewRecords !== undefined) {
+      updates.rentReviewRecords = sanitizeRentReviewRecords(req.body.rentReviewRecords);
+    }
+    if (req.body.billingScheduleAdjustments !== undefined) {
+      updates.billingScheduleAdjustments = sanitizeBillingScheduleAdjustments(req.body.billingScheduleAdjustments);
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: "No review fields provided" });
+    }
+
+    const updated = await populateLeaseQuery(
+      Lease.findByIdAndUpdate(lease._id, { $set: updates }, { new: true, runValidators: true })
+    );
+    emitToCompany(updated.business, "lease:updated", updated);
+    return res.status(200).json(updated);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const deleteLease = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);

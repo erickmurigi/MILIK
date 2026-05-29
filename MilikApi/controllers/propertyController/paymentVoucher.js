@@ -1063,7 +1063,7 @@ export const getPaymentVouchers = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "User must have a company context" });
     }
 
-    const { category, status, property, landlord, search } = req.query;
+    const { category, status, property, landlord, search, page = 1, limit = 50 } = req.query;
     const filter = { business };
 
     if (category) filter.category = category;
@@ -1080,11 +1080,17 @@ export const getPaymentVouchers = async (req, res, next) => {
       ];
     }
 
-    const rows = await populateVoucherQuery(
-      PaymentVoucher.find(filter).sort({ createdAt: -1 })
-    ).lean();
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
 
-    res.status(200).json(rows);
+    const [rows, total] = await Promise.all([
+      populateVoucherQuery(
+        PaymentVoucher.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum)
+      ).lean(),
+      PaymentVoucher.countDocuments(filter),
+    ]);
+
+    res.status(200).json({ success: true, data: rows, total, page: pageNum, pages: Math.max(1, Math.ceil(total / limitNum)) });
   } catch (err) {
     next(err);
   }

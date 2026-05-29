@@ -12,6 +12,7 @@ import {
   getTenantInvoiceNotes,
   createTenantInvoice,
   updateLease,
+  updateLeaseReviews,
 } from "../../redux/apiCalls";
 import { deleteTenantInvoice } from "../../redux/invoiceApi";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -374,6 +375,7 @@ const TenantStatement = () => {
   const [allocationTraceTarget, setAllocationTraceTarget] = useState(null);
   const [editingReviewId, setEditingReviewId] = useState(null);
   const [reviewRecords, setReviewRecords] = useState([]);
+  const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewForm, setReviewForm] = useState({
     type: "percentage",
     value: 5,
@@ -1815,26 +1817,9 @@ const TenantStatement = () => {
 
     const persistRentReviewRecords = async (nextReviewRecords, nextScheduleAdjustments = localBillingScheduleAdjustments, successMessage = "Rent review changes saved") => {
       try {
-        let targetLeaseId = safeId(tenantLease?._id);
-        if (!targetLeaseId && currentCompany?._id) {
-          const refreshedLeases = await getLeases(dispatch, currentCompany._id, null, tenantId);
-          const refreshedLeaseList = Array.isArray(refreshedLeases)
-            ? refreshedLeases
-            : Array.isArray(refreshedLeases?.data)
-            ? refreshedLeases.data
-            : [];
-          const tenantKey = safeId(tenantId);
-          const tenantUnitKey = safeId(tenant?.unit?._id || tenant?.unit);
-          const matchedLease = refreshedLeaseList.find((lease) => {
-            const leaseTenantKey = safeId(lease?.tenant);
-            const leaseUnitKey = safeId(lease?.unit);
-            return (tenantKey && leaseTenantKey === tenantKey) || (tenantUnitKey && leaseUnitKey === tenantUnitKey);
-          });
-          targetLeaseId = safeId(matchedLease?._id);
-        }
-
+        const targetLeaseId = safeId(tenantLease?._id);
         if (!targetLeaseId) {
-          toast.error("No lease record was found for this tenant. Save or restore the tenant agreement first.");
+          toast.error("No lease record found for this tenant. Save or restore the tenant agreement first.");
           return false;
         }
 
@@ -1843,7 +1828,7 @@ const TenantStatement = () => {
           setLocalBillingScheduleAdjustments(nextScheduleAdjustments);
         }
 
-        await updateLease(dispatch, targetLeaseId, {
+        await updateLeaseReviews(targetLeaseId, {
           rentReviewRecords: nextReviewRecords,
           billingScheduleAdjustments: Array.isArray(nextScheduleAdjustments)
             ? nextScheduleAdjustments
@@ -2740,10 +2725,10 @@ const TenantStatement = () => {
             },
           ];
 
-      const saved = await persistRentReviewRecords(nextRecords, localBillingScheduleAdjustments, editingReviewId ? "Review updated" : "Review created");
-      if (saved) {
-        resetReviewForm();
-      }
+      setReviewSaving(true);
+      const saved = await persistRentReviewRecords(nextRecords, localBillingScheduleAdjustments, editingReviewId ? "Review updated" : "Review saved");
+      setReviewSaving(false);
+      if (saved) resetReviewForm();
     };
 
     const handleEditReview = (record) => {
@@ -2846,224 +2831,212 @@ const TenantStatement = () => {
       return "Yearly";
     };
 
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+    const fmtMoney = (n) => `KES ${Number(n || 0).toLocaleString()}`;
+    const inputCls = "h-8 w-full border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
+    const labelCls = "mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-500";
+
     return (
-      <div className="space-y-6">
-        <div className="bg-white border border-gray-200 rounded-lg p-2">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-5">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Rent Reviews & Escalations</h3>
-              <p className="text-gray-600 text-sm mt-1">
-                Manage rent adjustments with full review and escalation controls.
-              </p>
+      <div className="flex flex-col gap-3">
+
+        {/* ── KPI strip ───────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { label: "Base Rent",             value: fmtMoney(baseRent),            border: "border-slate-200",  bg: "bg-white",       text: "text-slate-900"   },
+            { label: "Current Effective Rent", value: fmtMoney(currentEffectiveRent),border: "border-[#0B3B2E]", bg: "bg-[#EDF5F1]",   text: "text-[#0B3B2E]"  },
+            { label: "Scheduled Reviews",      value: pendingRecords.length,         border: "border-blue-200",  bg: "bg-blue-50",     text: "text-blue-800"   },
+            { label: "Projected Next Rent",    value: fmtMoney(projectedRent),       border: "border-orange-200",bg: "bg-orange-50",   text: "text-orange-800" },
+          ].map(({ label, value, border, bg, text }) => (
+            <div key={label} className={`border px-4 py-3 shadow-sm ${border} ${bg}`}>
+              <div className={`text-[10px] font-black uppercase tracking-widest opacity-70 ${text}`}>{label}</div>
+              <div className={`mt-0.5 text-sm font-extrabold ${text}`}>{value}</div>
             </div>
+          ))}
+        </div>
+
+        {/* ── toolbar ─────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between border border-slate-200 bg-white px-3 py-2 shadow-sm" style={{ borderLeftWidth: 3, borderLeftColor: "#0B3B2E" }}>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Rent Reviews & Escalations</span>
+            <span className="hidden text-[10px] text-slate-400 sm:inline">— track and apply rent adjustments</span>
+          </div>
+          {!reviewFormOpen && (
             <button
-              onClick={() => {
-                setEditingReviewId(null);
-                setReviewFormOpen(true);
-              }}
-              className={`${MILIK_GREEN} hover:bg-[#0A3127] text-white px-3 py-1.5 rounded font-semibold flex items-center gap-2`}
+              onClick={() => { setEditingReviewId(null); resetReviewForm(); setReviewFormOpen(true); }}
+              className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] transition-colors"
             >
-              <FaPlus /> Add Review / Escalation
+              <FaPlus size={9} /> Add Review
             </button>
-          </div>
+          )}
+        </div>
 
-          <div className="grid flex-shrink-0 grid-cols-2 gap-2 py-2 md:grid-cols-4">
-            <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-              <p className="text-xs text-slate-600 font-semibold">Base Rent</p>
-              <p className="mt-0.5 text-xs font-black text-slate-900">Ksh {baseRent.toLocaleString()}</p>
-            </div>
-            <div className="border border-green-200 rounded-lg p-3 bg-green-50">
-              <p className="text-xs text-green-700 font-semibold">Current Effective Rent</p>
-              <p className="text-sm font-bold text-green-700 mt-1">
-                Ksh {currentEffectiveRent.toLocaleString()}
-              </p>
-            </div>
-            <div className="border border-blue-200 rounded-lg p-3 bg-blue-50">
-              <p className="text-xs text-blue-700 font-semibold">Scheduled Reviews</p>
-              <p className="text-sm font-bold text-blue-700 mt-1">{pendingRecords.length}</p>
-            </div>
-            <div className="border border-orange-200 rounded-lg p-3 bg-orange-50">
-              <p className="text-xs text-orange-700 font-semibold">Projected Next Rent</p>
-              <p className="text-sm font-bold text-orange-700 mt-1">Ksh {projectedRent.toLocaleString()}</p>
-            </div>
-          </div>
-
-          {reviewFormOpen && (
-            <div className="border border-slate-200 rounded-lg p-2 bg-slate-50 mb-5">
-              <h4 className="font-bold text-slate-900 mb-3">
+        {/* ── form panel ──────────────────────────────────────────────── */}
+        {reviewFormOpen && (
+          <div className="border border-[#0B3B2E] bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-[#0B3B2E] px-4 py-2.5">
+              <span className="text-xs font-black uppercase tracking-widest text-white">
                 {editingReviewId ? "Edit Review / Escalation" : "New Review / Escalation"}
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+              </span>
+              <button onClick={resetReviewForm} className="text-white/60 hover:text-white transition-colors">
+                <FaTimes size={11} />
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Type</label>
-                  <select
-                    value={reviewForm.type}
-                    onChange={(e) => setReviewForm((prev) => ({ ...prev, type: e.target.value }))}
-                    className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                  >
+                  <label className={labelCls}>Increase Type</label>
+                  <select value={reviewForm.type} onChange={(e) => setReviewForm((p) => ({ ...p, type: e.target.value }))} className={inputCls}>
                     <option value="percentage">Percentage (%)</option>
-                    <option value="amount">Fixed Amount (Ksh)</option>
+                    <option value="amount">Fixed Amount (KES)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">
-                    {reviewForm.type === "percentage" ? "Increase %" : "Increase Amount"}
-                  </label>
+                  <label className={labelCls}>{reviewForm.type === "percentage" ? "Rate (%)" : "Amount (KES)"}</label>
                   <input
-                    type="number"
-                    min="0"
+                    type="number" min="0.01" step="0.01"
                     value={reviewForm.value}
-                    onChange={(e) =>
-                      setReviewForm((prev) => ({ ...prev, value: Math.max(0, Number(e.target.value)) }))
-                    }
-                    className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                    onChange={(e) => setReviewForm((p) => ({ ...p, value: Math.max(0, Number(e.target.value)) }))}
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Frequency</label>
-                  <select
-                    value={reviewForm.frequency}
-                    onChange={(e) => setReviewForm((prev) => ({ ...prev, frequency: e.target.value }))}
-                    className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                  >
+                  <label className={labelCls}>Frequency</label>
+                  <select value={reviewForm.frequency} onChange={(e) => setReviewForm((p) => ({ ...p, frequency: e.target.value }))} className={inputCls}>
                     <option value="yearly">Yearly</option>
                     <option value="biannual">Bi-Annual</option>
                     <option value="quarterly">Quarterly</option>
+                    <option value="once">One-Off</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Effective Date</label>
-                  <input
-                    type="date"
-                    value={reviewForm.effectiveDate}
-                    onChange={(e) => setReviewForm((prev) => ({ ...prev, effectiveDate: e.target.value }))}
-                    className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                  />
+                  <label className={labelCls}>Effective Date</label>
+                  <input type="date" value={reviewForm.effectiveDate} onChange={(e) => setReviewForm((p) => ({ ...p, effectiveDate: e.target.value }))} className={inputCls} />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Projected Rent</label>
-                  <div className="mt-1 h-[42px] px-3 rounded-md border border-green-300 bg-green-50 flex items-center font-bold text-green-700 text-sm">
-                    Ksh {computeNewRent(currentEffectiveRent, reviewForm.type, reviewForm.value).toLocaleString()}
+                  <label className={labelCls}>New Rent (Preview)</label>
+                  <div className="flex h-8 items-center border border-[#0B3B2E] bg-[#EDF5F1] px-2 text-xs font-black text-[#0B3B2E]">
+                    {fmtMoney(computeNewRent(currentEffectiveRent, reviewForm.type, reviewForm.value))}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Increase</label>
+                  <div className="flex h-8 items-center border border-orange-200 bg-orange-50 px-2 text-xs font-black text-orange-700">
+                    {reviewForm.type === "percentage" ? `+${Number(reviewForm.value || 0)}%` : `+${fmtMoney(reviewForm.value || 0)}`}
                   </div>
                 </div>
               </div>
               <div className="mt-3">
-                <label className="text-xs font-semibold text-slate-700">Notes</label>
-                <textarea
-                  rows={2}
+                <label className={labelCls}>Notes / Reason</label>
+                <input
+                  type="text"
                   value={reviewForm.note}
-                  onChange={(e) => setReviewForm((prev) => ({ ...prev, note: e.target.value }))}
-                  className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                  placeholder="Reason for escalation/review"
+                  onChange={(e) => setReviewForm((p) => ({ ...p, note: e.target.value }))}
+                  placeholder="e.g. Annual CPI escalation — lease clause 8.2"
+                  className={inputCls}
                 />
               </div>
-              <div className="mt-3 flex justify-end gap-2">
-                <button
-                  onClick={resetReviewForm}
-                  className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-100 flex items-center gap-2"
-                >
-                  <FaTimes /> Cancel
+              <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+                <button onClick={resetReviewForm} className="inline-flex items-center gap-1.5 border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                  <FaTimes size={9} /> Cancel
                 </button>
                 <button
                   onClick={handleSaveReview}
-                  className={`${MILIK_GREEN} hover:bg-[#0A3127] text-white px-3 py-1.5 rounded font-semibold text-sm`}
+                  disabled={reviewSaving}
+                  className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60 transition-colors"
                 >
-                  {editingReviewId ? "Update" : "Save"}
+                  {reviewSaving ? "Saving…" : editingReviewId ? "Update Review" : "Save Review"}
                 </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          <div className="overflow-auto border border-slate-200 rounded-lg">
-            <table className="w-full min-w-[980px] text-sm">
-              <thead className="sticky top-0 z-10 shadow-sm">
-                <tr className="bg-[#0B3B2E] text-white text-[10px]">
-                  <th className="px-3 py-2 text-left">Effective Date</th>
-                  <th className="px-3 py-2 text-left">Type</th>
-                  <th className="px-3 py-2 text-left">Frequency</th>
-                  <th className="px-3 py-2 text-right">Increase</th>
-                  <th className="px-3 py-2 text-right">Resulting Rent</th>
-                  <th className="px-3 py-2 text-left">Status</th>
-                  <th className="px-3 py-2 text-left">Notes</th>
-                  <th className="px-2.5 py-1.5 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {computedRows.length === 0 ? (
-                  <tr>
-                    <td colSpan="8" className="px-3 py-8 text-center text-slate-500">
-                      No rent review/escalation records yet.
-                    </td>
+        {/* ── records table ────────────────────────────────────────────── */}
+        <div className="border border-slate-200 bg-white shadow-sm">
+          {computedRows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-14 text-slate-400">
+              <FaChartLine size={26} className="opacity-30" />
+              <p className="text-xs font-semibold">No rent reviews or escalations recorded yet.</p>
+              {!reviewFormOpen && (
+                <button
+                  onClick={() => { setEditingReviewId(null); resetReviewForm(); setReviewFormOpen(true); }}
+                  className="mt-1 inline-flex items-center gap-1.5 border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 hover:border-[#0B3B2E] hover:text-[#0B3B2E] transition-colors"
+                >
+                  <FaPlus size={9} /> Add First Review
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px] border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    {["Effective Date", "Type", "Frequency", "Increase", "Previous Rent", "New Rent", "Status", "Notes", "Actions"].map((h) => (
+                      <th key={h} className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap">{h}</th>
+                    ))}
                   </tr>
-                ) : (
-                  computedRows.map((record, index) => {
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {computedRows.map((record) => {
                     const isApplied = record.status === "Applied";
+                    const isScheduled = record.status === "Scheduled";
                     return (
-                      <tr
-                        key={record.id}
-                        className={`${index % 2 === 0 ? "bg-white" : "bg-slate-50"} border-b border-slate-200`}
-                      >
-                        <td className="px-2.5 py-1 text-slate-800">
-                          {new Date(record.effectiveDate).toLocaleDateString()}
+                      <tr key={record.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap">{fmtDate(record.effectiveDate)}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className={`inline-block border px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${record.type === "percentage" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-violet-200 bg-violet-50 text-violet-700"}`}>
+                            {record.type === "percentage" ? "%" : "Fixed"}
+                          </span>
                         </td>
-                        <td className="px-3 py-2 text-slate-800 capitalize">{record.type}</td>
-                        <td className="px-2.5 py-1 text-slate-800">{formatFrequency(record.frequency)}</td>
-                        <td className="px-3 py-2 text-right text-slate-900 font-semibold">
-                          {record.type === "percentage"
-                            ? `${Number(record.value)}%`
-                            : `Ksh ${Number(record.value).toLocaleString()}`}
+                        <td className="px-3 py-2.5 text-slate-600 capitalize">{formatFrequency(record.frequency)}</td>
+                        <td className="px-3 py-2.5 font-black text-orange-700 whitespace-nowrap">
+                          {record.type === "percentage" ? `+${Number(record.value)}%` : `+${fmtMoney(record.value)}`}
                         </td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-900">
-                          Ksh {record.resultingRent.toLocaleString()}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={`inline-flex px-2 py-1 rounded text-xs font-semibold ${
-                              isApplied ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                            }`}
-                          >
+                        <td className="px-3 py-2.5 font-mono text-slate-500 whitespace-nowrap">{fmtMoney(record.previousRent)}</td>
+                        <td className="px-3 py-2.5 font-mono font-black text-[#0B3B2E] whitespace-nowrap">{fmtMoney(record.resultingRent)}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className={`inline-block border px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
+                            isApplied   ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
+                            isScheduled ? "border-amber-200 bg-amber-50 text-amber-700" :
+                                          "border-slate-200 bg-slate-50 text-slate-600"
+                          }`}>
                             {record.status}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-slate-700 max-w-[220px] truncate">
-                          {record.note || "-"}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center justify-center gap-2">
+                        <td className="px-3 py-2.5 max-w-[180px] truncate text-slate-500" title={record.note || ""}>{record.note || "—"}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
                             {!isApplied && (
-                              <button
-                                onClick={() => handleApplyReview(record.id)}
-                                className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700 flex items-center gap-1"
-                                title="Apply"
-                              >
-                                <FaCheck /> Apply
+                              <button onClick={() => handleApplyReview(record.id)}
+                                className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 transition-colors"
+                                title="Apply to billing schedule">
+                                <FaCheck size={8} /> Apply
                               </button>
                             )}
-                            <button
-                              onClick={() => handleEditReview(record)}
-                              disabled={isApplied}
-                              className={`px-2 py-1 text-xs rounded text-white ${isApplied ? "bg-slate-300 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}
-                              title={isApplied ? "Applied reviews are locked" : "Edit"}
-                            >
-                              <FaEdit />
-                            </button>
+                            {!isApplied && (
+                              <button onClick={() => handleEditReview(record)}
+                                className="border border-slate-200 bg-white px-2 py-1 text-[10px] font-black text-slate-600 hover:border-[#0B3B2E] hover:text-[#0B3B2E] transition-colors"
+                                title="Edit">
+                                <FaEdit size={9} />
+                              </button>
+                            )}
+                            {isApplied && <span className="text-[10px] italic text-slate-400">Locked</span>}
                             <button
                               onClick={() => handleDeleteReview(record.id)}
                               disabled={isApplied}
-                              className={`px-2 py-1 text-xs rounded text-white ${isApplied ? "bg-slate-300 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"}`}
-                              title={isApplied ? "Applied reviews are locked" : "Delete"}
-                            >
-                              <FaTrash />
+                              className={`border px-2 py-1 text-[10px] font-black transition-colors ${isApplied ? "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300" : "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"}`}
+                              title={isApplied ? "Applied reviews are locked" : "Delete"}>
+                              <FaTrash size={9} />
                             </button>
                           </div>
                         </td>
                       </tr>
                     );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     );

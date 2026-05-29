@@ -1,20 +1,21 @@
 // routes/rentPayment.js
 import express from "express"
-import { 
-  createPayment, 
-  getPayment, 
-  getPayments, 
+import {
+  createPayment,
+  getPayment,
+  getPayments,
   getPaymentAllocationOptions,
-  updatePayment, 
+  updatePayment,
   updatePaymentAllocations,
   deletePayment,
   confirmPayment,
   unconfirmPayment,
   reversePayment,
   cancelReversal,
-  getPaymentSummary 
+  getPaymentSummary
 } from "../../controllers/propertyController/rentPayment.js"
 import { verifyUser } from "../../controllers/verifyToken.js"
+import { generateReceiptPdf } from "../../services/receiptPdfService.js"
 
 const router = express.Router()
 
@@ -26,6 +27,21 @@ router.get("/", verifyUser, getPayments)
 
 // Get payment summary
 router.get("/get/summary", verifyUser, getPaymentSummary)
+
+// Download/preview receipt PDF
+router.get("/:id/pdf", verifyUser, async (req, res, next) => {
+  try {
+    const businessId = String(req.user?.company || req.user?.business || "");
+    const pdfBuffer = await generateReceiptPdf(req.params.id, businessId);
+    const disposition = req.query?.preview === "true" ? "inline" : "attachment";
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `${disposition}; filename="Receipt-${req.params.id}.pdf"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (err) {
+    next(err);
+  }
+})
 
 // Get single payment
 router.get("/:id", verifyUser, getPayment)

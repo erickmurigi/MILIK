@@ -561,7 +561,7 @@ export const getJournalEntries = async (req, res, next) => {
     }
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 5000, 1), 5000);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
 
     const [rows, total] = await Promise.all([
       populateJournalQuery(

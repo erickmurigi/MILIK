@@ -1795,55 +1795,56 @@ const visibleInvoiceKeys = useMemo(
   const selectedCount = selectedInvoices.length;
   const canEdit = selectedCount === 1;
 
-  const companyDisplayName =
-    currentCompany?.companyName ||
-    currentCompany?.name ||
-    currentCompany?.company ||
-    "MILIK Property Management";
-  const companyPhone = currentCompany?.phone || currentCompany?.phoneNo || currentCompany?.phoneNumber || currentCompany?.contactPhone || "";
-  const companyEmail = currentCompany?.email || currentCompany?.companyEmail || currentCompany?.contactEmail || "";
-  const companyTown = currentCompany?.town || currentCompany?.city || "";
-  const companyAddress = [currentCompany?.address || currentCompany?.postalAddress || currentCompany?.location || "", companyTown].filter(Boolean).join(", ");
-  const companyLogo = currentCompany?.logo || "";
+  const { companyDisplayName, companyPhone, companyEmail, companyTown, companyAddress, companyLogo } = useMemo(() => {
+    const town = currentCompany?.town || currentCompany?.city || "";
+    return {
+      companyDisplayName: currentCompany?.companyName || currentCompany?.name || currentCompany?.company || "MILIK Property Management",
+      companyPhone: currentCompany?.phone || currentCompany?.phoneNo || currentCompany?.phoneNumber || currentCompany?.contactPhone || "",
+      companyEmail: currentCompany?.email || currentCompany?.companyEmail || currentCompany?.contactEmail || "",
+      companyTown: town,
+      companyAddress: [currentCompany?.address || currentCompany?.postalAddress || currentCompany?.location || "", town].filter(Boolean).join(", "),
+      companyLogo: currentCompany?.logo || "",
+    };
+  }, [currentCompany]);
 
-  const activeInvoiceSource = activeInvoice?.originalInvoice || {};
-  const activeInvoiceMetadata =
-    activeInvoiceSource?.metadata && typeof activeInvoiceSource.metadata === "object"
-      ? activeInvoiceSource.metadata
-      : {};
-  const activeInvoiceTaxSnapshot =
-    activeInvoiceSource?.taxSnapshot && typeof activeInvoiceSource.taxSnapshot === "object"
-      ? activeInvoiceSource.taxSnapshot
-      : {};
-  const activeInvoiceUtilityBreakdown = Array.isArray(activeInvoiceMetadata?.utilityBreakdown)
-    ? activeInvoiceMetadata.utilityBreakdown
-    : [];
-  const activeInvoiceNetAmount = Number(
-    activeInvoiceTaxSnapshot?.netAmount ??
-      activeInvoiceTaxSnapshot?.enteredAmount ??
-      activeInvoiceSource?.amount ??
-      activeInvoice?.amount ??
-      0
-  );
-  const activeInvoiceTaxAmount = Number(activeInvoiceTaxSnapshot?.taxAmount || 0);
-  const activeInvoiceGrossAmount = Number(
-    activeInvoiceTaxSnapshot?.grossAmount ??
-      activeInvoiceSource?.amount ??
-      activeInvoice?.amount ??
-      0
-  );
-  const activeInvoiceDaysOverdue = getInvoiceDaysOverdue({
-    dueDate: activeInvoice?.dueDateValue || activeInvoiceSource?.dueDate || null,
-    outstandingAmount: activeInvoice?.outstandingAmount,
-    status: activeInvoice?.status,
-  });
-  const activeInvoiceSettlementPercentage =
-    activeInvoiceGrossAmount > 0
-      ? Math.min(
-          100,
-          Math.max(0, (Number(activeInvoice?.appliedAmount || 0) / activeInvoiceGrossAmount) * 100)
-        )
+  const {
+    activeInvoiceSource,
+    activeInvoiceMetadata,
+    activeInvoiceTaxSnapshot,
+    activeInvoiceUtilityBreakdown,
+    activeInvoiceNetAmount,
+    activeInvoiceTaxAmount,
+    activeInvoiceGrossAmount,
+    activeInvoiceDaysOverdue,
+    activeInvoiceSettlementPercentage,
+  } = useMemo(() => {
+    const source = activeInvoice?.originalInvoice || {};
+    const metadata = source?.metadata && typeof source.metadata === "object" ? source.metadata : {};
+    const taxSnapshot = source?.taxSnapshot && typeof source.taxSnapshot === "object" ? source.taxSnapshot : {};
+    const utilityBreakdown = Array.isArray(metadata?.utilityBreakdown) ? metadata.utilityBreakdown : [];
+    const netAmount = Number(taxSnapshot?.netAmount ?? taxSnapshot?.enteredAmount ?? source?.amount ?? activeInvoice?.amount ?? 0);
+    const taxAmount = Number(taxSnapshot?.taxAmount || 0);
+    const grossAmount = Number(taxSnapshot?.grossAmount ?? source?.amount ?? activeInvoice?.amount ?? 0);
+    const daysOverdue = getInvoiceDaysOverdue({
+      dueDate: activeInvoice?.dueDateValue || source?.dueDate || null,
+      outstandingAmount: activeInvoice?.outstandingAmount,
+      status: activeInvoice?.status,
+    });
+    const settlementPercentage = grossAmount > 0
+      ? Math.min(100, Math.max(0, (Number(activeInvoice?.appliedAmount || 0) / grossAmount) * 100))
       : 0;
+    return {
+      activeInvoiceSource: source,
+      activeInvoiceMetadata: metadata,
+      activeInvoiceTaxSnapshot: taxSnapshot,
+      activeInvoiceUtilityBreakdown: utilityBreakdown,
+      activeInvoiceNetAmount: netAmount,
+      activeInvoiceTaxAmount: taxAmount,
+      activeInvoiceGrossAmount: grossAmount,
+      activeInvoiceDaysOverdue: daysOverdue,
+      activeInvoiceSettlementPercentage: settlementPercentage,
+    };
+  }, [activeInvoice]);
   const activeInvoiceJournalLines = useMemo(
     () => (activeInvoice ? buildJournalEntriesForInvoice(activeInvoice) : []),
     [activeInvoice]

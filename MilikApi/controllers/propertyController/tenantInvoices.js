@@ -95,7 +95,8 @@ const findExistingInvoiceByIdempotencyKey = async (businessId, idempotencyKey) =
   })
     .populate("chartAccount", "code name type")
     .populate("ledgerEntries")
-    .populate("createdBy", "surname otherNames email profile");
+    .populate("createdBy", "surname otherNames email profile")
+    .lean();
 };
 
 const isIdempotencyKeyDuplicateError = (error) => {
@@ -2855,7 +2856,8 @@ export const createTenantInvoiceNote = async (req, res) => {
       .populate("chartAccount", "code name type")
       .populate("ledgerEntries")
       .populate("createdBy", "surname otherNames email profile")
-      .populate("sourceInvoice", "invoiceNumber amount category invoiceDate dueDate status");
+      .populate("sourceInvoice", "invoiceNumber amount category invoiceDate dueDate status")
+      .lean();
 
     return res.status(201).json(buildNoteStatementRow(populated));
   } catch (error) {

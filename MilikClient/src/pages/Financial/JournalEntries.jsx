@@ -159,6 +159,8 @@ const JournalEntries = () => {
   const setForm = (value) => setJournalDraft((prev) => ({ ...prev, form: typeof value === "function" ? value(prev.form || buildInitialForm()) : value }));
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [serverPages, setServerPages] = useState(1);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -194,15 +196,18 @@ const JournalEntries = () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
-      const rows = await getJournalEntries({
+      const { data: rows, total, pages } = await getJournalEntries({
         business: currentCompany._id,
         company: currentCompany._id,
-        // Accounts workspace = unified cross-module GL; PM workspace = PM journals only
         ...(isAccountsWorkspace ? {} : { excludeSourceModules: "hr,carwash" }),
         ...filters,
         search: debouncedSearch,
+        page: currentPage,
+        limit: pageSize,
       });
       setJournals(Array.isArray(rows) ? rows : []);
+      setServerTotal(total ?? 0);
+      setServerPages(pages ?? 1);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load journal entries");
     } finally {
@@ -212,7 +217,7 @@ const JournalEntries = () => {
 
   useEffect(() => {
     loadJournals();
-  }, [currentCompany?._id, debouncedSearch, filters.status, filters.journalType, filters.propertyId]);
+  }, [currentCompany?._id, debouncedSearch, filters.status, filters.journalType, filters.propertyId, currentPage, pageSize]);
 
   const totals = useMemo(() => {
     return journals.reduce(
@@ -229,19 +234,13 @@ const JournalEntries = () => {
   }, [journals]);
 
 
-  const totalPages = Math.max(1, Math.ceil(journals.length / pageSize));
+  const totalPages = Math.max(1, serverPages);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const currentPageRows = journals.slice(startIndex, endIndex);
+  const currentPageRows = journals;
 
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearch, filters.status, filters.journalType, filters.propertyId, pageSize]);
-
-  useEffect(() => {
-    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
-  }, [currentPage, safeCurrentPage]);
 
   const propertyOptions = useMemo(
     () =>
@@ -826,7 +825,7 @@ const JournalEntries = () => {
               </table>
             </div>
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-              <div className="font-semibold">Showing <span className="font-bold text-slate-900">{journals.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, journals.length)}</span> of <span className="font-bold text-slate-900">{journals.length}</span> journal(s)</div>
+              <div className="font-semibold">Showing <span className="font-bold text-slate-900">{journals.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> journal(s)</div>
               <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
             </div>
           </div>

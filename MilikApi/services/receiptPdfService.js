@@ -119,7 +119,7 @@ export const generateReceiptPdf = async (receiptId, businessId) => {
   .rcpt-title { text-align: right; }
   .rcpt-label { font-size: 38px; font-weight: 900; color: #0f172a; letter-spacing: -0.03em; line-height: 1; }
   .rcpt-number { font-size: 14px; color: #64748b; margin-top: 6px; }
-  .divider { height: 2px; background: linear-gradient(90deg, #3b82f6, #93c5fd); border-radius: 2px; margin: 16px 0 20px; }
+  .divider { height: 2px; background: linear-gradient(90deg, #0B3B2E, #E65F1A); border-radius: 2px; margin: 16px 0 20px; }
   .body-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 20px; }
   .sec-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.18em; color: #94a3b8; margin-bottom: 12px; }
   .fk { font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 8px; }
