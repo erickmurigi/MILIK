@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentUser,
+  selectCurrentCompany,
+  selectAllTenants,
+  selectAllUnits,
+  selectAllProperties,
+} from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
@@ -182,11 +189,11 @@ const TenantDeposits = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const tenants = useSelector((state) => ensureArray(state.tenant?.tenants));
-  const units = useSelector((state) => ensureArray(state.unit?.units));
-  const properties = useSelector((state) => ensureArray(state.property?.properties));
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const tenants = useSelector(selectAllTenants);
+  const units = useSelector(selectAllUnits);
+  const properties = useSelector(selectAllProperties);
 
   const isLandlordWorkspace = useMemo(() => isSelfManagingLandlordCompany(currentCompany || null), [currentCompany]);
   const holderColumnLabel = isLandlordWorkspace ? "Owner / Landlord" : "Deposit Holder";

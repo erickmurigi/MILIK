@@ -1,5 +1,5 @@
 import { createPage, resetBrowser } from './browserService.js';
-import Receipt from '../models/Receipts.js';
+import RentPayment from '../models/RentPayment.js';
 
 const pdfBufferCache = new Map();
 const pdfRenderPromises = new Map();
@@ -64,14 +64,17 @@ const releasePdfRenderSlot = () => {
 };
 
 export const generateReceiptPdf = async (receiptId, businessId) => {
-  const receipt = await Receipt.findOne({ _id: receiptId, business: businessId })
+  const receipt = await RentPayment.findOne({ _id: receiptId, business: businessId })
     .populate('tenant', 'name email tenantCode phone')
-    .populate('property', 'propertyName propertyCode address')
-    .populate('unit', 'unitNumber name')
+    .populate({ path: 'unit', select: 'unitNumber name property', populate: { path: 'property', select: 'propertyName propertyCode address' } })
     .populate('business', 'companyName name address phone email logo')
     .lean();
 
-  if (!receipt) throw new Error('Receipt not found or access denied');
+  if (!receipt) { const e = new Error('Receipt not found or access denied'); e.status = 404; throw e; }
+
+  // Normalise field names so the rest of the service works unchanged
+  receipt.property = receipt.unit?.property || {};
+  receipt.receiptDate = receipt.paymentDate || receipt.createdAt;
 
   const cacheKey = `receipt::${String(receipt._id)}::${receipt.updatedAt ? new Date(receipt.updatedAt).toISOString() : ''}`;
   const cached = getCachedPdfBuffer(cacheKey);

@@ -1,5 +1,6 @@
 import React from "react";
 import { useSelector } from "react-redux";
+import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import {
   FaEye,
@@ -70,8 +71,8 @@ const StatementsTable = ({
   onDeleteStatement,
   onDownloadPdf,
 }) => {
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
   const allowApprove = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "approve", "propertyManagement");
   const allowSend = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "send", "propertyManagement");
   const allowRevise = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "update", "propertyManagement");

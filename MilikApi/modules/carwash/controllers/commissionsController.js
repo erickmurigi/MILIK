@@ -6,11 +6,8 @@ import CarWashCommissionPayout from "../models/CarWashCommissionPayout.js";
 import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, escapeRegex, parseBoolean, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
-import {
-  generatePayoutNumber,
-  postCommissionPayoutLedger,
-  resolvePayoutCashbook,
-} from "../services/commissionService.js";
+import { generatePayoutNumber } from "../services/commissionService.js";
+import { postCarWashCommissionPayout, resolvePayoutCashbook } from "../services/carwashAccountingService.js";
 
 const ruleTypes = new Set(["fixed", "percentage"]);
 const payoutMethods = new Set(["cash", "mpesa", "bank", "card", "other"]);
@@ -193,7 +190,7 @@ export const createCommissionPayout = async (req, res, next) => {
       }
     }
 
-    await postCommissionPayoutLedger({ req, payout, cashbookAccount });
+    await postCarWashCommissionPayout({ req, payout, cashbookAccount });
 
     await CarWashStaffCommission.updateMany(
       { _id: { $in: commissions.map((item) => item._id) }, business },

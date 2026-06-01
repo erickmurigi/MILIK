@@ -55,7 +55,9 @@ export const getPettyCashDisbursements = async (params = {}) => {
   try {
     const qs = buildParams(params);
     const res = await adminRequests.get(`/petty-cash/disbursements${qs ? `?${qs}` : ""}`);
-    return Array.isArray(res.data?.data) ? res.data.data : Array.isArray(res.data) ? res.data : [];
+    const d = res.data;
+    if (d?.total !== undefined) return { data: Array.isArray(d.data) ? d.data : [], total: d.total, page: d.page ?? 1, pages: d.pages ?? 1 };
+    return { data: Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [], total: 0, page: 1, pages: 1 };
   } catch (err) {
     throw extractApiError(err);
   }
@@ -85,7 +87,9 @@ export const getPettyCashReplenishments = async (params = {}) => {
   try {
     const qs = buildParams(params);
     const res = await adminRequests.get(`/petty-cash/replenishments${qs ? `?${qs}` : ""}`);
-    return Array.isArray(res.data?.data) ? res.data.data : Array.isArray(res.data) ? res.data : [];
+    const d = res.data;
+    if (d?.total !== undefined) return { data: Array.isArray(d.data) ? d.data : [], total: d.total, page: d.page ?? 1, pages: d.pages ?? 1 };
+    return { data: Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [], total: 0, page: 1, pages: 1 };
   } catch (err) {
     throw extractApiError(err);
   }

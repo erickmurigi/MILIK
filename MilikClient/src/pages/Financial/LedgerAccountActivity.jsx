@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import {
   FaArrowLeft,
   FaExchangeAlt,
@@ -104,8 +105,8 @@ const LedgerAccountActivity = () => {
     : location.pathname.startsWith("/hr/")   ? "/hr/chart-of-accounts"
     : location.pathname.startsWith("/sale/") ? "/sale/chart-of-accounts"
     : "/financial/chart-of-accounts";
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
 
   const [account, setAccount] = useState(null);
   const [accounts, setAccounts] = useState([]);

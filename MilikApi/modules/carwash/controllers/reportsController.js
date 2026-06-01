@@ -5,6 +5,7 @@ import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
+import { backfillCarWashPaymentLedger, repairOrphanedCarWashLedgerEntries } from "../services/carwashAccountingService.js";
 
 const CW_LEDGER_SOURCE_TYPES = ["carwash_payment", "carwash_expense", "carwash_commission", "carwash_commission_payout"];
 
@@ -455,6 +456,43 @@ export const serviceReport = async (req, res, next) => {
         jobTypeFilter: jobTypeFilter.jobType || null,
         rows,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Reverse any approved payment ledger entries whose CarWashPayment no longer exists.
+export const repairLedger = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const { reversed, errors } = await repairOrphanedCarWashLedgerEntries(business, req);
+    res.json({
+      success: true,
+      message: `Repair complete: ${reversed} orphaned entr${reversed === 1 ? "y" : "ies"} reversed, ${errors.length} errors.`,
+      reversed,
+      errors,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Retroactively post Dr/Cr ledger entries for payments that have none.
+// Safe to call multiple times — it skips payments that already have entries.
+export const backfillPaymentLedger = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const { paymentsPosted, commissionsPosted, skipped, errors } = await backfillCarWashPaymentLedger(business, req);
+    const posted = paymentsPosted + commissionsPosted;
+    res.json({
+      success: true,
+      message: `Backfill complete: ${paymentsPosted} payments + ${commissionsPosted} commissions posted, ${skipped} skipped, ${errors.length} errors.`,
+      paymentsPosted,
+      commissionsPosted,
+      posted,
+      skipped,
+      errors,
     });
   } catch (error) {
     next(error);

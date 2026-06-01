@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany } from "../../redux/selectors";
 import { FaEdit, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSave, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
@@ -54,7 +55,7 @@ const preferredCashbookForMethod = (cashbooks = [], method = "cash") => {
 };
 
 const CarWashCommissions = () => {
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentCompany = useSelector(selectCurrentCompany);
   const [rules, setRules] = useState([]);
   const [commissions, setCommissions] = useState([]);
   const [payableCommissions, setPayableCommissions] = useState([]);

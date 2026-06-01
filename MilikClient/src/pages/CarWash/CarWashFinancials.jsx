@@ -32,6 +32,11 @@ const SOURCE_LABELS = {
   carwash_commission_payout: "Commission Payout",
 };
 
+const entryTypeLabel = (e) => {
+  if (e.category === "REVERSAL") return "Reversal";
+  return SOURCE_LABELS[e.sourceTransactionType] || e.sourceTransactionType || "—";
+};
+
 const DIRECTION_BADGE = {
   debit:  "bg-rose-50 text-rose-700 border-rose-200",
   credit: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -75,7 +80,7 @@ export default function CarWashFinancials() {
   const [entries, setEntries]         = useState([]);
   const [loading, setLoading]         = useState(false);
   const [search, setSearch]           = useState("");
-  const [statusFilter, setStatusFilter]   = useState("all");
+  const [statusFilter, setStatusFilter]   = useState("approved");
   const [sourceFilter, setSourceFilter]   = useState("all");
   const [directionFilter, setDirFilter]   = useState("all");
   const [startDate, setStartDate]     = useState(firstOfMonthISO());
@@ -106,7 +111,12 @@ export default function CarWashFinancials() {
     }
   }, [currentCompany?._id, statusFilter, sourceFilter, directionFilter, startDate, endDate]);
 
-  useEffect(() => { loadLedger(); }, [loadLedger]);
+  useEffect(() => {
+    // Silently seed accounts + backfill any missing entries on every page load
+    carWashApi.seedAccounts().catch(() => {});
+    carWashApi.backfillPaymentLedger().catch(() => {});
+    loadLedger();
+  }, [loadLedger]);
 
   // ── derived KPIs ──────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -248,7 +258,7 @@ export default function CarWashFinancials() {
                           {e.direction === "debit" ? "Dr" : "Cr"}
                         </span>
                         <span className="ml-1.5 text-[10px] font-semibold text-slate-500">
-                          {SOURCE_LABELS[e.sourceTransactionType] || e.sourceTransactionType || "—"}
+                          {entryTypeLabel(e)}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-slate-700 max-w-[180px]">

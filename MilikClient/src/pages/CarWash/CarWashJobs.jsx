@@ -1,122 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { FaCar, FaChevronDown, FaChevronRight, FaGift, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSearch, FaSms, FaStar, FaTimes, FaTrashAlt, FaUser } from "react-icons/fa";
+import { selectCurrentCompany } from "../../redux/selectors";
+import { FaChevronDown, FaChevronRight, FaEdit, FaMobileAlt, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrashAlt, FaUndoAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import { useConfirm } from "../../context/ConfirmContext";
-
-// ─── Plate lookup widget ──────────────────────────────────────────────────────
-const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound }) => {
-  const [lookupResult, setLookupResult] = useState(null);
-  const [looking, setLooking] = useState(false);
-  const timerRef = useRef(null);
-
-  const lookup = useCallback(async (value) => {
-    const p = value.trim().toUpperCase();
-    if (p.length < 3) { setLookupResult(null); return; }
-    setLooking(true);
-    try {
-      const result = await carWashApi.lookupPlate(p);
-      setLookupResult(result);
-      if (result?.customer) {
-        onCustomerFound({ name: result.customer.name, phone: result.customer.phone });
-      }
-    } catch (_) {
-      setLookupResult(null);
-    } finally {
-      setLooking(false);
-    }
-  }, [onCustomerFound]);
-
-  const handleChange = (e) => {
-    const val = e.target.value.toUpperCase();
-    onPlateChange(val);
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => lookup(val), 600);
-  };
-
-  const card = lookupResult?.loyaltyCard;
-  const customer = lookupResult?.customer;
-  const program = card?.program;
-  const pendingRewards = card?.pendingRewards ?? 0;
-
-  return (
-    <div>
-      <label className={labelClass}>Plate Number *</label>
-      <div className="relative">
-        <input
-          className={inputClass}
-          value={plate}
-          onChange={handleChange}
-          required
-          autoFocus
-          placeholder="e.g. KAA 123X"
-        />
-        {looking && (
-          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 animate-pulse">looking up…</span>
-        )}
-      </div>
-      {lookupResult && (
-        <div className={`mt-1.5 border px-3 py-2 text-[11px] ${customer ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-          {customer ? (
-            <div className="flex items-start gap-2">
-              <FaUser className="mt-0.5 shrink-0 text-emerald-600" />
-              <div className="flex-1">
-                <div className="font-black text-slate-800">{customer.name} <span className="font-normal text-slate-500">· {customer.phone}</span></div>
-                {card && program ? (
-                  <div className="mt-1 flex items-center gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex gap-0.5">
-                        {Array.from({ length: program.stampsRequired }).map((_, i) => (
-                          <div key={i} className={`h-2 w-2 rounded-full ${i < card.currentStamps ? "bg-emerald-500" : "bg-slate-200"}`} />
-                        ))}
-                      </div>
-                      <span className="text-slate-500">{card.currentStamps}/{program.stampsRequired} stamps</span>
-                    </div>
-                    {pendingRewards > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-black text-amber-700">
-                        <FaGift className="text-[8px]" /> {pendingRewards} reward{pendingRewards !== 1 ? "s" : ""} ready!
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-0.5 text-slate-500">No loyalty card yet</div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 text-slate-500">
-              <FaCar className="text-[10px]" />
-              <span>Plate not registered — customer name and phone won't auto-fill. <a href="/carwash/loyalty" className="text-emerald-700 font-bold hover:underline">Register customer</a></span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const emptyJobForm = {
-  jobType: "vehicle",
-  customerName: "",
-  phone: "",
-  plateNumber: "",
-  itemDescription: "",
-  expectedReadyAt: "",
-  service: "",
-  serviceName: "",
-  vehicleType: "",
-  price: "",
-  assignedStaff: "",
-  notes: "",
-};
+import CwSmsModal from "./CwSmsModal";
 
 const emptyPaymentForm = {
   job: "",
   amount: "",
+  discountAmount: "",
   method: "cash",
   cashbookAccount: "",
+  receivedFromPhone: "",
   paymentDate: todayISO(),
   reference: "",
 };
@@ -161,7 +60,10 @@ const paymentBadgeClass = {
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
-const preferredCashbookForMethod = (cashbooks = [], method = "cash") => {
+// Returns the configured default cashbook for the given method.
+// Falls back to regex guessing if no default is configured.
+const preferredCashbookForMethod = (cashbooks = [], method = "cash", defaults = {}) => {
+  if (defaults[method]) return defaults[method];
   const haystack = (item) => `${item?.name || ""} ${item?.code || ""}`.toLowerCase();
   if (method === "mpesa") return cashbooks.find((item) => /m-?pesa|mpesa/.test(haystack(item)))?._id || "";
   if (method === "bank" || method === "card") return cashbooks.find((item) => /bank/.test(haystack(item)))?._id || "";
@@ -195,19 +97,35 @@ const EmptyRow = ({ colSpan, text }) => (
   </tr>
 );
 
+// ─── Service / staff display helpers ─────────────────────────────────────────
+const getServiceDisplay = (job) => {
+  if (Array.isArray(job.serviceLines) && job.serviceLines.length > 1) {
+    return `${job.serviceLines[0].serviceName} +${job.serviceLines.length - 1}`;
+  }
+  if (Array.isArray(job.serviceLines) && job.serviceLines.length === 1) return job.serviceLines[0].serviceName;
+  return job.serviceName || "-";
+};
+
+const getStaffDisplay = (job) => {
+  const list = Array.isArray(job.assignedStaff) ? job.assignedStaff : (job.assignedStaff ? [job.assignedStaff] : []);
+  if (!list.length) return "-";
+  if (list.length === 1) return list[0]?.name || "-";
+  return `${list[0]?.name || "?"} +${list.length - 1}`;
+};
+
 const CarWashJobs = () => {
+  const navigate = useNavigate();
   const confirm = useConfirm();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentCompany = useSelector(selectCurrentCompany);
   const isConsolidated = !getActiveBranchId();
   const [jobs, setJobs] = useState([]);
   const [services, setServices] = useState([]);
   const [staff, setStaff] = useState([]);
   const [cashbooks, setCashbooks] = useState([]);
-  const [jobForm, setJobForm] = useState(emptyJobForm);
+  const [cashbookDefaults, setCashbookDefaults] = useState({});
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
-  const [showJobModal, setShowJobModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
@@ -219,6 +137,9 @@ const CarWashJobs = () => {
   const [smsTarget, setSmsTarget] = useState(null);
   const [smsBody, setSmsBody] = useState("");
   const [smsSending, setSmsSending] = useState(false);
+  const [stkPushing, setStkPushing] = useState(false);
+  // job-level payments: { [jobId]: { loading: bool, list: [] } }
+  const [jobPayments, setJobPayments] = useState({});
 
   const unpaidJobs = useMemo(() => jobs.filter((job) => job.paymentStatus !== "paid"), [jobs]);
   const jobStats = useMemo(() => {
@@ -234,7 +155,6 @@ const CarWashJobs = () => {
     () => jobs.filter((job) => job.paymentStatus === "unpaid" && job.status !== "paid").map((job) => job._id),
     [jobs]
   );
-  const selectedService = useMemo(() => services.find((item) => item._id === jobForm.service), [jobForm.service, services]);
   const allPaymentJobs = useMemo(() => {
     const seen = new Set();
     return [...modalUnpaidJobs, ...jobs].filter((j) => { if (seen.has(j._id)) return false; seen.add(j._id); return true; });
@@ -244,16 +164,21 @@ const CarWashJobs = () => {
 
   const loadReferenceData = async () => {
     try {
-      const [servicePayload, staffPayload, cashbookPayload] = await Promise.all([
+      const [servicePayload, staffPayload, cashbookPayload, settingsPayload] = await Promise.all([
         carWashApi.listServices({ active: true }),
         carWashApi.listStaff({ active: true }),
         currentCompany?._id
           ? carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" })
           : Promise.resolve([]),
+        carWashApi.getCarWashSettings().catch(() => null),
       ]);
       setServices(normalizeListPayload(servicePayload, "services"));
       setStaff(normalizeListPayload(staffPayload, "staff"));
       setCashbooks(Array.isArray(cashbookPayload) ? cashbookPayload : []);
+      const saved = settingsPayload?.defaultCashbooks || {};
+      const defs = {};
+      ["cash","mpesa","bank","card","other"].forEach((m) => { defs[m] = saved[m]?._id || saved[m] || ""; });
+      setCashbookDefaults(defs);
     } catch {
       toast.error("Failed to load reference data");
     }
@@ -293,16 +218,6 @@ const CarWashJobs = () => {
   useEffect(() => { loadJobs(); }, [appliedFilters, page, pageSize]);
 
   useEffect(() => {
-    if (!selectedService) return;
-    setJobForm((prev) => ({
-      ...prev,
-      serviceName: selectedService.name || "",
-      vehicleType: selectedService.vehicleType || prev.vehicleType,
-      price: selectedService.defaultPrice || "",
-    }));
-  }, [selectedService]);
-
-  useEffect(() => {
     if (!selectedPaymentJob) return;
     setPaymentForm((prev) => ({
       ...prev,
@@ -312,18 +227,13 @@ const CarWashJobs = () => {
 
   useEffect(() => {
     if (!cashbooks.length || paymentForm.cashbookAccount) return;
-    setPaymentForm((prev) => ({ ...prev, cashbookAccount: preferredCashbookForMethod(cashbooks, prev.method) }));
+    setPaymentForm((prev) => ({ ...prev, cashbookAccount: preferredCashbookForMethod(cashbooks, prev.method, cashbookDefaults) }));
   }, [cashbooks, paymentForm.cashbookAccount]);
 
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => jobs.some((job) => job._id === id)));
     setExpandedIds((prev) => prev.filter((id) => jobs.some((job) => job._id === id)));
   }, [jobs]);
-
-  const closeJobModal = () => {
-    setShowJobModal(false);
-    setJobForm(emptyJobForm);
-  };
 
   const closePaymentModal = () => {
     setShowPaymentModal(false);
@@ -336,7 +246,7 @@ const CarWashJobs = () => {
       ...emptyPaymentForm,
       job: job?._id || "",
       amount: job?.price || "",
-      cashbookAccount: preferredCashbookForMethod(cashbooks, emptyPaymentForm.method),
+      cashbookAccount: preferredCashbookForMethod(cashbooks, emptyPaymentForm.method, cashbookDefaults),
     });
     setShowPaymentModal(true);
     try {
@@ -347,34 +257,41 @@ const CarWashJobs = () => {
     }
   };
 
-  const createJob = async (event) => {
-    event.preventDefault();
-    try {
-      await carWashApi.createJob({
-        ...jobForm,
-        price: Number(jobForm.price || 0),
-        assignedStaff: jobForm.assignedStaff || null,
-      });
-      closeJobModal();
-      await loadJobs();
-      toast.success("Job created");
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Unable to create job");
-    }
-  };
-
   const recordPayment = async (event) => {
     event.preventDefault();
     try {
       await carWashApi.recordPayment({
         ...paymentForm,
         amount: Number(paymentForm.amount || 0),
+        discountAmount: Number(paymentForm.discountAmount || 0),
       });
       closePaymentModal();
       await loadJobs();
       toast.success("Payment recorded");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to record payment");
+    }
+  };
+
+  const sendStkPush = async () => {
+    const phone = paymentForm.receivedFromPhone?.trim();
+    const amount = Number(paymentForm.amount || 0);
+    if (!phone) { toast.error("Enter customer phone number first"); return; }
+    if (amount <= 0) { toast.error("Enter payment amount first"); return; }
+    setStkPushing(true);
+    try {
+      const job = allPaymentJobs.find((j) => j._id === paymentForm.job);
+      await carWashApi.initiateStkPush({
+        phone,
+        amount,
+        jobId: paymentForm.job,
+        accountRef: job?.plateNumber || job?.jobNumber || "CarWash",
+      });
+      toast.success(`M-Pesa payment request sent to ${phone} — ask customer to check their phone`);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "M-Pesa push failed");
+    } finally {
+      setStkPushing(false);
     }
   };
 
@@ -393,8 +310,45 @@ const CarWashJobs = () => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   };
 
+  const loadJobPayments = useCallback(async (jobId) => {
+    setJobPayments((prev) => {
+      if (prev[jobId]) return prev; // already loaded
+      return { ...prev, [jobId]: { loading: true, list: [] } };
+    });
+    try {
+      const payload = await carWashApi.listPayments({ job: jobId, limit: 20 });
+      const list = normalizeListPayload(payload, "payments");
+      setJobPayments((prev) => ({ ...prev, [jobId]: { loading: false, list } }));
+    } catch {
+      setJobPayments((prev) => ({ ...prev, [jobId]: { loading: false, list: [] } }));
+    }
+  }, []);
+
   const toggleExpanded = (id) => {
-    setExpandedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+    setExpandedIds((prev) => {
+      const expanding = !prev.includes(id);
+      if (expanding) loadJobPayments(id);
+      return expanding ? [...prev, id] : prev.filter((item) => item !== id);
+    });
+  };
+
+  const reversePayment = async (paymentId, jobId) => {
+    const confirmed = await confirm({
+      title: "Reverse Payment",
+      message: "This deletes the payment record, reverts the job payment status, and cancels any unpaid commissions. This action cannot be undone.",
+      confirmText: "Reverse",
+      isDangerous: true,
+    });
+    if (!confirmed) return;
+    try {
+      await carWashApi.deletePayment(paymentId);
+      await loadJobs();
+      // Clear cached payments so the list reloads on next expand
+      setJobPayments((prev) => { const next = { ...prev }; delete next[jobId]; return next; });
+      toast.success("Payment reversed");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to reverse payment");
+    }
   };
 
   const toggleSelectAllVisible = () => {
@@ -420,16 +374,35 @@ const CarWashJobs = () => {
     }
   };
 
-  const openSmsModal = (job) => {
-    setSmsTarget(job);
-    setSmsBody(`Hi ${job.customerName || "Customer"}, your car wash job ${job.jobNumber} is ${statusLabels[job.status] || job.status}. Thank you!`);
+  const buildJobTemplates = (job) => {
+    const name = job.customerName || "Customer";
+    const num  = job.jobNumber || "";
+    const type = job.jobType === "carpet" ? "item" : "car";
+    return [
+      { label: "Job Created",   color: "blue",   body: `Hi ${name}, your ${type} wash job ${num} has been received. We'll notify you when it's ready. Thank you!` },
+      { label: "Job Ready",     color: "green",  body: `Hi ${name}, your ${type} wash (${num}) is done and ready for collection. Please come pick it up. Thank you!` },
+      { label: "Status Update", color: "slate",  body: `Hi ${name}, your car wash job ${num} is currently ${statusLabels[job.status] || job.status}. Thank you for your patience!` },
+      { label: "Pay Reminder",  color: "amber",  body: `Hi ${name}, kindly note that car wash job ${num} (KES ${formatMoney(job.price)}) is still unpaid. Please visit us to complete payment. Thank you!` },
+    ];
   };
 
-  const sendSms = async () => {
-    if (!smsTarget || !smsBody.trim()) return;
+  const openSmsModal = (job, type) => {
+    setSmsTarget(job);
+    const name = job.customerName || "Customer";
+    const num  = job.jobNumber || "";
+    const itemType = job.jobType === "carpet" ? "item" : "car";
+    if (type === "ready") {
+      setSmsBody(`Hi ${name}, your ${itemType} wash (${num}) is done and ready for collection. Please come pick it up. Thank you!`);
+    } else {
+      setSmsBody(`Hi ${name}, your car wash job ${num} is ${statusLabels[job.status] || job.status}. Thank you!`);
+    }
+  };
+
+  const sendSms = async (phone, body) => {
+    if (!smsTarget) return;
     setSmsSending(true);
     try {
-      await carWashApi.sendJobSms(smsTarget._id, { phone: smsTarget.phone, body: smsBody.trim() });
+      await carWashApi.sendJobSms(smsTarget._id, { phone, body });
       toast.success("SMS sent successfully");
       setSmsTarget(null);
     } catch (error) {
@@ -488,7 +461,7 @@ const CarWashJobs = () => {
           </button>
           <button
             type="button"
-            onClick={() => setShowJobModal(true)}
+            onClick={() => navigate("/carwash/jobs/new")}
             className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]"
           >
             <FaPlus />
@@ -649,8 +622,8 @@ const CarWashJobs = () => {
                           : job.plateNumber || "-"}
                       </td>
                       <td className="px-2 py-1 font-semibold text-slate-800">{job.customerName || "-"}</td>
-                      <td className="px-2 py-1 text-slate-700">{job.serviceName || "-"}</td>
-                      <td className="px-2 py-1 text-slate-700">{job.assignedStaff?.name || "-"}</td>
+                      <td className="px-2 py-1 text-slate-700">{getServiceDisplay(job)}</td>
+                      <td className="px-2 py-1 text-slate-700">{getStaffDisplay(job)}</td>
                       {isConsolidated && <td className="px-2 py-1 text-slate-600">{job.branch?.name || <span className="text-slate-400">—</span>}</td>}
                       <td className="px-2 py-1">
                         <select
@@ -677,20 +650,39 @@ const CarWashJobs = () => {
                         <div className="inline-flex items-center gap-1">
                           <button
                             type="button"
+                            onClick={() => navigate(`/carwash/jobs/${job._id}/edit`)}
+                            disabled={job.status === "cancelled"}
+                            className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-40"
+                            title="Edit job"
+                          >
+                            <FaEdit className="text-[9px]" /> Edit
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => openPaymentModal(job)}
                             disabled={job.paymentStatus === "paid"}
                             className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Pay
                           </button>
+                          {job.phone && job.status === "done" && job.paymentStatus !== "paid" && (
+                            <button
+                              type="button"
+                              onClick={() => openSmsModal(job, "ready")}
+                              className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
+                              title="Notify customer — job ready"
+                            >
+                              <FaSms /> Ready
+                            </button>
+                          )}
                           {job.phone && (
                             <button
                               type="button"
                               onClick={() => openSmsModal(job)}
-                              className="border border-[#B7C9C0] bg-white p-1 text-[11px] text-[#0B3B2E] hover:bg-[#F1F6F3]"
+                              className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
                               title={`Send SMS to ${job.phone}`}
                             >
-                              <FaSms />
+                              <FaSms /> SMS
                             </button>
                           )}
                         </div>
@@ -698,18 +690,86 @@ const CarWashJobs = () => {
                     </tr>
                     {expanded && (
                       <tr className="border-b border-slate-200 bg-[#F8FBF9]">
-                        <td colSpan={isConsolidated ? 12 : 11} className="px-10 py-2">
+                        <td colSpan={isConsolidated ? 12 : 11} className="px-10 py-3">
                           <div className="grid gap-3 text-[11px] text-slate-600 md:grid-cols-5">
                             <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
-                            <div><span className="font-extrabold uppercase text-slate-500">Phone:</span> {job.phone || "-"}</div>
+                            <div>
+                              <span className="font-extrabold uppercase text-slate-500">Phone:</span>{" "}
+                              {job.phone ? job.phone : <span className="text-slate-400 italic">via M-Pesa on payment</span>}
+                            </div>
                             {job.jobType === "carpet" ? (
                               <div><span className="font-extrabold uppercase text-slate-500">Ready By:</span> {job.expectedReadyAt ? new Date(job.expectedReadyAt).toLocaleDateString("en-KE") : "-"}</div>
                             ) : (
-                              <div><span className="font-extrabold uppercase text-slate-500">Vehicle:</span> {job.vehicleType || "-"}</div>
+                              <div><span className="font-extrabold uppercase text-slate-500">Vehicle:</span> {job.serviceLines?.[0]?.vehicleType || job.vehicleType || "-"}</div>
                             )}
-                            <div><span className="font-extrabold uppercase text-slate-500">Staff Phone:</span> {job.assignedStaff?.phone || "-"}</div>
+                            <div>
+                              <span className="font-extrabold uppercase text-slate-500">Staff:</span>{" "}
+                              {Array.isArray(job.assignedStaff) && job.assignedStaff.length
+                                ? job.assignedStaff.map((s) => s?.name || s).join(", ")
+                                : "-"}
+                            </div>
                             <div><span className="font-extrabold uppercase text-slate-500">Delete:</span> {canDelete ? "Safe" : "Locked"}</div>
+                            {Array.isArray(job.serviceLines) && job.serviceLines.length > 1 && (
+                              <div className="md:col-span-5">
+                                <span className="font-extrabold uppercase text-slate-500">Service Lines:</span>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {job.serviceLines.map((line, li) => (
+                                    <span key={li} className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                      {line.serviceName} — {formatMoney(line.price)}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                             <div className="md:col-span-5"><span className="font-extrabold uppercase text-slate-500">Notes:</span> {job.notes || "-"}</div>
+
+                            {/* Payments sub-section */}
+                            <div className="md:col-span-5">
+                              <span className="font-extrabold uppercase text-slate-500">Payments:</span>
+                              {jobPayments[job._id]?.loading && (
+                                <span className="ml-2 italic text-slate-400">Loading…</span>
+                              )}
+                              {!jobPayments[job._id]?.loading && jobPayments[job._id]?.list?.length === 0 && (
+                                <span className="ml-2 italic text-slate-400">No payments recorded</span>
+                              )}
+                              {!jobPayments[job._id]?.loading && jobPayments[job._id]?.list?.length > 0 && (
+                                <div className="mt-1.5 overflow-x-auto">
+                                  <table className="min-w-[520px] text-[11px]">
+                                    <thead>
+                                      <tr className="border-b border-slate-200 text-slate-500">
+                                        <th className="pb-1 pr-4 text-left font-extrabold uppercase">Date</th>
+                                        <th className="pb-1 pr-4 text-left font-extrabold uppercase">Method</th>
+                                        <th className="pb-1 pr-4 text-left font-extrabold uppercase">Reference</th>
+                                        <th className="pb-1 pr-4 text-right font-extrabold uppercase">Amount</th>
+                                        <th className="pb-1 text-right font-extrabold uppercase">Action</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {jobPayments[job._id].list.map((pmt) => (
+                                        <tr key={pmt._id} className="border-b border-slate-100">
+                                          <td className="py-1 pr-4 text-slate-600">
+                                            {pmt.paymentDate ? new Date(pmt.paymentDate).toLocaleDateString("en-KE") : "—"}
+                                          </td>
+                                          <td className="py-1 pr-4 font-bold uppercase text-slate-700">{pmt.method}</td>
+                                          <td className="py-1 pr-4 text-slate-500">{pmt.reference || "—"}</td>
+                                          <td className="py-1 pr-4 text-right font-extrabold text-slate-900">{formatMoney(pmt.amount)}</td>
+                                          <td className="py-1 text-right">
+                                            <button
+                                              type="button"
+                                              onClick={() => reversePayment(pmt._id, job._id)}
+                                              className="inline-flex items-center gap-1 border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-50"
+                                              title="Reverse this payment"
+                                            >
+                                              <FaUndoAlt className="text-[8px]" /> Reverse
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -755,125 +815,6 @@ const CarWashJobs = () => {
         </div>
       </div>
 
-      {showJobModal && (
-        <Modal
-          title={jobForm.jobType === "carpet" ? "Create Carpet Job" : "Create Car Wash Job"}
-          subtitle={jobForm.jobType === "carpet" ? "Capture item details, service, and expected collection date." : "Capture the vehicle, service, price and assigned staff."}
-          onClose={closeJobModal}
-          footer={
-            <>
-              <button type="button" onClick={closeJobModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">
-                Cancel
-              </button>
-              <button type="submit" form="carwash-job-form" className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">
-                Save Job
-              </button>
-            </>
-          }
-        >
-          <form id="carwash-job-form" onSubmit={createJob} className="grid gap-3 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <label className={labelClass}>Job Type</label>
-              <div className="flex overflow-hidden border border-slate-300">
-                <button
-                  type="button"
-                  onClick={() => setJobForm((prev) => ({ ...prev, jobType: "vehicle", itemDescription: "", expectedReadyAt: "" }))}
-                  className={`flex-1 py-2 text-xs font-bold ${jobForm.jobType === "vehicle" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
-                >
-                  Vehicle Wash
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setJobForm((prev) => ({ ...prev, jobType: "carpet", plateNumber: "", vehicleType: "" }))}
-                  className={`flex-1 border-l border-slate-300 py-2 text-xs font-bold ${jobForm.jobType === "carpet" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
-                >
-                  Carpet / Textile
-                </button>
-              </div>
-            </div>
-            {jobForm.jobType === "vehicle" ? (
-              <div className="md:col-span-2">
-                <PlateLookupWidget
-                  plate={jobForm.plateNumber}
-                  onPlateChange={(val) => setJobForm((prev) => ({ ...prev, plateNumber: val }))}
-                  onCustomerFound={({ name, phone }) => setJobForm((prev) => ({ ...prev, customerName: prev.customerName || name, phone: prev.phone || phone }))}
-                />
-              </div>
-            ) : (
-              <>
-                <div className="md:col-span-2">
-                  <label className={labelClass}>Item Description *</label>
-                  <textarea
-                    className="min-h-[60px] w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
-                    value={jobForm.itemDescription}
-                    onChange={(event) => setJobForm((prev) => ({ ...prev, itemDescription: event.target.value }))}
-                    placeholder="e.g. 2 bedroom carpets, sofa set, car mat..."
-                    required
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Expected Ready Date</label>
-                  <input
-                    className={inputClass}
-                    type="date"
-                    value={jobForm.expectedReadyAt}
-                    onChange={(event) => setJobForm((prev) => ({ ...prev, expectedReadyAt: event.target.value }))}
-                  />
-                </div>
-              </>
-            )}
-            <div>
-              <label className={labelClass}>Customer Name</label>
-              <input className={inputClass} value={jobForm.customerName} onChange={(event) => setJobForm((prev) => ({ ...prev, customerName: event.target.value }))} placeholder="Customer name" />
-            </div>
-            <div>
-              <label className={labelClass}>Phone</label>
-              <input className={inputClass} value={jobForm.phone} onChange={(event) => setJobForm((prev) => ({ ...prev, phone: event.target.value }))} />
-            </div>
-            <div>
-              <label className={labelClass}>Service</label>
-              <select className={inputClass} value={jobForm.service} onChange={(event) => setJobForm((prev) => ({ ...prev, service: event.target.value }))}>
-                <option value="">Select service</option>
-                {services.map((item) => (
-                  <option key={item._id} value={item._id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Service Name {!jobForm.service ? "*" : ""}</label>
-              <input className={inputClass} value={jobForm.serviceName} onChange={(event) => setJobForm((prev) => ({ ...prev, serviceName: event.target.value }))} required={!jobForm.service} />
-            </div>
-            {jobForm.jobType === "vehicle" && (
-              <div>
-                <label className={labelClass}>Vehicle Type</label>
-                <input className={inputClass} value={jobForm.vehicleType} onChange={(event) => setJobForm((prev) => ({ ...prev, vehicleType: event.target.value }))} />
-              </div>
-            )}
-            <div className={jobForm.jobType === "vehicle" ? "" : "md:col-span-2"}>
-              <label className={labelClass}>Price *</label>
-              <input className={inputClass} type="number" min="0" value={jobForm.price} onChange={(event) => setJobForm((prev) => ({ ...prev, price: event.target.value }))} required />
-            </div>
-            <div className="md:col-span-2">
-              <label className={labelClass}>Assigned Staff</label>
-              <select className={inputClass} value={jobForm.assignedStaff} onChange={(event) => setJobForm((prev) => ({ ...prev, assignedStaff: event.target.value }))}>
-                <option value="">Assign staff</option>
-                {staff.map((item) => (
-                  <option key={item._id} value={item._id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <label className={labelClass}>Notes</label>
-              <textarea className="min-h-20 w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none" value={jobForm.notes} onChange={(event) => setJobForm((prev) => ({ ...prev, notes: event.target.value }))} />
-            </div>
-          </form>
-        </Modal>
-      )}
-
       {showPaymentModal && (
         <Modal
           title="Record Car Wash Payment"
@@ -903,12 +844,31 @@ const CarWashJobs = () => {
               </select>
             </div>
             <div>
-              <label className={labelClass}>Amount *</label>
+              <label className={labelClass}>Amount Received *</label>
               <input className={inputClass} type="number" min="1" value={paymentForm.amount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))} required />
             </div>
             <div>
+              <label className={labelClass}>
+                Discount
+                <span className="ml-1 font-normal normal-case text-slate-400">(write-off, optional)</span>
+              </label>
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                value={paymentForm.discountAmount}
+                onChange={(event) => setPaymentForm((prev) => ({ ...prev, discountAmount: event.target.value }))}
+                placeholder="0"
+              />
+              {Number(paymentForm.discountAmount) > 0 && Number(paymentForm.amount) > 0 && (
+                <p className="mt-0.5 text-[10px] text-emerald-700">
+                  Effective total: KES {(Number(paymentForm.amount || 0) + Number(paymentForm.discountAmount || 0)).toLocaleString()} — job cleared up to this amount
+                </p>
+              )}
+            </div>
+            <div>
               <label className={labelClass}>Method</label>
-              <select className={inputClass} value={paymentForm.method} onChange={(event) => setPaymentForm((prev) => ({ ...prev, method: event.target.value, cashbookAccount: preferredCashbookForMethod(cashbooks, event.target.value) }))}>
+              <select className={inputClass} value={paymentForm.method} onChange={(event) => setPaymentForm((prev) => ({ ...prev, method: event.target.value, cashbookAccount: preferredCashbookForMethod(cashbooks, event.target.value, cashbookDefaults) }))}>
                 {paymentMethods.map((method) => (
                   <option key={method} value={method}>
                     {method.toUpperCase()}
@@ -931,10 +891,41 @@ const CarWashJobs = () => {
                 ))}
               </select>
             </div>
-            <div className="md:col-span-2">
-              <label className={labelClass}>Reference</label>
-              <input className={inputClass} value={paymentForm.reference} onChange={(event) => setPaymentForm((prev) => ({ ...prev, reference: event.target.value }))} placeholder={paymentForm.method === "cash" ? "Optional cash receipt note" : "M-Pesa code, bank ref, card ref..."} />
+            <div className={paymentForm.method === "mpesa" ? "" : "md:col-span-2"}>
+              <label className={labelClass}>{paymentForm.method === "mpesa" ? "M-Pesa Transaction Code" : "Reference"}</label>
+              <input className={inputClass} value={paymentForm.reference} onChange={(event) => setPaymentForm((prev) => ({ ...prev, reference: event.target.value }))} placeholder={paymentForm.method === "mpesa" ? "e.g. QJK1234ABC" : paymentForm.method === "cash" ? "Optional cash receipt note" : "Bank ref, card ref..."} />
             </div>
+            {paymentForm.method === "mpesa" && (
+              <div className="md:col-span-2">
+                <label className={labelClass}>
+                  Customer Phone
+                  <span className="ml-1 font-normal normal-case text-emerald-700">(saves to customer record + enables STK push)</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    className={`${inputClass} flex-1`}
+                    type="tel"
+                    value={paymentForm.receivedFromPhone}
+                    onChange={(event) => setPaymentForm((prev) => ({ ...prev, receivedFromPhone: event.target.value }))}
+                    placeholder="e.g. 0712345678"
+                  />
+                  <button
+                    type="button"
+                    onClick={sendStkPush}
+                    disabled={stkPushing || !paymentForm.receivedFromPhone?.trim() || !Number(paymentForm.amount)}
+                    className="inline-flex shrink-0 items-center gap-1.5 border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Send M-Pesa payment prompt to customer's phone"
+                  >
+                    <FaMobileAlt />
+                    {stkPushing ? "Sending…" : "Push"}
+                  </button>
+                </div>
+                <p className="mt-0.5 text-[10px] text-slate-400">
+                  Enter phone then click Push — customer receives an M-Pesa prompt to pay KES {Number(paymentForm.amount || 0).toLocaleString()}.
+                  Phone is saved to the job and loyalty record.
+                </p>
+              </div>
+            )}
             <div className="md:col-span-2 border border-[#B7C9C0] bg-[#EDF5F1] px-3 py-2 text-xs font-bold text-[#0B3B2E]">
               Cashbook: {selectedCashbook ? `${selectedCashbook.code} - ${selectedCashbook.name}` : "Select where this payment was received"}
             </div>
@@ -943,39 +934,15 @@ const CarWashJobs = () => {
       )}
 
       {smsTarget && (
-        <Modal
-          title="Send SMS"
-          subtitle={`To: ${smsTarget.customerName || "Customer"} · ${smsTarget.phone}`}
+        <CwSmsModal
+          target={{ _id: smsTarget._id, name: smsTarget.customerName, phone: smsTarget.phone }}
+          defaultBody={smsBody}
+          templates={buildJobTemplates(smsTarget)}
+          context={smsTarget.jobNumber}
+          onSend={sendSms}
           onClose={() => setSmsTarget(null)}
-          footer={
-            <>
-              <button type="button" onClick={() => setSmsTarget(null)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">
-                Cancel
-              </button>
-              <button type="button" onClick={sendSms} disabled={smsSending || !smsBody.trim()} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
-                <FaSms />
-                {smsSending ? "Sending…" : "Send SMS"}
-              </button>
-            </>
-          }
-        >
-          <div className="space-y-3">
-            <div>
-              <label className={labelClass}>Phone</label>
-              <input className={inputClass} value={smsTarget.phone} readOnly />
-            </div>
-            <div>
-              <label className={labelClass}>Message *</label>
-              <textarea
-                className="min-h-24 w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
-                value={smsBody}
-                onChange={(e) => setSmsBody(e.target.value)}
-                maxLength={320}
-              />
-              <div className="mt-1 text-right text-[10px] text-slate-400">{smsBody.length}/320</div>
-            </div>
-          </div>
-        </Modal>
+          sending={smsSending}
+        />
       )}
     </CarWashShell>
   );

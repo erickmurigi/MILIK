@@ -29,6 +29,7 @@ import {
   FaPrint,
 } from "react-icons/fa";
 import { getLandlords, deleteLandlord, updateLandlord } from "../../redux/apiCalls";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import LandlordImportModal from "../../components/Modals/LandlordImportModal";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
@@ -58,8 +59,8 @@ const Landlords = () => {
   const landlordState = useSelector((state) => state.landlord);
   const landlords = landlordState?.landlords || [];
   const isFetching = landlordState?.isFetching || false;
-  const { currentCompany } = useSelector((state) => state.company);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   
   // Table + UI state
   const [selectedLandlords, setSelectedLandlords] = useState([]);

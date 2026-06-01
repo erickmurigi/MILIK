@@ -137,6 +137,8 @@ const AboutMilik           = lazy(() => import("./pages/Help/AboutMilik"));
 // Car Wash module
 const CarWashDashboard      = lazy(() => import("./pages/CarWash/CarWashDashboard"));
 const CarWashJobs           = lazy(() => import("./pages/CarWash/CarWashJobs"));
+const CarWashAddJob         = lazy(() => import("./pages/CarWash/CarWashAddJob"));
+const CarWashAccounts       = lazy(() => import("./pages/CarWash/CarWashAccounts"));
 const CarWashServices       = lazy(() => import("./pages/CarWash/CarWashServices"));
 const CarWashPayments       = lazy(() => import("./pages/CarWash/CarWashPayments"));
 const CarWashDeposits       = lazy(() => import("./pages/CarWash/CarWashDeposits"));
@@ -150,6 +152,7 @@ const CarWashCommissions    = lazy(() => import("./pages/CarWash/CarWashCommissi
 const CarWashLoyalty        = lazy(() => import("./pages/CarWash/CarWashLoyalty"));
 const CarWashFinancials     = lazy(() => import("./pages/CarWash/CarWashFinancials"));
 const CarWashBranches       = lazy(() => import("./pages/CarWash/CarWashBranches"));
+const CarWashSettings       = lazy(() => import("./pages/CarWash/CarWashSettings"));
 
 // Inventory & POS module
 const InventoryDashboard    = lazy(() => import("./pages/Inventory/InventoryDashboard"));
@@ -564,6 +567,9 @@ function App() {
             {/* ── Car Wash module ───────────────────────────────────────── */}
             <Route path="/carwash/dashboard"         element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-dashboard" moduleKey="carwash"><CarWashDashboard /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/jobs"              element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-jobs" moduleKey="carwash"><CarWashJobs /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/jobs/new"         element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-jobs" moduleKey="carwash"><CarWashAddJob /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/accounts"         element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-jobs" moduleKey="carwash"><CarWashAccounts /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/jobs/:id/edit"   element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-jobs" moduleKey="carwash"><CarWashAddJob /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/services"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-services" moduleKey="carwash"><CarWashServices /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/payments"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-payments" moduleKey="carwash"><CarWashPayments /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/deposits"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-deposits" moduleKey="carwash"><CarWashDeposits /></PermissionRoute></CompanyModuleRoute>} />
@@ -578,6 +584,7 @@ function App() {
             <Route path="/carwash/commissions"            element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissions /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/loyalty"           element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-loyalty" moduleKey="carwash"><CarWashLoyalty /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/branches"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-branches" moduleKey="carwash"><CarWashBranches /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/settings"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-settings" moduleKey="carwash"><CarWashSettings /></PermissionRoute></CompanyModuleRoute>} />
 
             {/* ── Inventory & POS module ────────────────────────────────── */}
             <Route path="/inventory/dashboard"       element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-dashboard"       moduleKey="inventory"><InventoryDashboard /></PermissionRoute></CompanyModuleRoute>} />

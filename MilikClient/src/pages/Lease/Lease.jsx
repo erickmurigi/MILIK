@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import { FaEdit, FaPlus, FaRedoAlt, FaSave, FaSearch, FaTrash, FaTimes } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -58,7 +59,7 @@ const sanitizeUnitTypes = (value = []) => {
 const UnitTypesPage = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentCompany = useSelector(selectCurrentCompany);
   const isSavingCompany = useSelector((state) => state.company?.isFetching);
 
   const [search, setSearch] = useState("");

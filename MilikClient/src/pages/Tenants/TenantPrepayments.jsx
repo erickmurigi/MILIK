@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentCompany,
+  selectAllProperties,
+} from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
 import { FaArrowRight, FaCoins, FaReceipt, FaSearch } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -63,8 +67,8 @@ const buildStatusParam = (statusFilter) => {
 const TenantPrepayments = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { currentCompany } = useSelector((state) => state.company || {});
-  const properties = useSelector((state) => ensureArray(state.property?.properties));
+  const currentCompany = useSelector(selectCurrentCompany);
+  const properties = useSelector(selectAllProperties);
 
   const [search, setSearch] = useState("");
   const [propertyFilter, setPropertyFilter] = useState("all");

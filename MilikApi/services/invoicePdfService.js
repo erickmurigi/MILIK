@@ -109,7 +109,7 @@ export const generateInvoicePdf = async (invoiceId, businessId) => {
     .populate('business', 'companyName name address phone email logo slogan')
     .lean();
 
-  if (!invoice) throw new Error('Invoice not found or access denied');
+  if (!invoice) { const e = new Error('Invoice not found or access denied'); e.status = 404; throw e; }
 
   const cacheKey = buildInvoicePdfCacheKey(invoice);
   const cachedPdfBuffer = getCachedPdfBuffer(cacheKey);
@@ -174,8 +174,8 @@ export const generateInvoicePdf = async (invoiceId, businessId) => {
   .meta-value { font-size: 13px; font-weight: 600; color: #0f172a; }
   .table-wrap { margin-bottom: 24px; }
   table { width: 100%; border-collapse: collapse; }
-  thead tr { background: #f1f5f9; }
-  th { padding: 10px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #64748b; border-bottom: 1px solid #e2e8f0; }
+  thead tr { background: #1e293b; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  th { padding: 10px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #fff; }
   th.right { text-align: right; }
   td { padding: 12px; font-size: 13px; color: #1e293b; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
   td.right { text-align: right; }

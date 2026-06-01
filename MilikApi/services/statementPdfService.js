@@ -480,7 +480,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
     .populate("business", "companyName name address phone phoneNo email slogan logo postalAddress roadStreet town country POBOX Street City")
     .lean();
 
-  if (!statement) throw new Error("Statement not found or access denied");
+  if (!statement) { const e = new Error("Statement not found or access denied"); e.status = 404; throw e; }
 
   const cacheKey = buildStatementPdfCacheKey(statement);
   const cachedPdfBuffer = getCachedPdfBuffer(cacheKey);
@@ -642,6 +642,8 @@ export const generateStatementPdf = async (statementId, businessId) => {
         summary.totalDirectToLandlordCollections ??
         printableDirectToLandlordTotal
     );
+    const directRentCollections = Number(summary.directRentCollections ?? 0);
+    const directUtilityCollections = Number(summary.directUtilityCollections ?? 0);
     const additionsAmount = Number(
       summary.additions ?? summary.totalAdditions ?? printableAdditionsTotal
     );
@@ -880,16 +882,36 @@ export const generateStatementPdf = async (statementId, businessId) => {
                 </table>` : ""}
             </td>
             <td>
-              <div class="section-title">Direct to Landlord Collections</div>
-              <table class="simple-table">
+              <div class="section-title" style="color:#0B3B2E;border-color:#0B3B2E;">Payments Collected Directly by Landlord</div>
+              ${directToLandlordRows.length === 0
+                ? `<p style="font-size:9px;color:#64748b;padding:6px 0;">No payments collected directly by landlord this period.</p>`
+                : `<table class="simple-table">
                 <thead>
-                  <tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr>
+                  <tr><th>Date</th><th>Unit</th><th>Tenant</th><th>Type</th><th>Reference</th><th class="num">Amount</th></tr>
                 </thead>
-                <tbody>${renderSimpleRows(directToLandlordRows, "No direct-to-landlord collections posted in this period")}</tbody>
+                <tbody>
+                  ${directToLandlordRows.map((r) => `
+                    <tr>
+                      <td>${r.date ? formatDate(new Date(r.date)) : "-"}</td>
+                      <td>${esc(r.unit || "-")}</td>
+                      <td>${esc(r.tenantName || "-")}</td>
+                      <td>${esc(r.typeLabel || r.paymentType || "Rent")}</td>
+                      <td>${esc(r.receiptRef || "-")}</td>
+                      <td class="num">${formatCurrency(r.amount)}</td>
+                    </tr>`).join("")}
+                </tbody>
                 <tfoot>
-                  <tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(directToLandlordAmount)}</td></tr>
+                  <tr>
+                    <td colspan="5" class="num" style="font-weight:700;">Total collected directly by landlord</td>
+                    <td class="num" style="font-weight:700;">${formatCurrency(directToLandlordAmount)}</td>
+                  </tr>
+                  ${directRentCollections > 0 ? `<tr><td colspan="5" class="num" style="color:#64748b;">of which: Rent</td><td class="num" style="color:#64748b;">${formatCurrency(directRentCollections)}</td></tr>` : ""}
+                  ${directUtilityCollections > 0 ? `<tr><td colspan="5" class="num" style="color:#64748b;">of which: Utilities</td><td class="num" style="color:#64748b;">${formatCurrency(directUtilityCollections)}</td></tr>` : ""}
                 </tfoot>
               </table>
+              <p style="font-size:8.5px;color:#64748b;margin-top:4px;font-style:italic;">
+                These amounts were received directly by you from tenants and are NOT included in the manager's remittance transfer.
+              </p>`}
 
               ${earlyPayoutRows.length > 0 ? `
                 <div class="section-title" style="color:#92400e;border-color:#92400e;">Early Payouts to Landlord</div>
@@ -949,10 +971,15 @@ export const generateStatementPdf = async (statementId, businessId) => {
                   <tr><td class="label">${esc(commissionBaseLabel)}</td><td class="num">${formatCurrency(commissionBaseAmount)}</td></tr>
                   <tr><td class="label">Commission</td><td class="num">${formatCurrency(commissionAmount)}</td></tr>
                   ${commissionTaxAmount > 0 ? `<tr><td class="label">VAT on commission</td><td class="num">${formatCurrency(commissionTaxAmount)}</td></tr>` : ""}
-                  <tr><td class="label">Direct to landlord collections (memo)</td><td class="num">${formatCurrency(directToLandlordAmount)}</td></tr>
                   ${totalEarlyPayouts > 0 ? `<tr><td class="label">Early payout already paid to landlord</td><td class="num negative">(${formatCurrency(totalEarlyPayouts)})</td></tr>` : ""}
                   ${totalAdvanceRecoveries > 0 ? `<tr><td class="label">Advance recovery deduction</td><td class="num negative">(${formatCurrency(totalAdvanceRecoveries)})</td></tr>` : ""}
                   <tr class="final-row"><td class="label">${esc(settlement.label)}</td><td class="num ${settlement.isNegative ? "negative" : ""}">${formatCurrency(settlement.amount)}</td></tr>
+                  ${directToLandlordAmount > 0 ? `
+                  <tr style="border-top:2px solid #e2e8f0;"><td class="label" colspan="2" style="padding-top:10px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#0B3B2E;">Landlord Reconciliation</td></tr>
+                  <tr><td class="label">Manager will transfer to you</td><td class="num" style="color:#0B3B2E;font-weight:700;">${formatCurrency(Math.max(0, settlement.amount))}</td></tr>
+                  <tr><td class="label">You have already received directly</td><td class="num" style="color:#0B3B2E;font-weight:700;">${formatCurrency(directToLandlordAmount)}</td></tr>
+                  <tr style="background:#EDF5F1;"><td class="label" style="font-weight:800;color:#0B3B2E;">Total income this period</td><td class="num" style="font-weight:800;color:#0B3B2E;">${formatCurrency(Math.max(0, settlement.amount) + directToLandlordAmount)}</td></tr>
+                  ` : ""}
                 </tbody>
               </table>
             </td>

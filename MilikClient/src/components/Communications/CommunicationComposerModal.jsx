@@ -216,6 +216,12 @@ const CommunicationComposerModal = ({
         recordIds: normalizedIds,
         customBody: customBody || undefined,
       });
+      // 202 = queued for background delivery (bulk sends > 10 recipients)
+      if (res?.queued) {
+        toast.success(`${res.message || `Sending to ${res.count} recipients in the background.`} Check the communication log for delivery status.`);
+        if (typeof onSent === 'function') onSent(res);
+        return;
+      }
       setPreview(res);
       const sent   = Number(res?.summary?.sentCount   || 0);
       const failed = Number(res?.summary?.failedCount || 0);

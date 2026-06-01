@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentCompany,
+  selectAllTenants,
+  selectAllProperties,
+} from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
   FaPlus,
@@ -533,9 +538,9 @@ function TakeOnViewModal({ open, row, onClose }) {
 
 const TakeOnBalances = () => {
   const dispatch = useDispatch();
-  const { currentCompany } = useSelector((state) => state.company);
-  const tenantState = useSelector((state) => state.tenant?.tenants || []);
-  const propertyState = useSelector((state) => state.property?.properties || []);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const tenantState = useSelector(selectAllTenants);
+  const propertyState = useSelector(selectAllProperties);
   const tenants = Array.isArray(tenantState)
     ? tenantState
     : Array.isArray(tenantState?.data)

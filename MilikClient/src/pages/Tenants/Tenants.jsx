@@ -1,5 +1,14 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentUser,
+  selectCurrentCompany,
+  selectAllProperties,
+  selectAllTenants,
+  selectAllUnits,
+  selectAllRentPayments,
+  selectAllLeases,
+} from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
@@ -195,15 +204,13 @@ const Tenants = ({ listingMode = "active" }) => {
   const navigate = useNavigate();
 
   // Redux state
-  const { currentCompany } = useSelector((state) => state.company || {});
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const { tenants: tenantsData = [] } = useSelector(
-    (state) => state.tenant || { tenants: [] }
-  );
-  const units = useSelector((state) => state.unit?.units || []);
-  const properties = useSelector((state) => state.property?.properties || []);
-  const { rentPayments = [] } = useSelector((state) => state.rentPayment || {});
-  const { leases = [] } = useSelector((state) => state.lease || {});
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const tenantsData = useSelector(selectAllTenants);
+  const units = useSelector(selectAllUnits);
+  const properties = useSelector(selectAllProperties);
+  const rentPayments = useSelector(selectAllRentPayments);
+  const leases = useSelector(selectAllLeases);
 
   const canViewTenants = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "view", "propertyManagement");
   const canCreateTenant = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement");

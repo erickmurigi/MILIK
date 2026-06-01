@@ -66,17 +66,33 @@ const resolveActorUserId = async (req, businessId) =>
     fallbackErrorMessage: "No valid company user could be resolved for journal posting.",
   });
 
+// Derives the linked property from a debit or credit account's property reference.
+// Property-specific sub-accounts (e.g. 2110-PARK) carry account.property = propertyId.
+const derivePropertyFromAccounts = async (businessId, debitAccountId, creditAccountId) => {
+  const ids = [debitAccountId, creditAccountId].filter(isValidObjectId);
+  if (!ids.length) return null;
+  const account = await ChartOfAccount.findOne({
+    _id: { $in: ids },
+    business: businessId,
+    property: { $exists: true, $ne: null },
+  }).select("property").lean();
+  return account?.property || null;
+};
+
 const resolveJournalLandlordId = async ({ businessId, payload = {} }) => {
   if (payload?.landlord && isValidObjectId(payload.landlord)) {
     return String(payload.landlord);
   }
 
-  if (!payload?.property || !isValidObjectId(payload.property)) {
-    return null;
-  }
+  // Prefer explicitly supplied property, then derive from selected accounts
+  const propertyId = (payload?.property && isValidObjectId(payload.property))
+    ? payload.property
+    : await derivePropertyFromAccounts(businessId, payload.debitAccount, payload.creditAccount);
+
+  if (!propertyId) return null;
 
   const accountingContext = await resolvePropertyAccountingContext({
-    propertyId: payload.property,
+    propertyId,
     landlordId: null,
     businessId,
   }).catch(() => null);
@@ -122,10 +138,6 @@ const ensurePostingAccount = async ({ businessId, accountId, label }) => {
 const validateJournalPayload = async ({ businessId, payload = {} }) => {
   const journalType = String(payload?.journalType || "general_manual_journal").trim().toLowerCase();
   const isCompanyJournal = COMPANY_ONLY_JOURNAL_TYPES.has(journalType);
-
-  if (!isCompanyJournal && (!payload.property || !isValidObjectId(payload.property))) {
-    throw new Error("Property is required.");
-  }
 
   if (!payload.debitAccount || !isValidObjectId(payload.debitAccount)) {
     throw new Error("Debit account is required.");
@@ -385,11 +397,15 @@ const postJournalToLedger = async ({ journal, actorUserId }) => {
     return existingEntries;
   }
 
-  const isCompanyJournal = COMPANY_ONLY_JOURNAL_TYPES.has(String(journal.journalType || "")) || !journal.property;
+  // Derive property from linked sub-account if not explicitly set on the journal
+  const resolvedPropertyId = journal.property
+    || await derivePropertyFromAccounts(journal.business, journal.debitAccount, journal.creditAccount);
+
+  const isCompanyJournal = COMPANY_ONLY_JOURNAL_TYPES.has(String(journal.journalType || "")) || !resolvedPropertyId;
   const accountingContext = isCompanyJournal
     ? { businessId: String(journal.business), propertyId: null, landlordId: null }
     : await resolvePropertyAccountingContext({
-        propertyId: journal.property,
+        propertyId: resolvedPropertyId,
         landlordId: journal.landlord || null,
         businessId: journal.business,
       });
@@ -497,11 +513,15 @@ export const createJournalEntry = async (req, res, next) => {
 
     const journalNo = await generateJournalNo(businessId);
 
+    // Derive property from selected accounts when not explicitly provided
+    const derivedProperty = normalizedPayload.property
+      || await derivePropertyFromAccounts(businessId, normalizedPayload.debitAccount, normalizedPayload.creditAccount);
+
     const journal = await JournalEntry.create({
       journalNo,
       date: normalizedPayload.date,
       journalType: normalizedPayload.journalType,
-      property: normalizedPayload.property,
+      property: derivedProperty || null,
       landlord: resolvedLandlordId || null,
       debitAccount: normalizedPayload.debitAccount,
       creditAccount: normalizedPayload.creditAccount,

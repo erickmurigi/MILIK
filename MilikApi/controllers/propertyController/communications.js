@@ -99,6 +99,10 @@ export const previewCommunicationController = async (req, res, next) => {
   }
 };
 
+// For bulk sends (> this threshold), respond 202 immediately and process in background.
+// Small sends stay synchronous so the frontend gets instant results.
+const BACKGROUND_THRESHOLD = 10;
+
 export const sendCommunicationController = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -120,17 +124,22 @@ export const sendCommunicationController = async (req, res, next) => {
     const customBody    = String(req.body?.customBody    || '').trim();
     const customSubject = String(req.body?.customSubject || '').trim();
 
-    const result = await sendCommunication({
-      businessId,
-      contextType,
-      channel,
-      templateKey,
-      recordIds,
-      profileId,
-      customBody,
-      customSubject,
-    });
+    const args = { businessId, contextType, channel, templateKey, recordIds, profileId, customBody, customSubject };
 
+    if (recordIds.length > BACKGROUND_THRESHOLD) {
+      // Respond immediately — results land in the communication logs
+      res.status(202).json({
+        queued: true,
+        count: recordIds.length,
+        message: `Sending ${channel.toUpperCase()} to ${recordIds.length} recipients in the background. Check the communication log for delivery status.`,
+      });
+      sendCommunication(args).catch((err) => {
+        console.error('[sendCommunication] Background send error:', err?.message || err);
+      });
+      return;
+    }
+
+    const result = await sendCommunication(args);
     return res.status(200).json(result);
   } catch (error) {
     return next(error);

@@ -2,15 +2,23 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { FaMoneyBillWave, FaTools, FaFileContract, FaUsers, FaCalendarAlt, FaReceipt } from 'react-icons/fa';
 import { markAllNotificationsAsRead } from '../../redux/apiCalls';
+import {
+  selectCurrentUser,
+  selectAllNotifications,
+  selectAllRentPayments,
+  selectAllMaintenances,
+  selectAllLeases,
+  selectAllTenants,
+} from '../../redux/selectors';
 
 const RecentActivity = ({ darkMode }) => {
   const dispatch = useDispatch();
-  const notifications = useSelector(state => state.notification?.notifications || []);
-  const rentPayments = useSelector(state => state.rentPayment?.rentPayments || []);
-  const maintenances = useSelector(state => state.maintenance?.maintenances || []);
-  const leases = useSelector(state => state.lease?.leases || []);
-  const tenants = useSelector(state => state.tenant?.tenants || []);
-  const currentUser = useSelector(state => state.auth?.currentUser);
+  const notifications = useSelector(selectAllNotifications);
+  const rentPayments  = useSelector(selectAllRentPayments);
+  const maintenances  = useSelector(selectAllMaintenances);
+  const leases        = useSelector(selectAllLeases);
+  const tenants       = useSelector(selectAllTenants);
+  const currentUser   = useSelector(selectCurrentUser);
 
   const [newActivityIds, setNewActivityIds] = useState(new Set());
   const previousIdsRef = useRef(new Set());

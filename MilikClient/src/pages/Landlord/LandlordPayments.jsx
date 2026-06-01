@@ -22,6 +22,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getLandlords, getRentPayments, getLandlordPayments, createLandlordPayment, getChartOfAccounts } from "../../redux/apiCalls";
+import { selectCurrentCompany, selectAllProperties, selectAllLandlords, selectAllTenants, selectAllRentPayments } from "../../redux/selectors";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
@@ -41,11 +42,11 @@ const LandlordPayments = ({ mode = "payments" }) => {
   const navigate = useNavigate();
 
   // Redux state
-  const { currentCompany } = useSelector((state) => state.company || {});
+  const currentCompany = useSelector(selectCurrentCompany);
   const { landlords = [], isFetching } = useSelector((state) => state.landlord || {});
-  const properties = useSelector((state) => state.property?.properties || []);
-  const rentPayments = useSelector((state) => state.rentPayment?.rentPayments || []);
-  const tenants = useSelector((state) => state.tenant?.tenants || []);
+  const properties = useSelector(selectAllProperties);
+  const rentPayments = useSelector(selectAllRentPayments);
+  const tenants = useSelector(selectAllTenants);
 
   // Local state
   const [filters, setFilters] = useState({

@@ -7,14 +7,21 @@ import {
   FaMoneyBillWave,
 } from 'react-icons/fa';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
+import {
+  selectCurrentUser,
+  selectCurrentCompany,
+  selectAllProperties,
+  selectAllUnits,
+  selectAllRentPayments,
+} from '../../redux/selectors';
 
 const MetricsGrid = ({ darkMode }) => {
-  const properties = useSelector((state) => state.property?.properties || []);
-  const units = useSelector((state) => state.unit?.units || []);
-  const rentPayments = useSelector((state) => state.rentPayment?.rentPayments || []);
+  const properties = useSelector(selectAllProperties);
+  const units = useSelector(selectAllUnits);
+  const rentPayments = useSelector(selectAllRentPayments);
   const propertiesLoading = useSelector((state) => state.property?.isFetching);
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);

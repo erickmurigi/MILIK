@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentCompany,
+  selectAllLeases,
+  selectAllTenants,
+  selectAllProperties,
+  selectAllUnits,
+} from "../../redux/selectors";
 import { useLocation, useNavigate } from "react-router-dom";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import {
@@ -144,11 +151,11 @@ const TenantAgreements = () => {
   const location = useLocation();
   const queryTenantId = new URLSearchParams(location.search).get("tenant") || "";
 
-  const { currentCompany } = useSelector((state) => state.company || {});
-  const leases = useSelector((state) => state.lease?.leases || []);
-  const tenants = useSelector((state) => state.tenant?.tenants || []);
-  const properties = useSelector((state) => state.property?.properties || []);
-  const units = useSelector((state) => state.unit?.units || []);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const leases = useSelector(selectAllLeases);
+  const tenants = useSelector(selectAllTenants);
+  const properties = useSelector(selectAllProperties);
+  const units = useSelector(selectAllUnits);
   const isFetchingLeases = useSelector((state) => state.lease?.isFetching || false);
 
   const [filters, setFilters] = useState({

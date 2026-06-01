@@ -7,6 +7,7 @@ import { FaSave, FaTimes, FaChevronDown, FaSpinner, FaPlus, FaTrash, FaCalculato
 import { toast } from "react-toastify";
 import { createUnit, getUnits, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 
@@ -158,10 +159,10 @@ const AddUnit = () => {
   const { id: unitId } = useParams();
   const isEditMode = Boolean(unitId);
   
-  const { currentCompany } = useSelector((state) => state.company);
-  const { currentUser } = useSelector((state) => state.auth);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const { isFetching: loading, units = [] } = useSelector((state) => state.unit);
-  const properties = useSelector((state) => state.property?.properties || []);
+  const properties = useSelector(selectAllProperties);
   const activeProperties = useMemo(
     () => properties.filter((property) => String(property?.status || "active").toLowerCase() !== "archived"),
     [properties]

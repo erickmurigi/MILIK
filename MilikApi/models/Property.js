@@ -224,8 +224,22 @@ const PropertySchema = new mongoose.Schema(
 
     accountLedgerType: {
       type: String,
-      default: "Property Control Ledger In GL",
+      // Accept both new values and legacy UI strings for backward compat with existing documents
+      enum: ["in-gl", "off-gl", "Property Control Ledger In GL", "OFF-GL (Property GL)"],
+      default: "in-gl",
       trim: true,
+    },
+
+    // Auto-created GL sub-accounts for In-GL properties.
+    // Populated by ensurePropertyChartOfAccounts() when the property is saved.
+    propertyAccounts: {
+      receivables:         { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+      depositsPayable:     { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+      landlordRemittance:  { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+      rentIncome:          { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+      serviceChargeIncome: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+      utilityRecharge:     { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+      penaltyIncome:       { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
     },
 
     primaryBank: { type: String, trim: true },

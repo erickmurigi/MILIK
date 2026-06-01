@@ -14,6 +14,7 @@ import {
 } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getChartOfAccounts } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
@@ -165,8 +166,8 @@ const ChartOfAccounts = () => {
     : location.pathname.startsWith("/hr/")   ? "/hr/chart-of-accounts"
     : location.pathname.startsWith("/sale/") ? "/sale/chart-of-accounts"
     : "/financial/chart-of-accounts";
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const canCreateCOA = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "create", "accounts");
   const canUpdateCOA = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "update", "accounts");
   const canDeleteCOA = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "delete", "accounts");

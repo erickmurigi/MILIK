@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import {
   FaFileDownload,
   FaMoneyBillWave,
@@ -103,8 +104,8 @@ const getCommissionStructureLabel = (statement = {}) => {
 };
 
 const CommissionReports = () => {
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
 
   const [loading, setLoading] = useState(false);

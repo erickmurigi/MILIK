@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { FaEye, FaEyeSlash, FaKey, FaLock, FaSpinner } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
+import { selectCurrentUser } from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getCurrentUserSuccess, loginSuccess } from "../../redux/authSlice";
@@ -13,7 +14,7 @@ const APP_LOGIN_HINT = import.meta.env.VITE_APP_LOGIN_HINT || "Use the temporary
 function FirstTimePassword() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { currentUser } = useSelector((state) => state.auth);
+  const currentUser = useSelector(selectCurrentUser);
   const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [loading, setLoading] = useState(false);
   const [show, setShow] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import {
   FaCalendarAlt,
   FaCheckCircle,
@@ -118,8 +119,8 @@ const csvEscape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
 const Inspections = () => {
   const confirm = useConfirm();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const isDemoUser = Boolean(currentUser?.isDemoUser);
   const canCreate = hasCompanyPermission(currentUser, currentCompany, "inspections", "create", "propertyManagement");
   const canUpdate = hasCompanyPermission(currentUser, currentCompany, "inspections", "update", "propertyManagement");

@@ -4,6 +4,7 @@ import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
+import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
 import { autoEnrollPlate } from "./loyaltyController.js";
@@ -25,6 +26,34 @@ const generateJobNumber = async (business) => {
   return `${prefix}${String(nextNum).padStart(4, "0")}`;
 };
 
+// Validate and resolve multi-service lines from request body
+const resolveServiceLines = async (business, rawLines) => {
+  if (!Array.isArray(rawLines) || !rawLines.length) return null;
+  const lines = [];
+  for (const raw of rawLines.slice(0, 20)) {
+    let serviceId = null;
+    let serviceName = String(raw.serviceName || "").trim();
+    let vehicleType = String(raw.vehicleType || "").trim();
+    let price = Number(raw.price ?? 0);
+
+    if (raw.service && mongoose.Types.ObjectId.isValid(String(raw.service))) {
+      const svc = await CarWashService.findOne({ _id: raw.service, business }).lean();
+      if (!svc) throw createError(400, "One or more selected services are invalid for this company");
+      serviceId = svc._id;
+      serviceName = serviceName || String(svc.name || "").trim();
+      vehicleType = vehicleType || String(svc.vehicleType || "").trim();
+      if (!Number.isFinite(price) || price <= 0) price = Number(svc.defaultPrice ?? 0);
+    }
+
+    if (!serviceName) throw createError(400, "Each service line must have a service name");
+    if (!Number.isFinite(price) || price < 0) throw createError(400, "Each service line must have a valid price");
+
+    lines.push({ service: serviceId, serviceName, vehicleType, price });
+  }
+  return lines;
+};
+
+// Legacy single-service resolver (backward compat)
 const resolveServiceSnapshot = async (business, body = {}) => {
   if (!body.service) {
     return {
@@ -46,11 +75,19 @@ const resolveServiceSnapshot = async (business, body = {}) => {
   };
 };
 
-const assertStaffBelongsToBusiness = async (business, staffId) => {
-  if (!staffId) return null;
-  const staff = await CarWashStaff.findOne({ _id: staffId, business }).select("_id").lean();
-  if (!staff) throw createError(400, "Selected Car Wash staff member is invalid for this company");
-  return staff._id;
+// Validate array of staff IDs against the business
+const assertStaffArrayBelongsToBusiness = async (business, rawStaff) => {
+  const ids = [
+    ...new Set(
+      [].concat(rawStaff || [])
+        .map((s) => String(s?._id || s))
+        .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    ),
+  ].slice(0, 5);
+  if (!ids.length) return [];
+  const found = await CarWashStaff.find({ _id: { $in: ids }, business }).select("_id").lean();
+  if (found.length !== ids.length) throw createError(400, "One or more selected Car Wash staff members are invalid for this company");
+  return found.map((s) => s._id);
 };
 
 const getJobDeleteBlocker = async (business, job) => {
@@ -90,27 +127,37 @@ export const listJobs = async (req, res, next) => {
     if (req.query.jobType && JOB_TYPES.has(String(req.query.jobType).trim().toLowerCase())) filter.jobType = String(req.query.jobType).trim().toLowerCase();
     if (req.query.status) filter.status = String(req.query.status).trim().toLowerCase();
     if (req.query.paymentStatus) filter.paymentStatus = String(req.query.paymentStatus).trim().toLowerCase();
-    if (req.query.service && mongoose.Types.ObjectId.isValid(req.query.service)) filter.service = req.query.service;
-    if (req.query.staff && mongoose.Types.ObjectId.isValid(req.query.staff)) filter.assignedStaff = req.query.staff;
+    if (req.query.service && mongoose.Types.ObjectId.isValid(req.query.service)) {
+      // Match both old root-level service and new serviceLines entries
+      const svcId = new mongoose.Types.ObjectId(req.query.service);
+      filter.$or = [{ service: svcId }, { "serviceLines.service": svcId }];
+    }
+    if (req.query.staff && mongoose.Types.ObjectId.isValid(req.query.staff)) {
+      // assignedStaff is now an array — $elemMatch or direct equality both work
+      filter.assignedStaff = new mongoose.Types.ObjectId(req.query.staff);
+    }
     if (req.query.date) {
       const { start, end } = parseDateRange(req.query.date);
       filter.createdAt = { $gte: start, $lt: end };
     }
     if (req.query.customer) {
       const customer = escapeRegex(String(req.query.customer).trim());
-      filter.$or = [{ customerName: new RegExp(customer, "i") }, { phone: new RegExp(customer, "i") }];
+      const customerOr = [{ customerName: new RegExp(customer, "i") }, { phone: new RegExp(customer, "i") }];
+      filter.$and = filter.$or
+        ? [{ $or: filter.$or }, { $or: customerOr }]
+        : [{ $or: customerOr }];
+      delete filter.$or;
     }
     if (req.query.search) {
       const search = escapeRegex(String(req.query.search).trim());
-      const searchFilter = [
+      const searchOr = [
         { jobNumber: new RegExp(search, "i") },
         { plateNumber: new RegExp(search, "i") },
         { itemDescription: new RegExp(search, "i") },
         { customerName: new RegExp(search, "i") },
         { phone: new RegExp(search, "i") },
       ];
-      filter.$and = filter.$or ? [{ $or: filter.$or }, { $or: searchFilter }] : [{ $or: searchFilter }];
-      delete filter.$or;
+      filter.$and = filter.$and ? [...filter.$and, { $or: searchOr }] : [{ $or: searchOr }];
     }
 
     const limit = Math.min(Math.max(Number(req.query.limit || 30), 1), 100);
@@ -140,6 +187,7 @@ export const getJob = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const job = await CarWashJob.findOne({ _id: req.params.id, business })
       .populate("service", "name category vehicleType defaultPrice")
+      .populate("serviceLines.service", "name category vehicleType defaultPrice")
       .populate("assignedStaff", "name phone role")
       .lean();
     if (!job) return next(createError(404, "Car Wash job not found"));
@@ -159,16 +207,48 @@ export const createJob = async (req, res, next) => {
     if (jobType === "vehicle" && !plateNumber) return next(createError(400, "Plate number is required for vehicle jobs"));
     if (jobType === "carpet" && !itemDescription) return next(createError(400, "Item description is required for carpet jobs"));
 
-    const serviceSnapshot = await resolveServiceSnapshot(business, req.body);
-    if (!serviceSnapshot.serviceName) return next(createError(400, "Service name is required"));
-    if (!Number.isFinite(serviceSnapshot.price) || serviceSnapshot.price < 0) {
-      return next(createError(400, "Price must be a valid amount"));
+    // Resolve service lines — new multi-line format takes priority
+    let serviceLines = null;
+    let rootService = null, rootServiceName = "", rootVehicleType = "", totalPrice = 0;
+
+    if (Array.isArray(req.body.serviceLines) && req.body.serviceLines.length) {
+      serviceLines = await resolveServiceLines(business, req.body.serviceLines);
+      totalPrice = round2(serviceLines.reduce((s, l) => s + Number(l.price || 0), 0));
+      // Keep root fields pointing to first line for backward compat with reports/filters
+      rootService = serviceLines[0].service;
+      rootServiceName = serviceLines.length === 1 ? serviceLines[0].serviceName : `${serviceLines[0].serviceName} +${serviceLines.length - 1} more`;
+      rootVehicleType = serviceLines[0].vehicleType;
+    } else {
+      // Legacy single-service path
+      const snapshot = await resolveServiceSnapshot(business, req.body);
+      if (!snapshot.serviceName) return next(createError(400, "Service name is required"));
+      if (!Number.isFinite(snapshot.price) || snapshot.price < 0) return next(createError(400, "Price must be a valid amount"));
+      serviceLines = [{ service: snapshot.service, serviceName: snapshot.serviceName, vehicleType: snapshot.vehicleType, price: snapshot.price }];
+      totalPrice = snapshot.price;
+      rootService = snapshot.service;
+      rootServiceName = snapshot.serviceName;
+      rootVehicleType = snapshot.vehicleType;
     }
 
-    const assignedStaff = await assertStaffBelongsToBusiness(business, req.body.assignedStaff);
+    if (totalPrice <= 0 && !req.body._allowZeroPrice) {
+      return next(createError(400, "Total job price must be greater than zero"));
+    }
+
+    // Multi-staff assignment
+    const assignedStaff = await assertStaffArrayBelongsToBusiness(business, req.body.assignedStaff);
+
     const userId = currentUserId(req);
     const branchId = resolveActiveBranchId(req);
     const expectedReadyAt = req.body.expectedReadyAt ? new Date(req.body.expectedReadyAt) : null;
+
+    // Credit account validation
+    let resolvedCreditAccount = null;
+    const rawAccountId = req.body.creditAccount;
+    if (rawAccountId && mongoose.Types.ObjectId.isValid(String(rawAccountId))) {
+      const acc = await CarWashCreditAccount.findOne({ _id: String(rawAccountId), business, status: "active" }).lean();
+      if (!acc) return next(createError(400, "Credit account not found or not active"));
+      resolvedCreditAccount = acc._id;
+    }
 
     const manualJobNumber = String(req.body.jobNumber || "").trim();
     const jobBase = {
@@ -180,9 +260,16 @@ export const createJob = async (req, res, next) => {
       plateNumber: jobType === "vehicle" ? plateNumber : "",
       itemDescription: jobType === "carpet" ? itemDescription : "",
       expectedReadyAt: jobType === "carpet" && expectedReadyAt && !Number.isNaN(expectedReadyAt.getTime()) ? expectedReadyAt : null,
-      ...serviceSnapshot,
+      // Root fields (backward compat)
+      service: rootService,
+      serviceName: rootServiceName,
+      vehicleType: rootVehicleType,
+      // Multi-line
+      serviceLines,
+      price: totalPrice,
       status: JOB_STATUSES.has(String(req.body.status || "").toLowerCase()) ? String(req.body.status).toLowerCase() : "waiting",
       assignedStaff,
+      creditAccount: resolvedCreditAccount,
       paymentStatus: "unpaid",
       notes: String(req.body.notes || "").trim(),
       createdBy: userId,
@@ -201,17 +288,31 @@ export const createJob = async (req, res, next) => {
       }
     }
 
-    // Auto-enroll vehicle plate into loyalty program (fire-and-forget)
     if (job.jobType === "vehicle" && job.plateNumber) {
-      autoEnrollPlate?.({
-        business,
-        plate: job.plateNumber,
-        customerName: job.customerName,
-        phone: job.phone,
-      })?.catch(() => {});
+      // Awaited so the card exists before any payment is recorded (avoids race condition)
+      try {
+        await autoEnrollPlate?.({ business, plate: job.plateNumber, customerName: job.customerName, phone: job.phone });
+      } catch (err) {
+        console.error("[CW Job] autoEnroll failed job=%s plate=%s: %s", job.jobNumber, job.plateNumber, err?.message || err);
+      }
+
+      if (resolvedCreditAccount && job.plateNumber) {
+        CarWashCreditAccount.updateOne(
+          { _id: resolvedCreditAccount },
+          { $addToSet: { plates: job.plateNumber } }
+        ).catch(() => {});
+      }
     }
 
-    res.status(201).json({ success: true, data: job, job, message: `${jobType === "carpet" ? "Carpet" : "Car Wash"} job created` });
+    res.status(201).json({
+      success: true,
+      data: job,
+      job,
+      creditAccount: resolvedCreditAccount ? String(resolvedCreditAccount) : null,
+      message: resolvedCreditAccount
+        ? "Job created and charged to credit account"
+        : `${jobType === "carpet" ? "Carpet" : "Car Wash"} job created`,
+    });
   } catch (error) {
     next(error);
   }
@@ -223,13 +324,36 @@ export const updateJob = async (req, res, next) => {
     const existing = await CarWashJob.findOne({ _id: req.params.id, business });
     if (!existing) return next(createError(404, "Car Wash job not found"));
 
-    const serviceSnapshot = await resolveServiceSnapshot(business, {
-      service: req.body.service ?? existing.service,
-      serviceName: req.body.serviceName ?? existing.serviceName,
-      vehicleType: req.body.vehicleType ?? existing.vehicleType,
-      price: req.body.price ?? existing.price,
-    });
-    const assignedStaff = await assertStaffBelongsToBusiness(business, req.body.assignedStaff ?? existing.assignedStaff);
+    // Resolve service lines
+    let serviceLines, rootService, rootServiceName, rootVehicleType, totalPrice;
+
+    if (Array.isArray(req.body.serviceLines) && req.body.serviceLines.length) {
+      serviceLines = await resolveServiceLines(business, req.body.serviceLines);
+      totalPrice = round2(serviceLines.reduce((s, l) => s + Number(l.price || 0), 0));
+      rootService = serviceLines[0].service;
+      rootServiceName = serviceLines.length === 1 ? serviceLines[0].serviceName : `${serviceLines[0].serviceName} +${serviceLines.length - 1} more`;
+      rootVehicleType = serviceLines[0].vehicleType;
+    } else {
+      // Fall back to legacy single-service merge
+      const snapshot = await resolveServiceSnapshot(business, {
+        service: req.body.service ?? existing.service,
+        serviceName: req.body.serviceName ?? existing.serviceName,
+        vehicleType: req.body.vehicleType ?? existing.vehicleType,
+        price: req.body.price ?? existing.price,
+      });
+      serviceLines = existing.serviceLines?.length
+        ? existing.serviceLines
+        : [{ service: snapshot.service, serviceName: snapshot.serviceName, vehicleType: snapshot.vehicleType, price: snapshot.price }];
+      totalPrice = snapshot.price;
+      rootService = snapshot.service;
+      rootServiceName = snapshot.serviceName;
+      rootVehicleType = snapshot.vehicleType;
+    }
+
+    // Multi-staff
+    const rawStaff = req.body.assignedStaff !== undefined ? req.body.assignedStaff : existing.assignedStaff;
+    const assignedStaff = await assertStaffArrayBelongsToBusiness(business, rawStaff);
+
     const status = String(req.body.status || existing.status).toLowerCase();
     if (!JOB_STATUSES.has(status)) return next(createError(400, "Invalid Car Wash job status"));
     if (status === "paid" && existing.paymentStatus !== "paid") {
@@ -251,10 +375,12 @@ export const updateJob = async (req, res, next) => {
         existing.expectedReadyAt = d && !Number.isNaN(d.getTime()) ? d : null;
       }
     }
-    existing.vehicleType = serviceSnapshot.vehicleType;
-    existing.service = serviceSnapshot.service;
-    existing.serviceName = serviceSnapshot.serviceName;
-    existing.price = serviceSnapshot.price;
+
+    existing.service = rootService;
+    existing.serviceName = rootServiceName;
+    existing.vehicleType = rootVehicleType;
+    existing.serviceLines = serviceLines;
+    existing.price = totalPrice;
     existing.status = status;
     existing.assignedStaff = assignedStaff;
     existing.notes = String(req.body.notes ?? existing.notes).trim();
@@ -407,3 +533,8 @@ export const sendJobSms = async (req, res, next) => {
     next(err);
   }
 };
+
+// Missing helper used in this file
+function round2(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+}

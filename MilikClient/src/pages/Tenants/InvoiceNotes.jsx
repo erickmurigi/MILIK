@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentUser,
+  selectCurrentCompany,
+  selectAllTenants,
+} from "../../redux/selectors";
 import { useSearchParams } from "react-router-dom";
 import { LISTING_UI } from "../../utils/listingPageUtils";
 import {
@@ -255,9 +260,9 @@ const STANDALONE_CHARGE_ITEMS = [
 const InvoiceNotes = () => {
   const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentCompany } = useSelector((state) => state.company || {});
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const tenants = useSelector((state) => state.tenant?.tenants || []);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const tenants = useSelector(selectAllTenants);
 
   const requestedType = String(searchParams.get("type") || "").trim().toLowerCase();
   const initialNoteType = requestedType === "debit" ? "DEBIT_NOTE" : "CREDIT_NOTE";

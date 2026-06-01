@@ -30,6 +30,7 @@ import {
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import { clearClientSessionStorage } from "../../utils/sessionCleanup";
 import { getAccessibleCompanies, switchCompany } from "../../redux/apiCalls";
@@ -125,8 +126,9 @@ const moduleRegistry = [
 const StartMenu = ({ darkMode = false, variant = "floating" }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { currentUser } = useSelector((state) => state.auth || {});
-  const { currentCompany, isSwitching: isCompanySwitching } = useSelector((state) => state.company || {});
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const isCompanySwitching = useSelector((state) => state.company?.isSwitching);
   const [open, setOpen] = useState(false);
   const [showSwitchModal, setShowSwitchModal] = useState(false);
   const [companies, setCompanies] = useState([]);

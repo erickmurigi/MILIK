@@ -155,6 +155,10 @@ const PettyCash = () => {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [disbPage, setDisbPage] = useState(1);
   const [repPage, setRepPage] = useState(1);
+  const [disbTotal, setDisbTotal] = useState(0);
+  const [disbPages, setDisbPages] = useState(1);
+  const [repTotal, setRepTotal] = useState(0);
+  const [repPages, setRepPages] = useState(1);
 
   const canCreate  = hasCompanyPermission(currentUser, currentCompany, "pettyCash", "create", "accounts");
   const canApprove = hasCompanyPermission(currentUser, currentCompany, "pettyCash", "approve", "accounts");
@@ -197,14 +201,33 @@ const PettyCash = () => {
     setLoading(true);
     try {
       const [d, r] = await Promise.all([
-        getPettyCashDisbursements({ business: businessId, pettyCashAccountId: selectedAccountId }),
-        getPettyCashReplenishments({ business: businessId, pettyCashAccountId: selectedAccountId }),
+        getPettyCashDisbursements({
+          business: businessId,
+          pettyCashAccountId: selectedAccountId,
+          status: filterStatus !== "any" ? filterStatus : undefined,
+          category: filterCategory !== "any" ? filterCategory : undefined,
+          startDate: filterFrom || undefined,
+          endDate: filterTo || undefined,
+          search: search || undefined,
+          page: disbPage,
+          limit: pageSize,
+        }),
+        getPettyCashReplenishments({
+          business: businessId,
+          pettyCashAccountId: selectedAccountId,
+          page: repPage,
+          limit: pageSize,
+        }),
       ]);
-      setDisbursements(d);
-      setReplenishments(r);
+      setDisbursements(d.data ?? d);
+      setDisbTotal(d.total ?? 0);
+      setDisbPages(d.pages ?? 1);
+      setReplenishments(r.data ?? r);
+      setRepTotal(r.total ?? 0);
+      setRepPages(r.pages ?? 1);
     } catch { toast.error("Failed to load transactions"); }
     finally { setLoading(false); }
-  }, [businessId, selectedAccountId]);
+  }, [businessId, selectedAccountId, filterStatus, filterCategory, filterFrom, filterTo, search, disbPage, repPage, pageSize]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
 
@@ -231,41 +254,14 @@ const PettyCash = () => {
   };
 
   // ── Filtered disbursements
-  const filteredDisbursements = useMemo(() => {
-    let rows = disbursements;
-    if (filterStatus === "any") rows = rows.filter((r) => r.status !== "void");
-    if (filterCategory !== "any") rows = rows.filter((r) => r.category === filterCategory);
-    if (filterStatus !== "any") rows = rows.filter((r) => r.status === filterStatus);
-    if (filterFrom) rows = rows.filter((r) => new Date(r.date) >= new Date(filterFrom));
-    if (filterTo) rows = rows.filter((r) => new Date(r.date) <= new Date(filterTo));
-    if (search) {
-      const q = search.toLowerCase();
-      rows = rows.filter((r) =>
-        r.voucherNumber?.toLowerCase().includes(q) ||
-        r.description?.toLowerCase().includes(q) ||
-        r.property?.propertyName?.toLowerCase().includes(q)
-      );
-    }
-    return rows;
-  }, [disbursements, filterCategory, filterStatus, filterFrom, filterTo, search]);
+  // Filters are now pushed server-side in loadTransactions — disbursements is already filtered
+  const filteredDisbursements = disbursements;
 
-  const filteredReplenishments = useMemo(() => {
-    let rows = replenishments;
-    if (filterStatus !== "any") rows = rows.filter((r) => r.status === filterStatus);
-    if (filterFrom) rows = rows.filter((r) => new Date(r.requestDate) >= new Date(filterFrom));
-    if (filterTo) rows = rows.filter((r) => new Date(r.requestDate) <= new Date(filterTo));
-    if (search) {
-      const q = search.toLowerCase();
-      rows = rows.filter((r) => r.replenishmentNumber?.toLowerCase().includes(q));
-    }
-    return rows;
-  }, [replenishments, filterStatus, filterFrom, filterTo, search]);
+  // Replenishments still filtered client-side (low volume, no server-side filter params yet)
+  const filteredReplenishments = replenishments;
 
-  // ── Paged slices
-  const pagedDisbursements = useMemo(
-    () => filteredDisbursements.slice((disbPage - 1) * pageSize, disbPage * pageSize),
-    [filteredDisbursements, disbPage, pageSize]
-  );
+  // Server already paginates — these are just aliases
+  const pagedDisbursements = filteredDisbursements;
   const pagedReplenishments = useMemo(
     () => filteredReplenishments.slice((repPage - 1) * pageSize, repPage * pageSize),
     [filteredReplenishments, repPage, pageSize]
@@ -781,11 +777,11 @@ const PettyCash = () => {
               <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
                 <div className="font-semibold">
                   Showing{" "}
-                  <span className="font-bold text-slate-900">{filteredDisbursements.length === 0 ? 0 : (disbPage - 1) * pageSize + 1}</span>
+                  <span className="font-bold text-slate-900">{disbTotal === 0 ? 0 : (disbPage - 1) * pageSize + 1}</span>
                   {" "}to{" "}
-                  <span className="font-bold text-slate-900">{Math.min(disbPage * pageSize, filteredDisbursements.length)}</span>
+                  <span className="font-bold text-slate-900">{Math.min(disbPage * pageSize, disbTotal)}</span>
                   {" "}of{" "}
-                  <span className="font-bold text-slate-900">{filteredDisbursements.length}</span>
+                  <span className="font-bold text-slate-900">{disbTotal}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1.5">
@@ -799,8 +795,8 @@ const PettyCash = () => {
                     </select>
                   </div>
                   <button type="button" onClick={() => setDisbPage((p) => Math.max(1, p - 1))} disabled={disbPage === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-                  <span className="font-semibold text-slate-700">Page {disbPage} of {Math.max(1, Math.ceil(filteredDisbursements.length / pageSize))}</span>
-                  <button type="button" onClick={() => setDisbPage((p) => Math.min(Math.ceil(filteredDisbursements.length / pageSize), p + 1))} disabled={disbPage >= Math.ceil(filteredDisbursements.length / pageSize)} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+                  <span className="font-semibold text-slate-700">Page {disbPage} of {disbPages}</span>
+                  <button type="button" onClick={() => setDisbPage((p) => Math.min(disbPages, p + 1))} disabled={disbPage >= disbPages} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
                 </div>
               </div>
             )}

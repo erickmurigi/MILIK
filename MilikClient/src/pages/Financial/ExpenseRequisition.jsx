@@ -18,6 +18,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { useConfirm } from "../../context/ConfirmContext";
 import {
   createExpenseRequisition,
@@ -61,9 +62,9 @@ const ExpenseRequisition = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const properties = useSelector((state) => state.property?.properties || []);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const properties = useSelector(selectAllProperties);
 
   const [rows, setRows] = useState([]);
   const [providers, setProviders] = useState([]);

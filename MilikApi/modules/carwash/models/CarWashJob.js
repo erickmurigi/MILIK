@@ -4,6 +4,16 @@ const JOB_STATUSES = ["waiting", "washing", "done", "paid", "cancelled"];
 const PAYMENT_STATUSES = ["unpaid", "partial", "paid"];
 const JOB_TYPES = ["vehicle", "carpet"];
 
+const serviceLineSchema = new mongoose.Schema(
+  {
+    service: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashService", default: null },
+    serviceName: { type: String, trim: true, default: "" },
+    vehicleType: { type: String, trim: true, default: "" },
+    price: { type: Number, min: 0, default: 0 },
+  },
+  { _id: false }
+);
+
 const carWashJobSchema = new mongoose.Schema(
   {
     business: {
@@ -18,15 +28,25 @@ const carWashJobSchema = new mongoose.Schema(
     customerName: { type: String, trim: true, default: "" },
     phone: { type: String, trim: true, default: "" },
     plateNumber: { type: String, trim: true, uppercase: true, default: "" },
-    vehicleType: { type: String, trim: true, default: "" },
     itemDescription: { type: String, trim: true, default: "" },
     expectedReadyAt: { type: Date, default: null },
+
+    // Deprecated single-service fields — kept for backward compat with existing jobs
     service: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashService", default: null },
     serviceName: { type: String, trim: true, default: "" },
+    vehicleType: { type: String, trim: true, default: "" },
+
+    // Multi-service lines (new)
+    serviceLines: { type: [serviceLineSchema], default: [] },
+
     price: { type: Number, required: true, min: 0, default: 0 },
     status: { type: String, enum: JOB_STATUSES, default: "waiting", index: true },
-    assignedStaff: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashStaff", default: null },
+
+    // Multi-staff support (array; old jobs may have a scalar coerced to [id])
+    assignedStaff: [{ type: mongoose.Schema.Types.ObjectId, ref: "CarWashStaff" }],
+
     paymentStatus: { type: String, enum: PAYMENT_STATUSES, default: "unpaid", index: true },
+    creditAccount: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashCreditAccount", default: null, index: true },
     notes: { type: String, trim: true, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
@@ -40,5 +60,6 @@ carWashJobSchema.index({ business: 1, branch: 1, createdAt: -1 });
 carWashJobSchema.index({ business: 1, jobType: 1, createdAt: -1 });
 carWashJobSchema.index({ business: 1, plateNumber: 1 });
 carWashJobSchema.index({ business: 1, jobType: 1, status: 1 });
+carWashJobSchema.index({ business: 1, creditAccount: 1, createdAt: 1 });
 
 export default mongoose.model("CarWashJob", carWashJobSchema);

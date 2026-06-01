@@ -3,51 +3,17 @@ import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
+import CarWashCustomer from "../models/CarWashCustomer.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
-import { awardLoyaltyStamp, sendPaymentConfirmationSms } from "./loyaltyController.js";
+import { awardLoyaltyStamp, revokeStampForJob, sendPaymentConfirmationSms } from "./loyaltyController.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
-import { postEntry } from "../../../services/ledgerPostingService.js";
-import { findSystemAccountByCode } from "../../../services/chartOfAccountsService.js";
-import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
+import mpesaService from "../../../services/mpesaService.js";
+import { postCarWashPaymentLedger, reverseCarWashPaymentLedger } from "../services/carwashAccountingService.js";
 
+const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 const PAYMENT_METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const RECONCILIATION_STATUSES = new Set(["pending", "reconciled", "flagged"]);
-
-const cwDayRange = (value = new Date()) => {
-  const safe = value instanceof Date && !Number.isNaN(value.getTime()) ? value : new Date();
-  const start = new Date(safe); start.setHours(0, 0, 0, 0);
-  const end = new Date(start); end.setDate(end.getDate() + 1);
-  return { start, end };
-};
-
-const postCwPaymentLedger = async ({ business, payment, cashbookAccountId, job, userId }) => {
-  try {
-    const revenueAccount = await findSystemAccountByCode(business, "4400");
-    if (!revenueAccount?._id) return;
-    const { start, end } = cwDayRange(payment.paymentDate || new Date());
-    const base = {
-      business,
-      sourceTransactionType: "carwash_payment",
-      sourceTransactionId: String(payment._id),
-      transactionDate: payment.paymentDate || new Date(),
-      statementPeriodStart: start,
-      statementPeriodEnd: end,
-      category: "CARWASH_PAYMENT",
-      amount: Number(payment.amount),
-      payer: job?.customerName || "customer",
-      receiver: "n/a",
-      createdBy: userId,
-      approvedBy: userId,
-      allowUnscoped: true,
-    };
-    await postEntry({ ...base, accountId: cashbookAccountId, direction: "debit", notes: `CW payment received – Job #${job?.jobNumber || ""} (${payment.method})` });
-    await postEntry({ ...base, accountId: revenueAccount._id, direction: "credit", notes: `CW service income – Job #${job?.jobNumber || ""}` });
-    await aggregateChartOfAccountBalances(business, [String(cashbookAccountId), String(revenueAccount._id)]);
-  } catch {
-    // ledger failure must not block the payment
-  }
-};
 
 const resolveCashbookAccount = async (business, value) => {
   const accountId = String(value || "").trim();
@@ -71,15 +37,20 @@ const resolveCashbookAccount = async (business, value) => {
   return account._id;
 };
 
+// Effective paid = cash received + any discount write-off
+const effectivePaidAggregation = [
+  { $group: { _id: "$job", paid: { $sum: { $add: ["$amount", { $ifNull: ["$discountAmount", 0] }] } } } },
+];
+
 const refreshJobPaymentStatus = async (business, jobId) => {
   const job = await CarWashJob.findOne({ _id: jobId, business });
   if (!job) throw createError(404, "Car Wash job not found");
 
   const totals = await CarWashPayment.aggregate([
     { $match: { business: job.business, job: job._id } },
-    { $group: { _id: "$job", amount: { $sum: "$amount" } } },
+    ...effectivePaidAggregation,
   ]);
-  const paidAmount = Number(totals?.[0]?.amount || 0);
+  const paidAmount = Number(totals?.[0]?.paid || 0);
   const price = Number(job.price || 0);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
   if (job.paymentStatus === "paid" && job.status !== "cancelled") {
@@ -101,6 +72,7 @@ export const listPayments = async (req, res, next) => {
     if (req.query.cashbookAccount && mongoose.Types.ObjectId.isValid(String(req.query.cashbookAccount))) {
       filter.cashbookAccount = String(req.query.cashbookAccount);
     }
+    if (req.query.job && mongoose.Types.ObjectId.isValid(req.query.job)) filter.job = req.query.job;
     if (req.query.reconciliationStatus) filter.reconciliationStatus = String(req.query.reconciliationStatus).trim().toLowerCase();
     if (req.query.reference) filter.reference = new RegExp(escapeRegex(String(req.query.reference).trim()), "i");
     if (req.query.date) {
@@ -139,18 +111,27 @@ export const recordPayment = async (req, res, next) => {
 
     const amount = Number(req.body.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) return next(createError(400, "Payment amount must be greater than zero"));
+    const discountAmount = Math.max(0, Number(req.body.discountAmount || 0));
+    const effectiveAmount = round2(amount + discountAmount);
+
     const paidRows = await CarWashPayment.aggregate([
       { $match: { business: job.business, job: job._id } },
-      { $group: { _id: "$job", amount: { $sum: "$amount" } } },
+      ...effectivePaidAggregation,
     ]);
-    const alreadyPaid = Number(paidRows?.[0]?.amount || 0);
+    const alreadyPaid = Number(paidRows?.[0]?.paid || 0);
     const outstanding = Math.max(Number(job.price || 0) - alreadyPaid, 0);
     if (outstanding <= 0) return next(createError(400, "Car Wash job is already fully paid"));
-    if (amount > outstanding) return next(createError(400, "Payment exceeds the outstanding Car Wash job balance"));
+    if (effectiveAmount > outstanding + 0.01) return next(createError(400, "Payment + discount exceeds the outstanding Car Wash job balance"));
 
     const method = String(req.body.method || "cash").trim().toLowerCase();
     if (!PAYMENT_METHODS.has(method)) return next(createError(400, "Invalid Car Wash payment method"));
     const cashbookAccount = await resolveCashbookAccount(business, req.body.cashbookAccount);
+
+    // For M-Pesa manual entries the staff can record the payer's number.
+    // This is used as the SMS target so confirmation always reaches whoever paid.
+    const receivedFromPhone = method === "mpesa" && req.body.receivedFromPhone
+      ? String(req.body.receivedFromPhone).trim() || null
+      : null;
 
     const userId = currentUserId(req);
     const payment = await CarWashPayment.create({
@@ -158,22 +139,39 @@ export const recordPayment = async (req, res, next) => {
       branch: job.branch || null,
       job: job._id,
       amount,
+      discountAmount,
       method,
       cashbookAccount,
       reference: String(req.body.reference || "").trim(),
+      receivedFromPhone,
       paymentDate: req.body.paymentDate ? new Date(req.body.paymentDate) : new Date(),
       receivedBy: userId,
       createdBy: userId,
       updatedBy: userId,
     });
     const updatedJob = await refreshJobPaymentStatus(business, job._id);
+
+    // Persist M-Pesa payer phone to the job + loyalty customer (enables SMS button + loyalty lookup)
+    if (receivedFromPhone) {
+      if (!updatedJob.phone) {
+        await CarWashJob.updateOne({ _id: updatedJob._id, business }, { $set: { phone: receivedFromPhone } });
+        updatedJob.phone = receivedFromPhone;
+      }
+      if (updatedJob.plateNumber) {
+        await CarWashCustomer.updateOne(
+          { business, plates: updatedJob.plateNumber, $or: [{ phone: null }, { phone: "" }] },
+          { $set: { phone: receivedFromPhone } }
+        ).catch(() => {});
+      }
+    }
+
     await accrueCommissionForJob({ req, job: updatedJob });
     if (updatedJob.paymentStatus === "paid") {
       await markJobCommissionsPayable({ business, jobId: updatedJob._id });
       await awardLoyaltyStamp({ business, job: updatedJob });
-      await sendPaymentConfirmationSms({ business, job: updatedJob, amount });
+      await sendPaymentConfirmationSms({ business, job: updatedJob, amount, overridePhone: receivedFromPhone });
     }
-    await postCwPaymentLedger({ business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId });
+    await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId });
     res.status(201).json({ success: true, data: payment, payment, job: updatedJob, message: "Car Wash payment recorded" });
   } catch (error) {
     next(error);
@@ -190,9 +188,10 @@ export const deletePayment = async (req, res, next) => {
 
     const totals = await CarWashPayment.aggregate([
       { $match: { business: jobBeforeDelete.business, job: jobBeforeDelete._id } },
-      { $group: { _id: "$job", amount: { $sum: "$amount" } } },
+      ...effectivePaidAggregation,
     ]);
-    const paidAfterDelete = Number(totals?.[0]?.amount || 0) - Number(payment.amount || 0);
+    const effectiveThisPayment = round2(Number(payment.amount || 0) + Number(payment.discountAmount || 0));
+    const paidAfterDelete = round2(Number(totals?.[0]?.paid || 0) - effectiveThisPayment);
     const willRemainPaid = paidAfterDelete >= Number(jobBeforeDelete.price || 0);
     if (!willRemainPaid) {
       await handleJobPaymentStatusAfterPaymentChange({
@@ -202,6 +201,8 @@ export const deletePayment = async (req, res, next) => {
       });
     }
 
+    await reverseCarWashPaymentLedger({ businessId: business, paymentId: payment._id, req });
+    await revokeStampForJob({ business, jobId: jobBeforeDelete._id, plate: jobBeforeDelete.plateNumber });
     await payment.deleteOne();
     const job = await refreshJobPaymentStatus(business, payment.job);
     await handleJobPaymentStatusAfterPaymentChange({ business, job });
@@ -256,6 +257,44 @@ export const sendPaymentSms = async (req, res, next) => {
     await sendAdHocSms({ businessId: business, phone, body, templateKey: "carwash_payment_manual" });
     res.json({ success: true, message: "SMS sent" });
   } catch (err) {
+    next(err);
+  }
+};
+
+// ─── M-Pesa STK Push ──────────────────────────────────────────────────────────
+export const initiateStkPush = async (req, res, next) => {
+  try {
+    if (!mpesaService.isConfigured()) {
+      return next(createError(400, "M-Pesa STK Push is not configured on this server. Ensure MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE, and MPESA_PASSKEY are set."));
+    }
+
+    const { phone, amount, jobId, accountRef } = req.body;
+    const normalised = String(phone || "").replace(/^\+/, "").replace(/^0/, "254");
+    if (!/^254[0-9]{9}$/.test(normalised)) {
+      return next(createError(400, "Invalid phone number. Use format 07XXXXXXXX or 2547XXXXXXXX"));
+    }
+    if (!amount || Number(amount) <= 0) return next(createError(400, "Amount must be greater than zero"));
+
+    const business = resolveActiveBusinessId(req);
+    const callbackUrl = `${process.env.APP_URL || "https://api.milik.co.ke"}/api/carwash/mpesa/confirmation/${business}`;
+
+    const result = await mpesaService.stkPush({
+      phone: normalised,
+      amount: Number(amount),
+      accountRef: accountRef || (jobId ? `JOB-${jobId.slice(-6)}` : "CarWash"),
+      description: "Car Wash Payment",
+      callbackUrl,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+      message: `M-Pesa payment request sent to ${phone}. Ask the customer to check their phone and enter their PIN.`,
+    });
+  } catch (err) {
+    // Daraja errors have helpful messages in err.response.data
+    const darajaMsg = err?.response?.data?.errorMessage || err?.response?.data?.ResultDesc;
+    if (darajaMsg) return next(createError(400, `M-Pesa: ${darajaMsg}`));
     next(err);
   }
 };

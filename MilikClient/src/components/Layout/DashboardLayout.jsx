@@ -4,6 +4,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import {
   FaFileInvoice, FaReceipt, FaCoins, FaBook, FaChartBar,
   FaCreditCard, FaExchangeAlt, FaMoneyBillWave, FaHandHolding,
@@ -90,6 +91,7 @@ const MENU_PERMISSION_MAP = {
   "carwash-commissions": { resource: "carwash-commissions", action: "view", moduleKey: "carwash" },
   "carwash-loyalty": { resource: "carwash-loyalty", action: "view", moduleKey: "carwash" },
   "carwash-branches": { resource: "carwash-branches", action: "view", moduleKey: "carwash" },
+  "carwash-settings": { resource: "carwash-settings", action: "view", moduleKey: "carwash" },
   "carwash-financials": { resource: "chartOfAccounts", action: "view", moduleKey: "carwash" },
   "carwash-cashbooks": { resource: "chartOfAccounts", action: "view", moduleKey: "carwash" },
   "carwash-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: "carwash" },
@@ -163,8 +165,8 @@ const filterMenuByPermissions = (items = [], currentUser = {}, activeCompany = n
 const DashboardLayout = ({ children, lockContentScroll = false }) => {
   const [darkMode, setDarkMode] = useState(false);
   const location = useLocation();
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
   const isCompanySwitching = useSelector((state) => state.company?.isSwitching);
   const [renderTimestamp] = useState(() => Date.now());
   const currentWorkspace = useMemo(() => getWorkspaceFromRoute(location.pathname), [location.pathname]);
@@ -528,7 +530,9 @@ const TopToolbar = ({
         "carwash-staff-report": "/carwash/reports/staff",
         "carwash-commissions": "/carwash/commissions",
         "carwash-loyalty": "/carwash/loyalty",
+        "carwash-accounts": "/carwash/accounts",
         "carwash-branches": "/carwash/branches",
+        "carwash-settings": "/carwash/settings",
         "carwash-financials": "/carwash/financials",
         "carwash-cashbooks": "/carwash/cashbooks",
         "carwash-chart-of-accounts": "/carwash/chart-of-accounts",
@@ -984,10 +988,17 @@ const TopToolbar = ({
           label: "Operations",
           icon: FaCar,
           submenu: [
-            { id: "carwash-dashboard", label: "Dashboard", icon: FaChartBar },
-            { id: "carwash-jobs", label: "Jobs", icon: FaCar },
-            { type: "separator" },
-            { id: "carwash-loyalty", label: "Loyalty Program", icon: FaStar },
+            { id: "carwash-dashboard", label: "Dashboard",   icon: FaChartBar },
+            { id: "carwash-jobs",      label: "Jobs",        icon: FaCar },
+          ],
+        },
+        {
+          id: "carwash-customers",
+          label: "Customers",
+          icon: FaUsers,
+          submenu: [
+            { id: "carwash-loyalty",  label: "Loyalty Program",   icon: FaStar },
+            { id: "carwash-accounts", label: "Credit Accounts",   icon: FaFileInvoice },
           ],
         },
         {
@@ -998,10 +1009,16 @@ const TopToolbar = ({
             { id: "carwash-payments", label: "Payments", icon: FaMoneyBillWave },
             { id: "carwash-deposits", label: "Deposits", icon: FaCoins },
             { id: "carwash-expenses", label: "Expenses", icon: FaFileInvoice },
-            { type: "separator" },
-            { id: "carwash-financials", label: "Financials", icon: FaChartBar },
-            { id: "carwash-cashbooks", label: "Cashbooks", icon: FaCoins },
-            { id: "carwash-chart-of-accounts", label: "Chart of Accounts", icon: FaLayerGroup },
+          ],
+        },
+        {
+          id: "carwash-accounting",
+          label: "Accounting",
+          icon: FaLayerGroup,
+          submenu: [
+            { id: "carwash-financials",         label: "Financials",         icon: FaChartBar },
+            { id: "carwash-cashbooks",           label: "Cashbooks",          icon: FaCoins },
+            { id: "carwash-chart-of-accounts",  label: "Chart of Accounts",  icon: FaLayerGroup },
           ],
         },
         {
@@ -1009,10 +1026,10 @@ const TopToolbar = ({
           label: "Reports",
           icon: FaChartBar,
           submenu: [
-            { id: "carwash-reports", label: "Daily / Weekly / Monthly", icon: FaChartLine },
-            { id: "carwash-service-report", label: "Service Report", icon: FaChartBar },
-            { id: "carwash-staff-report", label: "Staff Report", icon: FaUsers },
-            { id: "carwash-commissions", label: "Commissions", icon: FaHandshake },
+            { id: "carwash-reports",        label: "Daily / Weekly / Monthly", icon: FaChartLine },
+            { id: "carwash-service-report", label: "Service Report",           icon: FaChartBar },
+            { id: "carwash-staff-report",   label: "Staff Report",             icon: FaUsers },
+            { id: "carwash-commissions",    label: "Commissions",              icon: FaHandshake },
           ],
         },
         {
@@ -1020,9 +1037,10 @@ const TopToolbar = ({
           label: "Setup",
           icon: FaCog,
           submenu: [
-            { id: "carwash-services", label: "Services", icon: FaCog },
-            { id: "carwash-staff", label: "Staff", icon: FaUsers },
-            { id: "carwash-branches", label: "Branches", icon: FaCodeBranch },
+            { id: "carwash-services", label: "Services",             icon: FaCog },
+            { id: "carwash-staff",    label: "Staff",                icon: FaUsers },
+            { id: "carwash-branches", label: "Branches",             icon: FaCodeBranch },
+            { id: "carwash-settings", label: "Operational Settings", icon: FaCog },
           ],
         },
       ];

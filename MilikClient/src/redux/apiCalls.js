@@ -1516,8 +1516,15 @@ export const getServiceProviders = async (filters = {}) => {
   if (filters.company) params.append("company", filters.company);
   if (typeof filters.active === 'boolean') params.append("active", String(filters.active));
   if (filters.search) params.append("search", filters.search);
+  if (filters.page) params.append("page", filters.page);
+  if (filters.limit) params.append("limit", filters.limit);
   const res = await adminRequests.get(`/service-providers${params.toString() ? `?${params.toString()}` : ""}`);
-  return extractList(res.data);
+  return {
+    data: extractList(res.data),
+    total: res.data?.total ?? 0,
+    page: res.data?.page ?? 1,
+    pages: res.data?.pages ?? 1,
+  };
 };
 
 export const createServiceProvider = async (payload) => {
@@ -1558,8 +1565,10 @@ export const getLandlordStandingOrders = async (filters = {}) => {
   if (filters.landlordId && filters.landlordId !== "all") params.append("landlord", filters.landlordId);
   if (filters.propertyId && filters.propertyId !== "all") params.append("property", filters.propertyId);
   if (filters.search) params.append("search", filters.search);
+  if (filters.page) params.append("page", filters.page);
+  if (filters.limit) params.append("limit", filters.limit);
   const res = await adminRequests.get(`/landlord-standing-orders${params.toString() ? `?${params.toString()}` : ""}`);
-  return extractList(res.data);
+  return { data: extractList(res.data), total: res.data?.total ?? 0, page: res.data?.page ?? 1, pages: res.data?.pages ?? 1 };
 };
 
 export const createLandlordStandingOrder = async (payload) => {
@@ -1602,9 +1611,12 @@ export const getLandlordAdvancements = async (filters = {}) => {
   if (filters.status && filters.status !== "all") params.append("status", filters.status);
   if (filters.landlordId && filters.landlordId !== "all") params.append("landlord", filters.landlordId);
   if (filters.propertyId && filters.propertyId !== "all") params.append("property", filters.propertyId);
+  if (filters.advanceType && filters.advanceType !== "all") params.append("advanceType", filters.advanceType);
   if (filters.search) params.append("search", filters.search);
+  if (filters.page) params.append("page", filters.page);
+  if (filters.limit) params.append("limit", filters.limit);
   const res = await adminRequests.get(`/landlord-advancements${params.toString() ? `?${params.toString()}` : ""}`);
-  return extractList(res.data);
+  return { data: extractList(res.data), total: res.data?.total ?? 0, page: res.data?.page ?? 1, pages: res.data?.pages ?? 1 };
 };
 
 export const createLandlordAdvancement = async (payload) => {
@@ -2683,7 +2695,7 @@ export const getTrialBalanceReport = async (params = {}) => {
   });
 
   const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/trial-balance${query ? `?${query}` : ""}`);
+  const res = await adminRequests.get(`/financial-reports/trial-balance${query ? `?${query}` : ""}`, { timeout: 120_000 });
   return res.data;
 };
 
@@ -2697,7 +2709,7 @@ export const getIncomeStatementReport = async (params = {}) => {
   });
 
   const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/income-statement${query ? `?${query}` : ""}`);
+  const res = await adminRequests.get(`/financial-reports/income-statement${query ? `?${query}` : ""}`, { timeout: 120_000 });
   return res.data;
 };
 
@@ -2711,7 +2723,7 @@ export const getBalanceSheetReport = async (params = {}) => {
   });
 
   const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/balance-sheet${query ? `?${query}` : ""}`);
+  const res = await adminRequests.get(`/financial-reports/balance-sheet${query ? `?${query}` : ""}`, { timeout: 120_000 });
   return res.data;
 };
 
@@ -2721,27 +2733,27 @@ export const getCashFlowReport = async (params = {}) => {
     if (value !== null && value !== undefined && value !== "") search.append(key, value);
   });
   const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/cash-flow${query ? `?${query}` : ""}`);
+  const res = await adminRequests.get(`/financial-reports/cash-flow${query ? `?${query}` : ""}`, { timeout: 120_000 });
   return res.data;
 };
 
-export const getARAgingReport = async (params = {}) => {
+export const getARAgingReport = async (params = {}, signal) => {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== null && value !== undefined && value !== "") search.append(key, value);
   });
   const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/ar-aging${query ? `?${query}` : ""}`);
+  const res = await adminRequests.get(`/financial-reports/ar-aging${query ? `?${query}` : ""}`, { timeout: 120_000, signal });
   return res.data;
 };
 
-export const getAPAgingReport = async (params = {}) => {
+export const getAPAgingReport = async (params = {}, signal) => {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== null && value !== undefined && value !== "") search.append(key, value);
   });
   const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/ap-aging${query ? `?${query}` : ""}`);
+  const res = await adminRequests.get(`/financial-reports/ap-aging${query ? `?${query}` : ""}`, { timeout: 120_000, signal });
   return res.data;
 };
 
@@ -2847,7 +2859,7 @@ export const runDepreciation = async (data) => {
   return res.data;
 };
 
-export const getRentalCollectionReport = async (params = {}) => {
+export const getRentalCollectionReport = async (params = {}, signal) => {
   const search = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
@@ -2857,11 +2869,11 @@ export const getRentalCollectionReport = async (params = {}) => {
   });
 
   const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/rental-collection${query ? `?${query}` : ""}`);
+  const res = await adminRequests.get(`/financial-reports/rental-collection${query ? `?${query}` : ""}`, { timeout: 120_000, signal });
   return res.data;
 };
 
-export const getTenantPaidBalanceReport = async (params = {}) => {
+export const getTenantPaidBalanceReport = async (params = {}, signal) => {
   const search = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
@@ -2871,7 +2883,7 @@ export const getTenantPaidBalanceReport = async (params = {}) => {
   });
 
   const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/tenant-paid-balance${query ? `?${query}` : ""}`);
+  const res = await adminRequests.get(`/financial-reports/tenant-paid-balance${query ? `?${query}` : ""}`, { timeout: 120_000, signal });
   return res.data;
 };
 export const getMRITaxSummaryReport = async (params = {}) => {
@@ -2884,7 +2896,7 @@ export const getMRITaxSummaryReport = async (params = {}) => {
   });
 
   const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/mri-tax-summary${query ? `?${query}` : ""}`);
+  const res = await adminRequests.get(`/financial-reports/mri-tax-summary${query ? `?${query}` : ""}`, { timeout: 120_000 });
   return res.data;
 };
 
@@ -2898,7 +2910,7 @@ export const getPropertyIncomeSummaryReport = async (params = {}) => {
   });
 
   const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/property-income-summary${query ? `?${query}` : ""}`);
+  const res = await adminRequests.get(`/financial-reports/property-income-summary${query ? `?${query}` : ""}`, { timeout: 120_000 });
   return res.data;
 };
 

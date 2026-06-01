@@ -2,6 +2,19 @@ import mongoose from "mongoose";
 
 const COMMISSION_STATUSES = ["earned", "payable", "paid", "cancelled"];
 
+const lineBreakdownSchema = new mongoose.Schema(
+  {
+    service: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashService", default: null },
+    serviceName: { type: String, trim: true, default: "" },
+    linePrice: { type: Number, default: 0 },
+    commissionType: { type: String, enum: ["fixed", "percentage"], default: "fixed" },
+    commissionRate: { type: Number, default: 0 },
+    lineCommissionAmount: { type: Number, default: 0 },
+    rule: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashCommissionRule", default: null },
+  },
+  { _id: false }
+);
+
 const carWashStaffCommissionSchema = new mongoose.Schema(
   {
     business: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
@@ -16,6 +29,7 @@ const carWashStaffCommissionSchema = new mongoose.Schema(
     commissionType: { type: String, enum: ["fixed", "percentage"], required: true, default: "fixed" },
     commissionRate: { type: Number, required: true, min: 0, default: 0 },
     commissionAmount: { type: Number, required: true, min: 0, default: 0 },
+    lineBreakdown: { type: [lineBreakdownSchema], default: [] },
     status: { type: String, enum: COMMISSION_STATUSES, default: "earned", index: true },
     earnedAt: { type: Date, default: Date.now, index: true },
     payableAt: { type: Date, default: null },

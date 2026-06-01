@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllTenants, selectAllLandlords } from '../../redux/selectors';
 import { getLandlords, getRentalCollectionReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { getTenants } from '../../redux/tenantsRedux';
@@ -18,12 +19,12 @@ const ITEMS_PER_PAGE = 50;
 
 const RentalCollectionReport = () => {
   const dispatch = useDispatch();
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
-  const properties = useSelector((state) => state.property?.properties || []);
-  const tenants = useSelector((state) => state.tenant?.tenants || []);
-  const landlords = useSelector((state) => state.landlord?.landlords || []);
+  const properties = useSelector(selectAllProperties);
+  const tenants = useSelector(selectAllTenants);
+  const landlords = useSelector(selectAllLandlords);
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
   const companyName = currentCompany?.name
@@ -56,27 +57,32 @@ const RentalCollectionReport = () => {
     dispatch(getLandlords({ company: businessId }));
   }, [businessId, dispatch]);
 
-  const loadReport = async () => {
+  const loadReport = async (signal) => {
     if (!businessId) return;
     setLoading(true);
     setFiltersChanged(false);
     try {
-      const data = await getRentalCollectionReport({ business: businessId, ...filters });
+      const data = await getRentalCollectionReport({ business: businessId, ...filters }, signal);
+      if (signal?.aborted) return;
       setReport({
         summary: data?.summary || {},
         byProperty: Array.isArray(data?.byProperty) ? data.byProperty : [],
         rows: Array.isArray(data?.rows) ? data.rows : [],
       });
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.name === 'AbortError') return;
       toast.error(error?.response?.data?.error || error?.response?.data?.message || 'Failed to load rental collection report.');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
 
   // Auto-load only when the active company changes
   useEffect(() => {
-    if (businessId) loadReport();
+    if (!businessId) return;
+    const controller = new AbortController();
+    loadReport(controller.signal);
+    return () => controller.abort();
   }, [businessId]);
 
   // Track filter changes so the Refresh button shows a stale indicator

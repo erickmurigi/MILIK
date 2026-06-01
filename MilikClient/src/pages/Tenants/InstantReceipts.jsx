@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentCompany,
+  selectAllTenants,
+} from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
 import {
   FaArrowLeft,
@@ -79,8 +83,8 @@ const buildInstantReceiptDescription = (row) => {
 const InstantReceipts = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { currentCompany } = useSelector((state) => state.company || {});
-  const tenants = ensureArray(useSelector((state) => state.tenant?.tenants));
+  const currentCompany = useSelector(selectCurrentCompany);
+  const tenants = useSelector(selectAllTenants);
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany } from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
@@ -48,7 +49,7 @@ const getMpesaConfigs = (company) => {
 
 const MpesaBatchImport = () => {
   const navigate = useNavigate();
-  const { currentCompany } = useSelector((state) => state.company || {});
+  const currentCompany = useSelector(selectCurrentCompany);
 
   const [rawBatchText, setRawBatchText] = useState("");
   const [rows, setRows] = useState([]);

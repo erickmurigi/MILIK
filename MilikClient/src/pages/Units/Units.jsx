@@ -26,6 +26,7 @@ import {
 } from "react-icons/fa";
 import { getUnits, deleteUnit, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import UnitsImportModal from "../../components/Modals/UnitsImportModal";
@@ -90,10 +91,10 @@ const Units = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   
-  const { currentCompany } = useSelector((state) => state.company);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const { units: unitsData, isFetching } = useSelector((state) => state.unit);
-  const { properties } = useSelector((state) => state.property);
+  const properties = useSelector(selectAllProperties);
 
   // ---------------------------
   // UI STATE

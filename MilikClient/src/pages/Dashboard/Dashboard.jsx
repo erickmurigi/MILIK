@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { selectCurrentUser, selectCurrentCompany } from '../../redux/selectors';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MetricsGrid from '../../components/Dashboard/MetricsGrid';
 import PropertiesOverview from '../../components/Dashboard/PropertiesOverview';
@@ -32,8 +33,8 @@ const normalizeArr = (settled, ...keys) => {
 const Dashboard = ({ darkMode }) => {
   const dispatch = useDispatch();
   const socket = useSocket();
-  const currentCompany = useSelector(state => state.company?.currentCompany);
-  const currentUser = useSelector(state => state.auth?.currentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
 
   const [invoices, setInvoices] = useState([]);
   const [paymentVouchers, setPaymentVouchers] = useState([]);

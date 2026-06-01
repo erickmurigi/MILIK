@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { getProperties, updateProperty } from '../../redux/propertyRedux';
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from '../../redux/selectors';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { FaEdit, FaTrash, FaPlus, FaCheck, FaTimes, FaSearch, FaArrowLeft, FaRedoAlt } from 'react-icons/fa';
@@ -17,9 +18,9 @@ const CommissionsList = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const { properties } = useSelector((state) => state.property);
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const properties = useSelector(selectAllProperties);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState('all'); // all, configured, unconfigured

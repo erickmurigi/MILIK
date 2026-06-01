@@ -16,6 +16,7 @@ import {
   FaTrash,
 } from "react-icons/fa";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
@@ -124,7 +125,7 @@ const batchDeleteSummary = (batch) => {
 
 const LatePenalties = () => {
   const confirm = useConfirm();
-  const { currentCompany } = useSelector((state) => state.company || {});
+  const currentCompany = useSelector(selectCurrentCompany);
   const businessId = currentCompany?._id || "";
 
   const [accounts, setAccounts] = useState([]);

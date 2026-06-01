@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentUser,
+  selectCurrentCompany,
+  selectAllProperties,
+  selectAllUnits,
+} from "../../redux/selectors";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
@@ -341,8 +347,8 @@ const AddTenant = () => {
   const { id: routeTenantId } = useParams();
   const isEditMode = Boolean(routeTenantId);
 
-  const { currentCompany } = useSelector((state) => state.company);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const canSaveTenant = isEditMode
     ? hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "update", "propertyManagement")
     : hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement");
@@ -354,8 +360,8 @@ const AddTenant = () => {
     (state) => state.tenant || { isFetching: false }
   );
   const unitLoading = useSelector((state) => state.unit?.isFetching || false);
-  const properties = useSelector((state) => state.property?.properties || []);
-  const units = useSelector((state) => state.unit?.units || []);
+  const properties = useSelector(selectAllProperties);
+  const units = useSelector(selectAllUnits);
   const activeProperties = useMemo(
     () => properties.filter((property) => String(property?.status || "active").toLowerCase() !== "archived"),
     [properties]

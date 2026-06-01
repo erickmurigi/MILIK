@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import useDebounce from "../../hooks/useDebounce";
 import { useDispatch, useSelector } from "react-redux";
 import {
   FaArrowLeft,
@@ -16,7 +17,8 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { getLandlords, getChartOfAccounts, getLandlordReceipts, createLandlordReceipt, updateLandlordReceipt, postLandlordReceipt, reverseLandlordReceipt, deleteLandlordReceipt } from "../../redux/apiCalls";
+import { getLandlords, getChartOfAccounts, getLandlordReceipts, getLandlordAdvancements, createLandlordReceipt, updateLandlordReceipt, postLandlordReceipt, reverseLandlordReceipt, deleteLandlordReceipt } from "../../redux/apiCalls";
+import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -128,10 +130,10 @@ const getPropertyLinkedLandlord = (property, landlords = []) => {
 const LandlordReceipts = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
-  const { currentCompany } = useSelector((state) => state.company || {});
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const landlords = ensureArray(useSelector((state) => state.landlord?.landlords));
-  const properties = ensureArray(useSelector((state) => state.property?.properties));
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const landlords = ensureArray(useSelector(selectAllLandlords));
+  const properties = ensureArray(useSelector(selectAllProperties));
   const activeLandlords = useMemo(() => landlords.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [landlords]);
   const activeProperties = useMemo(() => properties.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [properties]);
 
@@ -140,6 +142,9 @@ const LandlordReceipts = () => {
 
   const [cashbooks, setCashbooks] = useState([]);
   const [receipts, setReceipts] = useState([]);
+  const [totalReceipts, setTotalReceipts] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [advancements, setAdvancements] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [filters, setFilters] = useState({
     search: "",
@@ -149,6 +154,7 @@ const LandlordReceipts = () => {
     property: "all",
   });
   const [currentPage, setCurrentPage] = useState(1);
+  const debouncedSearch = useDebounce(filters.search, 400);
   const [showFormModal, setShowFormModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -162,19 +168,30 @@ const LandlordReceipts = () => {
     try {
       const [chartRows, receiptRows] = await Promise.all([
         getChartOfAccounts({ business: currentCompany._id, type: "asset" }),
-        getLandlordReceipts({ business: currentCompany._id, limit: 500 }),
+        getLandlordReceipts({
+          business: currentCompany._id,
+          page: currentPage,
+          limit: ITEMS_PER_PAGE,
+          ...(filters.status !== "all" ? { status: filters.status } : {}),
+          ...(filters.category !== "all" ? { category: filters.category } : {}),
+          ...(filters.landlord !== "all" ? { landlord: filters.landlord } : {}),
+          ...(filters.property !== "all" ? { property: filters.property } : {}),
+          ...(debouncedSearch ? { search: debouncedSearch } : {}),
+        }),
         dispatch(getLandlords({ company: currentCompany._id })),
         dispatch(getProperties({ business: currentCompany._id })),
       ]);
 
       setCashbooks(ensureArray(chartRows).filter(isCashbookAccount));
-      setReceipts(ensureArray(receiptRows?.data ?? receiptRows));
+      setReceipts(ensureArray(receiptRows?.data));
+      setTotalReceipts(receiptRows?.total ?? 0);
+      setTotalPages(receiptRows?.pages ?? 1);
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to load landlord receipts");
     } finally {
       setIsLoading(false);
     }
-  }, [currentCompany?._id, dispatch]);
+  }, [currentCompany?._id, dispatch, currentPage, filters.status, filters.category, filters.landlord, filters.property, debouncedSearch]);
 
   useEffect(() => {
     loadData();
@@ -217,40 +234,31 @@ const LandlordReceipts = () => {
     }
   }, [resolvedFormLandlord?.id, formData.property, formData.landlord]);
 
-  const filteredReceipts = useMemo(() => {
-    return receipts.filter((receipt) => {
-      if (filters.status !== "all" && String(receipt?.status || "") !== filters.status) return false;
-      if (filters.category !== "all" && String(receipt?.category || "") !== filters.category) return false;
-      if (filters.landlord !== "all" && String(receipt?.landlord?._id || receipt?.landlord || "") !== filters.landlord) return false;
-      if (filters.property !== "all" && String(receipt?.property?._id || receipt?.property || "") !== filters.property) return false;
-      if (filters.search) {
-        const probe = `${receipt?.receiptNumber || ""} ${receipt?.referenceNumber || ""} ${receipt?.narration || ""} ${receipt?.landlord?.landlordName || ""} ${receipt?.property?.propertyName || ""}`.toLowerCase();
-        if (!probe.includes(filters.search.toLowerCase())) return false;
-      }
-      return true;
-    });
-  }, [filters, receipts]);
-
-  const pagedRows = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredReceipts.slice(start, start + ITEMS_PER_PAGE);
-  }, [currentPage, filteredReceipts]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredReceipts.length / ITEMS_PER_PAGE));
-
   const stats = useMemo(() => {
-    const total = filteredReceipts.reduce((sum, row) => sum + Number(row?.amount || 0), 0);
-    const posted = filteredReceipts.filter((row) => row?.status === "posted").reduce((sum, row) => sum + Number(row?.amount || 0), 0);
-    const draft = filteredReceipts.filter((row) => row?.status === "draft").reduce((sum, row) => sum + Number(row?.amount || 0), 0);
-    const reversed = filteredReceipts.filter((row) => row?.status === "reversed").reduce((sum, row) => sum + Number(row?.amount || 0), 0);
+    const total = receipts.reduce((sum, row) => sum + Number(row?.amount || 0), 0);
+    const posted = receipts.filter((row) => row?.status === "posted").reduce((sum, row) => sum + Number(row?.amount || 0), 0);
+    const draft = receipts.filter((row) => row?.status === "draft").reduce((sum, row) => sum + Number(row?.amount || 0), 0);
     return {
-      count: filteredReceipts.length,
-      total,
+      count: totalReceipts,
       posted,
       draft,
-      reversed,
     };
-  }, [filteredReceipts]);
+  }, [receipts, totalReceipts]);
+
+  useEffect(() => {
+    if (formData.category !== "advance_settlement" || !currentCompany?._id || !formData.property) {
+      setAdvancements([]);
+      return;
+    }
+    getLandlordAdvancements({
+      business: currentCompany._id,
+      propertyId: formData.property,
+      ...(formData.landlord ? { landlordId: formData.landlord } : {}),
+      status: "all",
+    })
+      .then((rows) => setAdvancements(ensureArray(rows).filter((a) => ["disbursed", "recovering"].includes(a.status))))
+      .catch(() => {});
+  }, [formData.category, formData.property, formData.landlord, currentCompany?._id]);
 
   const openCreateModal = () => {
     if (!canCreate) { toast.warning("You don't have permission to record landlord receipts"); return; }
@@ -403,7 +411,7 @@ const LandlordReceipts = () => {
     .doc-title{text-align:right;align-self:center}
     .doc-label{font-size:34px;font-weight:900;color:#0f172a;letter-spacing:-0.03em;line-height:1}
     .doc-number{font-size:14px;color:#64748b;margin-top:6px}
-    .divider{height:2px;background:linear-gradient(90deg,#3b82f6,#93c5fd);border-radius:2px;margin:16px 0 20px}
+    .divider{height:2px;background:linear-gradient(90deg,#0B3B2E,#E65F1A);border-radius:2px;margin:16px 0 20px}
     .body-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-bottom:20px}
     .sec-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.18em;color:#94a3b8;margin-bottom:12px}
     .fk{font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;margin-top:8px}
@@ -540,8 +548,9 @@ const LandlordReceipts = () => {
                 <option value="all">All Landlords</option>
                 {activeLandlords.map((landlord) => (<option key={landlord._id} value={landlord._id}>{landlord.landlordName}</option>))}
               </select>
+
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{stats.count} receipts</span>
+              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{totalReceipts} receipts</span>
               <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Posted: {formatMoney(stats.posted)}</span>
               <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Draft: {formatMoney(stats.draft)}</span>
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
@@ -561,7 +570,7 @@ const LandlordReceipts = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagedRows.map((row, index) => (
+                  {receipts.map((row, index) => (
                     <tr key={row._id} className={`border-b border-slate-200 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50 hover:bg-blue-50/40"}`}>
                       <td className="px-3 py-2 font-semibold text-slate-700">{formatDate(row.receiptDate)}</td>
                       <td className="px-3 py-2 font-bold text-blue-700">{row.receiptNumber || "-"}</td>
@@ -595,7 +604,7 @@ const LandlordReceipts = () => {
                       </td>
                     </tr>
                   ))}
-                  {!isLoading && pagedRows.length === 0 && (
+                  {!isLoading && receipts.length === 0 && (
                     <tr>
                       <td colSpan={8} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
                         No landlord receipts found for the selected filters.
@@ -608,7 +617,7 @@ const LandlordReceipts = () => {
 
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-700">
               <div className="font-semibold">
-                Showing <span className="font-bold text-slate-900">{filteredReceipts.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1}</span>–<span className="font-bold text-slate-900">{Math.min(currentPage * ITEMS_PER_PAGE, filteredReceipts.length)}</span> of <span className="font-bold text-slate-900">{filteredReceipts.length}</span> landlord receipt(s)
+                Showing <span className="font-bold text-slate-900">{totalReceipts === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1}</span>–<span className="font-bold text-slate-900">{Math.min(currentPage * ITEMS_PER_PAGE, totalReceipts)}</span> of <span className="font-bold text-slate-900">{totalReceipts}</span> landlord receipt(s)
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-slate-500">Per page: {ITEMS_PER_PAGE}</span>
@@ -660,7 +669,7 @@ const LandlordReceipts = () => {
               </label>
               <label className="space-y-2 md:col-span-2">
                 <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Receipt category</span>
-                <select value={formData.category} onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
+                <select value={formData.category} onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value, linkedDocumentType: "", linkedDocumentId: "", linkedDocumentRef: "" }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
                   {CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
                 <p className="text-xs font-semibold text-slate-500">Posting rule: Dr selected cashbook, {CATEGORY_OPTIONS.find((item) => item.value === formData.category)?.accountHint || "controlled category account"}.</p>
@@ -681,20 +690,57 @@ const LandlordReceipts = () => {
                 <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Reference number</span>
                 <input type="text" value={formData.referenceNumber} onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]" placeholder="Bank ref / M-Pesa code / cheque no" />
               </label>
-              <label className="space-y-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Linked document type</span>
-                <select value={formData.linkedDocumentType} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentType: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
-                  {LINKED_DOCUMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Linked document ID</span>
-                <input type="text" value={formData.linkedDocumentId} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentId: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]" placeholder="Optional internal document id" />
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Linked document reference</span>
-                <input type="text" value={formData.linkedDocumentRef} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentRef: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]" placeholder="Statement no / voucher no / manual ref" />
-              </label>
+              {formData.category === "advance_settlement" ? (
+                <label className="space-y-2 md:col-span-2">
+                  <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
+                    Advancement to settle <span className="normal-case font-semibold text-slate-400">(select the advance this receipt clears)</span>
+                  </span>
+                  {advancements.length === 0 ? (
+                    <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
+                      No disbursed advancements found for this property. Select a property with active advancements first.
+                    </p>
+                  ) : (
+                    <select
+                      value={formData.linkedDocumentId}
+                      onChange={(e) => {
+                        const adv = advancements.find((a) => String(a._id) === e.target.value);
+                        setFormData((prev) => ({
+                          ...prev,
+                          linkedDocumentType: "landlord_advancement",
+                          linkedDocumentId: e.target.value,
+                          linkedDocumentRef: adv?.referenceNo || "",
+                          amount: adv ? String(Number(adv.balanceOutstanding || 0)) : prev.amount,
+                        }));
+                      }}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]"
+                    >
+                      <option value="">— Select advancement —</option>
+                      {advancements.map((adv) => (
+                        <option key={adv._id} value={adv._id}>
+                          {adv.referenceNo} — {adv.title} — Balance: KES {Number(adv.balanceOutstanding || 0).toLocaleString()}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </label>
+              ) : (
+                <>
+                  <label className="space-y-2">
+                    <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Linked document type</span>
+                    <select value={formData.linkedDocumentType} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentType: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
+                      {LINKED_DOCUMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Linked document ID</span>
+                    <input type="text" value={formData.linkedDocumentId} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentId: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]" placeholder="Optional internal document id" />
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Linked document reference</span>
+                    <input type="text" value={formData.linkedDocumentRef} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentRef: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]" placeholder="Statement no / voucher no / manual ref" />
+                  </label>
+                </>
+              )}
               <label className="space-y-2 md:col-span-2">
                 <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Narration</span>
                 <textarea rows={4} value={formData.narration} onChange={(e) => setFormData((prev) => ({ ...prev, narration: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:border-[#0B3B2E]" placeholder="Explain why this money was received from the landlord" />

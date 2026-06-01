@@ -17,6 +17,7 @@ import {
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { selectCurrentUser, selectCurrentCompany } from '../../redux/selectors';
 import { toast } from 'react-hot-toast';
 import { adminRequests } from '../../utils/requestMethods';
 import { createUser, updateUser } from '../../redux/apiCalls';
@@ -158,8 +159,8 @@ export default function AddUserPage() {
   const { state: locationState } = useLocation();
   const returnTo = locationState?.returnTo || '/system-setup/users';
   const dispatch = useDispatch();
-  const { currentUser } = useSelector((state) => state.auth);
-  const { currentCompany } = useSelector((state) => state.company);
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
   const isEditing = Boolean(id);
   const isSystemAdmin = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
 

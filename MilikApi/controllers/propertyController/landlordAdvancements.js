@@ -1199,6 +1199,7 @@ export const getLandlordAdvancements = async (req, res, next) => {
     const filter = { business: businessId };
     if (req.query?.landlord && isValidObjectId(req.query.landlord)) filter.landlord = req.query.landlord;
     if (req.query?.property && isValidObjectId(req.query.property)) filter.property = req.query.property;
+    if (req.query?.advanceType && req.query.advanceType !== "all") filter.advanceType = req.query.advanceType;
     if (req.query?.search) {
       const term = String(req.query.search).trim();
       filter.$or = [
@@ -1217,7 +1218,12 @@ export const getLandlordAdvancements = async (req, res, next) => {
       serialized = serialized.filter((row) => row.status === requested || String(row.legacyStatus || "").toLowerCase() === requested);
     }
 
-    res.status(200).json(serialized);
+    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const total = serialized.length;
+    const data = serialized.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
+    res.status(200).json({ data, total, page: pageNum, pages: Math.ceil(total / limitNum) });
   } catch (error) {
     next(error);
   }

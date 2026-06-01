@@ -1388,30 +1388,32 @@ const normalizeStoredAllocationRows = ({ receipt, invoiceMap = new Map() }) => {
   return rows;
 };
 
-const buildSortedInvoiceSnapshots = (invoices = []) =>
-  invoices
+const buildSortedInvoiceSnapshots = (invoices = []) => {
+  const MAX_MS = Number.MAX_SAFE_INTEGER;
+  return invoices
     .filter(isInvoiceActiveForAllocation)
-    .map((invoice) => ({
-      ...invoice,
-      priorityGroup: getInvoicePriorityGroup(invoice),
-      priorityRank: getPriorityRank(getInvoicePriorityGroup(invoice)),
-      utilityType: getInvoiceUtilityType(invoice),
-      applied: 0,
-      outstanding: Math.abs(Number(invoice?.amount || 0)),
-    }))
+    .map((invoice) => {
+      const priorityGroup = getInvoicePriorityGroup(invoice);
+      return {
+        ...invoice,
+        priorityGroup,
+        priorityRank: getPriorityRank(priorityGroup),
+        utilityType: getInvoiceUtilityType(invoice),
+        applied: 0,
+        outstanding: Math.abs(Number(invoice?.amount || 0)),
+        _dueDateMs: invoice.dueDate ? new Date(invoice.dueDate).getTime() : MAX_MS,
+        _invoiceDateMs: invoice.invoiceDate ? new Date(invoice.invoiceDate).getTime() : MAX_MS,
+        _createdAtMs: invoice.createdAt ? new Date(invoice.createdAt).getTime() : MAX_MS,
+      };
+    })
     .sort((a, b) => {
       if (a.priorityRank !== b.priorityRank) return a.priorityRank - b.priorityRank;
-      const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
-      const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
-      if (aDue !== bDue) return aDue - bDue;
-      const aInvoiceDate = a.invoiceDate ? new Date(a.invoiceDate).getTime() : Number.MAX_SAFE_INTEGER;
-      const bInvoiceDate = b.invoiceDate ? new Date(b.invoiceDate).getTime() : Number.MAX_SAFE_INTEGER;
-      if (aInvoiceDate !== bInvoiceDate) return aInvoiceDate - bInvoiceDate;
-      const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : Number.MAX_SAFE_INTEGER;
-      const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : Number.MAX_SAFE_INTEGER;
-      if (aCreated !== bCreated) return aCreated - bCreated;
+      if (a._dueDateMs !== b._dueDateMs) return a._dueDateMs - b._dueDateMs;
+      if (a._invoiceDateMs !== b._invoiceDateMs) return a._invoiceDateMs - b._invoiceDateMs;
+      if (a._createdAtMs !== b._createdAtMs) return a._createdAtMs - b._createdAtMs;
       return String(a._id).localeCompare(String(b._id));
     });
+};
 
 const TENANT_SNAPSHOT_INVOICE_FIELDS = [
   "_id",
@@ -3227,10 +3229,13 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
         })
       : null;
 
-  const ledgerMode = resolveInvoiceLedgerMode({
+  let ledgerMode = resolveInvoiceLedgerMode({
     category: normalizedCategory,
     depositHeldBy,
   });
+
+  // Off-GL properties never post to the main GL — PM module tracks internally only
+  if (accountingContext.isOffGL) ledgerMode = "off_ledger";
 
   const requestedChartAccountValue =
     chartAccountId ||
@@ -3331,11 +3336,28 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     () => getCompanyTaxConfiguration(businessId)
   );
 
-  const cachedReceivableAccount = await getOrLoadCachedValue(
+  let cachedReceivableAccount = await getOrLoadCachedValue(
     batchContext?.receivableAccountCache,
     String(businessId),
     () => resolveTenantReceivableAccount(businessId)
   );
+
+  // Override with property-specific GL accounts for In-GL properties
+  if (!accountingContext.isOffGL) {
+    if (accountingContext.receivablesAccountId) {
+      cachedReceivableAccount = { _id: accountingContext.receivablesAccountId };
+    }
+    if (normalizedCategory !== "DEPOSIT_CHARGE") {
+      const propIncomeId = {
+        RENT_CHARGE:         accountingContext.rentIncomeAccountId,
+        UTILITY_CHARGE:      accountingContext.utilityRechargeAccountId,
+        SERVICE_CHARGE:      accountingContext.serviceChargeAccountId,
+        LEASE_FEE:           accountingContext.serviceChargeAccountId,
+        LATE_PENALTY_CHARGE: accountingContext.penaltyIncomeAccountId,
+      }[normalizedCategory];
+      if (propIncomeId) postingAccount = { _id: propIncomeId };
+    }
+  }
 
   const taxSnapshot = buildInvoiceTaxSnapshot({
     amount: Math.abs(Number(amount)),

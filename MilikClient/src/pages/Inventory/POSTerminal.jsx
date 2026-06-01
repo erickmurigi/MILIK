@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import {
   FaBarcode, FaCheck, FaMinus, FaPlus, FaSearch,
@@ -159,7 +160,7 @@ const POSTerminal = () => {
   const [closingSession, setClosingSession] = useState(false);
 
   /* Active company — used to detect company switches and reset POS state */
-  const companyId = useSelector((state) => state.company?.currentCompany?._id);
+  const companyId = useSelector((state) => selectCurrentCompany(state)?._id);
 
   /* Totals */
   const subtotal   = round2(cart.reduce((s, l) => s + l.unitPrice * l.qty, 0));

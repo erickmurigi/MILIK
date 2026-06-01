@@ -27,6 +27,7 @@ import PostCommissionModal from "../../components/Modals/PostCommissionModal";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { adminRequests } from "../../utils/requestMethods";
 import { getChartOfAccounts } from "../../redux/apiCalls";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -67,8 +68,8 @@ const ProcessedStatements = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
   const canProcessLandlordPayments = hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "process", "accounts");
   const canReverseProcessedStatement = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "reverse", "accounts");
   const canExportProcessedStatement = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "export", "accounts");

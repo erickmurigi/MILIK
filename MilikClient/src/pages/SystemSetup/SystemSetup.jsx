@@ -47,6 +47,7 @@ import {
   getCompanyOperatingModeLabel,
   getEnabledCompanyModuleKeys,
 } from "../../utils/companyModules";
+import { selectCurrentUser } from "../../redux/selectors";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
@@ -890,7 +891,7 @@ export default function SystemSetupPage() {
 
   const { companies, isFetching: companiesFetching, currentCompany } = useSelector((state) => state.company || {});
   const { users, isFetching: usersFetching } = useSelector((state) => state.user || {});
-  const { currentUser } = useSelector((state) => state.auth || {});
+  const currentUser = useSelector(selectCurrentUser);
 
   const rawSection = location.pathname.split("/")[2] || "overview";
   const activeSection = SECTION_ALIASES[rawSection] || rawSection;

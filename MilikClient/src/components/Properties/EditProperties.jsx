@@ -23,6 +23,7 @@ import {
 } from "react-icons/fa";
 import { getPropertyById, updateProperty, clearCurrentProperty } from "../../redux/propertyRedux";
 import { getLandlords } from "../../redux/apiCalls";
+import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
@@ -203,8 +204,8 @@ const EditProperty = () => {
   const navigate = useNavigate();
 
   const { loading, error, currentProperty } = useSelector((state) => state.property);
-  const { currentCompany } = useSelector((state) => state.company);
-  const { currentUser } = useSelector((state) => state.auth);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isSelfManagingLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
@@ -216,16 +217,8 @@ const EditProperty = () => {
     activeCompanyContext?.slogan ||
     "";
 
-  const landlordsFromStore =
-    useSelector((state) => state?.landlord?.landlords) ||
-    useSelector((state) => state?.landlords?.items) ||
-    useSelector((state) => state?.landlords?.landlords) ||
-    [];
-
-  const propertiesFromStore =
-    useSelector((state) => state?.property?.properties) ||
-    useSelector((state) => state?.properties?.items) ||
-    [];
+  const landlordsFromStore = useSelector(selectAllLandlords);
+  const propertiesFromStore = useSelector(selectAllProperties);
 
   const [activeTab, setActiveTab] = useState("general");
   const draftStorageKey = currentCompany?._id && id ? `milik:edit-property-draft:${currentCompany._id}:${id}` : null;

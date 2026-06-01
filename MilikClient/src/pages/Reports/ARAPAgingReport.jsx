@@ -149,24 +149,30 @@ const ARAPAgingReport = () => {
 
   const businessId = currentCompany?._id;
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal) => {
     if (!businessId) return;
     setLoading(true);
     try {
       const [ar, ap] = await Promise.all([
-        getARAgingReport({ business: businessId, asOf }),
-        getAPAgingReport({ business: businessId, asOf }),
+        getARAgingReport({ business: businessId, asOf }, signal),
+        getAPAgingReport({ business: businessId, asOf }, signal),
       ]);
+      if (signal?.aborted) return;
       setArData(ar);
       setApData(ap);
-    } catch {
+    } catch (err) {
+      if (err?.name === 'CanceledError' || err?.name === 'AbortError') return;
       toast.error("Failed to load aging report");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, [businessId, asOf]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
+  }, [fetchData]);
 
   const activeData = tab === "ar" ? arData : apData;
   const rows = activeData?.rows || [];

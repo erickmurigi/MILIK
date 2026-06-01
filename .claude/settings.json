@@ -8,7 +8,19 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\" -Recurse -Name)",
       "Bash(Get-ChildItem \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\" -Directory)",
       "Bash(xargs grep -l \"receipt\\\\|invoice\")",
-      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\" -Filter \"*.jsx\")"
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\" -Filter \"*.jsx\")",
+      "Bash(xargs grep -l \"bull\\\\|agenda\\\\|queue\\\\|job\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\" -Recurse -Directory)",
+      "Bash(Select-Object -First 30)",
+      "Bash(xargs grep -l \"getChartOfAccounts\")",
+      "Bash(node -e \"import\\('./services/invoicePdfService.js'\\).then\\(m => console.log\\('ok'\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")",
+      "Bash(node -e \"import\\('puppeteer'\\).then\\(m => { const p = m.default || m; console.log\\('puppeteer version:', p.version || 'loaded'\\); return p.executablePath ? console.log\\('exe:', p.executablePath\\(\\)\\) : p.launch\\({headless:true, args:['--no-sandbox']}\\).then\\(b => { console.log\\('browser ok, closing'\\); return b.close\\(\\); }\\); }\\).catch\\(e => console.error\\('ERROR:', e.message\\)\\)\")",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")",
+      "Bash(findstr \"start\\\\|dev\\\\|nodemon\")",
+      "Bash(grep -E \"\\\\.\\(js|ts\\)$\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\components\" -Recurse -Filter \"*.jsx\" -File)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(powershell -Command \"Get-ChildItem -Recurse -Include '*.jsx','*.js' | Select-String -Pattern 'html2pdf' | Select-Object -First 5\")"
     ]
   }
 }

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useRef } from "react";
 import { useSelector } from "react-redux";
+import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
-import html2pdf from "html2pdf.js";
 import {
   FaArrowLeft,
   FaCheckCircle,
@@ -60,10 +60,9 @@ const StatementDetailView = ({
 }) => {
   const [showAudit, setShowAudit] = useState(false);
   const printViewRef = useRef(null);
-  const pdfExportRef = useRef(null);
 
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
   const allowApprove = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "approve", "propertyManagement");
   const allowSend = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "send", "propertyManagement");
   const allowRevise = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "update", "propertyManagement");
@@ -130,25 +129,8 @@ const StatementDetailView = ({
     window.print();
   };
 
-  const handleDownloadPdf = async () => {
-    if (!pdfExportRef.current) return;
-    const opt = {
-      margin: [15, 15, 15, 15],
-      filename: `Statement_${statement?.statementNumber || statement?._id}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-    // Temporarily show export node
-    pdfExportRef.current.style.display = 'block';
-    try {
-      await html2pdf().set(opt).from(pdfExportRef.current).save();
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      throw error;
-    } finally {
-      pdfExportRef.current.style.display = 'none';
-    }
+  const handleDownloadPdf = () => {
+    if (onDownloadPdf) onDownloadPdf(statement);
   };
 
   const getCategoryAmount = (category) => {
@@ -307,19 +289,6 @@ const StatementDetailView = ({
 
   return (
     <>
-      {/* Off-screen export node for PDF generation */}
-      <div
-        ref={pdfExportRef}
-        style={{ position: 'absolute', left: '-9999px', top: 0, display: 'none', zIndex: -1 }}
-      >
-        <StatementPrintView
-          statement={statement}
-          lines={lines}
-          company={company}
-          summary={summary}
-        />
-      </div>
-
       {/* Hidden Print View - Only visible when printing */}
       <div className="print-only-wrapper" ref={printViewRef}>
         <StatementPrintView

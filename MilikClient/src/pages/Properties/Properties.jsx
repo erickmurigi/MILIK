@@ -27,6 +27,7 @@ import {
 import { toast } from "react-toastify";
 import { getProperties, deleteProperty, archiveProperty, restoreProperty } from "../../redux/propertyRedux";
 import { getLandlords } from "../../redux/apiCalls";
+import { selectCurrentCompany, selectAllLandlords } from "../../redux/selectors";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import PropertyImportModal from "../../components/Modals/PropertyImportModal";
 import { downloadPropertiesTemplate, exportPropertiesToExcel } from "../../utils/excelTemplates";
@@ -48,8 +49,8 @@ const Properties = () => {
 
   // Redux state
   const { properties, error, pagination } = useSelector((state) => state.property);
-  const landlords = useSelector((state) => state?.landlord?.landlords || state?.landlords?.items || state?.landlords?.landlords || []);
-  const { currentCompany } = useSelector((state) => state.company);
+  const landlords = useSelector(selectAllLandlords);
+  const currentCompany = useSelector(selectCurrentCompany);
 
   const landlordOptions = useMemo(() =>
     landlords.map(l => ({ id: l._id || l.id, label: l.fullName || l.name || l.landlordName || "Unnamed" })),

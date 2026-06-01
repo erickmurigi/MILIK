@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { useConfirm } from "../../context/ConfirmContext";
 import { adminRequests } from "../../utils/requestMethods";
@@ -490,7 +491,7 @@ const CompanySettings = () => {
   const confirm = useConfirm();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentCompany } = useSelector((state) => state.company || {});
+  const currentCompany = useSelector(selectCurrentCompany);
 
   // ── Module flags ──────────────────────────────────────────────────────────
   const hasPM   = hasCompanyModule(currentCompany, "propertyManagement");

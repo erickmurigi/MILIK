@@ -32,6 +32,7 @@ import {
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { propertyBelongsToLandlord } from "./propertyUtils";
+import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 
 const ITEMS_PER_PAGE = 50;
@@ -151,10 +152,10 @@ const validateForm = (form) => {
 const LandlordStandingOrders = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const landlords = useSelector((state) => state.landlord?.landlords || []);
-  const properties = useSelector((state) => state.property?.properties || []);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const landlords = useSelector(selectAllLandlords);
+  const properties = useSelector(selectAllProperties);
   const activeLandlords = useMemo(
     () => landlords.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"),
     [landlords]
@@ -165,6 +166,8 @@ const LandlordStandingOrders = () => {
   );
 
   const [rows, setRows] = useState([]);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [serverPages, setServerPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -228,13 +231,17 @@ const LandlordStandingOrders = () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
-      const data = await getLandlordStandingOrders({
+      const result = await getLandlordStandingOrders({
         business: currentCompany._id,
         company: currentCompany._id,
         ...filters,
         search: debouncedSearch,
+        page: currentPage,
+        limit: ITEMS_PER_PAGE,
       });
-      setRows(Array.isArray(data) ? data : []);
+      setRows(Array.isArray(result.data) ? result.data : []);
+      setServerTotal(result.total ?? 0);
+      setServerPages(result.pages ?? 1);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load standing orders");
     } finally {
@@ -244,7 +251,7 @@ const LandlordStandingOrders = () => {
 
   useEffect(() => {
     loadRows();
-  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.propertyId]);
+  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.propertyId, currentPage]);
 
   useEffect(() => {
     setSelectedIds((prev) =>
@@ -266,27 +273,19 @@ const LandlordStandingOrders = () => {
 
   const stats = useMemo(
     () => ({
-      total: rows.length,
+      total: serverTotal,
       active: rows.filter((row) => row.status === "active").length,
       processed: rows.reduce((sum, row) => sum + Number(row.totalProcessedAmount || 0), 0),
       pendingPeriods: rows.reduce((sum, row) => sum + Number(row.unprocessedPeriodsCount || 0), 0),
     }),
-    [rows]
+    [rows, serverTotal]
   );
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = rows.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const paginatedRows = rows.slice(startIndex, endIndex);
+  const safeCurrentPage = Math.min(currentPage, serverPages);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, filters.status, filters.landlordId, filters.propertyId, rows.length]);
-
-  useEffect(() => {
-    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
-  }, [currentPage, safeCurrentPage]);
+  }, [debouncedSearch, filters.status, filters.landlordId, filters.propertyId]);
 
   const closeModal = () => {
     if (_lsoDraftKey) { try { window.sessionStorage.removeItem(_lsoDraftKey); } catch {} }
@@ -446,10 +445,10 @@ const LandlordStandingOrders = () => {
 
   const selectableRowIds = useMemo(
     () =>
-      paginatedRows
+      rows
         .filter((row) => row.status === "active" && (row.eligiblePeriods || []).length > 0)
         .map((row) => String(row._id)),
-    [paginatedRows]
+    [rows]
   );
 
   const allSelectableChecked =
@@ -646,7 +645,7 @@ const LandlordStandingOrders = () => {
                       </td>
                     </tr>
                   )}
-                  {paginatedRows.map((row, index) => {
+                  {rows.map((row, index) => {
                     const expanded = expandedId === row._id;
                     const runnable = row.status === "active" && (row.eligiblePeriods || []).length > 0;
                     return (
@@ -885,7 +884,7 @@ const LandlordStandingOrders = () => {
 
           <div className="flex items-center justify-between gap-3 border border-slate-200 border-t-0 bg-white px-4 py-2 text-xs text-slate-600 rounded-b-lg">
             <div className="font-semibold">
-              Showing <span className="font-bold text-slate-900">{rows.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of <span className="font-bold text-slate-900">{rows.length}</span> standing orders
+              Showing <span className="font-bold text-slate-900">{serverTotal === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * ITEMS_PER_PAGE, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> standing orders
             </div>
             <div className="flex items-center gap-2">
               <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
@@ -896,10 +895,10 @@ const LandlordStandingOrders = () => {
               >
                 Previous
               </button>
-              <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
+              <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {serverPages}</span>
               <button
-                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                disabled={safeCurrentPage === totalPages}
+                onClick={() => setCurrentPage((prev) => Math.min(serverPages, prev + 1))}
+                disabled={safeCurrentPage === serverPages}
                 className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Next

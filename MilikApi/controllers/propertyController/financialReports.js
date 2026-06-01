@@ -819,34 +819,51 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     const tenantQuery = { business: businessId };
     if (req.query.tenantId) tenantQuery._id = toObjectId(req.query.tenantId);
 
-    // Stream tenants 200 at a time so memory stays bounded regardless of tenant count.
-    // Snapshot computation and search/status filtering happen per chunk.
-    const REPORT_CHUNK = 200;
-    const allRows = [];
-    let chunk = [];
+    const filterPropertyId = req.query.propertyId ? String(req.query.propertyId) : "";
+    const filterLandlordId = req.query.landlordId ? String(req.query.landlordId) : "";
+    const filterSearch = safeLower(req.query.search || "");
+    const filterStatus = req.query.status && req.query.status !== "all" ? req.query.status : "";
 
-    const processChunk = async (tenants) => {
-      const baseRows = tenants.map((tenant) => {
-        const unit = tenant?.unit || {};
-        const property = unit?.property || {};
+    // ── Step 1: batch-fetch tenants, units, properties in 3 parallel queries ──
+    // Avoids the N+1 problem of cursor+nested-populate (2 queries per tenant).
+    const [allTenants, allUnits, allProperties] = await Promise.all([
+      Tenant.find(tenantQuery).select("_id tenantName name unit").sort({ name: 1, createdAt: 1 }).lean(),
+      Unit.find({ business: businessId }).select("_id unitNumber name property").lean(),
+      Property.find({ business: businessId }).select("_id propertyName name landlords").lean(),
+    ]);
+
+    const unitMap = new Map(allUnits.map((u) => [String(u._id), u]));
+    const propMap = new Map(allProperties.map((p) => [String(p._id), p]));
+
+    // ── Step 2: build base rows and apply cheap filters before snapshot cost ──
+    const baseRows = allTenants
+      .map((tenant) => {
+        const unit = unitMap.get(String(tenant.unit || "")) || {};
+        const property = propMap.get(String(unit.property || "")) || {};
         const landlord = pickPrimaryLandlord(property);
         return {
-          tenantId: String(tenant?._id || ""),
-          tenantName: tenant?.tenantName || tenant?.name || "Unknown Tenant",
-          unitId: String(unit?._id || tenant?.unit || ""),
-          unitNumber: unit?.unitNumber || unit?.name || "N/A",
-          propertyId: String(property?._id || unit?.property || ""),
-          propertyName: property?.propertyName || property?.name || "N/A",
+          tenantId: String(tenant._id),
+          tenantName: tenant.tenantName || tenant.name || "Unknown Tenant",
+          unitId: String(unit._id || tenant.unit || ""),
+          unitNumber: unit.unitNumber || unit.name || "N/A",
+          propertyId: String(property._id || unit.property || ""),
+          propertyName: property.propertyName || property.name || "N/A",
           landlordId: String(landlord?.landlordId || ""),
           landlordName: landlord?.name || "N/A",
         };
       })
-        .filter((row) => !req.query.propertyId || String(row.propertyId) === String(req.query.propertyId))
-        .filter((row) => !req.query.landlordId || String(row.landlordId) === String(req.query.landlordId));
+      .filter((row) => !filterPropertyId || row.propertyId === filterPropertyId)
+      .filter((row) => !filterLandlordId || row.landlordId === filterLandlordId)
+      .filter((row) => !filterSearch || `${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase().includes(filterSearch));
 
-      if (baseRows.length === 0) return;
+    // ── Step 3: snapshot computation in chunks of 500 ──
+    const REPORT_CHUNK = 500;
+    const allRows = [];
 
-      const chunkTenantIds = baseRows.map((row) => row.tenantId).filter(Boolean);
+    for (let i = 0; i < baseRows.length; i += REPORT_CHUNK) {
+      const chunkRows = baseRows.slice(i, i + REPORT_CHUNK);
+      const chunkTenantIds = chunkRows.map((row) => row.tenantId);
+
       const snapshotMap = await computeTenantInvoiceSnapshotsBatch({
         businessId,
         tenantIds: chunkTenantIds,
@@ -854,8 +871,8 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
         invoiceQuery: {},
       });
 
-      for (const row of baseRows) {
-        const snapshot = snapshotMap.get(String(row.tenantId)) || { invoiceSnapshots: [], receiptAllocations: [] };
+      for (const row of chunkRows) {
+        const snapshot = snapshotMap.get(row.tenantId) || { invoiceSnapshots: [], receiptAllocations: [] };
         const invoices = normalizeArray(snapshot.invoiceSnapshots);
         const receipts = normalizeArray(snapshot.receiptAllocations);
 
@@ -867,9 +884,9 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
         let penaltyBalance = 0;
         let depositBalance = 0;
         let otherBalance = 0;
-        let oldestDueDate = null;
+        let oldestDueDateMs = null;
 
-        invoices.forEach((invoice) => {
+        for (const invoice of invoices) {
           const amount = Number(invoice?.amount || 0);
           const applied = Number(invoice?.applied || 0);
           const remaining = Number(invoice?.outstanding || 0);
@@ -882,30 +899,29 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           else if (category === "LATE_PENALTY_CHARGE") penaltyBalance += remaining;
           else if (category === "DEPOSIT_CHARGE") depositBalance += remaining;
           else otherBalance += remaining;
-          const reportDueDate = resolveInvoiceDueDateForReports(invoice);
-          if (remaining > 0 && reportDueDate && (!oldestDueDate || new Date(reportDueDate) < new Date(oldestDueDate))) {
-            oldestDueDate = reportDueDate;
+          if (remaining > 0) {
+            const reportDueDate = resolveInvoiceDueDateForReports(invoice);
+            if (reportDueDate) {
+              const ms = new Date(reportDueDate).getTime();
+              if (!oldestDueDateMs || ms < oldestDueDateMs) oldestDueDateMs = ms;
+            }
           }
-        });
+        }
 
         let unappliedCredit = 0;
-        let lastPaymentDate = null;
-        receipts.forEach((receipt) => {
+        let lastPaymentDateMs = null;
+        for (const receipt of receipts) {
           unappliedCredit += Number(receipt?.unappliedAmount || 0);
-          if (receipt?.paymentDate && (!lastPaymentDate || new Date(receipt.paymentDate) > new Date(lastPaymentDate))) {
-            lastPaymentDate = receipt.paymentDate;
+          if (receipt?.paymentDate) {
+            const ms = new Date(receipt.paymentDate).getTime();
+            if (!lastPaymentDateMs || ms > lastPaymentDateMs) lastPaymentDateMs = ms;
           }
-        });
+        }
 
         const netBalance = round2(outstanding - unappliedCredit);
         const status = netBalance > 0.009 ? "owing" : netBalance < -0.009 ? "credit" : "settled";
 
-        const search = safeLower(req.query.search || "");
-        if (search) {
-          const haystack = `${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase();
-          if (!haystack.includes(search)) continue;
-        }
-        if (req.query.status && req.query.status !== "all" && status !== req.query.status) continue;
+        if (filterStatus && status !== filterStatus) continue;
 
         allRows.push({
           ...row,
@@ -919,32 +935,11 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           penaltyBalance: round2(penaltyBalance),
           depositBalance: round2(depositBalance),
           otherBalance: round2(otherBalance),
-          oldestDueDate: oldestDueDate || null,
-          lastPaymentDate: lastPaymentDate || null,
+          oldestDueDate: oldestDueDateMs ? new Date(oldestDueDateMs).toISOString() : null,
+          lastPaymentDate: lastPaymentDateMs ? new Date(lastPaymentDateMs).toISOString() : null,
           status,
         });
       }
-    };
-
-    const tenantCursor = Tenant.find(tenantQuery)
-      .populate({
-        path: "unit",
-        select: "unitNumber name property",
-        populate: { path: "property", select: "propertyName name landlords" },
-      })
-      .sort({ name: 1, createdAt: 1 })
-      .lean()
-      .cursor();
-
-    for await (const tenantDoc of tenantCursor) {
-      chunk.push(tenantDoc);
-      if (chunk.length >= REPORT_CHUNK) {
-        await processChunk(chunk);
-        chunk = [];
-      }
-    }
-    if (chunk.length > 0) {
-      await processChunk(chunk);
     }
 
     const rows = allRows;

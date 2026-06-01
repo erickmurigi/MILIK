@@ -6,20 +6,28 @@ import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashBranch from "../models/CarWashBranch.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../../utils/companyModules.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
-import { awardLoyaltyStamp, sendPaymentConfirmationSms } from "./loyaltyController.js";
+import { postCarWashPaymentLedger } from "../services/carwashAccountingService.js";
+import { autoEnrollPlate, awardLoyaltyStamp, sendPaymentConfirmationSms } from "./loyaltyController.js";
 
 const normalizeText = (v = "") => String(v || "").trim();
 const normalizeUpper = (v = "") => normalizeText(v).toUpperCase();
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
-// Strip all whitespace and uppercase — handles "kca 123a", "KCA123A", "KCA 123A" etc.
-const normalizePlate = (v = "") => normalizeUpper(v).replace(/\s+/g, "");
+// Strip everything except letters and digits, then uppercase.
+// Handles: "kca123a", "KCA 123A", "kca-123a", "KCA.123A", "k c a 1 2 3 a", etc.
+const normalizePlate = (v = "") =>
+  normalizeUpper(v).replace(/[^A-Z0-9]/g, "");
 
-// Build a regex that matches the plate whether stored with or without spaces
-// e.g. normalizePlate("KCA 123A") → "KCA123A" → /^K\s*C\s*A\s*1\s*2\s*3\s*A$/i
+// Build a regex that matches the normalized plate whether the DB stores it with or
+// without separators (spaces, hyphens, dots) and regardless of case.
+// e.g. normalizePlate("kca-123a") → "KCA123A"
+//      buildPlateRegex("KCA123A") → /^K[^A-Z0-9]*C[^A-Z0-9]*A[^A-Z0-9]*1[^A-Z0-9]*2[^A-Z0-9]*3[^A-Z0-9]*A$/i
 const buildPlateRegex = (plate = "") =>
   new RegExp(
-    `^${plate.split("").map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s*")}$`,
+    `^${plate
+      .split("")
+      .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("[^A-Z0-9]*")}$`,
     "i"
   );
 
@@ -107,13 +115,49 @@ export const validateCarWashCallback = async (req, res) => {
   try {
     const shortCode = normalizeText(req.params.shortCode || req.body?.BusinessShortCode || "");
     const resolved = await resolveCarWashCompanyAndConfig(shortCode);
-    const responseType = normalizeText(resolved?.config?.responseType || "Completed");
-    const accepted = responseType !== "Cancelled";
-    return res.status(200).json({
-      ResultCode: accepted ? 0 : 1,
-      ResultDesc: accepted ? "Accepted" : "Cancelled by company configuration",
-    });
+
+    if (!resolved) {
+      return res.status(200).json({ ResultCode: 1, ResultDesc: "Rejected – service not found" });
+    }
+
+    // If the company has opted out of validation (responseType = "Completed"),
+    // accept blindly — they don't want Safaricom to wait on a DB round-trip.
+    const responseType = normalizeText(resolved.config?.responseType || "Completed");
+    if (responseType === "Completed") {
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+    }
+
+    // Validate: check the BillRefNumber (plate) maps to an open unpaid job.
+    const billRef = normalizeText(
+      req.body?.BillRefNumber || req.body?.BillRefNo || req.body?.AccountReference || ""
+    );
+    const plate = normalizePlate(billRef);
+
+    if (!plate) {
+      return res.status(200).json({
+        ResultCode: 1,
+        ResultDesc: "Enter your plate number as account reference (e.g. KCA123A or kca123a). Spaces and hyphens are ignored.",
+      });
+    }
+
+    const openJob = await CarWashJob.findOne({
+      business: resolved.company._id,
+      plateNumber: buildPlateRegex(plate),
+      status: { $nin: ["cancelled", "paid"] },
+      paymentStatus: { $in: ["unpaid", "partial"] },
+    }).lean();
+
+    if (!openJob) {
+      return res.status(200).json({
+        ResultCode: 1,
+        ResultDesc: `No open job found for plate ${plate}. Confirm your plate with the attendant, then try again.`,
+      });
+    }
+
+    return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
   } catch {
+    // On any error always accept — Safaricom requires a response and we can't
+    // block a payment due to a server fault. Confirmation handler will handle edge cases.
     return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
   }
 };
@@ -174,14 +218,21 @@ export const confirmCarWashCallback = async (req, res) => {
       return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – job already fully paid" });
     }
 
-    await CarWashPayment.create({
+    const paidAmount = Math.min(amount, outstanding);
+    // Safaricom sends MSISDN as 2547XXXXXXXX — normalise to 07XXXXXXXX
+    const normalizedMsisdn = msisdn
+      ? msisdn.replace(/\D/g, "").replace(/^254/, "0") || null
+      : null;
+
+    const payment = await CarWashPayment.create({
       business: businessId,
       branch: branchId,
       job: job._id,
-      amount: Math.min(amount, outstanding),
+      amount: paidAmount,
       method: "mpesa",
       cashbookAccount: cashbook._id,
-      reference: transactionCode || msisdn,
+      reference: transactionCode || "",
+      receivedFromPhone: normalizedMsisdn,
       paymentDate: parseMpesaDate(transTimeRaw),
     });
 
@@ -189,13 +240,26 @@ export const confirmCarWashCallback = async (req, res) => {
       await CarWashJob.updateOne({ _id: job._id, business: businessId }, { branch: branchId });
     }
 
+    // Enroll the plate with the M-Pesa number BEFORE awarding the stamp.
+    // - New plate → creates customer with this phone + creates loyalty card
+    // - Returning plate with no phone → updates their customer record with this phone
+    // - Returning plate with a different phone → leaves their registered number intact
+    await autoEnrollPlate({
+      business: businessId,
+      plate: job.plateNumber,
+      customerName: job.customerName,
+      phone: normalizedMsisdn,
+    }).catch((err) => console.error('[CW M-Pesa] autoEnroll failed:', err?.message));
+
     const updatedJob = await refreshJobPaymentStatus(businessId, job._id);
+    await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null });
     if (updatedJob) {
       await accrueCommissionForJob({ req: null, job: updatedJob });
       if (updatedJob.paymentStatus === "paid") {
         await markJobCommissionsPayable({ business: businessId, jobId: updatedJob._id });
-        await awardLoyaltyStamp({ business: businessId, job: updatedJob });
-        await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: Math.min(amount, outstanding) });
+        // Both SMS go to the M-Pesa payer's number — they paid, they get notified.
+        await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: normalizedMsisdn });
+        await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, overridePhone: normalizedMsisdn });
       }
     }
 

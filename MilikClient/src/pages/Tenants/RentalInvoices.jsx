@@ -3,6 +3,13 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
+  selectCurrentUser,
+  selectCurrentCompany,
+  selectAllTenants,
+  selectAllProperties,
+  selectAllUnits,
+} from "../../redux/selectors";
+import {
   FaArrowLeft,
   FaFileInvoice,
   FaDownload,
@@ -26,7 +33,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits } from "../../redux/unitRedux";
-import { getChartOfAccounts } from "../../redux/apiCalls";
+import { getChartOfAccounts, downloadInvoicePdf } from "../../redux/apiCalls";
 import {
   createTenantInvoice,
   createTenantInvoicesBatch,
@@ -1011,15 +1018,15 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
     taxMode: "company_default",
   });
 
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null );
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const canCreateInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "create", "propertyManagement");
   const canUpdateInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "update", "propertyManagement");
   const canDeleteInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "delete", "propertyManagement");
   const canExportInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "export", "propertyManagement");
-  const rawTenantsFromStore = useSelector((state) => state.tenant?.tenants);
-  const propertiesFromStore = useSelector((state) => state.property?.properties || []);
-  const unitsFromStore = useSelector((state) => state.unit?.units || []);
+  const rawTenantsFromStore = useSelector(selectAllTenants);
+  const propertiesFromStore = useSelector(selectAllProperties);
+  const unitsFromStore = useSelector(selectAllUnits);
   const tenantsFromStore = useMemo(() => ensureArray(rawTenantsFromStore), [rawTenantsFromStore]);
   const [companyTaxConfig, setCompanyTaxConfig] = useState(null);
   const [companyBillingPeriods, setCompanyBillingPeriods] = useState([]);
@@ -2309,38 +2316,25 @@ const visibleInvoiceKeys = useMemo(
     setInvoiceDetailOpen(true);
   }, []);
 
-  const handlePrintInvoice = (invoice) => {
-    if (!canExportInvoice) {
-      toast.warning("You do not have permission to print invoices");
-      return;
+  const handlePrintInvoice = async (invoice) => {
+    if (!canExportInvoice) { toast.warning("You do not have permission to print invoices"); return; }
+    if (!invoice?._id) return;
+    try {
+      await downloadInvoicePdf(invoice._id, { preview: true, filename: `Invoice-${invoice.id || invoice._id}.pdf` });
+    } catch {
+      toast.error("Failed to open invoice PDF. Try downloading instead.");
     }
-    if (!invoice) return;
-    const printWindow = openHtmlDocument(`Invoice ${invoice.id}`, buildInvoiceHtml(invoice));
-    if (!printWindow) return;
-
-    setTimeout(() => {
-      printWindow.focus();
-      printWindow.print();
-    }, 500);
   };
 
-  const handleDownloadInvoice = (invoice) => {
-    if (!canExportInvoice) {
-      toast.warning("You do not have permission to download invoices");
-      return;
+  const handleDownloadInvoice = async (invoice) => {
+    if (!canExportInvoice) { toast.warning("You do not have permission to download invoices"); return; }
+    if (!invoice?._id) return;
+    try {
+      await downloadInvoicePdf(invoice._id, { preview: false, filename: `Invoice-${invoice.id || invoice._id}.pdf` });
+      toast.success(`Downloaded Invoice ${invoice.id || invoice._id}`);
+    } catch {
+      toast.error("Failed to download invoice PDF.");
     }
-    if (!invoice) return;
-    const html = buildInvoiceHtml(invoice);
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${invoice.id || "invoice"}_${(invoice.period || "period").replace(/\s+/g, "_")}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-    toast.success(`Downloaded ${invoice.id}`);
   };
 
   const handlePrintList = async () => {

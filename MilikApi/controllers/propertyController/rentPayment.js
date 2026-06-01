@@ -15,7 +15,10 @@ import {
   recomputeTenantFinancialState,
 } from "./tenantInvoices.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
-import { resolveLandlordRemittancePayableAccount } from "../../services/propertyAccountingService.js";
+import {
+  resolveLandlordRemittancePayableAccount,
+  resolvePropertyAccountingContext,
+} from "../../services/propertyAccountingService.js";
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { logAuditEvent } from "../../utils/auditLogger.js";
@@ -1226,6 +1229,21 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
     throw new Error("Landlord Remittance Payable account not found for direct-to-landlord receipt posting.");
   }
 
+  // Resolve property-specific receivable account for In-GL properties
+  const propCtx = await resolvePropertyAccountingContext({
+    propertyId,
+    businessId: payment.business,
+  }).catch(() => null);
+
+  if (propCtx?.isOffGL) {
+    payment.postingStatus = "not_applicable";
+    payment.postingError = null;
+    await payment.save();
+    return { journalGroupId: null, entries: [] };
+  }
+
+  const propertyReceivableId = propCtx?.receivablesAccountId || null;
+
   const receiver = "landlord";
   const { start, end } = getStatementPeriodFromPayment(payment);
   const txDate = normalizeDate(payment.paymentDate);
@@ -1260,9 +1278,14 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
 
   const _directGroupAccountMap = new Map(
     await Promise.all(
-      [...new Set(postingGroups.map((g) => g.key))].map(async (key) => [
-        key, await resolveCreditAccountForAllocationGroup(payment.business, key),
-      ])
+      [...new Set(postingGroups.map((g) => g.key))].map(async (key) => {
+        if (key === "unapplied" || key === "deposit_landlord") {
+          return [key, await resolveCreditAccountForAllocationGroup(payment.business, key)];
+        }
+        return [key, propertyReceivableId
+          ? { _id: propertyReceivableId }
+          : await resolveCreditAccountForAllocationGroup(payment.business, key)];
+      })
     )
   );
 
@@ -1379,6 +1402,22 @@ const postReceiptJournal = async (payment, actorId) => {
   const { propertyId, landlordId } = await resolvePropertyAndLandlord(payment);
   const balancingAccount = await resolveCashbookAccount(payment.business, payment);
 
+  // Resolve property-specific receivable account for In-GL properties
+  const propCtx = await resolvePropertyAccountingContext({
+    propertyId,
+    businessId: payment.business,
+  }).catch(() => null);
+
+  // Off-GL properties never post receipts to the main GL
+  if (propCtx?.isOffGL) {
+    payment.postingStatus = "not_applicable";
+    payment.postingError = null;
+    await payment.save();
+    return { journalGroupId: null, entries: [] };
+  }
+
+  const propertyReceivableId = propCtx?.receivablesAccountId || null;
+
   const receiver = payment?.paidDirectToLandlord ? "landlord" : "manager";
   const { start, end } = getStatementPeriodFromPayment(payment);
   const txDate = normalizeDate(payment.paymentDate);
@@ -1412,9 +1451,16 @@ const postReceiptJournal = async (payment, actorId) => {
 
   const _normalGroupAccountMap = new Map(
     await Promise.all(
-      [...new Set(postingGroups.map((g) => g.key))].map(async (key) => [
-        key, await resolveCreditAccountForAllocationGroup(payment.business, key),
-      ])
+      [...new Set(postingGroups.map((g) => g.key))].map(async (key) => {
+        // Special accounts are always resolved at business level
+        if (key === "unapplied" || key === "deposit_landlord") {
+          return [key, await resolveCreditAccountForAllocationGroup(payment.business, key)];
+        }
+        // All other groups clear tenant receivable — use property-specific account if available
+        return [key, propertyReceivableId
+          ? { _id: propertyReceivableId }
+          : await resolveCreditAccountForAllocationGroup(payment.business, key)];
+      })
     )
   );
 

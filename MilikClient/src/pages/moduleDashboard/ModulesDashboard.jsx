@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import {
   FaChartLine,
   FaWarehouse,
@@ -128,8 +129,8 @@ const moduleRegistry = [
 
 const ModulesDashboard = () => {
   const navigate = useNavigate();
-  const currentCompany = useSelector((state) => state.company?.currentCompany || null);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const isFetchingCompany = useSelector((state) => state.company?.isFetching || false);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");

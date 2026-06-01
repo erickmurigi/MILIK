@@ -50,7 +50,7 @@ const CompanyAvatar = ({ logo, name, darkMode, size = "h-11 w-11" }) => {
   );
 };
 
-const Navbar = ({ setSidebarOpen, darkMode, setDarkMode }) => {
+const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { currentUser } = useSelector((state) => state.auth);
@@ -179,6 +179,6 @@ const Navbar = ({ setSidebarOpen, darkMode, setDarkMode }) => {
       </div>
     </nav>
   );
-};
+});
 
 export default Navbar;

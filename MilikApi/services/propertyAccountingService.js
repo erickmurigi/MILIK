@@ -38,6 +38,32 @@ const getPrimaryLandlordId = (propertyDoc) => {
   return primary?.landlordId || fallback?.landlordId || null;
 };
 
+// Cached system account lookup (code → ObjectId) per business, 5-min TTL
+const sysAccountCache = new Map();
+const SYS_CACHE_TTL = 5 * 60 * 1000;
+
+const getCachedSystemAccount = async (businessId, code) => {
+  const key = `${businessId}:${code}`;
+  const hit = sysAccountCache.get(key);
+  if (hit && Date.now() - hit.at < SYS_CACHE_TTL) return hit.id;
+  const acct = await ChartOfAccount.findOne({
+    business: businessId,
+    code,
+    isPosting: true,
+  }).select("_id").lean();
+  const id = acct?._id || null;
+  if (id) sysAccountCache.set(key, { id, at: Date.now() });
+  return id;
+};
+
+// Resolves a typed property account, falling back to the system (parent) account.
+// Order: property sub-account → system account by code.
+const resolveTypedAccount = async (propertyAccounts, key, businessId, fallbackCode) => {
+  const stored = propertyAccounts?.[key];
+  if (stored && isValidObjectId(stored)) return stored;
+  return getCachedSystemAccount(businessId, fallbackCode);
+};
+
 export const resolvePropertyAccountingContext = async ({
   propertyId,
   landlordId = null,
@@ -51,7 +77,7 @@ export const resolvePropertyAccountingContext = async ({
     _id: propertyId,
     ...(businessId && isValidObjectId(businessId) ? { business: businessId } : {}),
   })
-    .select("_id business propertyCode propertyName landlords controlAccount")
+    .select("_id business propertyCode propertyName landlords controlAccount accountLedgerType propertyAccounts")
     .lean();
 
   if (!property) {
@@ -92,88 +118,171 @@ export const resolvePropertyAccountingContext = async ({
     throw new Error("Linked landlord was not found in the supplied business.");
   }
 
+  const isOffGL = String(property.accountLedgerType || "").toLowerCase().includes("off");
+  const pa = property.propertyAccounts || {};
+
+  // Resolve all typed accounts in parallel — property sub-accounts first, system fallback second.
+  const [
+    receivablesAccountId,
+    depositsPayableAccountId,
+    landlordRemittanceAccountId,
+    rentIncomeAccountId,
+    serviceChargeAccountId,
+    utilityRechargeAccountId,
+    penaltyIncomeAccountId,
+  ] = await Promise.all([
+    resolveTypedAccount(pa, "receivables",         resolvedBusinessId, "1200"),
+    resolveTypedAccount(pa, "depositsPayable",     resolvedBusinessId, "2100"),
+    resolveTypedAccount(pa, "landlordRemittance",  resolvedBusinessId, "2110"),
+    resolveTypedAccount(pa, "rentIncome",          resolvedBusinessId, "4100"),
+    resolveTypedAccount(pa, "serviceChargeIncome", resolvedBusinessId, "4101"),
+    resolveTypedAccount(pa, "utilityRecharge",     resolvedBusinessId, "4102"),
+    resolveTypedAccount(pa, "penaltyIncome",       resolvedBusinessId, "4103"),
+  ]);
+
   return {
     property,
     propertyId: property._id,
     businessId: resolvedBusinessId,
     landlordId: resolvedLandlordId,
     controlAccountId: property.controlAccount || null,
+    accountLedgerType: property.accountLedgerType || "in-gl",
+    isOffGL,
+    // Typed account IDs — use these in posting functions instead of findSystemAccountByCode
+    receivablesAccountId,
+    depositsPayableAccountId,
+    landlordRemittanceAccountId,
+    rentIncomeAccountId,
+    serviceChargeAccountId,
+    utilityRechargeAccountId,
+    penaltyIncomeAccountId,
   };
 };
 
-export const ensurePropertyControlAccount = async ({
+// Account types to create per In-GL property.
+// Each entry: field on propertyAccounts, parent system code, sub-account suffix,
+// account type, group, and name template.
+const PROPERTY_ACCOUNT_DEFS = [
+  { key: "receivables",         parentCode: "1200", type: "asset",     group: "assets",       subGroup: "Property Receivables",  nameSuffix: "Tenant Receivables"       },
+  { key: "depositsPayable",     parentCode: "2100", type: "liability", group: "liabilities",  subGroup: "Property Liabilities",  nameSuffix: "Tenant Deposits Payable"  },
+  { key: "landlordRemittance",  parentCode: "2110", type: "liability", group: "liabilities",  subGroup: "Property Liabilities",  nameSuffix: "Landlord Remittance"      },
+  { key: "rentIncome",          parentCode: "4100", type: "income",    group: "income",       subGroup: "Property Income",       nameSuffix: "Rent Income"              },
+  { key: "serviceChargeIncome", parentCode: "4101", type: "income",    group: "income",       subGroup: "Property Income",       nameSuffix: "Service Charge Income"    },
+  { key: "utilityRecharge",     parentCode: "4102", type: "income",    group: "income",       subGroup: "Property Income",       nameSuffix: "Utility Recharge Income"  },
+  { key: "penaltyIncome",       parentCode: "4103", type: "income",    group: "income",       subGroup: "Property Income",       nameSuffix: "Penalty Income"           },
+];
+
+/**
+ * Creates (or retrieves) typed GL sub-accounts for an In-GL property.
+ * For Off-GL properties, returns null without touching the GL.
+ * Idempotent — safe to call on every property save.
+ */
+export const ensurePropertyChartOfAccounts = async ({
   businessId,
   propertyId,
   propertyCode,
   propertyName,
+  accountLedgerType = "in-gl",
 } = {}) => {
-  if (!businessId || !isValidObjectId(businessId)) {
-    throw new Error("Valid businessId is required to ensure a property control account.");
-  }
+  if (!businessId || !isValidObjectId(businessId)) throw new Error("Valid businessId required.");
+  if (!propertyId  || !isValidObjectId(propertyId))  throw new Error("Valid propertyId required.");
 
-  if (!propertyId || !isValidObjectId(propertyId)) {
-    throw new Error("Valid propertyId is required to ensure a property control account.");
-  }
+  const property = await Property.findById(propertyId)
+    .select("_id business propertyCode propertyName controlAccount propertyAccounts accountLedgerType");
+  if (!property) throw new Error("Property not found while creating GL accounts.");
 
-  const property = await Property.findById(propertyId).select(
-    "_id business propertyCode propertyName controlAccount"
-  );
-
-  if (!property) {
-    throw new Error("Property not found while creating property control account.");
-  }
+  // Always respect the stored ledger type on the property document
+  const effectiveLedgerType = property.accountLedgerType || accountLedgerType || "in-gl";
+  if (String(effectiveLedgerType).toLowerCase().includes("off")) return null;
 
   await ensureSystemChartOfAccounts(businessId);
 
-  if (property.controlAccount && isValidObjectId(property.controlAccount)) {
-    const existingLinked = await ChartOfAccount.findOne({
-      _id: property.controlAccount,
-      business: businessId,
-    });
+  const code = String(propertyCode || property.propertyCode || "").trim().toUpperCase();
+  const name = String(propertyName || property.propertyName || "").trim();
+  if (!code || !name) throw new Error("Property code and name are required to create GL accounts.");
 
-    if (existingLinked) {
-      return existingLinked;
+  const updatedAccounts = property.propertyAccounts?.toObject?.() || {};
+  const accountsToAggregate = [];
+
+  for (const def of PROPERTY_ACCOUNT_DEFS) {
+    // Skip if already exists and valid
+    if (updatedAccounts[def.key] && isValidObjectId(updatedAccounts[def.key])) {
+      const exists = await ChartOfAccount.findOne({ _id: updatedAccounts[def.key], business: businessId }).lean();
+      if (exists) continue;
     }
+
+    // Find parent system account
+    const parent = await ChartOfAccount.findOne({ business: businessId, code: def.parentCode }).lean();
+
+    // Create property sub-account (upsert — safe to re-run)
+    const subCode = `${def.parentCode}-${code}`;
+    const subAccount = await ChartOfAccount.findOneAndUpdate(
+      { business: businessId, code: subCode },
+      {
+        $setOnInsert: {
+          business:      businessId,
+          code:          subCode,
+          name:          `${def.nameSuffix} – ${name}`,
+          type:          def.type,
+          group:         def.group,
+          subGroup:      def.subGroup,
+          parentAccount: parent?._id || null,
+          level:         parent ? 1 : 0,
+          isHeader:      false,
+          isPosting:     true,
+          isControl:     true,
+          isSystem:      true,
+          property:      property._id,
+          balance:       0,
+          moduleScopes:  ["propertyManagement"],
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    updatedAccounts[def.key] = subAccount._id;
+    accountsToAggregate.push(String(subAccount._id));
   }
 
-  const effectivePropertyCode = String(propertyCode || property.propertyCode || "").trim().toUpperCase();
-  const effectivePropertyName = String(propertyName || property.propertyName || "").trim();
+  // Persist account references on the property
+  property.propertyAccounts = updatedAccounts;
 
-  if (!effectivePropertyCode || !effectivePropertyName) {
-    throw new Error("Property code and property name are required to create a property control account.");
+  // Also maintain the legacy single controlAccount (backward compat for anything still using it)
+  if (!property.controlAccount) {
+    const legacyCode = `PCTRL-${code}`;
+    const legacy = await ChartOfAccount.findOneAndUpdate(
+      { business: businessId, code: legacyCode },
+      {
+        $setOnInsert: {
+          business: businessId, code: legacyCode,
+          name: `${name} – Property Control`, type: "asset",
+          group: "assets", subGroup: "Property Receivables",
+          isHeader: false, isPosting: true, isSystem: true,
+          isControl: true, property: property._id, balance: 0,
+          moduleScopes: ["propertyManagement"],
+        },
+      },
+      { upsert: true, new: true }
+    );
+    property.controlAccount = legacy._id;
   }
 
-  const controlCode = `PCTRL-${effectivePropertyCode}`;
-  const exactExisting = await ChartOfAccount.findOne({
-    business: businessId,
-    code: controlCode,
-  });
+  await property.save();
+  return property.propertyAccounts;
+};
 
-  let controlAccount = exactExisting;
-
-  if (!controlAccount) {
-    controlAccount = await ChartOfAccount.create({
-      business: businessId,
-      code: controlCode,
-      name: `${effectivePropertyName} Property Control`,
-      type: "asset",
-      group: "assets",
-      subGroup: "Receivables",
-      parentAccount: null,
-      level: 0,
-      isHeader: false,
-      isPosting: true,
-      isSystem: true,
-      balance: 0,
-    });
-  }
-
-  if (String(property.controlAccount || "") !== String(controlAccount._id)) {
-    property.controlAccount = controlAccount._id;
-    await property.save();
-  }
-
-  return controlAccount;
+/**
+ * Backward-compatible wrapper — existing callers of ensurePropertyControlAccount
+ * now get the full set of typed accounts created, plus the legacy control account.
+ */
+export const ensurePropertyControlAccount = async ({
+  businessId, propertyId, propertyCode, propertyName,
+} = {}) => {
+  await ensurePropertyChartOfAccounts({ businessId, propertyId, propertyCode, propertyName });
+  // Return the legacy PCTRL account for callers that still expect it
+  const property = await Property.findById(propertyId).select("controlAccount").lean();
+  if (!property?.controlAccount) return null;
+  return ChartOfAccount.findById(property.controlAccount);
 };
 
 export const resolveTenantDepositPayableAccount = async (businessId) => {
@@ -241,6 +350,7 @@ export const findPropertyControlAccount = async ({ businessId, propertyCode } = 
 
 export default {
   resolvePropertyAccountingContext,
+  ensurePropertyChartOfAccounts,
   ensurePropertyControlAccount,
   resolveTenantDepositPayableAccount,
   resolveLandlordRemittancePayableAccount,

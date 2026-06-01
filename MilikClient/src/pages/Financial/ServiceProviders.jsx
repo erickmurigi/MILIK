@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FaEdit, FaPlus, FaSave, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
   createServiceProvider,
@@ -43,8 +44,8 @@ const CATEGORY_OPTIONS = [
 
 const ServiceProviders = () => {
   const confirm = useConfirm();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -56,6 +57,8 @@ const ServiceProviders = () => {
   const [form, setForm] = useState(blankForm);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [serverPages, setServerPages] = useState(1);
 
   const canCreate = hasCompanyPermission(currentUser, currentCompany, "expenses", "create", "accounts");
   const canUpdate = hasCompanyPermission(currentUser, currentCompany, "expenses", "update", "accounts");
@@ -90,12 +93,16 @@ const ServiceProviders = () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
-      const data = await getServiceProviders({
+      const { data, total, pages } = await getServiceProviders({
         business: currentCompany._id,
         company: currentCompany._id,
         search,
+        page: currentPage,
+        limit: pageSize,
       });
       setRows(Array.isArray(data) ? data : []);
+      setServerTotal(total ?? 0);
+      setServerPages(pages ?? 1);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load service providers");
     } finally {
@@ -105,7 +112,7 @@ const ServiceProviders = () => {
 
   useEffect(() => {
     loadRows();
-  }, [currentCompany?._id, search]);
+  }, [currentCompany?._id, search, currentPage, pageSize]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -130,19 +137,13 @@ const ServiceProviders = () => {
   }, [rows, search, nameFilter, categoryFilter]);
 
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, serverPages);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const currentPageRows = filtered.slice(startIndex, endIndex);
+  const currentPageRows = rows; // server already paginates
 
   useEffect(() => {
     setCurrentPage(1);
   }, [search, nameFilter, categoryFilter, pageSize]);
-
-  useEffect(() => {
-    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
-  }, [currentPage, safeCurrentPage]);
 
   const openCreate = () => {
     if (!canCreate) { toast.warning("You don't have permission to create service providers"); return; }
@@ -265,7 +266,7 @@ const ServiceProviders = () => {
             </table>
           </div>
           <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <div className="font-semibold">Showing <span className="font-bold text-slate-900">{filtered.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filtered.length)}</span> of <span className="font-bold text-slate-900">{filtered.length}</span> provider(s)</div>
+            <div className="font-semibold">Showing <span className="font-bold text-slate-900">{serverTotal === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> provider(s)</div>
             <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
           </div>
         </div>

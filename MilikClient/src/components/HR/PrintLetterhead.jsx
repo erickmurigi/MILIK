@@ -1,5 +1,6 @@
 import React from 'react';
 import { useSelector } from 'react-redux';
+import { selectCurrentCompany } from '../../redux/selectors';
 import { FaPhone, FaEnvelope, FaIdCard, FaMapMarkerAlt } from 'react-icons/fa';
 
 /**
@@ -9,7 +10,7 @@ import { FaPhone, FaEnvelope, FaIdCard, FaMapMarkerAlt } from 'react-icons/fa';
  * variant="print"    — screen-hidden, print-only (reports, registers)
  */
 export default function PrintLetterhead({ variant = 'print', docLabel, docTitle, docMeta, printedDate }) {
-  const company = useSelector((state) => state.company?.currentCompany);
+  const company = useSelector(selectCurrentCompany);
   if (!company) return null;
 
   const { companyName, roadStreet, town, postalAddress, phoneNo, email, taxPIN, slogan, logo } = company;

@@ -4,6 +4,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { FaArrowLeft, FaRedoAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getLandlordPayments } from "../../redux/apiCalls";
+import { selectCurrentCompany } from "../../redux/selectors";
 
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : "-");
 const money = (value) => `Ksh ${Number(value || 0).toLocaleString()}`;
@@ -12,7 +13,7 @@ const LandlordPaymentHistory = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const landlordId = searchParams.get("landlordId");
-  const { currentCompany } = useSelector((state) => state.company || {});
+  const currentCompany = useSelector(selectCurrentCompany);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(false);
 

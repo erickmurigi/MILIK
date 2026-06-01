@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import AppSelect from "../../components/common/AppSelect";
 import { useLocation } from "react-router-dom";
 import useDebounce from "../../hooks/useDebounce";
 import {
@@ -17,13 +18,13 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
 import {
   createJournalEntry,
   deleteJournalEntry,
   getChartOfAccounts,
   getJournalEntries,
-  getLandlords,
   postJournalEntry,
   reverseJournalEntry,
   updateJournalEntry,
@@ -35,33 +36,33 @@ import { useConfirm } from "../../context/ConfirmContext";
 const JOURNAL_TYPES = [
   {
     value: "general_manual_journal",
-    label: "General Manual Journal",
-    description: "Use for controlled same-company adjustments. Leave it off the landlord statement unless one side is Landlord Remittance Payable.",
+    label: "General Journal",
+    description: "Standard double-entry journal. Select any two posting accounts from the Chart of Accounts. Property context is derived automatically from property-specific accounts (e.g. 2110-PARK).",
   },
   {
     value: "internal_account_transfer",
-    label: "Internal Ledger Transfer (Same Company)",
-    description: "Moves value between two ledger accounts inside the selected company only. Cross-company transfers are intentionally blocked.",
+    label: "Internal Ledger Transfer",
+    description: "Moves value between two ledger accounts within the same company. Never appears on any owner statement.",
   },
   {
     value: "landlord_credit_adjustment",
-    label: "Landlord Credit Adjustment",
-    description: "Credits Landlord Remittance Payable to raise a landlord-facing addition with a balanced journal.",
+    label: "Owner / Creditor Credit",
+    description: "Credits the Owner Remittance Payable account to raise an owner-facing addition. Select the property-specific remittance account (e.g. 2110-PARK) as the credit leg.",
   },
   {
     value: "landlord_debit_adjustment",
-    label: "Landlord Debit Adjustment",
-    description: "Debits Landlord Remittance Payable to post a landlord-facing deduction with a balanced journal.",
+    label: "Owner / Creditor Debit",
+    description: "Debits the Owner Remittance Payable account to post an owner-facing deduction. Select the property-specific remittance account (e.g. 2110-PARK) as the debit leg.",
   },
   {
     value: "property_expense_accrual",
-    label: "Property Expense / Landlord Deduction",
-    description: "Use only when you need a manual landlord-facing property deduction. Debit Landlord Remittance Payable and credit the balancing account.",
+    label: "Expense Accrual / Owner Deduction",
+    description: "Accrues a property expense by debiting Owner Remittance Payable and crediting the accrual or offset account.",
   },
   {
     value: "company_journal",
     label: "Company Journal (Internal)",
-    description: "Internal company-level journal with no property or owner context. Use for head-office cost allocation, inter-department reclassifications, or company-wide adjustments. Never appears on any landlord statement.",
+    description: "Internal company-level journal with no property context. Use for head-office allocations, reclassifications, or company-wide adjustments. Never appears on any owner statement.",
   },
   {
     value: "payroll_posting",
@@ -95,8 +96,6 @@ const DEFAULT_PAGE_SIZE = 50;
 const buildInitialForm = () => ({
   date: new Date().toISOString().split("T")[0],
   journalType: "general_manual_journal",
-  property: "",
-  landlord: "",
   debitAccount: "",
   creditAccount: "",
   amount: "",
@@ -110,10 +109,9 @@ const JournalEntries = () => {
   const dispatch = useDispatch();
   const location = useLocation();
   const isAccountsWorkspace = location.pathname.startsWith("/accounts/");
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const properties = useSelector((state) => state.property?.properties || []);
-  const landlords = useSelector((state) => state.landlord?.landlords || []);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const properties = useSelector(selectAllProperties);
   const canCreateJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "create", "accounts");
   const canUpdateJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "update", "accounts");
   const canPostJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "process", "accounts");
@@ -163,12 +161,13 @@ const JournalEntries = () => {
   const [serverPages, setServerPages] = useState(1);
 
   useEffect(() => {
-    if (!currentCompany?._id) return;
-    dispatch(getProperties({ business: currentCompany._id }));
-    if (!isLandlordWorkspace) {
-      dispatch(getLandlords({ company: currentCompany._id }));
-    }
-  }, [dispatch, currentCompany?._id, isLandlordWorkspace]);
+    if (currentCompany?._id) dispatch(getProperties({ business: currentCompany._id }));
+  }, [dispatch, currentCompany?._id]);
+
+  const propertyOptions = useMemo(
+    () => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name || "Property" })),
+    [properties]
+  );
 
   useEffect(() => {
     const loadAccounts = async () => {
@@ -242,47 +241,18 @@ const JournalEntries = () => {
     setCurrentPage(1);
   }, [debouncedSearch, filters.status, filters.journalType, filters.propertyId, pageSize]);
 
-  const propertyOptions = useMemo(
-    () =>
-      properties.map((p) => ({
-        value: p._id,
-        label: p.propertyName || p.name || "Property",
-      })),
-    [properties]
-  );
-
-
-  const selectedPropertyRecord = useMemo(
-    () => properties.find((property) => String(property?._id || "") === String(form.property || "")) || null,
-    [form.property, properties]
-  );
-
-  const derivedLandlordIdFromProperty = useMemo(() => {
-    if (!selectedPropertyRecord) return "";
-    return (
-      selectedPropertyRecord?.landlords?.find((item) => item?.isPrimary && (item?.landlordId?._id || item?.landlordId || item?._id))?.landlordId?._id ||
-      selectedPropertyRecord?.landlords?.find((item) => item?.isPrimary && (item?.landlordId?._id || item?.landlordId || item?._id))?.landlordId ||
-      selectedPropertyRecord?.landlords?.find((item) => item?.landlordId?._id || item?.landlordId || item?._id)?.landlordId?._id ||
-      selectedPropertyRecord?.landlords?.find((item) => item?.landlordId?._id || item?.landlordId || item?._id)?.landlordId ||
-      selectedPropertyRecord?.landlords?.find((item) => item?._id)?._id ||
-      ""
-    );
-  }, [selectedPropertyRecord]);
-
-  const landlordOptions = useMemo(
-    () =>
-      landlords.map((l) => ({
-        value: l._id,
-        label: l.landlordName || l.name || "Landlord",
-      })),
-    [landlords]
-  );
-
   const accountOptions = useMemo(
     () =>
       accounts.map((a) => ({
         value: a._id,
-        label: `${a.code} - ${a.name}`,
+        label: `${a.code} – ${a.name}`,
+        description: [
+          a.type ? a.type.charAt(0).toUpperCase() + a.type.slice(1) : "",
+          a.subGroup || a.group || "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        isControl: Boolean(a.isControl),
       })),
     [accounts]
   );
@@ -297,38 +267,15 @@ const JournalEntries = () => {
     [accounts, form.creditAccount]
   );
 
-  const getJournalTypePresentation = (journalType) => {
-    const match = JOURNAL_TYPES.find((type) => type.value === journalType) || JOURNAL_TYPES[0];
-    if (!isLandlordWorkspace) return match;
-
-    if (journalType === "landlord_credit_adjustment") {
-      return {
-        ...match,
-        label: "Owner Credit Adjustment",
-        description: "Raises an owner-facing addition while preserving a balanced manual journal.",
-      };
-    }
-
-    if (journalType === "landlord_debit_adjustment") {
-      return {
-        ...match,
-        label: "Owner Debit Adjustment",
-        description: "Posts an owner-facing deduction while preserving a balanced manual journal.",
-      };
-    }
-
-    return match;
-  };
+  const getJournalTypePresentation = (journalType) =>
+    JOURNAL_TYPES.find((type) => type.value === journalType) || JOURNAL_TYPES[0];
 
   const activeJournalTypePresentation = useMemo(
     () => getJournalTypePresentation(form.journalType),
-    [form.journalType, isLandlordWorkspace]
+    [form.journalType]
   );
 
   const isCompanyJournal = form.journalType === "company_journal";
-  const isLandlordJournal =
-    form.journalType === "landlord_credit_adjustment" ||
-    form.journalType === "landlord_debit_adjustment";
   const isInternalTransferJournal = form.journalType === "internal_account_transfer";
   const isForcedLandlordStatementJournal =
     !isCompanyJournal &&
@@ -338,43 +285,36 @@ const JournalEntries = () => {
   const debitTouchesLandlordPayable = !isCompanyJournal && isLandlordPayableAccountRecord(selectedDebitAccountRecord);
   const creditTouchesLandlordPayable = !isCompanyJournal && isLandlordPayableAccountRecord(selectedCreditAccountRecord);
   const statementVisibilityLocked = isCompanyJournal || isInternalTransferJournal || isForcedLandlordStatementJournal;
+  const controlAccountWarning = useMemo(() => {
+    const warnings = [];
+    if (selectedDebitAccountRecord?.isControl) warnings.push(`Dr: "${selectedDebitAccountRecord.name}" is a control account managed by a module. Post through the module instead, or select a different account.`);
+    if (selectedCreditAccountRecord?.isControl) warnings.push(`Cr: "${selectedCreditAccountRecord.name}" is a control account managed by a module. Post through the module instead, or select a different account.`);
+    return warnings;
+  }, [selectedDebitAccountRecord, selectedCreditAccountRecord]);
+
   const journalStructureHint = useMemo(() => {
     if (form.journalType === "company_journal") {
-      return "Company journals are internal-only. No property or owner context is attached. These entries never appear on any landlord statement and do not affect Landlord Remittance Payable.";
+      return "Company journals are internal-only. No property or owner context is attached. These entries never appear on any owner statement.";
     }
     if (form.journalType === "landlord_credit_adjustment") {
-      return "Credit Landlord Remittance Payable and debit the balancing account. This creates one clean landlord statement addition.";
+      return "Select the property-specific Owner Remittance Payable (e.g. 2110-PARK) as the credit leg and a balancing account as the debit. This creates one clean owner statement addition.";
     }
     if (form.journalType === "landlord_debit_adjustment") {
-      return "Debit Landlord Remittance Payable and credit the balancing account. This creates one clean landlord statement deduction.";
+      return "Select the property-specific Owner Remittance Payable (e.g. 2110-PARK) as the debit leg and a balancing account as the credit. This creates one clean owner statement deduction.";
     }
     if (form.journalType === "property_expense_accrual") {
-      return "Use this only for a manual landlord-facing property deduction. Debit Landlord Remittance Payable and credit the accrual or offset account.";
+      return "Debit the Owner Remittance Payable account (e.g. 2110-PARK) and credit the accrual or offset account. The property context is derived automatically from the account.";
     }
     if (form.journalType === "internal_account_transfer") {
-      return "Internal transfers stay inside the same company only and must not use Landlord Remittance Payable or appear on the landlord statement.";
+      return "Internal transfers stay inside the same company only and must not use Owner Remittance Payable or appear on any owner statement.";
     }
     if (form.includeInLandlordStatement) {
-      return "Statement-visible general journals must touch Landlord Remittance Payable on exactly one side. Debit = deduction. Credit = addition.";
+      return "Statement-visible general journals must touch Owner Remittance Payable on exactly one side. Debit = deduction. Credit = addition.";
     }
-    return "General manual journals stay internal unless you deliberately expose one payable-side leg to the landlord statement.";
-  }, [
-    form.includeInLandlordStatement,
-    form.journalType,
-  ]);
+    return "The account selection carries all context — select property-specific accounts (e.g. 2110-PARK) to automatically link to a property and owner.";
+  }, [form.includeInLandlordStatement, form.journalType]);
 
   const applyJournalTypeDefaults = (journalType) => {
-    if (journalType === "company_journal") {
-      setForm((prev) => ({
-        ...prev,
-        journalType,
-        property: "",
-        landlord: "",
-        includeInLandlordStatement: false,
-      }));
-      return;
-    }
-
     const landlordStatementJournal =
       journalType === "landlord_credit_adjustment" ||
       journalType === "landlord_debit_adjustment" ||
@@ -384,13 +324,9 @@ const JournalEntries = () => {
       ...prev,
       journalType,
       includeInLandlordStatement:
-        journalType === "internal_account_transfer" ? false : landlordStatementJournal,
-      landlord:
-        journalType === "internal_account_transfer"
-          ? ""
-          : isLandlordWorkspace
-          ? derivedLandlordIdFromProperty || prev.landlord
-          : prev.landlord,
+        journalType === "company_journal" || journalType === "internal_account_transfer"
+          ? false
+          : landlordStatementJournal,
     }));
   };
 
@@ -406,10 +342,7 @@ const JournalEntries = () => {
       return;
     }
     setEditingJournalId("");
-    setForm((prev) => ({
-      ...buildInitialForm(),
-      landlord: isLandlordWorkspace ? derivedLandlordIdFromProperty || "" : "",
-    }));
+    setForm(buildInitialForm());
     setShowCreateModal(true);
   };
 
@@ -427,8 +360,6 @@ const JournalEntries = () => {
     setForm({
       date: journal?.date ? new Date(journal.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
       journalType: journal?.journalType || "general_manual_journal",
-      property: journal?.property?._id || journal?.property || "",
-      landlord: journal?.landlord?._id || journal?.landlord || "",
       debitAccount: journal?.debitAccount?._id || journal?.debitAccount || "",
       creditAccount: journal?.creditAccount?._id || journal?.creditAccount || "",
       amount: journal?.amount || "",
@@ -445,18 +376,6 @@ const JournalEntries = () => {
   };
 
 
-  useEffect(() => {
-    if (!isLandlordWorkspace) return;
-    if (!form.property) return;
-    if (!derivedLandlordIdFromProperty) return;
-    if (form.landlord === derivedLandlordIdFromProperty) return;
-
-    setForm((prev) => ({
-      ...prev,
-      landlord: derivedLandlordIdFromProperty,
-    }));
-  }, [derivedLandlordIdFromProperty, form.landlord, form.property, isLandlordWorkspace]);
-
   const handleSaveJournal = async () => {
     if (!(editingJournalId ? canUpdateJournal : canCreateJournal)) {
       toast.warning(editingJournalId ? "You do not have permission to update journals" : "You do not have permission to create journals");
@@ -464,16 +383,6 @@ const JournalEntries = () => {
     }
     if (!currentCompany?._id) {
       toast.warning("Please select a company first");
-      return;
-    }
-
-    if (!isCompanyJournal && !form.property) {
-      toast.warning("Property is required");
-      return;
-    }
-
-    if (!isCompanyJournal && isLandlordJournal && !isLandlordWorkspace && !form.landlord) {
-      toast.warning("Landlord is required for landlord journal types");
       return;
     }
 
@@ -530,16 +439,6 @@ const JournalEntries = () => {
       company: currentCompany._id,
       date: form.date,
       journalType: form.journalType,
-      ...(isCompanyJournal
-        ? {}
-        : {
-            property: form.property,
-            landlord: isInternalTransferJournal
-              ? undefined
-              : isLandlordWorkspace
-              ? derivedLandlordIdFromProperty || form.landlord || undefined
-              : form.landlord || undefined,
-          }),
       debitAccount: form.debitAccount,
       creditAccount: form.creditAccount,
       amount: Number(form.amount),
@@ -857,17 +756,18 @@ const JournalEntries = () => {
               <div className="space-y-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Journal type</p>
-                  <select
-                    value={form.journalType}
-                    onChange={(e) => applyJournalTypeDefaults(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                  >
-                    {JOURNAL_TYPES.map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {getJournalTypePresentation(type.value)?.label || type.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="mt-2">
+                    <AppSelect
+                      value={form.journalType}
+                      onChange={(val) => applyJournalTypeDefaults(val ?? "general_manual_journal")}
+                      options={JOURNAL_TYPES.map((t) => ({
+                        value: t.value,
+                        label: getJournalTypePresentation(t.value)?.label || t.label,
+                        description: t.description,
+                      }))}
+                      size="sm"
+                    />
+                  </div>
                   <p className="mt-3 text-xs leading-6 text-slate-600">{activeJournalTypePresentation.description}</p>
                 </div>
 
@@ -882,105 +782,39 @@ const JournalEntries = () => {
                     />
                   </label>
 
-                  {isCompanyJournal ? (
-                    <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-xs text-blue-900 md:col-span-1">
-                      <p className="font-black uppercase tracking-[0.16em] text-blue-700">No Property Required</p>
-                      <p className="mt-1 leading-6">Company journals are not linked to any property or owner. They post directly to the company general ledger.</p>
-                    </div>
-                  ) : (
-                    <label className="block">
-                      <span className="text-xs font-bold text-slate-700">Property</span>
-                      <select
-                        value={form.property}
-                        onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))}
-                        className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                      >
-                        <option value="">Select property</option>
-                        {propertyOptions.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {isInternalTransferJournal
-                          ? "Property stays required because posted ledger entries in the current architecture are property-scoped. The linked owner context is derived automatically during posting."
-                          : isLandlordWorkspace
-                          ? "Select the property context this owner-side journal belongs to. The linked owner is derived from the property automatically."
-                          : "Select the property context this journal belongs to."}
-                      </p>
-                    </label>
-                  )}
-
-                  {isCompanyJournal ? null : isInternalTransferJournal ? (
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 md:col-span-2">
-                      {isLandlordWorkspace
-                        ? "Owner selection is not needed for internal ledger transfers. MILIK derives the owner automatically from the selected property's accounting context when the balanced ledger entries are posted."
-                        : "Landlord selection is not needed for internal ledger transfers. MILIK derives the landlord automatically from the selected property's accounting context when the balanced ledger entries are posted."}
-                    </div>
-                  ) : isLandlordWorkspace ? (
-                    <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 text-xs text-orange-900 md:col-span-2">
-                      <p className="font-black uppercase tracking-[0.16em] text-orange-700">Owner Context</p>
-                      <p className="mt-1 leading-6">
-                        This company is operating as the owner, so MILIK derives the owner ledger context from the selected property automatically. No separate landlord picker is required here.
-                      </p>
-                    </div>
-                  ) : (
-                    <label className="block md:col-span-2">
-                      <span className="text-xs font-bold text-slate-700">Landlord</span>
-                      <select
-                        value={form.landlord}
-                        onChange={(e) => setForm((prev) => ({ ...prev, landlord: e.target.value }))}
-                        className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                      >
-                        <option value="">Select landlord {isLandlordJournal ? "" : "(optional)"}</option>
-                        {landlordOptions.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {isLandlordJournal
-                          ? "Required because this journal affects a landlord-facing adjustment."
-                          : "Optional unless the journal touches landlord-specific balances."}
-                      </p>
-                    </label>
-                  )}
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-900">
+                    <p className="font-black uppercase tracking-[0.16em] text-emerald-700">Account-Driven Context</p>
+                    <p className="mt-1 leading-6">
+                      Property and owner context are derived automatically from the selected accounts.
+                      Select property-specific accounts (e.g. <span className="font-mono font-bold">2110-PARK</span>) to link a journal to a property and owner — no dropdown needed.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <label className="block">
-                    <span className="text-xs font-bold text-slate-700">Debit Account</span>
-                    <select
+                  <div className="block">
+                    <AppSelect
+                      label="Debit Account"
                       value={form.debitAccount}
-                      onChange={(e) => setForm((prev) => ({ ...prev, debitAccount: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                    >
-                      <option value="">Select debit account</option>
-                      {accountOptions.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      onChange={(val) => setForm((prev) => ({ ...prev, debitAccount: val ?? "" }))}
+                      options={accountOptions}
+                      placeholder="Search debit account..."
+                      searchable
+                      warning={selectedDebitAccountRecord?.isControl ? "⚠ Control account — post through the module to maintain reconciliation." : ""}
+                    />
+                  </div>
 
-                  <label className="block">
-                    <span className="text-xs font-bold text-slate-700">Credit Account</span>
-                    <select
+                  <div className="block">
+                    <AppSelect
+                      label="Credit Account"
                       value={form.creditAccount}
-                      onChange={(e) => setForm((prev) => ({ ...prev, creditAccount: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                    >
-                      <option value="">Select credit account</option>
-                      {accountOptions.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      onChange={(val) => setForm((prev) => ({ ...prev, creditAccount: val ?? "" }))}
+                      options={accountOptions}
+                      placeholder="Search credit account..."
+                      searchable
+                      warning={selectedCreditAccountRecord?.isControl ? "⚠ Control account — post through the module to maintain reconciliation." : ""}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1029,26 +863,33 @@ const JournalEntries = () => {
                     className="mt-1"
                   />
                   <span>
-                    {isLandlordWorkspace ? "Include in owner adjustment metadata" : "Include in landlord statement metadata"}
+                    Include in owner statement metadata
                     <span className="mt-1 block text-xs text-slate-500">
                       {isCompanyJournal
-                        ? "Always off for company journals — they are never linked to any owner statement."
+                        ? "Always off for company journals — never linked to any owner statement."
                         : isInternalTransferJournal
-                        ? "Disabled for internal ledger transfers because those remain same-company movements only."
+                        ? "Disabled for internal ledger transfers — same-company movements only."
                         : isForcedLandlordStatementJournal
-                        ? "Locked on for landlord-facing journal types because they are designed to create one clean landlord addition or deduction."
-                        : "Turn this on only when exactly one side is Landlord Remittance Payable. Debit = deduction. Credit = addition."}
+                        ? "Locked on — this journal type always creates a clean owner addition or deduction."
+                        : "Turn on only when exactly one side is Owner Remittance Payable. Debit = deduction. Credit = addition."}
                     </span>
                   </span>
                 </label>
 
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
-                  <p className="font-black">Control note</p>
+                  <p className="font-black">Posting note</p>
                   <p className="mt-1 leading-6">{journalStructureHint}</p>
                   {!isCompanyJournal && (
                     <p className="mt-2 text-xs font-semibold text-amber-800">
-                      Current selection: debit {debitTouchesLandlordPayable ? "touches" : "does not touch"} Landlord Remittance Payable · credit {creditTouchesLandlordPayable ? "touches" : "does not touch"} Landlord Remittance Payable.
+                      Current selection: debit {debitTouchesLandlordPayable ? "touches" : "does not touch"} Owner Remittance Payable · credit {creditTouchesLandlordPayable ? "touches" : "does not touch"} Owner Remittance Payable.
                     </p>
+                  )}
+                  {controlAccountWarning.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {controlAccountWarning.map((w, i) => (
+                        <p key={i} className="text-xs font-bold text-amber-900">{w}</p>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>

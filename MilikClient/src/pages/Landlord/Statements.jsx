@@ -11,6 +11,7 @@ import {
   getStatement,
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllLandlords } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
@@ -487,10 +488,10 @@ const Statements = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const properties = useSelector((state) => state.property?.properties || []);
-  const landlords = useSelector((state) => state.landlord?.landlords || []);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const properties = useSelector(selectAllProperties);
+  const landlords = useSelector(selectAllLandlords);
   const canCreateStatement = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "create", "propertyManagement");
   const canApproveStatement = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "approve", "propertyManagement");
   const canExportStatement = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "export", "propertyManagement");
@@ -2046,16 +2047,41 @@ const Statements = () => {
                       {directToLandlordRows.length > 0 && (
                         <div>
                           <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
-                            Direct to Landlord Receipts
+                            Payments Collected Directly by Landlord
                           </h4>
-                          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                          <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
+                            <div className="grid grid-cols-[80px_60px_1fr_60px_80px_90px] gap-0 border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+                              {["Date", "Unit", "Tenant", "Type", "Reference", "Amount"].map((h) => (
+                                <span key={h} className="text-[9px] font-black uppercase tracking-widest text-slate-500">{h}</span>
+                              ))}
+                            </div>
                             {directToLandlordRows.map((item, index) => (
-                              <div key={`direct-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-slate-50/60">
-                                <span className="text-xs text-slate-700">{item.description || item.referenceNumber || item.receiptNumber || "Direct receipt"}</span>
-                                <span className="text-xs font-semibold text-slate-900">{currency(item.amount)}</span>
+                              <div key={`direct-${index}`} className={`grid grid-cols-[80px_60px_1fr_60px_80px_90px] gap-0 border-b border-slate-100 px-3 py-2 last:border-0 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                                <span className="text-[10px] text-slate-600">
+                                  {item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "—"}
+                                </span>
+                                <span className="text-[10px] font-semibold text-slate-700">{item.unit || "—"}</span>
+                                <div>
+                                  <span className="block text-[10px] font-semibold text-slate-800">{item.tenantName || item.description || "—"}</span>
+                                  {item.tenantCode && item.tenantCode !== "-" && (
+                                    <span className="text-[9px] text-slate-400">{item.tenantCode}</span>
+                                  )}
+                                </div>
+                                <span className={`text-[9px] font-black uppercase tracking-wide ${item.paymentType === "utility" ? "text-blue-600" : "text-[#0B3B2E]"}`}>
+                                  {item.typeLabel || "Rent"}
+                                </span>
+                                <span className="text-[10px] text-slate-500 truncate">{item.receiptRef || "—"}</span>
+                                <span className="text-[10px] font-bold text-slate-900 text-right">{currency(item.amount)}</span>
                               </div>
                             ))}
+                            <div className="flex items-center justify-between border-t-2 border-[#0B3B2E]/20 bg-[#EDF5F1] px-3 py-2">
+                              <span className="text-[10px] font-black uppercase tracking-wide text-[#0B3B2E]">Total received directly by landlord</span>
+                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(directToLandlordAmount)}</span>
+                            </div>
                           </div>
+                          <p className="mt-1.5 text-[9px] italic text-slate-400 leading-4">
+                            These payments were made directly to you by tenants and are NOT included in the manager&apos;s remittance transfer below.
+                          </p>
                         </div>
                       )}
                     </div>
@@ -2091,6 +2117,25 @@ const Statements = () => {
                       </p>
                     </div>
                   </div>
+                  {directToLandlordAmount > 0 && (
+                    <div className="border-t border-[#0B3B2E]/20 bg-[#EDF5F1] px-4 py-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-4 text-xs">
+                          <span className="text-slate-600">
+                            Manager transfers: <strong className="text-slate-900">{currency(Math.max(0, settlement.amount))}</strong>
+                          </span>
+                          <span className="text-slate-400">+</span>
+                          <span className="text-slate-600">
+                            Already with you: <strong className="text-[#0B3B2E]">{currency(directToLandlordAmount)}</strong>
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-[#0B3B2E]">Total Income This Period</p>
+                          <p className="text-base font-black text-[#0B3B2E]">{currency(Math.max(0, settlement.amount) + directToLandlordAmount)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

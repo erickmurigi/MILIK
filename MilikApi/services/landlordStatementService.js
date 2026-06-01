@@ -1393,15 +1393,15 @@ export const generateLandlordStatement = async ({
       property: propertyObjectId,
       business: businessObjectId,
       landlord: landlordObjectId,
-      category: { $in: ["ADJUSTMENT", "ADVANCE_TO_LANDLORD"] },
+      category: { $in: ["ADJUSTMENT", "ADVANCE_TO_LANDLORD", "LANDLORD_RECEIPT"] },
       transactionDate: { $gte: periodStart, $lte: periodEnd },
       status: "approved",
       sourceTransactionType: {
-        $in: ["manual_adjustment", "other", "processed_statement", "recurring_deduction", "advance"],
+        $in: ["manual_adjustment", "other", "processed_statement", "recurring_deduction", "advance", "landlord_receipt"],
       },
       $or: [
         { "metadata.includeInLandlordStatement": true },
-        { "metadata.statementBucket": { $in: ["addition", "deduction", "advance_recovery", "advance_payment"] } },
+        { "metadata.statementBucket": { $in: ["addition", "deduction", "advance_recovery", "advance_payment", "landlord_receipt_addition"] } },
       ],
     })
       .select(
@@ -2898,6 +2898,8 @@ export const generateLandlordStatement = async ({
   const directToLandlordCollections = round2(
     totalRentReceivedLandlord + totalUtilityReceivedLandlord + totalInvoiceTaxReceivedLandlord
   );
+  const directRentCollections = round2(totalRentReceivedLandlord);
+  const directUtilityCollections = round2(totalUtilityReceivedLandlord + totalInvoiceTaxReceivedLandlord);
   const totalCollections = round2(
     managerCollections + directToLandlordCollections
   );
@@ -3015,14 +3017,23 @@ export const generateLandlordStatement = async ({
 
   const directToLandlordRows = receiptsInPeriod
     .filter((r) => r.paidDirectToLandlord)
+    .sort((a, b) => new Date(a.paymentDate) - new Date(b.paymentDate))
     .map((r) => {
       const row = ensureRow(r.tenant, r.unit);
+      const paymentType = String(r.paymentType || "rent").toLowerCase();
+      const typeLabel = paymentType === "utility" ? "Utilities" : "Rent";
       return {
         date: r.paymentDate,
-        description: `Direct to landlord collection - ${row.tenantName}`,
+        description: `${row.tenantName} — ${typeLabel} (Direct)`,
         amount: round2(Math.abs(r.amount)),
         category: "direct_to_landlord",
         sourceId: String(r._id),
+        tenantName: row.tenantName,
+        tenantCode: row.accountNo,
+        unit: row.unit,
+        paymentType,
+        typeLabel,
+        receiptRef: r.receiptNumber || r.referenceNumber || "",
       };
     });
 
@@ -3142,6 +3153,8 @@ export const generateLandlordStatement = async ({
       unappliedPayments: round2(filteredTenantRows.reduce((sum, row) => sum + Number(row.unappliedCredits || 0), 0)),
       directToLandlordCollections,
       totalDirectToLandlordCollections: directToLandlordCollections,
+      directRentCollections,
+      directUtilityCollections,
       openingLandlordSettlementBalance: openingSettlementBalance,
       openingSettlementBalance,
       additions: additionsTotal,

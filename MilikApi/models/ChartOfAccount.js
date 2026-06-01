@@ -73,6 +73,23 @@ const ChartOfAccountSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Marks accounts that are auto-managed by a module (PM, CW, HR).
+    // Finance staff should not manually journal to these — the module owns them.
+    isControl: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    // For property-specific sub-accounts (e.g. 1200-PARK).
+    // Links the account back to its property for lookups and reports.
+    property: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Property",
+      default: null,
+      index: true,
+    },
+
     moduleScopes: {
       type: [String],
       enum: ["general", "propertyManagement", "carwash", "hr"],

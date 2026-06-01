@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { selectCurrentCompany } from "../../redux/selectors";
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
@@ -890,7 +891,7 @@ export default function CompanySetupPage() {
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { currentCompany } = useSelector((state) => state.company || {});
+  const currentCompany = useSelector(selectCurrentCompany);
   const [searchParams, setSearchParams] = useSearchParams();
   const [savingDetails, setSavingDetails] = useState(false);
   const [savingPayments, setSavingPayments] = useState(false);

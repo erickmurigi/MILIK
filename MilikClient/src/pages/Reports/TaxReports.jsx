@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
 import { FaFileDownload, FaFilter, FaPrint, FaReceipt } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { hasCompanyPermission } from '../../utils/permissions';
@@ -41,8 +42,8 @@ const withinRange = (value, startDate, endDate) => {
 
 const TaxReports = () => {
   const dispatch = useDispatch();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
   const propertyState = useSelector((state) => state.property || {});
   const properties = Array.isArray(propertyState?.properties?.data)

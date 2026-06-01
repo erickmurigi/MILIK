@@ -361,16 +361,32 @@ export const getDisbursements = async (req, res, next) => {
       if (req.query.endDate) filter.date.$lte = new Date(req.query.endDate);
     }
 
-    const disbursements = await PettyCashDisbursement.find(filter)
-      .populate("pettyCashAccount", "name voucherPrefix")
-      .populate("property", "propertyName propertyCode")
-      .populate("unit", "unitName unitNumber")
-      .populate("expenseAccountId", "code name")
-      .populate("createdBy", "name email")
-      .sort({ date: -1, createdAt: -1 })
-      .lean();
+    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
 
-    return res.status(200).json({ success: true, data: disbursements });
+    if (req.query.search) {
+      const term = req.query.search.trim();
+      filter.$or = [
+        { voucherNumber: { $regex: term, $options: "i" } },
+        { description: { $regex: term, $options: "i" } },
+      ];
+    }
+
+    const [disbursements, total] = await Promise.all([
+      PettyCashDisbursement.find(filter)
+        .populate("pettyCashAccount", "name voucherPrefix")
+        .populate("property", "propertyName propertyCode")
+        .populate("unit", "unitName unitNumber")
+        .populate("expenseAccountId", "code name")
+        .populate("createdBy", "name email")
+        .sort({ date: -1, createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      PettyCashDisbursement.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({ success: true, data: disbursements, total, page: pageNum, pages: Math.max(1, Math.ceil(total / limitNum)) });
   } catch (err) {
     next(err);
   }
@@ -568,15 +584,23 @@ export const getReplenishments = async (req, res, next) => {
       if (req.query.endDate) filter.requestDate.$lte = new Date(req.query.endDate);
     }
 
-    const replenishments = await PettyCashReplenishment.find(filter)
-      .populate("pettyCashAccount", "name voucherPrefix floatAmount")
-      .populate("bankAccountId", "code name")
-      .populate("requestedBy", "name email")
-      .populate("approvedBy", "name email")
-      .sort({ requestDate: -1, createdAt: -1 })
-      .lean();
+    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
 
-    return res.status(200).json({ success: true, data: replenishments });
+    const [replenishments, total] = await Promise.all([
+      PettyCashReplenishment.find(filter)
+        .populate("pettyCashAccount", "name voucherPrefix floatAmount")
+        .populate("bankAccountId", "code name")
+        .populate("requestedBy", "name email")
+        .populate("approvedBy", "name email")
+        .sort({ requestDate: -1, createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      PettyCashReplenishment.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({ success: true, data: replenishments, total, page: pageNum, pages: Math.max(1, Math.ceil(total / limitNum)) });
   } catch (err) {
     next(err);
   }

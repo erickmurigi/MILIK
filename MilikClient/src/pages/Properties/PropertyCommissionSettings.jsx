@@ -6,6 +6,7 @@ import { FaArrowLeft, FaInfoCircle, FaSave } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { getProperties, updateProperty } from '../../redux/propertyRedux';
 import { adminRequests } from '../../utils/requestMethods';
+import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
 
 const CARD = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
 const INPUT = 'w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100';
@@ -71,8 +72,8 @@ const normalizePropertyForm = (property) => ({
 const PropertyCommissionSettings = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
   const propertyState = useSelector((state) => state.property || {});
   const properties = Array.isArray(propertyState?.properties)
     ? propertyState.properties

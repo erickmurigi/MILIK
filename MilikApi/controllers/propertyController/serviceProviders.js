@@ -87,8 +87,14 @@ export const getServiceProviders = async (req, res, next) => {
       ];
     }
 
-    const rows = await ServiceProvider.find(filter).sort({ createdAt: -1 }).lean();
-    res.status(200).json(rows);
+    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+
+    const [rows, total] = await Promise.all([
+      ServiceProvider.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
+      ServiceProvider.countDocuments(filter),
+    ]);
+    res.status(200).json({ success: true, data: rows, total, page: pageNum, pages: Math.max(1, Math.ceil(total / limitNum)) });
   } catch (error) {
     next(error);
   }

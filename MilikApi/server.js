@@ -79,6 +79,9 @@ import carWashCommissionRoutes from "./modules/carwash/routes/commissions.js";
 import carWashLoyaltyRoutes from "./modules/carwash/routes/loyalty.js";
 import carWashMpesaRoutes from "./modules/carwash/routes/mpesa.js";
 import carWashBranchRoutes from "./modules/carwash/routes/branches.js";
+import carWashCreditAccountRoutes from "./modules/carwash/routes/creditAccounts.js";
+import carWashSettingsRoutes from "./modules/carwash/routes/settings.js";
+import { processDueBilling } from "./modules/carwash/controllers/creditAccountsController.js";
 import hrDepartmentRoutes from "./modules/hr/routes/departments.js";
 import hrDesignationRoutes from "./modules/hr/routes/designations.js";
 import hrEmployeeRoutes from "./modules/hr/routes/employees.js";
@@ -568,6 +571,8 @@ app.use("/api/carwash/commissions", carWashCommissionRoutes);
 app.use("/api/carwash/loyalty", carWashLoyaltyRoutes);
 app.use("/api/carwash/mpesa", carWashMpesaRoutes);
 app.use("/api/carwash/branches", carWashBranchRoutes);
+app.use("/api/carwash/accounts", carWashCreditAccountRoutes);
+app.use("/api/carwash/settings", carWashSettingsRoutes);
 app.use("/api/hr/departments", hrDepartmentRoutes);
 app.use("/api/hr/designations", hrDesignationRoutes);
 app.use("/api/hr/employees", hrEmployeeRoutes);
@@ -636,6 +641,8 @@ async function connect() {
       });
 
       console.log(`Connected to MongoDB using ${candidate.label}`);
+      // Run auto-billing check for monthly car wash accounts on startup (fire-and-forget)
+      processDueBilling(null).then((r) => { if (r.length) console.log(`[CW Billing] Auto-generated ${r.length} statement(s)`); }).catch(() => {});
       return;
     } catch (error) {
       lastError = error;

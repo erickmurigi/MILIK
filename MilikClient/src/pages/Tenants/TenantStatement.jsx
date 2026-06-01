@@ -1,6 +1,15 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentCompany,
+  selectAllTenants,
+  selectAllLeases,
+  selectAllRentPayments,
+  selectAllMaintenances,
+  selectAllUnits,
+  selectAllProperties,
+} from "../../redux/selectors";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
@@ -406,15 +415,15 @@ const TenantStatement = () => {
   const [scheduleSearchText, setScheduleSearchText] = useState("");
   const [companyTaxConfig, setCompanyTaxConfig] = useState(null);
 
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const tenantsFromStore = useSelector((state) => state.tenant?.tenants || []);
-  const leasesFromStore = useSelector((state) => state.lease?.leases || []);
-  const rentPaymentsFromStore = useSelector((state) => state.rentPayment?.rentPayments || []);
-  const maintenanceFromStore = useSelector((state) => state.maintenance?.maintenances || []);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const tenantsFromStore = useSelector(selectAllTenants);
+  const leasesFromStore = useSelector(selectAllLeases);
+  const rentPaymentsFromStore = useSelector(selectAllRentPayments);
+  const maintenanceFromStore = useSelector(selectAllMaintenances);
   const expensesFromStore = useSelector((state) => state.expenseProperty?.expenseProperties || []);
   const utilitiesFromStore = useSelector((state) => state.utility?.utilities || []);
-  const unitsFromStore = useSelector((state) => state.unit?.units || []);
-  const propertiesFromStore = useSelector((state) => state.property?.properties || []);
+  const unitsFromStore = useSelector(selectAllUnits);
+  const propertiesFromStore = useSelector(selectAllProperties);
   const normalizedTaxConfig = useMemo(
     () => normalizeCompanyTaxConfig(companyTaxConfig),
     [companyTaxConfig]

@@ -970,6 +970,91 @@ const dispatchEmail = async ({ profile, to, subject, text, html, attachments }) 
   });
 };
 
+// Concurrency limit for parallel sends — keeps SMTP server happy
+const SEND_BATCH_SIZE = 8;
+// Per-send timeout (ms) — prevents one slow connection blocking a batch
+const SEND_TIMEOUT_MS = 25_000;
+
+const withTimeout = (promise, ms, label) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`Send timed out after ${ms}ms (${label})`)), ms)),
+  ]);
+
+const buildLogEntry = ({ businessId, channel, contextType, templateKey, preview, profile, item, status, providerResult = {}, error = '' }) => ({
+  business: businessId,
+  channel,
+  contextType,
+  templateKey,
+  templateName: preview.template?.name || '',
+  profileName: profile?.name || '',
+  provider: profile?.provider || '',
+  to: channel === 'sms' ? item.recipientPhone : item.recipientEmail,
+  recipientName: item.recipientName,
+  body: item.body,
+  subject: item.subject || '',
+  status,
+  error,
+  providerMessageId: providerResult.messageId || '',
+  providerStatus: providerResult.status || '',
+  costLabel: providerResult.cost || '',
+  recordId: item.recordId,
+});
+
+// Pre-generate all PDFs in parallel before the send loop so each email
+// doesn't block waiting for its own Puppeteer render.
+const preBuildAttachments = async ({ contextType, items, businessId }) => {
+  const cache = new Map();
+  const sendableIds = items.filter((i) => i.canSend).map((i) => i.recordId);
+  if (!sendableIds.length) return cache;
+
+  if (contextType === 'processed_statement') {
+    const statements = await ProcessedStatement.find({ _id: { $in: sendableIds }, business: businessId })
+      .select('sourceStatement property periodStart')
+      .populate('property', 'propertyCode propertyName')
+      .lean();
+    const stmtMap = new Map(statements.map((s) => [String(s._id), s]));
+
+    await Promise.allSettled(sendableIds.map(async (id) => {
+      const ps = stmtMap.get(String(id));
+      const sourceStatementId = String(ps?.sourceStatement || '');
+      if (!sourceStatementId) return;
+      try {
+        const pdfBuffer = await generateStatementPdf(sourceStatementId, businessId);
+        const propertyCode = ps?.property?.propertyCode || 'STMT';
+        const periodLabel = ps?.periodStart
+          ? new Date(ps.periodStart).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace(' ', '-')
+          : 'statement';
+        cache.set(String(id), [{ filename: `Statement-${propertyCode}-${periodLabel}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]);
+      } catch { /* best-effort */ }
+    }));
+  }
+
+  if (contextType === 'invoice' || contextType === 'penalty_invoice') {
+    await Promise.allSettled(sendableIds.map(async (id) => {
+      try {
+        const pdfBuffer = await generateInvoicePdf(id, businessId);
+        const item = items.find((i) => i.recordId === id);
+        const invoiceNum = item?.payload?.invoiceNumber || String(id);
+        cache.set(String(id), [{ filename: `Invoice-${invoiceNum}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]);
+      } catch { /* best-effort */ }
+    }));
+  }
+
+  if (contextType === 'receipt') {
+    await Promise.allSettled(sendableIds.map(async (id) => {
+      try {
+        const pdfBuffer = await generateReceiptPdf(id, businessId);
+        const item = items.find((i) => i.recordId === id);
+        const receiptNum = item?.payload?.receiptNumber || String(id);
+        cache.set(String(id), [{ filename: `Receipt-${receiptNum}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]);
+      } catch { /* best-effort */ }
+    }));
+  }
+
+  return cache;
+};
+
 export const sendCommunication = async ({ businessId, contextType, channel, templateKey, recordIds = [], profileId = '', customBody = '', customSubject = '' }) => {
   const preview = await previewCommunication({ businessId, contextType, channel, templateKey, recordIds, profileId, customBody, customSubject });
   const results = [];
@@ -1016,159 +1101,67 @@ export const sendCommunication = async ({ businessId, contextType, channel, temp
     : resolveEmailProfile({ company, requestedProfileId: profileId });
   const profile = profileResolution.profile;
 
-  for (const item of preview.previews) {
-    if (!item.canSend) {
-      results.push({
-        recordId: item.recordId,
-        recipientName: item.recipientName,
-        status: 'failed',
-        messageId: '',
-        cost: '',
-        message: item.reason || 'Communication preview is not sendable for this recipient.',
-      });
+  // Pre-generate all PDFs in parallel before entering the send loop
+  const attachmentCache = channel === 'email'
+    ? await preBuildAttachments({ contextType, items: preview.previews, businessId })
+    : new Map();
 
-      await SmsLog.create({
-        business: businessId,
-        channel,
-        contextType,
-        templateKey,
-        templateName: preview.template?.name || '',
-        profileName: profile?.name || '',
-        provider: profile?.provider || '',
-        to: channel === 'sms' ? item.recipientPhone : item.recipientEmail,
-        recipientName: item.recipientName,
-        body: item.body,
-        subject: item.subject || '',
-        status: 'failed',
-        error: item.reason || 'Blocked',
-        recordId: item.recordId,
-      }).catch(() => {});
+  // Deduplicate recipients to avoid double-sending
+  const seenAddresses = new Set();
 
-      continue;
-    }
+  // Process in parallel batches to avoid sequential SMTP delays
+  const sendable = preview.previews;
+  for (let i = 0; i < sendable.length; i += SEND_BATCH_SIZE) {
+    const batch = sendable.slice(i, i + SEND_BATCH_SIZE);
 
-    try {
-      let providerResult = { messageId: '', status: '', cost: '' };
-
-      if (channel === 'sms') {
-        providerResult = (await dispatchSms({ profile, to: item.recipientPhone, body: item.body })) || {};
-      } else {
-        let attachments = [];
-        if (contextType === 'processed_statement') {
-          try {
-            const ps = await ProcessedStatement.findOne({ _id: item.recordId, business: businessId })
-              .select('sourceStatement property landlord periodStart periodEnd')
-              .populate('property', 'propertyCode propertyName')
-              .lean();
-            const sourceStatementId = String(ps?.sourceStatement || '');
-            if (sourceStatementId) {
-              const pdfBuffer = await generateStatementPdf(sourceStatementId, businessId);
-              const propertyCode = ps?.property?.propertyCode || 'STMT';
-              const periodLabel = ps?.periodStart
-                ? new Date(ps.periodStart).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace(' ', '-')
-                : 'statement';
-              attachments = [{
-                filename: `Statement-${propertyCode}-${periodLabel}.pdf`,
-                content: pdfBuffer,
-                contentType: 'application/pdf',
-              }];
-            }
-          } catch {
-            // PDF generation is best-effort — send without attachment on failure
-          }
-        }
-        if (contextType === 'invoice' || contextType === 'penalty_invoice') {
-          try {
-            const pdfBuffer = await generateInvoicePdf(item.recordId, businessId);
-            const invoiceNum = item.payload?.invoiceNumber || String(item.recordId);
-            attachments = [{
-              filename: `Invoice-${invoiceNum}.pdf`,
-              content: pdfBuffer,
-              contentType: 'application/pdf',
-            }];
-          } catch {
-            // PDF generation is best-effort — send without attachment on failure
-          }
-        }
-        if (contextType === 'receipt') {
-          try {
-            const pdfBuffer = await generateReceiptPdf(item.recordId, businessId);
-            const receiptNum = item.payload?.receiptNumber || String(item.recordId);
-            attachments = [{
-              filename: `Receipt-${receiptNum}.pdf`,
-              content: pdfBuffer,
-              contentType: 'application/pdf',
-            }];
-          } catch {
-            // PDF generation is best-effort — send without attachment on failure
-          }
-        }
-        await dispatchEmail({
-          profile,
-          to: item.recipientEmail,
-          subject: item.subject,
-          text: item.body,
-          html: item.htmlBody,
-          attachments,
-        });
+    await Promise.allSettled(batch.map(async (item) => {
+      if (!item.canSend) {
+        results.push({ recordId: item.recordId, recipientName: item.recipientName, status: 'failed', messageId: '', cost: '', message: item.reason || 'Not sendable.' });
+        SmsLog.create(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'failed', error: item.reason || 'Blocked' })).catch(() => {});
+        return;
       }
 
-      await SmsLog.create({
-        business: businessId,
-        channel,
-        contextType,
-        templateKey,
-        templateName: preview.template?.name || '',
-        profileName: profile?.name || '',
-        provider: profile?.provider || '',
-        to: channel === 'sms' ? item.recipientPhone : item.recipientEmail,
-        recipientName: item.recipientName,
-        body: item.body,
-        subject: item.subject || '',
-        status: 'sent',
-        providerMessageId: providerResult.messageId || '',
-        providerStatus: providerResult.status || '',
-        costLabel: providerResult.cost || '',
-        recordId: item.recordId,
-      }).catch(() => {});
+      // Deduplicate by destination address
+      const dest = channel === 'sms' ? (item.recipientPhone || '') : (item.recipientEmail || '');
+      if (!dest || seenAddresses.has(dest)) {
+        results.push({ recordId: item.recordId, recipientName: item.recipientName, status: 'failed', messageId: '', cost: '', message: !dest ? 'No recipient address.' : 'Duplicate recipient — skipped.' });
+        SmsLog.create(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'failed', error: !dest ? 'No address' : 'Duplicate' })).catch(() => {});
+        return;
+      }
+      seenAddresses.add(dest);
 
-      results.push({
-        recordId: item.recordId,
-        recipientName: item.recipientName,
-        status: 'sent',
-        messageId: providerResult.messageId || '',
-        cost: providerResult.cost || '',
-        message: `${channel.toUpperCase()} sent successfully.`,
-      });
-    } catch (error) {
-      const errMsg = error?.response?.data?.message || error?.message || `Failed to send ${channel.toUpperCase()}.`;
+      try {
+        let providerResult = { messageId: '', status: '', cost: '' };
 
-      await SmsLog.create({
-        business: businessId,
-        channel,
-        contextType,
-        templateKey,
-        templateName: preview.template?.name || '',
-        profileName: profile?.name || '',
-        provider: profile?.provider || '',
-        to: channel === 'sms' ? item.recipientPhone : item.recipientEmail,
-        recipientName: item.recipientName,
-        body: item.body,
-        subject: item.subject || '',
-        status: 'failed',
-        error: errMsg,
-        recordId: item.recordId,
-      }).catch(() => {});
+        if (channel === 'sms') {
+          providerResult = (await withTimeout(
+            dispatchSms({ profile, to: item.recipientPhone, body: item.body }),
+            SEND_TIMEOUT_MS,
+            item.recipientName
+          )) || {};
+        } else {
+          await withTimeout(
+            dispatchEmail({
+              profile,
+              to: item.recipientEmail,
+              subject: item.subject,
+              text: item.body,
+              html: item.htmlBody,
+              attachments: attachmentCache.get(String(item.recordId)) || [],
+            }),
+            SEND_TIMEOUT_MS,
+            item.recipientEmail
+          );
+        }
 
-      results.push({
-        recordId: item.recordId,
-        recipientName: item.recipientName,
-        status: 'failed',
-        messageId: '',
-        cost: '',
-        message: errMsg,
-      });
-    }
+        SmsLog.create(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'sent', providerResult })).catch(() => {});
+        results.push({ recordId: item.recordId, recipientName: item.recipientName, status: 'sent', messageId: providerResult.messageId || '', cost: providerResult.cost || '', message: `${channel.toUpperCase()} sent.` });
+      } catch (error) {
+        const errMsg = error?.response?.data?.message || error?.message || `Failed to send ${channel.toUpperCase()}.`;
+        SmsLog.create(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'failed', error: errMsg })).catch(() => {});
+        results.push({ recordId: item.recordId, recipientName: item.recipientName, status: 'failed', messageId: '', cost: '', message: errMsg });
+      }
+    }));
   }
 
   return {

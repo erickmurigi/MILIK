@@ -36,6 +36,7 @@ import {
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { propertyBelongsToLandlord } from "./propertyUtils";
+import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 
 const todayIso = () => new Date().toISOString().split("T")[0];
@@ -191,10 +192,10 @@ const RecoveryHistoryRow = ({ item, onCancel }) => (
 const LandlordAdvancements = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const landlords = useSelector((state) => state.landlord?.landlords || []);
-  const properties = useSelector((state) => state.property?.properties || []);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const landlords = useSelector(selectAllLandlords);
+  const properties = useSelector(selectAllProperties);
 
   const activeLandlords = useMemo(
     () => landlords.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"),
@@ -206,6 +207,8 @@ const LandlordAdvancements = () => {
   );
 
   const [rows, setRows] = useState([]);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [serverPages, setServerPages] = useState(1);
   const [cashbooks, setCashbooks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -268,19 +271,19 @@ const LandlordAdvancements = () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
-      const data = await getLandlordAdvancements({
+      const result = await getLandlordAdvancements({
         business: currentCompany._id,
         company: currentCompany._id,
         status: filters.status,
         landlordId: filters.landlordId,
+        advanceType: filters.advanceType,
         search: debouncedSearch,
+        page: currentPage,
+        limit: ITEMS_PER_PAGE,
       });
-      const baseRows = Array.isArray(data) ? data : [];
-      const filteredByType =
-        filters.advanceType === "all"
-          ? baseRows
-          : baseRows.filter((row) => String(row.advanceType || "") === filters.advanceType);
-      setRows(filteredByType);
+      setRows(Array.isArray(result.data) ? result.data : []);
+      setServerTotal(result.total ?? 0);
+      setServerPages(result.pages ?? 1);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load landlord advances");
     } finally {
@@ -290,7 +293,7 @@ const LandlordAdvancements = () => {
 
   useEffect(() => {
     loadRows();
-  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.advanceType]);
+  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.advanceType, currentPage]);
 
   useEffect(() => {
     if (!showModal) return;
@@ -317,19 +320,11 @@ const LandlordAdvancements = () => {
     });
   }, [showModal, form.advanceType]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = rows.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const currentPageRows = rows.slice(startIndex, endIndex);
+  const safeCurrentPage = Math.min(currentPage, serverPages);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, filters.status, filters.landlordId, filters.advanceType, rows.length]);
-
-  useEffect(() => {
-    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
-  }, [currentPage, safeCurrentPage]);
+  }, [debouncedSearch, filters.status, filters.landlordId, filters.advanceType]);
 
   const filteredProperties = useMemo(() => {
     if (!form.landlord) return activeProperties;
@@ -341,7 +336,7 @@ const LandlordAdvancements = () => {
 
   const stats = useMemo(
     () => ({
-      total: rows.length,
+      total: serverTotal,
       totalDisbursed: rows.reduce((sum, row) => sum + Number(row?.disbursedAt ? row.amount || 0 : 0), 0),
       earlyPayouts: rows.reduce(
         (sum, row) => sum + Number(row?.advanceType === "against_payable" ? row.alreadyPaidToLandlord || 0 : 0),
@@ -353,7 +348,7 @@ const LandlordAdvancements = () => {
       ),
       totalRecovered: rows.reduce((sum, row) => sum + Number(row.totalRecoveredAmount || 0), 0),
     }),
-    [rows]
+    [rows, serverTotal]
   );
 
   const selectedRecoveryPeriod = useMemo(() => {
@@ -688,7 +683,7 @@ const LandlordAdvancements = () => {
                 ) : rows.length === 0 ? (
                   <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">No landlord advances found.</td></tr>
                 ) : (
-                  currentPageRows.map((row, index) => {
+                  rows.map((row, index) => {
                     const expanded = expandedId === row._id;
                     const landlordLabel = row?.landlord?.landlordName || [row?.landlord?.firstName, row?.landlord?.lastName].filter(Boolean).join(" ") || row?.landlord?.email || "Landlord";
                     const propertyLabel = row?.property?.propertyName || row?.property?.name || row?.property?.propertyCode || "Property";
@@ -723,16 +718,16 @@ const LandlordAdvancements = () => {
               </tbody>
             </table>
           </div>
-          {!loading && rows.length > 0 && (
+          {!loading && serverTotal > 0 && (
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
               <div className="font-semibold">
-                Showing <span className="font-bold text-slate-900">{rows.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of <span className="font-bold text-slate-900">{rows.length}</span> advancement record(s)
+                Showing <span className="font-bold text-slate-900">{serverTotal === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * ITEMS_PER_PAGE, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> advancement record(s)
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
                 <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {serverPages}</span>
+                <button onClick={() => setCurrentPage((prev) => Math.min(serverPages, prev + 1))} disabled={safeCurrentPage === serverPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
               </div>
             </div>
           )}

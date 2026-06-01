@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaBalanceScale, FaFileDownload, FaFilePdf, FaFilter, FaSyncAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getBalanceSheetReport } from "../../redux/apiCalls";
@@ -74,8 +75,8 @@ const escapeHtml = (value) =>
     .replaceAll("'", "&#039;");
 
 const BalanceSheetReport = () => {
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
 
   const businessId = useMemo(() => {

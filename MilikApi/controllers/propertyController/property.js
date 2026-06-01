@@ -468,9 +468,10 @@ const normalizePropertyServiceMode = (value = "Managing") => {
 const isLettingMode = (value) =>
   String(value || "").trim().toLowerCase() === "letting";
 
-const PROPERTY_CONTROL_LEDGER_TYPE = "Property Control Ledger In GL";
-
-const normalizePropertyLedgerType = () => PROPERTY_CONTROL_LEDGER_TYPE;
+const normalizePropertyLedgerType = (value) => {
+  const v = String(value || "").toLowerCase().trim();
+  return v.includes("off") ? "off-gl" : "in-gl";
+};
 
 // Create property
 export const createProperty = async (req, res) => {

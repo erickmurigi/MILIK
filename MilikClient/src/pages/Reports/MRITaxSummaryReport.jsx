@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '../../redux/selectors';
 import { getMRITaxSummaryReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
@@ -15,10 +16,10 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 
 const MRITaxSummaryReport = () => {
   const dispatch = useDispatch();
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
-  const properties = useSelector((state) => state.property?.properties || []);
+  const properties = useSelector(selectAllProperties);
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
   const companyName = currentCompany?.name

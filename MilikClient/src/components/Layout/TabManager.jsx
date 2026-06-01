@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { FaTimes, FaHome, FaPlus, FaWindowClose } from 'react-icons/fa';
+import { selectCurrentCompany } from '../../redux/selectors';
 import {
   WORKSPACE_IDS,
   getWorkspaceDefaultRoute,
@@ -50,6 +51,9 @@ const getPageTitle = (pathname) => {
     '/dashboard': 'Dashboard',
     '/carwash/dashboard': 'Dashboard',
     '/carwash/jobs': 'Jobs',
+    '/carwash/jobs/new': 'New Job',
+    '/carwash/jobs/:id/edit': 'Edit Job',
+    '/carwash/accounts': 'Credit Accounts',
     '/carwash/services': 'Services',
     '/carwash/payments': 'Payments',
     '/carwash/deposits': 'Deposits',
@@ -264,7 +268,7 @@ const readActiveTabsByWorkspace = (companyKey) => {
 const TabManager = ({ darkMode }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentCompany = useSelector(selectCurrentCompany);
   const currentCompanyKey = String(currentCompany?._id || 'default-company');
   const currentCompanyName = String(currentCompany?.companyName || currentCompany?.name || '').trim();
   const previousCompanyKeyRef = useRef(currentCompanyKey);

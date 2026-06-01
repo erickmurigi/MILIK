@@ -415,8 +415,13 @@ export const getLandlordStandingOrders = async (req, res, next) => {
       ];
     }
 
-    const rows = await populateQuery(LandlordStandingOrder.find(filter).sort({ createdAt: -1 })).lean();
-    res.status(200).json(serializeRows(rows));
+    const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const [total, rows] = await Promise.all([
+      LandlordStandingOrder.countDocuments(filter),
+      populateQuery(LandlordStandingOrder.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum)).lean(),
+    ]);
+    res.status(200).json({ data: serializeRows(rows), total, page: pageNum, pages: Math.ceil(total / limitNum) });
   } catch (error) {
     next(error);
   }

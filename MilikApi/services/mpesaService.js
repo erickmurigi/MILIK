@@ -69,6 +69,44 @@ class MpesaService {
     }
   }
 
+  // STK Push — prompts a customer's phone to pay via Lipa Na M-Pesa
+  async stkPush({ phone, amount, accountRef, description, callbackUrl }) {
+    const accessToken = await this.generateAccessToken();
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+    const password = Buffer.from(`${this.shortCode}${this.passKey}${timestamp}`).toString('base64');
+    // Normalise phone: 07xx → 2547xx, +2547xx → 2547xx
+    const normalised = String(phone || '').replace(/^\+/, '').replace(/^0/, '254');
+    const payload = {
+      BusinessShortCode: this.shortCode,
+      Password: password,
+      Timestamp: timestamp,
+      TransactionType: 'CustomerPayBillOnline',
+      Amount: Math.ceil(Number(amount)),
+      PartyA: normalised,
+      PartyB: this.shortCode,
+      PhoneNumber: normalised,
+      CallBackURL: callbackUrl,
+      AccountReference: String(accountRef || 'CarWash').slice(0, 12),
+      TransactionDesc: String(description || 'Car Wash Payment').slice(0, 13),
+    };
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/mpesa/stkpush/v1/processrequest`,
+        payload,
+        { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('STK Push error:', error.response?.data || error.message);
+      throw error;
+    }
+  }
+
+  // Check if STK push is configured (env vars present)
+  isConfigured() {
+    return Boolean(this.consumerKey && this.consumerSecret && this.shortCode && this.passKey);
+  }
+
   // Simulate C2B payment (for sandbox testing)
   async simulateC2BPayment(amount, msisdn, billRefNumber) {
     try {

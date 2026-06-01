@@ -12,6 +12,15 @@ import {
   FaTools,
 } from 'react-icons/fa';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
+import {
+  selectCurrentUser,
+  selectCurrentCompany,
+  selectAllUnits,
+  selectAllTenants,
+  selectAllLeases,
+  selectAllMaintenances,
+  selectAllRentPayments,
+} from '../../redux/selectors';
 
 const normalizeArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -56,14 +65,13 @@ const QuickActions = ({
   loading = false,
 }) => {
   const navigate = useNavigate();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const units = useSelector((state) => normalizeArray(state.unit?.units));
-  const tenants = useSelector((state) => normalizeArray(state.tenant?.tenants));
-  const leases = useSelector((state) => normalizeArray(state.lease?.leases));
-  const maintenances = useSelector((state) => normalizeArray(state.maintenance?.maintenances));
-  const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
-  const rentPayments = useMemo(() => normalizeArray(rawRentPayments), [rawRentPayments]);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const units = useSelector(selectAllUnits);
+  const tenants = useSelector(selectAllTenants);
+  const leases = useSelector(selectAllLeases);
+  const maintenances = useSelector(selectAllMaintenances);
+  const rentPayments = useSelector(selectAllRentPayments);
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);

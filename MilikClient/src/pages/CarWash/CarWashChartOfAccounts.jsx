@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaBook, FaCheckSquare, FaEdit, FaEye, FaPlus, FaRedoAlt, FaSearch, FaSquare, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney } from "../../services/carWashApi";
@@ -66,8 +67,8 @@ const groupForType = (type = "") => {
 
 const CarWashChartOfAccounts = () => {
   const confirm = useConfirm();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const [accounts, setAccounts] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);

@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { FaSave, FaSpinner } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentUser,
+  selectCurrentCompany,
+  selectAllProperties,
+  selectAllTenants,
+} from "../../redux/selectors";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -127,12 +133,12 @@ const AddReceipt = () => {
   const prefilledAccountReference = searchParams.get("accountReference") || "";
   const prefilledMsisdn = searchParams.get("msisdn") || "";
   const prefilledPayerName = searchParams.get("payerName") || "";
-  const { currentCompany } = useSelector((state) => state.company || {});
+  const currentCompany = useSelector(selectCurrentCompany);
   const isCompanyLandlordMode = isSelfManagingLandlordCompany(currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const currentUser = useSelector(selectCurrentUser);
   const canSaveReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement");
-  const rawProperties = useSelector((state) => state.property?.properties);
-  const rawTenants = useSelector((state) => state.tenant?.tenants);
+  const rawProperties = useSelector(selectAllProperties);
+  const rawTenants = useSelector(selectAllTenants);
 
   const properties = ensureArray(rawProperties);
   const activeProperties = useMemo(
@@ -157,10 +163,8 @@ const AddReceipt = () => {
       cashbook: "Main Cashbook",
       paidDirectToLandlord: isLandlordMode,
       paymentDate: todayInput(),
-      dueDate: todayInput(),
       referenceNumber: prefilledReference,
       bankingDate: todayInput(),
-      recordDate: todayInput(),
       description: prefilledDescription,
       isConfirmed: false,
     },
@@ -557,10 +561,8 @@ const AddReceipt = () => {
       cashbook: isDirectToLandlord ? "" : formData.cashbook,
       paidDirectToLandlord: isDirectToLandlord,
       paymentDate: formData.paymentDate,
-      dueDate: formData.dueDate,
       referenceNumber: String(formData.referenceNumber || "").trim(),
-      bankingDate: isCompanyLandlordMode ? undefined : (formData.bankingDate || undefined),
-      recordDate: isCompanyLandlordMode ? undefined : (formData.recordDate || undefined),
+      bankingDate: isCompanyLandlordMode ? undefined : (formData.bankingDate || formData.paymentDate || undefined),
       description: formData.description,
       isConfirmed: formData.isConfirmed,
       ledgerType: "receipts",
@@ -785,43 +787,23 @@ const AddReceipt = () => {
                     <input
                       type="date"
                       value={formData.paymentDate}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, paymentDate: e.target.value }))}
+                      onChange={(e) => setFormData((prev) => ({
+                        ...prev,
+                        paymentDate: e.target.value,
+                        bankingDate: prev.bankingDate === prev.paymentDate ? e.target.value : prev.bankingDate,
+                      }))}
                       className={inputClass}
                     />
                   </div>
 
-                  {/* Due Date */}
-                  <div>
-                    <label className={labelClass}>Due Date *</label>
-                    <input
-                      type="date"
-                      value={formData.dueDate}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, dueDate: e.target.value }))}
-                      className={inputClass}
-                    />
-                  </div>
-
-                  {/* Banking Date — hidden in self-managing landlord mode */}
-                  {!isCompanyLandlordMode && (
+                  {/* Banking Date — only relevant for bank transfer / cheque; hidden in landlord mode */}
+                  {!isCompanyLandlordMode && ["bank_transfer", "check"].includes(formData.paymentMethod) && (
                     <div>
-                      <label className={labelClass}>Banking Date</label>
+                      <label className={labelClass}>Banking / Clearance Date</label>
                       <input
                         type="date"
                         value={formData.bankingDate}
                         onChange={(e) => setFormData((prev) => ({ ...prev, bankingDate: e.target.value }))}
-                        className={inputClass}
-                      />
-                    </div>
-                  )}
-
-                  {/* Record Date — hidden in self-managing landlord mode */}
-                  {!isCompanyLandlordMode && (
-                    <div>
-                      <label className={labelClass}>Record Date</label>
-                      <input
-                        type="date"
-                        value={formData.recordDate}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, recordDate: e.target.value }))}
                         className={inputClass}
                       />
                     </div>

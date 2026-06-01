@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { FaHome, FaTimes, FaCog, FaBuilding, FaCar, FaHandshake, FaUsers, FaBook, FaBoxes } from 'react-icons/fa';
+import { selectCurrentCompany } from '../../redux/selectors';
 import {
   WORKSPACE_IDS,
   getWorkspaceDefaultRoute,
@@ -116,7 +117,7 @@ const readActiveModule = (companyKey, company, openModules = []) => {
 const ModuleTabManager = ({ darkMode }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentCompany = useSelector(selectCurrentCompany);
   const currentCompanyKey = String(currentCompany?._id || 'default-company');
   const previousCompanyKeyRef = useRef(currentCompanyKey);
 

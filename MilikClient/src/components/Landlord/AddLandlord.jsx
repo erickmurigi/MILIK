@@ -16,6 +16,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { createLandlord, updateLandlord } from "../../redux/apiCalls";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 
 // Orange theme constants
 const MILIK_ORANGE_BG = "bg-orange-600";
@@ -130,8 +131,8 @@ const AddLandlord = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentCompany } = useSelector((state) => state.company);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const { isFetching } = useSelector((state) => state.landlord);
   const fileInputRef = useRef(null);
   const editLandlordId = location.state?.landlordId || null;

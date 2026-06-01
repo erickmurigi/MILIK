@@ -1,6 +1,12 @@
 import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentUser,
+  selectCurrentCompany,
+  selectAllTenants,
+  selectAllRentPayments,
+} from "../../redux/selectors";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   FaArrowLeft,
@@ -26,6 +32,7 @@ import {
   FaPlusCircle,
   FaSms,
   FaEnvelope,
+  FaDownload,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -44,6 +51,7 @@ import {
   getChartOfAccounts,
   getReceiptAllocationOptions,
   updateReceiptAllocations,
+  downloadReceiptPdf,
 } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { printTabularList } from "../../utils/printList";
@@ -304,8 +312,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const { currentCompany } = useSelector((state) => state.company || {});
-  const { currentUser } = useSelector((state) => state.auth || {});
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const canCreateReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement");
   const canProcessReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "process", "propertyManagement");
   const canReverseReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "reverse", "propertyManagement");
@@ -317,8 +325,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const backPath = isLandlordReceiptView ? "/landlords" : "/tenants";
   const pageLabel = isLandlordReceiptView ? "Landlord Receipts" : "Rental Receipts";
   const pageCreateLabel = isLandlordReceiptView ? "New Landlord Receipt" : "New Receipt";
-  const rawTenants = useSelector((state) => state.tenant?.tenants);
-  const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
+  const rawTenants = useSelector(selectAllTenants);
+  const rawRentPayments = useSelector(selectAllRentPayments);
 
   const tenants = ensureArray(rawTenants);
   const rentPayments = ensureArray(rawRentPayments);
@@ -1635,6 +1643,19 @@ const visibleReceiptIds = useMemo(
     }
   }, [allocationLines, allocationReason, allocationRules, allocationTarget, closeAllocationDrawer, dispatch, loadData, syncActiveReceipt]);
 
+  const handleDownloadReceiptPdf = async (receipt) => {
+    if (!canExportReceipt) { toast.warning("You do not have permission to download receipts"); return; }
+    if (!receipt?._id) return;
+    try {
+      await downloadReceiptPdf(receipt._id, {
+        preview: false,
+        filename: `Receipt-${receipt.receiptNumber || receipt.referenceNumber || receipt._id}.pdf`,
+      });
+    } catch {
+      toast.error("Failed to download receipt PDF.");
+    }
+  };
+
   const handlePrintList = () => {
     if (!canExportReceipt) {
       toast.warning("You do not have permission to print receipt lists");
@@ -1880,65 +1901,36 @@ const visibleReceiptIds = useMemo(
                           <td className="px-3 py-2 font-semibold text-slate-900">{receipt.referenceNumber || "-"}</td>
                           <td className="px-3 py-2">
                             <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={() => openView(receipt)}
-                                className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700"
-                                title="View"
-                              >
+                              <button onClick={() => openView(receipt)} className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700" title="View">
                                 <FaEye size={11} />
                               </button>
-                              <button
-                                onClick={() => openEditForm(receipt)}
-                                className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white"
-                                title="Edit"
-                              >
-                                <FaEdit size={11} />
-                              </button>
-                              <button
-                                onClick={() => handleConfirmOne(receipt)}
-                                className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white"
-                                title="Confirm"
-                                disabled={receipt.isConfirmed}
-                              >
-                                <FaCheck size={11} />
-                              </button>
-                              <button
-                                onClick={() => handleUnconfirmOne(receipt)}
-                                className="px-2 py-1 rounded bg-orange-600 hover:bg-orange-700 text-white"
-                                title="Unconfirm"
-                                disabled={!receipt.isConfirmed}
-                              >
-                                <FaTimes size={11} />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteOne(receipt._id)}
-                                className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white"
-                                title="Delete"
-                              >
-                                <FaTrash size={11} />
-                              </button>
-                              <button
-                                onClick={() => handleReverseOne(receipt)}
-                                className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Reverse Receipt"
-                                disabled={!receipt.isConfirmed || receipt.isReversed}
-                              >
-                                <FaUndo size={11} />
-                              </button>
-                              <button
-                                onClick={() => handleCancelReversalOne(receipt)}
-                                className="px-2 py-1 rounded bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Cancel Reversal"
-                                disabled={!receipt.isReversed}
-                              >
-                                <FaRedoAlt size={11} />
-                              </button>
-                              <button
-                                onClick={() => handlePrintReceipt(receipt)}
-                                className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white"
-                                title="Print"
-                              >
-                                <FaPrint size={11} />
+                              {!receipt.isConfirmed && !receipt.isReversed && (
+                                <button onClick={() => openEditForm(receipt)} className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white" title="Edit">
+                                  <FaEdit size={11} />
+                                </button>
+                              )}
+                              {!receipt.isConfirmed && (
+                                <button onClick={() => handleConfirmOne(receipt)} className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white" title="Confirm">
+                                  <FaCheck size={11} />
+                                </button>
+                              )}
+                              {receipt.isConfirmed && !receipt.isReversed && (
+                                <button onClick={() => handleUnconfirmOne(receipt)} className="px-2 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white" title="Unconfirm">
+                                  <FaTimes size={11} />
+                                </button>
+                              )}
+                              {!receipt.isReversed && (
+                                <button onClick={() => handleDeleteOne(receipt._id)} className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white" title="Delete">
+                                  <FaTrash size={11} />
+                                </button>
+                              )}
+                              {receipt.isConfirmed && !receipt.isReversed && (
+                                <button onClick={() => handleReverseOne(receipt)} className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white" title="Reverse">
+                                  <FaUndo size={11} />
+                                </button>
+                              )}
+                              <button onClick={() => handleDownloadReceiptPdf(receipt)} disabled={!canExportReceipt} className="px-2 py-1 rounded bg-slate-600 hover:bg-slate-700 text-white disabled:opacity-40 disabled:cursor-not-allowed" title="Download PDF">
+                                <FaDownload size={11} />
                               </button>
                             </div>
                           </td>

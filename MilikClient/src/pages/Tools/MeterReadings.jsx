@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import {
   FaArrowLeft,
@@ -248,9 +249,9 @@ const buildRegisterPrintHtml = ({ company, companyName, rows, totalAmount, filte
 
 const MeterReadings = () => {
   const confirm = useConfirm();
-  const { currentCompany } = useSelector((state) => state.company || {});
+  const currentCompany = useSelector(selectCurrentCompany);
   const businessId = currentCompany?._id || "";
-  const currentUser = useSelector((state) => state.auth?.currentUser);
+  const currentUser = useSelector(selectCurrentUser);
 
   const canCreateReading = hasCompanyPermission(
     currentUser || {},

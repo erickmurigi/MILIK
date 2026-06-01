@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany } from "../../redux/selectors";
 import { FaChevronDown, FaChevronRight, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
@@ -63,7 +64,7 @@ const Modal = ({ title, children, footer, onClose }) => (
 );
 
 const CarWashExpenses = () => {
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentCompany = useSelector(selectCurrentCompany);
   const isConsolidated = !getActiveBranchId();
   const [rows, setRows] = useState([]);
   const [cashbooks, setCashbooks] = useState([]);

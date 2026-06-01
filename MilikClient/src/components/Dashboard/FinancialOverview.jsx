@@ -10,17 +10,14 @@ import {
   YAxis,
 } from 'recharts';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
+import {
+  selectCurrentUser,
+  selectCurrentCompany,
+  selectAllRentPayments,
+} from '../../redux/selectors';
 
 const SNAPSHOT_CATEGORIES = new Set(['RENT_CHARGE', 'UTILITY_CHARGE']);
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-const normalizeArray = (value) => {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.data)) return value.data;
-  if (Array.isArray(value?.items)) return value.items;
-  if (Array.isArray(value?.rentPayments)) return value.rentPayments;
-  return [];
-};
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase();
 
@@ -33,10 +30,9 @@ const getInvoiceRecognitionDate = (invoice) =>
   parseDate(invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt);
 
 const FinancialOverview = ({ darkMode, invoices = [] }) => {
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
-  const rentPayments = useMemo(() => normalizeArray(rawRentPayments), [rawRentPayments]);
+  const currentCompany  = useSelector(selectCurrentCompany);
+  const currentUser     = useSelector(selectCurrentUser);
+  const rentPayments    = useSelector(selectAllRentPayments);
 
   const chartRef = useRef(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });

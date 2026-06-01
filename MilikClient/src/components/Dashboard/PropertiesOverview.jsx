@@ -2,6 +2,15 @@ import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
+import {
+  selectCurrentUser,
+  selectCurrentCompany,
+  selectAllProperties,
+  selectAllUnits,
+  selectAllTenants,
+  selectAllMaintenances,
+  selectAllRentPayments,
+} from '../../redux/selectors';
 
 const normalizeArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -28,14 +37,13 @@ const isOperationalTenant = (tenant) => !['inactive', 'terminated', 'evicted', '
 
 const PropertiesOverview = ({ darkMode, invoices = [] }) => {
   const navigate = useNavigate();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser || state.auth?.user || null);
-  const properties = useSelector((state) => normalizeArray(state.property?.properties));
-  const units = useSelector((state) => normalizeArray(state.unit?.units));
-  const tenants = useSelector((state) => normalizeArray(state.tenant?.tenants));
-  const maintenances = useSelector((state) => normalizeArray(state.maintenance?.maintenances));
-  const rawRentPayments = useSelector((state) => state.rentPayment?.rentPayments);
-  const rentPayments = useMemo(() => normalizeArray(rawRentPayments), [rawRentPayments]);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const properties = useSelector(selectAllProperties);
+  const units = useSelector(selectAllUnits);
+  const tenants = useSelector(selectAllTenants);
+  const maintenances = useSelector(selectAllMaintenances);
+  const rentPayments = useSelector(selectAllRentPayments);
   const propertiesLoading = useSelector((state) => state.property?.loading || state.property?.isFetching);
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;

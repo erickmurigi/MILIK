@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany } from "../../redux/selectors";
 import { FaChevronDown, FaChevronRight, FaRedoAlt, FaSearch, FaSms, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import CwSmsModal from "./CwSmsModal";
 
 const defaultFilters = { date: todayISO(), method: "", cashbookAccount: "", reference: "", reconciliationStatus: "" };
 const PAGE_SIZE = 30;
@@ -17,7 +19,7 @@ const reconciliationBadgeClass = {
 };
 
 const CarWashPayments = () => {
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
+  const currentCompany = useSelector(selectCurrentCompany);
   const isConsolidated = !getActiveBranchId();
   const [rows, setRows] = useState([]);
   const [cashbooks, setCashbooks] = useState([]);
@@ -77,16 +79,38 @@ const CarWashPayments = () => {
   }, [rows]);
   const { totalAmount, pendingCount, reconciledCount, flaggedCount } = rowStats;
 
-  const openSmsModal = (row) => {
-    setSmsTarget(row);
-    setSmsBody(`Hi ${row.job?.customerName || "Customer"}, your payment of KES ${Number(row.amount || 0).toLocaleString()} for car wash job ${row.job?.jobNumber || ""} has been received. Thank you!`);
+  const buildPaymentTemplates = (row) => {
+    const name   = row.job?.customerName || "Customer";
+    const amount = Number(row.amount || 0).toLocaleString();
+    const num    = row.job?.jobNumber || "";
+    const plate  = row.job?.plateNumber || "";
+    return [
+      { label: "Payment Confirmed", color: "green",  body: `Hi ${name}! Payment of KES ${amount} received for ${plate || num} wash. Thank you!` },
+      { label: "Receipt",           color: "blue",   body: `Hi ${name}, your payment of KES ${amount} for car wash job ${num} has been received. Your balance is now cleared. Thank you for choosing us!` },
+      { label: "Partial Payment",   color: "amber",  body: `Hi ${name}, we've received KES ${amount} toward your car wash job ${num}. Please pay the remaining balance at your convenience. Thank you!` },
+    ];
   };
 
-  const sendSms = async () => {
-    if (!smsTarget || !smsBody.trim()) return;
+  const openSmsModal = (row) => {
+    setSmsTarget(row);
+    const name   = row.job?.customerName || "Customer";
+    const amount = Number(row.amount || 0).toLocaleString();
+    const plate  = row.job?.plateNumber || "";
+    const num    = row.job?.jobNumber || "";
+    setSmsBody(`Hi ${name}! Payment of KES ${amount} received for ${plate || num} wash. Thank you!`);
+  };
+
+  // Resolve the best SMS target phone for a payment:
+  // 1. M-Pesa sender phone (stored at payment time — most accurate for Paybill)
+  // 2. Customer phone from the job record
+  const resolvePaymentSmsPhone = (row) =>
+    row.receivedFromPhone || row.job?.phone || "";
+
+  const sendSms = async (phone, body) => {
+    if (!smsTarget) return;
     setSmsSending(true);
     try {
-      await carWashApi.sendPaymentSms(smsTarget._id, { phone: smsTarget.job?.phone || "", body: smsBody.trim() });
+      await carWashApi.sendPaymentSms(smsTarget._id, { phone, body });
       toast.success("SMS sent successfully");
       setSmsTarget(null);
     } catch (error) {
@@ -250,14 +274,17 @@ const CarWashPayments = () => {
                             <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {row.paymentDate ? new Date(row.paymentDate).toLocaleString("en-KE") : "-"}</div>
                             <div className="flex items-center gap-2">
                               <div><span className="font-extrabold uppercase text-slate-500">Customer:</span> {row.job?.customerName || "-"}</div>
-                              {row.job?.phone && (
+                              {(row.receivedFromPhone || row.job?.phone) && (
                                 <button
                                   type="button"
                                   onClick={() => openSmsModal(row)}
                                   className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-1.5 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-                                  title={`Send SMS to ${row.job.phone}`}
+                                  title={`Send SMS to ${row.receivedFromPhone || row.job?.phone}`}
                                 >
                                   <FaSms /> SMS
+                                  {row.receivedFromPhone && (
+                                    <span className="rounded bg-emerald-100 px-1 text-[9px] font-black text-emerald-700">M-Pesa</span>
+                                  )}
                                 </button>
                               )}
                             </div>
@@ -292,50 +319,15 @@ const CarWashPayments = () => {
         </div>
       </div>
       {smsTarget && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-[2px]">
-          <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-              <div>
-                <h2 className="text-sm font-extrabold uppercase tracking-wide">Send SMS</h2>
-                <p className="mt-0.5 text-xs font-semibold text-emerald-50">
-                  {smsTarget.job?.customerName || "Customer"} · {smsTarget.job?.phone || ""}
-                </p>
-              </div>
-              <button type="button" onClick={() => setSmsTarget(null)} className="p-1 text-white/80 hover:bg-white/10 hover:text-white">
-                <FaTimes />
-              </button>
-            </div>
-            <div className="space-y-3 p-4">
-              <div>
-                <div className="mb-1 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Phone</div>
-                <input
-                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800"
-                  value={smsTarget.job?.phone || ""}
-                  readOnly
-                />
-              </div>
-              <div>
-                <div className="mb-1 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Message *</div>
-                <textarea
-                  className="min-h-24 w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
-                  value={smsBody}
-                  onChange={(e) => setSmsBody(e.target.value)}
-                  maxLength={320}
-                />
-                <div className="mt-1 text-right text-[10px] text-slate-400">{smsBody.length}/320</div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <button type="button" onClick={() => setSmsTarget(null)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">
-                Cancel
-              </button>
-              <button type="button" onClick={sendSms} disabled={smsSending || !smsBody.trim()} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
-                <FaSms />
-                {smsSending ? "Sending…" : "Send SMS"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <CwSmsModal
+          target={{ _id: smsTarget._id, name: smsTarget.job?.customerName, phone: resolvePaymentSmsPhone(smsTarget) }}
+          defaultBody={smsBody}
+          templates={buildPaymentTemplates(smsTarget)}
+          context={`Payment · ${smsTarget.job?.jobNumber || ""}${smsTarget.receivedFromPhone ? ` · M-Pesa: ${smsTarget.receivedFromPhone}` : ""}`}
+          onSend={sendSms}
+          onClose={() => setSmsTarget(null)}
+          sending={smsSending}
+        />
       )}
     </CarWashShell>
   );

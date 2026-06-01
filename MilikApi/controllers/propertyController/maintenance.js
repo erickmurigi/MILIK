@@ -36,7 +36,7 @@ export const createMaintenance = async (req, res, next) => {
 
 // Get all maintenance requests
 export const getMaintenances = async (req, res, next) => {
-  const { status, priority, unit, tenant, page = 1, limit = 5000 } = req.query;
+  const { status, priority, unit, tenant, page = 1, limit = 50 } = req.query;
   try {
     const business = resolveBusinessId(req);
     const filter = { business };
@@ -46,7 +46,7 @@ export const getMaintenances = async (req, res, next) => {
     if (tenant) filter.tenant = tenant;
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 5000, 1), 5000);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
 
     const [maintenances, total] = await Promise.all([
       Maintenance.find(filter)

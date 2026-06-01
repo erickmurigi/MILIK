@@ -380,15 +380,22 @@ router.post('/', verifyUser, async (req, res) => {
 
     let onboardingEmail = { attempted: false, sent: false, skipped: true, error: null };
     if (shouldSendOnboardingEmail) {
+      const companyDoc = companies.find((item) => String(item._id) === String(primaryCompany)) || null;
+      // Cap at 12s so a slow SMTP server never stalls the user-creation response
+      const emailTimeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Onboarding email timed out')), 12_000)
+      );
       try {
-        const companyDoc = companies.find((item) => String(item._id) === String(primaryCompany)) || null;
-        onboardingEmail = await sendUserOnboardingEmail({
-          user: { email: normalizedEmail, surname: user.surname, otherNames: user.otherNames },
-          company: companyDoc,
-          temporaryPassword: resolvedPassword,
-        });
+        onboardingEmail = await Promise.race([
+          sendUserOnboardingEmail({
+            user: { email: normalizedEmail, surname: user.surname, otherNames: user.otherNames },
+            company: companyDoc,
+            temporaryPassword: resolvedPassword,
+          }),
+          emailTimeout,
+        ]);
         if (onboardingEmail?.sent) {
-          await User.findByIdAndUpdate(user._id, { $set: { onboardingEmailSentAt: new Date() } });
+          User.findByIdAndUpdate(user._id, { $set: { onboardingEmailSentAt: new Date() } }).catch(() => {});
           user.onboardingEmailSentAt = new Date();
         }
       } catch (mailError) {
@@ -595,7 +602,8 @@ router.post('/:id/reset-password', verifyUser, async (req, res) => {
     user.onboardingEmailSentAt = new Date();
     await user.save();
 
-    await sendUserOnboardingEmail({ user, company, temporaryPassword: tempPassword });
+    // Fire-and-forget — reset-password result is not needed before responding
+    sendUserOnboardingEmail({ user, company, temporaryPassword: tempPassword }).catch(() => {});
 
     await logAuditEvent({
       req,

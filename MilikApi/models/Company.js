@@ -561,6 +561,16 @@ const companySchema = new mongoose.Schema(
       default: () => ({}),
     },
 
+    carwashSettings: {
+      defaultCashbooks: {
+        cash:  { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount', default: null },
+        mpesa: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount', default: null },
+        bank:  { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount', default: null },
+        card:  { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount', default: null },
+        other: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount', default: null },
+      },
+    },
+
     communication: {
       type: communicationSchema,
       default: () => ({}),

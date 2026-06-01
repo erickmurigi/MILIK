@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import AppSelect from "../../components/common/AppSelect";
 import useDebounce from "../../hooks/useDebounce";
 import {
   FaCheck,
@@ -18,6 +19,7 @@ import { toast } from "react-toastify";
 import { useLocation, useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -34,12 +36,12 @@ import { getProperties } from "../../redux/propertyRedux";
 const DEFAULT_PAGE_SIZE = 50;
 
 const BASE_CATEGORIES = [
-  { value: "landlord_maintenance", label: "Landlord Expense - Maintenance", landlordLabel: "Owner Expense - Maintenance", propertyRequired: true, explicitDebitAccount: false },
-  { value: "deposit_refund", label: "Deposit Refund", landlordLabel: "Deposit Refund", propertyRequired: true, explicitDebitAccount: false },
-  { value: "landlord_other", label: "Landlord Expense - Other", landlordLabel: "Owner Expense - Other", propertyRequired: true, explicitDebitAccount: false },
-  { value: "manager_property", label: "Manager-Borne Property Expense", landlordLabel: "Manager-Borne Property Expense", propertyRequired: true, explicitDebitAccount: true },
-  { value: "company_operational", label: "Internal / Company Expense", landlordLabel: "Internal / Company Expense", propertyRequired: false, explicitDebitAccount: true },
-  { value: "petty_cash_float", label: "Petty Cash Float Funding", landlordLabel: "Petty Cash Float Funding", propertyRequired: false, explicitDebitAccount: true },
+  { value: "landlord_maintenance", label: "Accounts Payable – Maintenance", landlordLabel: "Accounts Payable – Maintenance", propertyRequired: true, explicitDebitAccount: false },
+  { value: "deposit_refund", label: "Deposit Refund (Liability Release)", landlordLabel: "Deposit Refund (Liability Release)", propertyRequired: true, explicitDebitAccount: false },
+  { value: "landlord_other", label: "Accounts Payable – Other", landlordLabel: "Accounts Payable – Other", propertyRequired: true, explicitDebitAccount: false },
+  { value: "manager_property", label: "Operating Expense (Property)", landlordLabel: "Operating Expense (Property)", propertyRequired: true, explicitDebitAccount: true },
+  { value: "company_operational", label: "Operating Expense (Company)", landlordLabel: "Operating Expense (Company)", propertyRequired: false, explicitDebitAccount: true },
+  { value: "petty_cash_float", label: "Petty Cash Float Top-up", landlordLabel: "Petty Cash Float Top-up", propertyRequired: false, explicitDebitAccount: true },
   { value: "petty_cash_expense", label: "Petty Cash Expense", landlordLabel: "Petty Cash Expense", propertyRequired: false, explicitDebitAccount: true },
 ];
 
@@ -75,9 +77,9 @@ const PaymentVouchers = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const currentUser = useSelector((state) => state.auth?.currentUser);
-  const properties = useSelector((state) => state.property?.properties || []);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const properties = useSelector(selectAllProperties);
   const isLandlordWorkspace = useMemo(
     () => isSelfManagingLandlordCompany(currentCompany || currentUser?.company || null),
     [currentCompany, currentUser?.company]
@@ -196,6 +198,30 @@ const PaymentVouchers = () => {
     };
     loadAccounts();
   }, [currentCompany?._id]);
+
+  const toAccountOptions = (list) =>
+    list.map((a) => ({
+      value: a._id,
+      label: `${a.code} – ${a.name}`,
+      description: [
+        a.type ? a.type.charAt(0).toUpperCase() + a.type.slice(1) : "",
+        a.subGroup || a.group || "",
+      ].filter(Boolean).join(" · "),
+    }));
+
+  const liabilityAccountOptions = useMemo(() => toAccountOptions(liabilityAccounts), [liabilityAccounts]);
+  const debitAccountOptions     = useMemo(() => toAccountOptions(debitAccounts),     [debitAccounts]);
+  const settlementAccountOptions = useMemo(() => toAccountOptions(settlementAccounts), [settlementAccounts]);
+
+  const propertyOptions = useMemo(
+    () => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name || "Property" })),
+    [properties]
+  );
+
+  const categoryOptions = useMemo(
+    () => categories.map((c) => ({ value: c.value, label: c.label })),
+    [categories]
+  );
 
   const loadVouchers = async () => {
     if (!currentCompany?._id) return;
@@ -682,19 +708,14 @@ const PaymentVouchers = () => {
               <p className="mb-4 text-sm text-slate-600">
                 This voucher has no settlement account set. Select one below to complete the payment.
               </p>
-              <label className="block">
-                <span className="text-sm font-bold text-slate-700">Settlement Cashbook / Petty Cash</span>
-                <select
-                  value={pendingPaySettlementId}
-                  onChange={(e) => setPendingPaySettlementId(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="">Select account...</option>
-                  {settlementAccounts.map((account) => (
-                    <option key={account._id} value={account._id}>{account.code} - {account.name}</option>
-                  ))}
-                </select>
-              </label>
+              <AppSelect
+                label="Settlement Cashbook / Petty Cash"
+                value={pendingPaySettlementId}
+                onChange={(val) => setPendingPaySettlementId(val ?? "")}
+                options={settlementAccountOptions}
+                placeholder="Search cashbook..."
+                searchable
+              />
             </div>
             <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-5 py-4">
               <button
@@ -732,14 +753,109 @@ const PaymentVouchers = () => {
                   <div className="mt-1 text-xs text-violet-700">This voucher will keep the requisition linked and mark it as converted.</div>
                 </div>
               ) : null}
-              <label className="block"><span className="text-sm font-bold text-slate-700">Category</span><select value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20">{categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Property</span><select value={form.propertyId} onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">{selectedCategoryMeta?.propertyRequired ? "Select property" : "No property linkage"}</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">{selectedCategoryMeta?.propertyRequired ? "This voucher remains property-linked." : "Leave blank for company-level or petty-cash activity."}</span></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Liability Account</span><select value={form.liabilityAccountId} onChange={(e) => setForm((prev) => ({ ...prev, liabilityAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select liability account</option>{liabilityAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Used for accrual / payable recognition before settlement.</span></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Amount</span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Debit Posting Account</span><select value={form.debitAccountId} onChange={(e) => setForm((prev) => ({ ...prev, debitAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">{selectedCategoryMeta?.explicitDebitAccount ? "Select debit account" : "Automatic from voucher category"}</option>{debitAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">{selectedCategoryMeta?.explicitDebitAccount ? form.category === "petty_cash_float" ? "Choose the petty-cash asset account receiving the float." : "Choose the expense account to debit when this voucher is approved." : "Landlord-borne vouchers continue using the existing automatic posting logic."}</span></label>
-              <label className="block"><span className="text-sm font-bold text-slate-700">Due Date</span><input type="date" value={form.dueDate} onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
-              {!editingVoucherId && <label className="block"><span className="text-sm font-bold text-slate-700">Initial Status</span><select value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="draft">Draft</option><option value="approved">Approved</option><option value="paid">Paid</option></select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Paid creates the accrual leg and immediately settles it through the selected cashbook.</span></label>}
-              <label className="block"><span className="text-sm font-bold text-slate-700">Settlement Cashbook / Petty Cash</span><select value={form.settlementAccountId} onChange={(e) => setForm((prev) => ({ ...prev, settlementAccountId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select cashbook / petty cash account</option>{settlementAccounts.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select><span className="mt-1 block text-[11px] font-semibold text-slate-500">Required before a voucher can be marked as paid.</span></label>
+              <AppSelect
+                label="Category"
+                value={form.category}
+                onChange={(val) => setForm((prev) => ({ ...prev, category: val ?? prev.category }))}
+                options={categoryOptions}
+              />
+
+              <div>
+                <AppSelect
+                  label="Property"
+                  value={form.propertyId}
+                  onChange={(val) => setForm((prev) => ({ ...prev, propertyId: val ?? "" }))}
+                  options={propertyOptions}
+                  placeholder={selectedCategoryMeta?.propertyRequired ? "Select property" : "No property linkage (optional)"}
+                  searchable
+                  clearable
+                />
+                <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                  {selectedCategoryMeta?.propertyRequired
+                    ? "This voucher remains property-linked."
+                    : "Leave blank for company-level or petty-cash activity."}
+                </p>
+              </div>
+
+              <div>
+                <AppSelect
+                  label="Liability Account"
+                  value={form.liabilityAccountId}
+                  onChange={(val) => setForm((prev) => ({ ...prev, liabilityAccountId: val ?? "" }))}
+                  options={liabilityAccountOptions}
+                  placeholder="Search liability / payable account..."
+                  searchable
+                />
+                <p className="mt-1 text-[11px] font-semibold text-slate-500">Used for accrual / payable recognition before settlement.</p>
+              </div>
+
+              <label className="block">
+                <span className="text-sm font-bold text-slate-700">Amount</span>
+                <input
+                  type="number"
+                  value={form.amount}
+                  onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                />
+              </label>
+
+              <div>
+                <AppSelect
+                  label="Debit Posting Account"
+                  value={form.debitAccountId}
+                  onChange={(val) => setForm((prev) => ({ ...prev, debitAccountId: val ?? "" }))}
+                  options={debitAccountOptions}
+                  placeholder={selectedCategoryMeta?.explicitDebitAccount ? "Search debit account..." : "Automatic from category"}
+                  searchable
+                  clearable={!selectedCategoryMeta?.explicitDebitAccount}
+                />
+                <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                  {selectedCategoryMeta?.explicitDebitAccount
+                    ? form.category === "petty_cash_float"
+                      ? "Choose the petty-cash asset account receiving the float."
+                      : "Choose the expense account to debit when this voucher is approved."
+                    : "Accounts-payable vouchers use automatic posting logic."}
+                </p>
+              </div>
+
+              <label className="block">
+                <span className="text-sm font-bold text-slate-700">Due Date</span>
+                <input
+                  type="date"
+                  value={form.dueDate}
+                  onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                />
+              </label>
+
+              {!editingVoucherId && (
+                <div>
+                  <AppSelect
+                    label="Initial Status"
+                    value={form.status}
+                    onChange={(val) => setForm((prev) => ({ ...prev, status: val ?? "draft" }))}
+                    options={[
+                      { value: "draft", label: "Draft" },
+                      { value: "approved", label: "Approved" },
+                      { value: "paid", label: "Paid" },
+                    ]}
+                  />
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">Paid creates the accrual leg and immediately settles it through the selected cashbook.</p>
+                </div>
+              )}
+
+              <div>
+                <AppSelect
+                  label="Settlement Cashbook / Petty Cash"
+                  value={form.settlementAccountId}
+                  onChange={(val) => setForm((prev) => ({ ...prev, settlementAccountId: val ?? "" }))}
+                  options={settlementAccountOptions}
+                  placeholder="Search cashbook / petty cash..."
+                  searchable
+                  clearable
+                />
+                <p className="mt-1 text-[11px] font-semibold text-slate-500">Required before a voucher can be marked as paid.</p>
+              </div>
               <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Reference</span><input value={form.reference} onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block xl:col-span-3"><span className="text-sm font-bold text-slate-700">Narration</span><textarea rows={3} value={form.narration} onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
             </div>

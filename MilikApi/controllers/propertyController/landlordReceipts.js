@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import LandlordReceipt, { RECEIPT_CATEGORIES, PAYMENT_METHODS } from "../../models/LandlordReceipt.js";
 import Landlord from "../../models/Landlord.js";
+import LandlordAdvancement from "../../models/LandlordAdvancement.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import { createError } from "../../utils/error.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
@@ -130,6 +131,43 @@ const buildPostingRole = (category) => {
   if (["owner_float", "utility_funding", "deposit_funding"].includes(normalized)) return "landlord_funds_held";
   if (["expense_reimbursement", "advance_settlement"].includes(normalized)) return "landlord_recovery_clearance";
   return "landlord_current_account_credit";
+};
+
+const statementInclusionForCategory = (category) => {
+  const normalized = String(category || "").trim().toLowerCase();
+  // Funds-held categories are neutral cash management — not part of P&L settlement
+  if (["owner_float", "utility_funding", "deposit_funding"].includes(normalized)) {
+    return { includeInLandlordStatement: false, statementBucket: null };
+  }
+  // Expense reimbursement and advance settlement appear on the statement as additions
+  return { includeInLandlordStatement: true, statementBucket: "landlord_receipt_addition" };
+};
+
+const settleLinkedAdvancement = async (businessId, linkedDocumentId, amount, receiptId) => {
+  if (!isValidObjectId(linkedDocumentId)) return;
+  try {
+    const advancement = await LandlordAdvancement.findOne({
+      _id: linkedDocumentId,
+      business: businessId,
+      status: { $in: ["disbursed", "recovering", "cleared", "active"] },
+    });
+    if (!advancement) return;
+
+    const settle = Math.min(Number(amount || 0), Number(advancement.balanceOutstanding || 0));
+    if (settle <= 0) return;
+
+    advancement.recoveredAmount = Number(advancement.recoveredAmount || 0) + settle;
+    advancement.balanceOutstanding = Math.max(0, Number(advancement.balanceOutstanding || 0) - settle);
+    if (advancement.balanceOutstanding <= 0) advancement.status = "cleared";
+    advancement.metadata = {
+      ...(advancement.metadata || {}),
+      lastSettlementReceiptId: String(receiptId),
+      lastSettlementAt: new Date().toISOString(),
+    };
+    await advancement.save();
+  } catch {
+    // settlement tracking must not block receipt posting
+  }
 };
 
 const resolveReceiptContext = async ({ businessId, propertyId, landlordId = null }) => {
@@ -492,6 +530,8 @@ export const postLandlordReceipt = async (req, res, next) => {
       status: "approved",
     });
 
+    const { includeInLandlordStatement, statementBucket } = statementInclusionForCategory(receipt.category);
+
     const creditLeg = await postEntry({
       business: receipt.business,
       property: receipt.property,
@@ -520,12 +560,19 @@ export const postLandlordReceipt = async (req, res, next) => {
         linkedDocumentRef: receipt.linkedDocumentRef || "",
         postingRole,
         offsetOfEntryId: String(debitLeg._id),
+        includeInLandlordStatement,
+        statementBucket: statementBucket || "",
       },
       createdBy: actorUserId,
       approvedBy: actorUserId,
       approvedAt: postingDate,
       status: "approved",
     });
+
+    // When settling an advance, update the advancement record's outstanding balance
+    if (receipt.category === "advance_settlement" && receipt.linkedDocumentId) {
+      await settleLinkedAdvancement(businessId, receipt.linkedDocumentId, amount, receipt._id);
+    }
 
     receipt.status = "posted";
     receipt.postedBy = actorUserId;
@@ -589,6 +636,32 @@ export const reverseLandlordReceipt = async (req, res, next) => {
     ];
     if (touchedAccountIds.length) {
       await aggregateChartOfAccountBalances(receipt.business, touchedAccountIds);
+    }
+
+    // Restore the advancement balance when an advance_settlement receipt is reversed
+    if (receipt.category === "advance_settlement" && receipt.linkedDocumentId) {
+      try {
+        const advancement = await LandlordAdvancement.findOne({
+          _id: receipt.linkedDocumentId,
+          business: businessId,
+        });
+        if (advancement) {
+          const restore = Math.min(Number(receipt.amount || 0), Number(advancement.recoveredAmount || 0));
+          if (restore > 0) {
+            advancement.recoveredAmount = Math.max(0, Number(advancement.recoveredAmount || 0) - restore);
+            advancement.balanceOutstanding = Number(advancement.balanceOutstanding || 0) + restore;
+            if (advancement.status === "cleared") advancement.status = "recovering";
+            advancement.metadata = {
+              ...(advancement.metadata || {}),
+              lastReversalReceiptId: String(receipt._id),
+              lastReversalAt: new Date().toISOString(),
+            };
+            await advancement.save();
+          }
+        }
+      } catch {
+        // advancement update must not block receipt reversal
+      }
     }
 
     const populated = await populateQuery(LandlordReceipt.findById(receipt._id));

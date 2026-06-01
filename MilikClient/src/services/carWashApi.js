@@ -25,7 +25,10 @@ export const carWashApi = {
   getServiceReport: async (params = {}) => unwrap(await adminRequests.get("/carwash/reports/service-report", { params: bp(params) })),
   getStaffReport: async (params = {}) => unwrap(await adminRequests.get("/carwash/reports/staff-report", { params: bp(params) })),
   listLedgerEntries: async (params = {}) => unwrap(await adminRequests.get("/carwash/reports/ledger", { params: bp(params) })),
+  backfillPaymentLedger: async () => unwrap(await adminRequests.post("/carwash/reports/ledger/backfill")),
+  repairLedger: async () => unwrap(await adminRequests.post("/carwash/reports/ledger/repair")),
   listJobs: async (params = {}) => unwrap(await adminRequests.get("/carwash/jobs", { params: bp(params) })),
+  getJob: async (id) => unwrap(await adminRequests.get(`/carwash/jobs/${id}`)),
   createJob: async (payload) => unwrap(await adminRequests.post("/carwash/jobs", bb(payload))),
   updateJob: async (id, payload) => unwrap(await adminRequests.put(`/carwash/jobs/${id}`, payload)),
   updateJobStatus: async (id, status) => unwrap(await adminRequests.patch(`/carwash/jobs/${id}/status`, { status })),
@@ -38,6 +41,8 @@ export const carWashApi = {
   deleteService: async (id) => unwrap(await adminRequests.delete(`/carwash/services/${id}`)),
   listPayments: async (params = {}) => unwrap(await adminRequests.get("/carwash/payments", { params: bp(params) })),
   recordPayment: async (payload) => unwrap(await adminRequests.post("/carwash/payments", bb(payload))),
+  deletePayment: async (id) => unwrap(await adminRequests.delete(`/carwash/payments/${id}`)),
+  initiateStkPush: async (payload) => unwrap(await adminRequests.post("/carwash/payments/stk-push", payload)),
   updatePaymentReconciliation: async (id, payload) => unwrap(await adminRequests.patch(`/carwash/payments/${id}/reconciliation`, payload)),
   listDeposits: async (params = {}) => unwrap(await adminRequests.get("/carwash/deposits", { params: bp(params) })),
   createDeposit: async (payload) => unwrap(await adminRequests.post("/carwash/deposits", bb(payload))),
@@ -46,6 +51,9 @@ export const carWashApi = {
   createExpense: async (payload) => unwrap(await adminRequests.post("/carwash/expenses", bb(payload))),
   updateExpenseStatus: async (id, payload) => unwrap(await adminRequests.patch(`/carwash/expenses/${id}/status`, payload)),
   listChartOfAccounts: async (params = {}) => unwrap(await adminRequests.get("/chart-of-accounts", { params })),
+  listCashbooks: async () => unwrap(await adminRequests.get("/chart-of-accounts", { params: { type: "asset", moduleScope: "carwash", search: "Cashbooks" } })),
+  getCarWashSettings: async () => unwrap(await adminRequests.get("/carwash/settings")),
+  updateCarWashSettings: async (payload) => unwrap(await adminRequests.put("/carwash/settings", payload)),
   createChartAccount: async (payload) => unwrap(await adminRequests.post("/chart-of-accounts", payload)),
   updateChartAccount: async (id, payload) => unwrap(await adminRequests.put(`/chart-of-accounts/${id}`, payload)),
   deleteChartAccount: async (id, payload = {}) => unwrap(await adminRequests.delete(`/chart-of-accounts/${id}`, { data: payload })),
@@ -67,6 +75,7 @@ export const carWashApi = {
   // Loyalty
   getLoyaltyProgram: async () => unwrap(await adminRequests.get("/carwash/loyalty/program")),
   saveLoyaltyProgram: async (payload) => unwrap(await adminRequests.post("/carwash/loyalty/program", payload)),
+  migratePerCustomerCards: async () => unwrap(await adminRequests.post("/carwash/loyalty/admin/migrate-per-customer")),
   lookupPlate: async (plate) => unwrap(await adminRequests.get(`/carwash/loyalty/plate/${encodeURIComponent(plate)}`)),
   listLoyaltyCustomers: async (params = {}) => unwrap(await adminRequests.get("/carwash/loyalty/customers", { params })),
   registerLoyaltyCustomer: async (payload) => unwrap(await adminRequests.post("/carwash/loyalty/customers", payload)),
@@ -76,6 +85,19 @@ export const carWashApi = {
   sendJobSms: async (jobId, payload) => unwrap(await adminRequests.post(`/carwash/jobs/${jobId}/sms`, payload)),
   sendCustomerSms: async (customerId, payload) => unwrap(await adminRequests.post(`/carwash/loyalty/customers/${customerId}/sms`, payload)),
   sendPaymentSms: async (paymentId, payload) => unwrap(await adminRequests.post(`/carwash/payments/${paymentId}/sms`, payload)),
+
+  // ─── Credit accounts ─────────────────────────────────────────────────────
+  seedAccounts: async () => unwrap(await adminRequests.post("/carwash/accounts/setup/seed-accounts")),
+  listCreditAccounts: async (params = {}) => unwrap(await adminRequests.get("/carwash/accounts", { params })),
+  createCreditAccount: async (payload) => unwrap(await adminRequests.post("/carwash/accounts", payload)),
+  getCreditAccount: async (id) => unwrap(await adminRequests.get(`/carwash/accounts/${id}`)),
+  updateCreditAccount: async (id, payload) => unwrap(await adminRequests.put(`/carwash/accounts/${id}`, payload)),
+  lookupAccountByPlate: async (plate) => unwrap(await adminRequests.get(`/carwash/accounts/lookup/plate/${encodeURIComponent(plate)}`)),
+  recordAccountPayment: async (id, payload) => unwrap(await adminRequests.post(`/carwash/accounts/${id}/pay`, payload)),
+  generateStatement: async (id, payload = {}) => unwrap(await adminRequests.post(`/carwash/accounts/${id}/statements`, payload)),
+  listStatements: async (id, params = {}) => unwrap(await adminRequests.get(`/carwash/accounts/${id}/statements`, { params })),
+  getStatement: async (id, statementId) => unwrap(await adminRequests.get(`/carwash/accounts/${id}/statements/${statementId}`)),
+  sendStatementSms: async (id, statementId, payload) => unwrap(await adminRequests.post(`/carwash/accounts/${id}/statements/${statementId}/sms`, payload)),
 };
 
 export const todayISO = () => new Date().toISOString().slice(0, 10);

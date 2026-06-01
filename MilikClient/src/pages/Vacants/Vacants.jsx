@@ -33,6 +33,7 @@ import { getUnits, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getMaintenances } from "../../redux/apiCalls";
+import { selectCurrentCompany, selectAllProperties, selectAllTenants, selectAllMaintenances } from "../../redux/selectors";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import { printTabularList } from "../../utils/printList";
 
@@ -210,12 +211,12 @@ const Vacants = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const { currentCompany } = useSelector((state) => state.company || {});
+  const currentCompany = useSelector(selectCurrentCompany);
   const units = useSelector((state) => state.unit?.units || []);
   const unitsLoading = useSelector((state) => state.unit?.isFetching || false);
-  const properties = useSelector((state) => state.property?.properties || []);
-  const tenants = useSelector((state) => state.tenant?.tenants || []);
-  const maintenances = useSelector((state) => state.maintenance?.maintenances || []);
+  const properties = useSelector(selectAllProperties);
+  const tenants = useSelector(selectAllTenants);
+  const maintenances = useSelector(selectAllMaintenances);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedRows, setExpandedRows] = useState([]);
