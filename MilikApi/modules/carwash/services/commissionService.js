@@ -57,7 +57,25 @@ export const resolveCommissionRuleForJob = async (job = {}) => {
   return resolveCommissionRuleForLine(job.business, job.service || null, staffId);
 };
 
-export const accrueCommissionForJob = async ({ req = null, job }) => {
+// Build highest-amount-first allocation map for service lines.
+// Returns a Set of serviceName values whose lines are fully covered by totalPaid.
+export const buildPaidLineSet = (serviceLines, totalPaid) => {
+  if (!Array.isArray(serviceLines) || !serviceLines.length) return null;
+  // Sort descending by price so the most valuable service is covered first
+  const sorted = [...serviceLines].sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+  let remaining = round2(Number(totalPaid || 0));
+  const paid = new Set();
+  for (const line of sorted) {
+    const price = Number(line.price || 0);
+    if (remaining >= price - 0.01) {
+      paid.add(line.serviceName);
+      remaining = round2(remaining - price);
+    }
+  }
+  return paid;
+};
+
+export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = null }) => {
   if (!job || !["done", "paid"].includes(String(job.status || "").toLowerCase())) return null;
 
   const rawStaff = Array.isArray(job.assignedStaff) ? job.assignedStaff : (job.assignedStaff ? [job.assignedStaff] : []);
@@ -97,6 +115,11 @@ export const accrueCommissionForJob = async ({ req = null, job }) => {
     let totalAmount = 0;
 
     for (const line of lines) {
+      // Skip commission for service lines not fully covered by payment allocation.
+      // paidLineSet is null when the job is fully paid (all lines earnable) or
+      // when called from a status update without payment context.
+      if (paidLineSet !== null && !paidLineSet.has(line.serviceName)) continue;
+
       const rule = await resolveCommissionRuleForLine(job.business, line.service || null, staffId);
       if (!rule || Number(rule.rate || 0) <= 0) continue;
 

@@ -822,14 +822,21 @@ const sendSmsViaAfricasTalking = async ({ profile, to, body }) => {
   if (!apiKey) {
     throw new Error("Africa's Talking API key is missing for this SMS profile.");
   }
+  if (!profile?.accountUsername) {
+    throw new Error("Africa's Talking username is missing for this SMS profile.");
+  }
+
+  const baseUrl = profile?.useSandbox
+    ? 'https://api.sandbox.africastalking.com/version1/messaging'
+    : 'https://api.africastalking.com/version1/messaging';
 
   const params = new URLSearchParams();
-  params.append('username', profile?.accountUsername || '');
+  params.append('username', profile.accountUsername);
   params.append('to', to);
   params.append('message', body);
   if (profile?.senderId) params.append('from', profile.senderId);
 
-  const response = await axios.post('https://api.africastalking.com/version1/messaging', params.toString(), {
+  const response = await axios.post(baseUrl, params.toString(), {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       Accept: 'application/json',
@@ -838,11 +845,27 @@ const sendSmsViaAfricasTalking = async ({ profile, to, body }) => {
     timeout: 30000,
   });
 
-  const recipients = response?.data?.SMSMessageData?.Recipients || [];
-  const first = recipients[0] || {};
+  const smsData = response?.data?.SMSMessageData;
+  if (!smsData) {
+    throw new Error(`Africa's Talking: unexpected response — ${JSON.stringify(response?.data || {})}`);
+  }
+
+  const recipients = smsData.Recipients || [];
+  if (!recipients.length) {
+    // AT puts a human-readable reason in smsData.Message when no recipients are processed
+    const reason = smsData.Message || 'No recipients processed';
+    throw new Error(`Africa's Talking: ${reason}`);
+  }
+
+  const first = recipients[0];
+  const atStatus = String(first.status || '');
+  if (atStatus.toLowerCase() !== 'success') {
+    throw new Error(`Africa's Talking: message rejected — ${atStatus || 'unknown status'}`);
+  }
+
   return {
     messageId: String(first.messageId || ''),
-    status: String(first.status || ''),
+    status: atStatus,
     cost: String(first.cost || ''),
   };
 };
@@ -1193,17 +1216,31 @@ export const sendAdHocSms = async ({ businessId, phone, body, templateKey = 'adh
       business: businessId,
       channel: 'sms',
       templateKey,
-      recipientPhone: phone,
+      to: phone,
       recipientName,
       body,
       status: result?.messageId ? 'sent' : 'failed',
       providerMessageId: result?.messageId || '',
-      providerName: profile?.provider || 'generic',
+      providerStatus: result?.status || '',
+      provider: profile?.provider || 'generic',
       sentAt: new Date(),
     }).catch(() => {});
 
     return result;
-  } catch (_err) {
+  } catch (err) {
+    console.error('[SMS] sendAdHocSms failed phone=%s template=%s: %s', phone, templateKey, err?.message || err);
+    SmsLog.create({
+      business: businessId,
+      channel: 'sms',
+      templateKey,
+      to: phone,
+      recipientName,
+      body,
+      status: 'failed',
+      error: String(err?.message || 'Unknown error').slice(0, 500),
+      provider: 'unknown',
+      sentAt: new Date(),
+    }).catch(() => {});
     return null;
   }
 };

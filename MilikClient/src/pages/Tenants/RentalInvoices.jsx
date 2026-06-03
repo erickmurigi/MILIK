@@ -1516,7 +1516,7 @@ const getTenantPricing = (tenant) => {
       ...context,
       utilityAmount: useTenantUtilities ? utilitiesFromTenant : utilitiesFromUnit,
       utilityLabel:
-        billableUtilityLabels.length === 1 ? billableUtilityLabels[0] : billableUtilityLabels.length > 1 ? "Utilities" : "",
+        billableUtilityLabels.length > 0 ? billableUtilityLabels.join(", ") : "",
     };
   });
 
@@ -1527,7 +1527,7 @@ const getTenantPricing = (tenant) => {
   return {
     rentAmount,
     utilityAmount,
-    utilityLabel: utilityLabels.length === 1 ? utilityLabels[0] : utilityLabels.length > 1 ? "Utilities" : "",
+    utilityLabel: utilityLabels.length > 0 ? utilityLabels.join(", ") : "",
     total: rentAmount + utilityAmount,
     unitContexts,
   };
@@ -1570,7 +1570,7 @@ const getTenantPricingForBookingPeriod = (tenant, month, year) => {
   return {
     rentAmount,
     utilityAmount,
-    utilityLabel: utilityLabels.length === 1 ? utilityLabels[0] : utilityLabels.length > 1 ? "Utilities" : "",
+    utilityLabel: utilityLabels.length > 0 ? utilityLabels.join(", ") : "",
     total: rentAmount + utilityAmount,
     unitContexts: scheduleAwareUnitContexts,
   };

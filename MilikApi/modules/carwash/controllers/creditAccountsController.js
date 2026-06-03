@@ -39,22 +39,35 @@ const generateStatementNumber = async (business, periodStart) => {
 
 // ─── Balance computation ──────────────────────────────────────────────────────
 
+// Finds all non-cancelled jobs for an account — by explicit creditAccount link
+// OR by plate number (covers jobs created before the account existed, or where
+// the PM forgot to select the account at job creation).
 const computeAccountBalance = async (business, accountId) => {
+  const account = await CarWashCreditAccount.findById(accountId).select("plates").lean();
+  const plates = Array.isArray(account?.plates) ? account.plates.filter(Boolean) : [];
+
+  const orConditions = [{ creditAccount: new mongoose.Types.ObjectId(String(accountId)) }];
+  if (plates.length) orConditions.push({ plateNumber: { $in: plates } });
+
   const jobs = await CarWashJob.find({
     business,
-    creditAccount: accountId,
     status: { $nin: ["cancelled"] },
-  }).lean();
+    $or: orConditions,
+  }).select("_id price").lean();
 
   if (!jobs.length) return 0;
 
-  const jobIds = jobs.map((j) => j._id);
+  // Deduplicate by _id (a job linked by both plate AND creditAccount must not be counted twice)
+  const uniqueJobs = [...new Map(jobs.map((j) => [String(j._id), j])).values()];
+  const jobIds = uniqueJobs.map((j) => j._id);
+
+  const businessOid = new mongoose.Types.ObjectId(String(business));
   const totals = await CarWashPayment.aggregate([
-    { $match: { business, job: { $in: jobIds } } },
+    { $match: { business: businessOid, job: { $in: jobIds } } },
     { $group: { _id: null, paid: { $sum: "$amount" } } },
   ]);
 
-  const totalInvoiced = jobs.reduce((sum, j) => sum + Number(j.price || 0), 0);
+  const totalInvoiced = uniqueJobs.reduce((sum, j) => sum + Number(j.price || 0), 0);
   const totalPaid = Number(totals[0]?.paid || 0);
   return round2(totalInvoiced - totalPaid);
 };

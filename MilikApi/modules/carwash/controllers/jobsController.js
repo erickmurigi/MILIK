@@ -7,7 +7,7 @@ import CarWashStaff from "../models/CarWashStaff.js";
 import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
-import { autoEnrollPlate } from "./loyaltyController.js";
+import { autoEnrollPlate, awardLoyaltyStamp, ensureCarWashCustomer } from "./loyaltyController.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
 
 const JOB_STATUSES = new Set(["waiting", "washing", "done", "paid", "cancelled"]);
@@ -289,12 +289,12 @@ export const createJob = async (req, res, next) => {
     }
 
     if (job.jobType === "vehicle" && job.plateNumber) {
-      // Awaited so the card exists before any payment is recorded (avoids race condition)
-      try {
-        await autoEnrollPlate?.({ business, plate: job.plateNumber, customerName: job.customerName, phone: job.phone });
-      } catch (err) {
-        console.error("[CW Job] autoEnroll failed job=%s plate=%s: %s", job.jobNumber, job.plateNumber, err?.message || err);
-      }
+      // Always create the customer record first — no loyalty dependency
+      ensureCarWashCustomer({ business, plate: job.plateNumber, customerName: job.customerName, phone: job.phone })
+        .catch((err) => console.error("[CW Job] ensureCustomer failed job=%s plate=%s: %s", job.jobNumber, job.plateNumber, err?.message || err));
+      // Then attempt loyalty card enrolment (no-op if no active program)
+      autoEnrollPlate?.({ business, plate: job.plateNumber, customerName: job.customerName, phone: job.phone })
+        .catch(() => {});
 
       if (resolvedCreditAccount && job.plateNumber) {
         CarWashCreditAccount.updateOne(
@@ -453,6 +453,14 @@ export const updateJobStatus = async (req, res, next) => {
       });
     } else {
       await accrueCommissionForJob({ req, job });
+      // Award loyalty stamp when work is done — covers both cash and credit customers.
+      // Cash customers get their stamp regardless of payment timing;
+      // credit customers get it immediately without waiting for end-of-month settlement.
+      if (status === "done") {
+        awardLoyaltyStamp({ business, job }).catch((err) =>
+          console.error("[CW Loyalty] Stamp award failed job=%s: %s", job.jobNumber, err?.message || err)
+        );
+      }
     }
     res.status(200).json({ success: true, data: job, job, message: "Car Wash job status updated" });
   } catch (error) {

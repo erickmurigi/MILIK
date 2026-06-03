@@ -4,6 +4,7 @@ import {
   getLoyaltyProgram,
   upsertLoyaltyProgram,
   listCustomers,
+  listCustomersEnriched,
   registerCustomer,
   updateCustomer,
   lookupPlate,
@@ -25,6 +26,7 @@ router.get('/plate/:plate', requireCompanyPermission('carwash-jobs', 'view', 'ca
 
 // Customers
 router.get('/customers', requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), listCustomers);
+router.get('/customers/enriched', requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), listCustomersEnriched);
 router.post('/customers', requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), registerCustomer);
 router.put('/customers/:id', validateParamId(), requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), updateCustomer);
 router.get('/customers/:customerId/card', validateParamId('customerId'), requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), getCustomerCard);

@@ -206,6 +206,7 @@ const normalizeSmsProfileItem = (item = {}, index = 0) => {
     callbackUrl: optionalString(item?.callbackUrl),
     enabled: Boolean(item?.enabled),
     isDefault: Boolean(item?.isDefault),
+    useSandbox: Boolean(item?.useSandbox),
     lastTestStatus: ['success', 'failed', 'never'].includes(optionalString(item?.lastTestStatus).toLowerCase())
       ? optionalString(item?.lastTestStatus).toLowerCase()
       : 'never',
@@ -399,6 +400,7 @@ const smsProfileSchema = new mongoose.Schema(
     callbackUrl: { type: String, trim: true, default: '' },
     enabled: { type: Boolean, default: false },
     isDefault: { type: Boolean, default: false },
+    useSandbox: { type: Boolean, default: false },
     lastTestStatus: {
       type: String,
       enum: ['never', 'success', 'failed'],

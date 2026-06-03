@@ -78,6 +78,7 @@ export const carWashApi = {
   migratePerCustomerCards: async () => unwrap(await adminRequests.post("/carwash/loyalty/admin/migrate-per-customer")),
   lookupPlate: async (plate) => unwrap(await adminRequests.get(`/carwash/loyalty/plate/${encodeURIComponent(plate)}`)),
   listLoyaltyCustomers: async (params = {}) => unwrap(await adminRequests.get("/carwash/loyalty/customers", { params })),
+  listCustomersEnriched: async (params = {}) => unwrap(await adminRequests.get("/carwash/loyalty/customers/enriched", { params })),
   registerLoyaltyCustomer: async (payload) => unwrap(await adminRequests.post("/carwash/loyalty/customers", payload)),
   updateLoyaltyCustomer: async (id, payload) => unwrap(await adminRequests.put(`/carwash/loyalty/customers/${id}`, payload)),
   getCustomerCard: async (customerId) => unwrap(await adminRequests.get(`/carwash/loyalty/customers/${customerId}/card`)),

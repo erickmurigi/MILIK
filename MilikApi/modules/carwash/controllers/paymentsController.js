@@ -5,7 +5,7 @@ import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashCustomer from "../models/CarWashCustomer.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
-import { accrueCommissionForJob, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
+import { accrueCommissionForJob, buildPaidLineSet, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
 import { awardLoyaltyStamp, revokeStampForJob, sendPaymentConfirmationSms } from "./loyaltyController.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
 import mpesaService from "../../../services/mpesaService.js";
@@ -165,12 +165,30 @@ export const recordPayment = async (req, res, next) => {
       }
     }
 
-    await accrueCommissionForJob({ req, job: updatedJob });
+    // Build allocation: highest-price line paid first for commission recognition.
+    // When job is fully paid, paidLineSet is null (all lines recognised).
+    const totalEffectivePaid = round2(
+      (await CarWashPayment.aggregate([
+        { $match: { business: job.business, job: job._id } },
+        ...effectivePaidAggregation,
+      ]))?.[0]?.paid || 0
+    );
+    const serviceLines = Array.isArray(updatedJob.serviceLines) && updatedJob.serviceLines.length
+      ? updatedJob.serviceLines
+      : [{ serviceName: updatedJob.serviceName || "", price: Number(updatedJob.price || 0) }];
+    const paidLineSet = updatedJob.paymentStatus === "paid"
+      ? null
+      : buildPaidLineSet(serviceLines, totalEffectivePaid);
+
+    await accrueCommissionForJob({ req, job: updatedJob, paidLineSet });
+
     if (updatedJob.paymentStatus === "paid") {
       await markJobCommissionsPayable({ business, jobId: updatedJob._id });
-      await awardLoyaltyStamp({ business, job: updatedJob });
-      await sendPaymentConfirmationSms({ business, job: updatedJob, amount, overridePhone: receivedFromPhone });
     }
+
+    // Payment confirmation SMS fires on every payment — partial or full.
+    // Includes outstanding balance so customer knows what's left.
+    sendPaymentConfirmationSms({ business, job: updatedJob, amount, overridePhone: receivedFromPhone });
     await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId });
     res.status(201).json({ success: true, data: payment, payment, job: updatedJob, message: "Car Wash payment recorded" });
   } catch (error) {

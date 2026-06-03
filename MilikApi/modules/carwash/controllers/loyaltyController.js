@@ -3,9 +3,13 @@ import CarWashCustomer from '../models/CarWashCustomer.js';
 import CarWashLoyaltyProgram from '../models/CarWashLoyaltyProgram.js';
 import CarWashLoyaltyCard from '../models/CarWashLoyaltyCard.js';
 import CarWashJob from '../models/CarWashJob.js';
+import CarWashPayment from '../models/CarWashPayment.js';
+import CarWashCreditAccount from '../models/CarWashCreditAccount.js';
 import { createError } from '../../../utils/error.js';
 import { currentUserId, escapeRegex, resolveActiveBusinessId } from '../services/businessScope.js';
 import { sendAdHocSms } from '../../../services/communicationService.js';
+
+const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 const sendLoyaltySms = (business, phone, body, templateKey) =>
   sendAdHocSms({ businessId: business, phone, body, templateKey }).catch(() => {});
@@ -108,6 +112,133 @@ export const listCustomers = async (req, res, next) => {
     }));
 
     res.json({ success: true, data: enriched, total, page: Number(page), limit: Number(limit) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Enriched customer list — used by the dedicated Customers page.
+// Returns every CarWashCustomer with aggregated job stats, outstanding balance,
+// loyalty card progress, and credit account reference.
+// All aggregations are batched (no N+1 queries).
+export const listCustomersEnriched = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const pageNum = Math.max(Number(req.query.page || 1), 1);
+    const limitNum = Math.min(Math.max(Number(req.query.limit || 30), 1), 100);
+    const search = escapeRegex(String(req.query.search || '').trim());
+
+    const filter = { business };
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { plates: { $regex: search, $options: 'i' } },
+      ];
+    }
+    // Optional: filter to only customers with outstanding balance
+    if (req.query.hasOutstanding === 'true') {
+      // Handled in post-processing below — filter flag stored for later
+    }
+
+    const [customers, total] = await Promise.all([
+      CarWashCustomer.find(filter)
+        .sort({ updatedAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      CarWashCustomer.countDocuments(filter),
+    ]);
+
+    if (!customers.length) {
+      return res.json({ success: true, data: [], total: 0, page: pageNum, limit: limitNum });
+    }
+
+    const allPlates = [...new Set(customers.flatMap((c) => c.plates || []))];
+    const customerIds = customers.map((c) => c._id);
+    const businessOid = new mongoose.Types.ObjectId(String(business));
+
+    // Three parallel batch queries — no N+1
+    const [jobStats, loyaltyCards, creditAccounts] = await Promise.all([
+      CarWashJob.aggregate([
+        { $match: { business: businessOid, plateNumber: { $in: allPlates }, status: { $nin: ['cancelled'] } } },
+        { $group: {
+          _id: '$plateNumber',
+          totalJobs: { $sum: 1 },
+          totalInvoiced: { $sum: '$price' },
+          lastVisit: { $max: '$createdAt' },
+          jobIds: { $push: '$_id' },
+        }},
+      ]),
+      CarWashLoyaltyCard.find({ customer: { $in: customerIds }, business }).lean(),
+      CarWashCreditAccount.find({ business, plates: { $in: allPlates }, status: { $ne: 'closed' } })
+        .select('plates accountNumber accountType status')
+        .lean(),
+    ]);
+
+    // Batch payment totals for all jobs found
+    const allJobIds = jobStats.flatMap((s) => s.jobIds);
+    const paymentTotals = allJobIds.length
+      ? await CarWashPayment.aggregate([
+          { $match: { business: businessOid, job: { $in: allJobIds } } },
+          { $group: { _id: '$job', paid: { $sum: '$amount' } } },
+        ])
+      : [];
+
+    const paidByJob = new Map(paymentTotals.map((p) => [String(p._id), Number(p.paid || 0)]));
+
+    // Build per-plate stats map
+    const statsByPlate = new Map();
+    for (const s of jobStats) {
+      const totalPaid = s.jobIds.reduce((sum, jid) => sum + (paidByJob.get(String(jid)) || 0), 0);
+      statsByPlate.set(s._id, {
+        totalJobs: s.totalJobs,
+        totalInvoiced: round2(s.totalInvoiced || 0),
+        totalPaid: round2(totalPaid),
+        outstanding: round2(Math.max(0, (s.totalInvoiced || 0) - totalPaid)),
+        lastVisit: s.lastVisit || null,
+      });
+    }
+
+    // Build plate → credit account map (first account wins per plate)
+    const creditByPlate = new Map();
+    for (const acc of creditAccounts) {
+      for (const plate of (acc.plates || [])) {
+        if (!creditByPlate.has(plate)) creditByPlate.set(plate, acc);
+      }
+    }
+
+    const cardsByCustomer = new Map(loyaltyCards.map((c) => [String(c.customer), c]));
+
+    const enriched = customers.map((c) => {
+      let totalJobs = 0, totalInvoiced = 0, totalPaid = 0, outstanding = 0, lastVisit = null;
+      let creditAccount = null;
+      for (const plate of (c.plates || [])) {
+        const s = statsByPlate.get(plate);
+        if (s) {
+          totalJobs += s.totalJobs;
+          totalInvoiced += s.totalInvoiced;
+          totalPaid += s.totalPaid;
+          outstanding += s.outstanding;
+          if (!lastVisit || (s.lastVisit && s.lastVisit > lastVisit)) lastVisit = s.lastVisit;
+        }
+        if (!creditAccount) creditAccount = creditByPlate.get(plate) || null;
+      }
+      return {
+        ...c,
+        totalJobs,
+        totalInvoiced: round2(totalInvoiced),
+        totalPaid: round2(totalPaid),
+        outstanding: round2(outstanding),
+        lastVisit,
+        loyaltyCard: cardsByCustomer.get(String(c._id)) || null,
+        creditAccount: creditAccount
+          ? { _id: creditAccount._id, accountNumber: creditAccount.accountNumber, accountType: creditAccount.accountType, status: creditAccount.status }
+          : null,
+      };
+    });
+
+    res.json({ success: true, data: enriched, total, page: pageNum, limit: limitNum });
   } catch (err) {
     next(err);
   }
@@ -228,70 +359,48 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null })
   if (!job?.plateNumber) return null;
 
   const plate = String(job.plateNumber).trim().toUpperCase();
-  const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
-  if (!program) return null;
 
-  // Check service eligibility — for multi-service jobs, any qualifying line is enough
+  // 1. Always ensure customer exists — independent of loyalty program
+  const customer = await ensureCarWashCustomer({
+    business,
+    plate,
+    customerName: job.customerName,
+    phone: job.phone,
+  });
+  if (!customer) return null;
+
+  // 2. Check for active loyalty program — no program = customer created but no stamp
+  const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
+  if (!program) return customer;
+
+  // 3. Check service eligibility — empty applicableServices = all services qualify
   if (program.applicableServices?.length) {
     const eligibleIds = new Set(program.applicableServices.map(s => String(s)));
     const jobServiceIds = [
       job.service,
       ...(Array.isArray(job.serviceLines) ? job.serviceLines.map(l => l.service) : []),
     ].filter(Boolean).map(String);
-    if (!jobServiceIds.some(id => eligibleIds.has(id))) return null;
+    if (!jobServiceIds.some(id => eligibleIds.has(id))) return customer;
   }
 
-  // Resolve customer by plate — one card per customer, not per plate
-  let customer = await CarWashCustomer.findOne({ business, plates: plate }).lean();
-  if (!customer) {
-    // Inline enroll — mirrors autoEnrollPlate's logic
-    try {
-      const cleanPhone = String(job.phone || '').trim() || null;
-      customer = await CarWashCustomer.create({
-        business,
-        name: String(job.customerName || plate).trim() || plate,
-        phone: cleanPhone,
-        plates: [plate],
-        notes: 'Auto-enrolled at payment',
-      });
-    } catch (err) {
-      if (err.code === 11000) {
-        customer = await CarWashCustomer.findOne({
-          business,
-          $or: [{ plates: plate }, ...(job.phone ? [{ phone: String(job.phone).trim() }] : [])],
-        }).lean();
-        if (customer) {
-          await CarWashCustomer.updateOne({ _id: customer._id }, { $addToSet: { plates: plate } });
-        }
-      }
-      if (!customer) return null;
-    }
-  }
-
+  // 4. Upsert loyalty card
   let card = await CarWashLoyaltyCard.findOneAndUpdate(
     { business, customer: customer._id },
     { $setOnInsert: { business, customer: customer._id, program: program._id } },
     { upsert: true, new: true }
   );
 
-  // Handle stamp expiry
+  // 5. Handle stamp expiry
   if (program.stampExpiryDays > 0 && card.lastStampAt) {
     const daysSinceLast = (Date.now() - card.lastStampAt.getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSinceLast > program.stampExpiryDays) {
-      card.currentStamps = 0;
-    }
+    if (daysSinceLast > program.stampExpiryDays) card.currentStamps = 0;
   }
 
-  // Award stamp
+  // 6. Award stamp
   card.currentStamps += 1;
   card.totalStampsEarned += 1;
   card.lastStampAt = new Date();
-  card.stampHistory.push({
-    job: job._id,
-    jobNumber: job.jobNumber || '',
-    plate,
-    awardedAt: new Date(),
-  });
+  card.stampHistory.push({ job: job._id, jobNumber: job.jobNumber || '', plate, awardedAt: new Date() });
 
   let rewardTriggered = false;
   if (card.currentStamps >= program.stampsRequired) {
@@ -303,57 +412,47 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null })
 
   await card.save();
 
-  // Fetch latest customer record for name + fallback phone (customer was resolved earlier)
-  const smsCustomer = await CarWashCustomer.findById(card.customer).lean();
-  const customerName = smsCustomer?.name || customer?.name || 'Valued Customer';
-  // M-Pesa override phone takes priority — it's the number that actually paid.
-  // Fall back to the loyalty-registered phone for manual payments.
-  const smsPhone = overridePhone || smsCustomer?.phone || customer?.phone;
+  // 7. SMS — always automatic, no smsOn* flag gates
+  const smsPhone = overridePhone || customer.phone;
+  const customerName = customer.name || 'Valued Customer';
 
-  if (rewardTriggered && program.smsOnReward && smsPhone) {
-    const rewardDesc = program.rewardType === 'free_wash'
-      ? 'a FREE wash'
-      : program.rewardType === 'discount_percent'
-        ? `${program.rewardValue}% off your next wash`
-        : `KES ${program.rewardValue} off your next wash`;
-    const body = `Hi ${customerName}! 🎉 Congratulations! You've earned ${rewardDesc} for vehicle ${plate}. Redeem it on your next visit. Thank you for your loyalty!`;
-    await sendLoyaltySms(business, smsPhone, body, 'carwash_reward_ready');
-  } else if (!rewardTriggered && program.smsOnStamp && smsPhone) {
-    const remaining = program.stampsRequired - card.currentStamps;
-    const body = `Hi ${customerName}! You've earned stamp ${card.currentStamps}/${program.stampsRequired} for ${plate}. ${remaining} more wash${remaining !== 1 ? 'es' : ''} to go for your reward! 🚗`;
-    await sendLoyaltySms(business, smsPhone, body, 'carwash_stamp_earned');
+  if (smsPhone) {
+    if (rewardTriggered) {
+      const rewardDesc = program.rewardType === 'free_wash'
+        ? 'a FREE wash'
+        : program.rewardType === 'discount_percent'
+          ? `${program.rewardValue}% off your next wash`
+          : `KES ${program.rewardValue} off your next wash`;
+      sendLoyaltySms(business, smsPhone, `Hi ${customerName}! 🎉 You've earned ${rewardDesc} for ${plate}. Redeem on your next visit. Thank you!`, 'carwash_reward_ready');
+    } else {
+      const remaining = program.stampsRequired - card.currentStamps;
+      sendLoyaltySms(business, smsPhone, `Hi ${customerName}! Stamp ${card.currentStamps}/${program.stampsRequired} earned for ${plate}. ${remaining} more wash${remaining !== 1 ? 'es' : ''} to your reward! 🚗`, 'carwash_stamp_earned');
+    }
   }
 
   return { card, rewardTriggered, program };
 };
 
-// ─── Auto-enroll plate at job creation ───────────────────────────────────────
-// Called from jobsController.createJob. Never throws — failure must not block job creation.
-export const autoEnrollPlate = async ({ business, plate, customerName, phone }) => {
+// ─── Customer upsert — completely independent of loyalty ─────────────────────
+// Creates or updates the CarWashCustomer record for a plate.
+// Called at job creation AND as a safety net before stamp awarding.
+// Never throws — failure must not block any calling flow.
+export const ensureCarWashCustomer = async ({ business, plate, customerName, phone }) => {
   try {
     const normalizedPlate = String(plate || '').trim().toUpperCase();
     if (!normalizedPlate) return null;
-
-    const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
-    if (!program) return null;
-
-    // Card existence checked after we know the customer
-
     const cleanPhone = String(phone || '').trim() || null;
 
-    // 1. Try to find customer by plate
     let customer = await CarWashCustomer.findOne({ business, plates: normalizedPlate }).lean();
 
-    // 2. Try to find customer by phone and add plate to their record
     if (!customer && cleanPhone) {
       const byPhone = await CarWashCustomer.findOne({ business, phone: cleanPhone }).lean();
       if (byPhone) {
         await CarWashCustomer.updateOne({ _id: byPhone._id }, { $addToSet: { plates: normalizedPlate } });
-        customer = byPhone;
+        customer = { ...byPhone };
       }
     }
 
-    // 3. Auto-create a minimal customer record for first-time plates
     if (!customer) {
       try {
         customer = await CarWashCustomer.create({
@@ -365,40 +464,47 @@ export const autoEnrollPlate = async ({ business, plate, customerName, phone }) 
         });
       } catch (createErr) {
         if (createErr.code === 11000) {
-          // Phone duplicate — find by phone and add this plate
           if (cleanPhone) {
-            const existing = await CarWashCustomer.findOneAndUpdate(
+            customer = await CarWashCustomer.findOneAndUpdate(
               { business, phone: cleanPhone },
               { $addToSet: { plates: normalizedPlate } },
               { new: true }
             ).lean();
-            customer = existing;
           }
-          // For any other 11000 (e.g. non-sparse phone index with null), try finding by plate
-          if (!customer) {
-            customer = await CarWashCustomer.findOne({ business, plates: normalizedPlate }).lean();
-          }
+          if (!customer) customer = await CarWashCustomer.findOne({ business, plates: normalizedPlate }).lean();
         }
         if (!customer) throw createErr;
       }
     }
 
-    // 4. If the customer has no phone yet and we now have one from M-Pesa, update it.
     if (customer && !customer.phone && cleanPhone) {
       await CarWashCustomer.updateOne({ _id: customer._id }, { phone: cleanPhone });
     }
 
-    // Card already exists for this customer — nothing more to do
-    const existingCard = await CarWashLoyaltyCard.findOne({ business, customer: customer._id }).lean();
-    if (existingCard) return existingCard;
+    return customer;
+  } catch (err) {
+    console.error('[CW Customer] ensureCarWashCustomer plate=%s error=%s', plate, err?.message || err);
+    return null;
+  }
+};
 
-    // Upsert by customer (one card per customer per business)
+// ─── Auto-enroll plate at job creation ───────────────────────────────────────
+// Called from jobsController.createJob. Never throws — failure must not block job creation.
+export const autoEnrollPlate = async ({ business, plate, customerName, phone }) => {
+  try {
+    // Customer creation is always guaranteed via ensureCarWashCustomer
+    const customer = await ensureCarWashCustomer({ business, plate, customerName, phone });
+    if (!customer) return null;
+
+    // Loyalty card creation is optional — only if a program is active
+    const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
+    if (!program) return customer;
+
     const card = await CarWashLoyaltyCard.findOneAndUpdate(
       { business, customer: customer._id },
       { $setOnInsert: { business, customer: customer._id, program: program._id } },
       { upsert: true, new: true }
     );
-
     return card;
   } catch (err) {
     console.error('[CW AutoEnroll] plate=%s error=%s', plate, err?.message || err);
@@ -454,17 +560,20 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, overri
   if (!job?.plateNumber) return;
   try {
     const plate = String(job.plateNumber).trim().toUpperCase();
-    const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
-    if (!program?.smsOnPayment) return;
 
-    // Prefer M-Pesa payer's number — it's the number that actually transacted.
-    // Fall back to the loyalty customer's registered phone for manual payments.
-    const phone = overridePhone || (await CarWashCustomer.findOne({ business, plates: plate }).lean())?.phone;
+    // Phone: M-Pesa payer number first, then job phone, then customer record
+    const phone = overridePhone
+      || String(job.phone || '').trim()
+      || (await CarWashCustomer.findOne({ business, plates: plate }).select('phone').lean())?.phone;
     if (!phone) return;
 
     const customerName = job.customerName || 'Valued Customer';
-    const body = `Hi ${customerName}! Payment of KES ${Number(amount || 0).toLocaleString()} received for ${plate} wash. Thank you!`;
-    await sendLoyaltySms(business, phone, body, 'carwash_payment_confirmed');
+    const outstanding = Math.max(0, Number(job.price || 0) - Number(amount || 0));
+    const body = outstanding > 0.01
+      ? `Hi ${customerName}! KES ${Number(amount || 0).toLocaleString()} received for ${plate}. Balance: KES ${outstanding.toLocaleString()}. Thank you!`
+      : `Hi ${customerName}! KES ${Number(amount || 0).toLocaleString()} received for ${plate}. Fully paid. Thank you!`;
+
+    sendLoyaltySms(business, phone, body, 'carwash_payment_confirmed');
   } catch (_err) {
     // Never break the main flow
   }

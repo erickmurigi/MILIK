@@ -987,6 +987,7 @@ const Statements = () => {
       );
   }, [collapseAdditionalUnitRows, preparedRows, statementColumns, tenantUnitMeta]);
   const [rowFilter, setRowFilter] = useState("all"); // all | unpaid | partial | paid | vacant
+  const [kpiExpanded, setKpiExpanded] = useState(false);
 
   const collectionStats = useMemo(() => {
     if (!draftStatement || !preparedRows.length) return null;
@@ -1051,7 +1052,7 @@ const Statements = () => {
       ),
     [preparedRows, summary]
   );
-  const statementColSpan = 7 + statementColumns.length * 2 + (hasInvoiceVatColumn ? 2 : 0);
+  const statementColSpan = 7 + (hasInvoiceVatColumn ? 2 : 0) + statementColumns.length * 2;
   const hasFuturePeriodDate =
     isFutureIsoDate(periodStart, todayIso) || isFutureIsoDate(periodEnd, todayIso);
   const hasValidPeriodSelection =
@@ -1784,70 +1785,123 @@ const Statements = () => {
 
               /* ══════════ WORKSPACE TAB ══════════ */
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                {/* Header banner */}
-                <div className="flex-shrink-0 bg-[#0B3B2E] px-5 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Workspace Preview</p>
-                      <h3 className="mt-0.5 truncate text-sm font-bold text-white">
-                        {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Workspace"}
-                      </h3>
-                      {landlord && (
-                        <p className="text-[11px] text-green-100/60">{landlord.name || landlord.fullName || ""}</p>
+
+                {/* ── Compact workspace info bar ── */}
+                <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2">
+                  <div className="flex items-center gap-3">
+
+                    {/* Left: property name · landlord · period badge */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="truncate text-[11px] font-bold text-white">
+                          {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Workspace"}
+                        </span>
+                        {landlord && (
+                          <span className="text-[10px] text-green-200/55 truncate">
+                            · {landlord.name || landlord.fullName || ""}
+                          </span>
+                        )}
+                        <span className="rounded border border-white/20 bg-white/10 px-1.5 py-0.5 text-[9px] font-bold text-green-100/80">
+                          {statementPeriodLabel}
+                        </span>
+                      </div>
+
+                      {/* Mini collection bar + inline stats */}
+                      {collectionStats && collectionStats.rate !== null && (
+                        <div className="mt-1 flex items-center gap-2">
+                          <div className="relative h-1.5 w-20 flex-shrink-0 overflow-hidden rounded-full bg-white/15">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                collectionStats.rate >= 80 ? "bg-emerald-400" :
+                                collectionStats.rate >= 50 ? "bg-amber-400" : "bg-red-400/80"
+                              }`}
+                              style={{ width: `${Math.max(0.5, Math.min(100, collectionStats.rate))}%` }}
+                            />
+                          </div>
+                          <span className={`text-[10px] font-bold tabular-nums ${
+                            collectionStats.rate >= 80 ? "text-emerald-300" :
+                            collectionStats.rate >= 50 ? "text-amber-300" : "text-red-300"
+                          }`}>
+                            {collectionStats.rate}%
+                          </span>
+                          <span className="text-[9px] text-green-200/50">
+                            {collectionStats.occupied} occ
+                            {collectionStats.vacant > 0 && ` · ${collectionStats.vacant} vac`}
+                            {collectionStats.unpaid > 0 && (
+                              <span className="text-red-300/80"> · {collectionStats.unpaid} unpaid</span>
+                            )}
+                          </span>
+                          <span className={`ml-auto text-[10px] font-bold tabular-nums ${
+                            settlement.isNegative ? "text-red-300" : "text-emerald-300"
+                          }`}>
+                            {currency(settlement.amount)} net
+                          </span>
+                        </div>
                       )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="rounded-md border border-white/15 bg-white/10 px-3 py-1.5">
-                        <p className="text-[8px] font-bold uppercase tracking-widest text-green-200/50">Period</p>
-                        <p className="text-[11px] font-bold text-white">{statementPeriodLabel}</p>
-                      </div>
+
+                    {/* Right: filter chips + toggles */}
+                    <div className="flex flex-shrink-0 items-center gap-1.5">
+
+                      {/* Filter chips — styled for dark bar */}
+                      {draftStatement && preparedRows.length > 0 && (
+                        <div className="flex items-center gap-1">
+                          {[
+                            { key: "all",     label: `All·${preparedRows.length}`,               cls: "border-white/25 bg-white/10 text-white/80" },
+                            { key: "unpaid",  label: `Unpaid·${collectionStats?.unpaid ?? 0}`,   cls: "border-red-400/50 bg-red-900/40 text-red-200" },
+                            { key: "partial", label: `Partial·${collectionStats?.partial ?? 0}`, cls: "border-amber-400/50 bg-amber-900/40 text-amber-200" },
+                            { key: "paid",    label: `Paid·${collectionStats?.paid ?? 0}`,       cls: "border-emerald-400/50 bg-emerald-900/40 text-emerald-200" },
+                            { key: "vacant",  label: `Vacant·${collectionStats?.vacant ?? 0}`,   cls: "border-white/15 bg-white/5 text-slate-300" },
+                          ].map((chip) => (
+                            <button
+                              key={chip.key}
+                              type="button"
+                              onClick={() => setRowFilter(chip.key)}
+                              className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold transition-colors ${chip.cls} ${
+                                rowFilter === chip.key
+                                  ? "ring-1 ring-white/60 opacity-100"
+                                  : "opacity-50 hover:opacity-90"
+                              }`}
+                            >
+                              {chip.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Separator */}
+                      <div className="h-5 w-px bg-white/15" />
+
+                      {/* Collapse multi-unit rows toggle */}
                       <button
                         type="button"
                         onClick={() => setCollapseAdditionalUnitRows(!collapseAdditionalUnitRows)}
-                        className={`rounded-md border px-2.5 py-1.5 text-[10px] font-semibold transition-colors ${
+                        title="Toggle multi-unit row collapsing"
+                        className={`rounded border px-2 py-1 text-[9px] font-semibold transition-colors ${
                           collapseAdditionalUnitRows
                             ? "border-green-300/40 bg-green-500/30 text-white"
-                            : "border-white/20 bg-white/10 text-green-100/70 hover:bg-white/20"
+                            : "border-white/20 bg-white/10 text-green-100/60 hover:bg-white/20"
                         }`}
                       >
-                        {collapseAdditionalUnitRows ? "Collapsed" : "Collapse Multi"}
+                        {collapseAdditionalUnitRows ? "Multi ▲" : "Multi ▼"}
                       </button>
+
+                      {/* KPI details toggle */}
+                      {collectionStats && (
+                        <button
+                          type="button"
+                          onClick={() => setKpiExpanded((v) => !v)}
+                          className="rounded border border-white/20 bg-white/10 px-2 py-1 text-[9px] font-semibold text-green-100/60 transition-colors hover:bg-white/20"
+                        >
+                          {kpiExpanded ? "Details ▲" : "Details ▼"}
+                        </button>
+                      )}
                     </div>
                   </div>
-
-                  {/* Collection rate bar */}
-                  {collectionStats && collectionStats.rate !== null && (
-                    <div className="mt-2.5">
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">
-                          Collection Rate
-                        </span>
-                        <span className={`text-[11px] font-bold ${
-                          collectionStats.rate >= 80 ? "text-emerald-300" :
-                          collectionStats.rate >= 50 ? "text-amber-300" : "text-red-300"
-                        }`}>
-                          {collectionStats.rate}% · {currency(collectionStats.totalCollected)} of {currency(collectionStats.totalInvoiced)}
-                        </span>
-                      </div>
-                      <div className="relative h-2 w-full overflow-hidden rounded-full bg-white/15">
-                        {/* Track label at 0% */}
-                        {collectionStats.rate === 0 && (
-                          <span className="absolute left-1 top-0 flex h-full items-center text-[8px] font-bold text-white/40">0%</span>
-                        )}
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            collectionStats.rate >= 80 ? "bg-emerald-400" :
-                            collectionStats.rate >= 50 ? "bg-amber-400" : "bg-red-400/80"
-                          }`}
-                          style={{ width: `${Math.max(0.5, Math.min(100, collectionStats.rate))}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
                 </div>
 
-                {/* KPI strip */}
-                {collectionStats && (
+                {/* ── Expandable KPI strip (collapsed by default) ── */}
+                {kpiExpanded && collectionStats && (
                   <div className="flex-shrink-0 grid grid-cols-5 divide-x divide-slate-100 border-b border-slate-200 bg-white">
                     {[
                       {
@@ -1857,9 +1911,9 @@ const Statements = () => {
                         color: "text-slate-800",
                         subColor: collectionStats.vacant > 0 ? "text-amber-500" : "text-emerald-500",
                       },
-                      { label: "Paid in Full", value: collectionStats.paid,    sub: "tenants", color: collectionStats.paid > 0 ? "text-emerald-700" : "text-slate-400",  subColor: "text-slate-400" },
-                      { label: "Partial",      value: collectionStats.partial,  sub: "tenants", color: collectionStats.partial > 0 ? "text-amber-700" : "text-slate-400", subColor: "text-slate-400" },
-                      { label: "Not Paid",     value: collectionStats.unpaid,   sub: "tenants", color: collectionStats.unpaid > 0 ? "text-red-600" : "text-slate-400",   subColor: "text-slate-400" },
+                      { label: "Paid in Full", value: collectionStats.paid,   sub: "tenants", color: collectionStats.paid > 0    ? "text-emerald-700" : "text-slate-400", subColor: "text-slate-400" },
+                      { label: "Partial",      value: collectionStats.partial, sub: "tenants", color: collectionStats.partial > 0 ? "text-amber-700"   : "text-slate-400", subColor: "text-slate-400" },
+                      { label: "Not Paid",     value: collectionStats.unpaid,  sub: "tenants", color: collectionStats.unpaid > 0  ? "text-red-600"     : "text-slate-400", subColor: "text-slate-400" },
                       {
                         label: "Net to Landlord",
                         value: currency(settlement.amount),
@@ -1877,93 +1931,80 @@ const Statements = () => {
                   </div>
                 )}
 
-                {/* Row filter chips */}
-                {draftStatement && preparedRows.length > 0 && (
-                  <div className="flex-shrink-0 flex items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-5 py-2">
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mr-1">Filter:</span>
-                    {[
-                      { key: "all",     label: `All (${preparedRows.length})`,              cls: "border-slate-300 bg-white text-slate-700" },
-                      { key: "unpaid",  label: `Unpaid (${collectionStats?.unpaid ?? 0})`,  cls: "border-red-200 bg-red-50 text-red-700" },
-                      { key: "partial", label: `Partial (${collectionStats?.partial ?? 0})`,cls: "border-amber-200 bg-amber-50 text-amber-700" },
-                      { key: "paid",    label: `Paid (${collectionStats?.paid ?? 0})`,      cls: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-                      { key: "vacant",  label: `Vacant (${collectionStats?.vacant ?? 0})`,  cls: "border-slate-200 bg-slate-100 text-slate-500" },
-                    ].map((chip) => (
-                      <button
-                        key={chip.key}
-                        type="button"
-                        onClick={() => setRowFilter(chip.key)}
-                        className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition-colors ${chip.cls} ${
-                          rowFilter === chip.key ? "ring-2 ring-offset-1 ring-[#0B3B2E] opacity-100" : "opacity-65 hover:opacity-100"
-                        }`}
-                      >
-                        {chip.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
                 {/* Scrollable table + detail sections */}
                 <div className="min-h-0 flex-1 overflow-auto bg-white">
                   <table className="min-w-max w-full whitespace-nowrap text-xs">
                     <thead className="sticky top-0 z-20">
+                      {/* ── Row 1: Group span headers ── */}
                       <tr className="bg-[#0B3B2E]">
-                        {/* Sticky: Unit */}
-                        <th className="sticky left-0 z-30 w-[88px] min-w-[88px] bg-[#0B3B2E] px-3 py-3 text-left">
-                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">—</div>
+                        <th rowSpan={2} className="sticky left-0 z-30 w-[88px] min-w-[88px] bg-[#0B3B2E] px-3 py-2 text-left align-bottom border-b border-white/10">
                           <div className="text-[11px] font-semibold text-white">Unit</div>
                         </th>
-                        {/* Sticky: Tenant */}
-                        <th className="sticky left-[88px] z-30 w-[155px] min-w-[155px] bg-[#0B3B2E] px-3 py-3 text-left border-r border-white/10">
-                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">—</div>
+                        <th rowSpan={2} className="sticky left-[88px] z-30 w-[155px] min-w-[155px] bg-[#0B3B2E] px-3 py-2 text-left align-bottom border-r border-white/10 border-b border-white/10">
                           <div className="text-[11px] font-semibold text-white">Tenant</div>
                         </th>
-                        {/* Ledger group */}
-                        <th className="px-3 py-3 text-right">
+                        <th rowSpan={2} className="px-3 py-2 text-right align-bottom border-b border-white/10">
                           <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Ledger</div>
                           <div className="text-[11px] font-semibold text-white">Bal B/F</div>
                         </th>
-                        {/* Rent group */}
-                        <th className="border-l border-white/10 px-3 py-3 text-right">
-                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Rent</div>
-                          <div className="text-[11px] font-semibold text-white">Invoiced</div>
+                        {/* INVOICED group */}
+                        <th
+                          colSpan={1 + (hasInvoiceVatColumn ? 1 : 0) + statementColumns.length}
+                          className="border-l border-white/10 px-3 py-1.5 text-center"
+                        >
+                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/40">Invoiced</div>
+                        </th>
+                        {/* PAID group */}
+                        <th
+                          colSpan={1 + (hasInvoiceVatColumn ? 1 : 0) + statementColumns.length}
+                          className="border-l border-white/10 px-3 py-1.5 text-center"
+                        >
+                          <div className="text-[8px] font-bold uppercase tracking-widest text-emerald-300/70">Paid</div>
+                        </th>
+                        {/* SUMMARY group */}
+                        <th
+                          colSpan={2}
+                          className="border-l border-white/10 px-3 py-1.5 text-center"
+                        >
+                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30">Summary</div>
+                        </th>
+                      </tr>
+                      {/* ── Row 2: Individual column names ── */}
+                      <tr className="bg-[#0B3B2E] border-t border-white/10">
+                        {/* Invoiced sub-columns */}
+                        <th className="border-l border-white/10 px-3 py-2 text-right">
+                          <div className="text-[11px] font-semibold text-white/90">Rent</div>
                         </th>
                         {hasInvoiceVatColumn && (
-                          <th className="px-3 py-3 text-right">
-                            <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Rent</div>
-                            <div className="text-[11px] font-semibold text-white">VAT Inv.</div>
+                          <th className="px-3 py-2 text-right">
+                            <div className="text-[11px] font-semibold text-white/70">VAT</div>
                           </th>
                         )}
-                        <th className="px-3 py-3 text-right">
-                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Rent</div>
-                          <div className="text-[11px] font-semibold text-white">Paid</div>
-                        </th>
-                        {hasInvoiceVatColumn && (
-                          <th className="px-3 py-3 text-right">
-                            <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Rent</div>
-                            <div className="text-[11px] font-semibold text-white">VAT Pd.</div>
-                          </th>
-                        )}
-                        {/* Utility groups */}
                         {statementColumns.map((column) => (
-                          <React.Fragment key={`head-${column.key}`}>
-                            <th className="border-l border-white/10 px-3 py-3 text-right">
-                              <div className="mb-0.5 max-w-[90px] truncate text-[8px] font-bold uppercase tracking-widest text-white/30">{column.label}</div>
-                              <div className="text-[11px] font-semibold text-white">Invoiced</div>
-                            </th>
-                            <th className="px-3 py-3 text-right">
-                              <div className="mb-0.5 max-w-[90px] truncate text-[8px] font-bold uppercase tracking-widest text-white/30">{column.label}</div>
-                              <div className="text-[11px] font-semibold text-white">Paid</div>
-                            </th>
-                          </React.Fragment>
+                          <th key={`inv-head-${column.key}`} className="px-3 py-2 text-right" title={column.label}>
+                            <div className="max-w-[110px] truncate text-[11px] font-semibold text-white/90">{column.label}</div>
+                          </th>
                         ))}
-                        {/* Summary group */}
-                        <th className="border-l border-white/10 px-3 py-3 text-right">
-                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Summary</div>
-                          <div className="text-[11px] font-semibold text-white">Total Paid</div>
+                        {/* Paid sub-columns */}
+                        <th className="border-l border-white/10 px-3 py-2 text-right">
+                          <div className="text-[11px] font-semibold text-emerald-200/90">Rent</div>
                         </th>
-                        <th className="px-3 py-3 text-right">
-                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Summary</div>
-                          <div className="text-[11px] font-semibold text-white">Bal C/F</div>
+                        {hasInvoiceVatColumn && (
+                          <th className="px-3 py-2 text-right">
+                            <div className="text-[11px] font-semibold text-emerald-200/70">VAT</div>
+                          </th>
+                        )}
+                        {statementColumns.map((column) => (
+                          <th key={`paid-head-${column.key}`} className="px-3 py-2 text-right" title={column.label}>
+                            <div className="max-w-[110px] truncate text-[11px] font-semibold text-emerald-200/90">{column.label}</div>
+                          </th>
+                        ))}
+                        {/* Summary sub-columns */}
+                        <th className="border-l border-white/10 px-3 py-2 text-right">
+                          <div className="text-[11px] font-semibold text-white/90">Total Paid</div>
+                        </th>
+                        <th className="px-3 py-2 text-right">
+                          <div className="text-[11px] font-semibold text-white/90">Bal C/F</div>
                         </th>
                       </tr>
                     </thead>
@@ -2052,7 +2093,7 @@ const Statements = () => {
                               <td className="px-3 py-2.5 text-right text-slate-400 text-[11px]">
                                 {isVacant ? "—" : (Number(row.openingBalance ?? row.balanceBF ?? 0) !== 0 ? currency(row.openingBalance ?? row.balanceBF ?? 0) : "—")}
                               </td>
-                              {/* Rent Invoiced */}
+                              {/* ── INVOICED block ── */}
                               <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${isVacant ? "text-slate-300" : "text-slate-700"}`}>
                                 {isVacant ? "—" : currency(row.invoicedRent)}
                               </td>
@@ -2061,22 +2102,23 @@ const Statements = () => {
                                   {isVacant ? "—" : currency(row.invoicedTax ?? 0)}
                                 </td>
                               )}
-                              {/* Rent Paid — green only when > 0 */}
-                              <td className={`px-3 py-2.5 text-right text-xs ${paidRentCell.cls}`}>{paidRentCell.text}</td>
+                              {statementColumns.map((column) => {
+                                const invVal = getPreparedStatementColumnValue(row, column.key, "invoiced");
+                                return (
+                                  <td key={`inv-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-3 py-2.5 text-right text-xs ${isVacant ? "text-slate-300" : "text-slate-700"}`}>
+                                    {isVacant ? "—" : currency(invVal)}
+                                  </td>
+                                );
+                              })}
+                              {/* ── PAID block ── */}
+                              <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${paidRentCell.cls}`}>{paidRentCell.text}</td>
                               {hasInvoiceVatColumn && (
                                 <td className={`px-3 py-2.5 text-right text-[11px] ${paidTaxCell.cls}`}>{paidTaxCell.text}</td>
                               )}
-                              {/* Utility columns */}
                               {statementColumns.map((column) => {
-                                const invVal = getPreparedStatementColumnValue(row, column.key, "invoiced");
                                 const padVal = paidCell(getPreparedStatementColumnValue(row, column.key, "paid"));
                                 return (
-                                  <React.Fragment key={`${row.unitId || row.unitNumber || "row"}-${column.key}`}>
-                                    <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${isVacant ? "text-slate-300" : "text-slate-700"}`}>
-                                      {isVacant ? "—" : currency(invVal)}
-                                    </td>
-                                    <td className={`px-3 py-2.5 text-right text-xs ${padVal.cls}`}>{padVal.text}</td>
-                                  </React.Fragment>
+                                  <td key={`paid-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-3 py-2.5 text-right text-xs ${padVal.cls}`}>{padVal.text}</td>
                                 );
                               })}
                               {/* Total Paid */}
@@ -2095,19 +2137,21 @@ const Statements = () => {
                           <td className="sticky left-0 z-10 w-[88px] min-w-[88px] bg-[#0B3B2E] px-3 py-3 text-xs font-bold text-white">Totals</td>
                           <td className="sticky left-[88px] z-10 w-[155px] min-w-[155px] border-r border-white/10 bg-[#0B3B2E] px-3 py-3"></td>
                           <td className="px-3 py-3 text-right text-xs font-semibold text-white/80">{currency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
+                          {/* Invoiced totals */}
                           <td className="border-l border-white/10 px-3 py-3 text-right text-xs font-semibold text-white">{currency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
                           {hasInvoiceVatColumn && (
                             <td className="px-3 py-3 text-right text-xs font-semibold text-white/80">{currency(totals.invoicedTax ?? summary.totalInvoiceVatInvoiced ?? 0)}</td>
                           )}
-                          <td className="px-3 py-3 text-right text-xs font-bold text-white">{currency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
+                          {statementColumns.map((column) => (
+                            <td key={`foot-inv-${column.key}`} className="px-3 py-3 text-right text-xs font-semibold text-white">{currency(Number(column?.invoiced || 0))}</td>
+                          ))}
+                          {/* Paid totals */}
+                          <td className="border-l border-white/10 px-3 py-3 text-right text-xs font-bold text-white">{currency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
                           {hasInvoiceVatColumn && (
                             <td className="px-3 py-3 text-right text-xs font-semibold text-white/80">{currency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>
                           )}
                           {statementColumns.map((column) => (
-                            <React.Fragment key={`foot-${column.key}`}>
-                              <td className="border-l border-white/10 px-3 py-3 text-right text-xs font-semibold text-white">{currency(Number(column?.invoiced || 0))}</td>
-                              <td className="px-3 py-3 text-right text-xs font-bold text-white">{currency(Number(column?.paid || 0))}</td>
-                            </React.Fragment>
+                            <td key={`foot-paid-${column.key}`} className="px-3 py-3 text-right text-xs font-bold text-white">{currency(Number(column?.paid || 0))}</td>
                           ))}
                           <td className="border-l border-white/10 px-3 py-3 text-right text-xs font-bold text-white">{currency(totals.totalPaid ?? 0)}</td>
                           <td className="px-3 py-3 text-right text-xs font-bold text-white">{currency(totals.closingBalance ?? summary.closingBalance ?? 0)}</td>

@@ -524,19 +524,28 @@ const resolveEmailTestBadge = (status = "never") => {
 };
 
 const smsProviderOptions = [
-  { value: "generic", label: "Generic SMS API" },
-  { value: "africas_talking", label: "Africa's Talking" },
-  { value: "twilio", label: "Twilio" },
-  { value: "mtech", label: "MTech Africa" },
-  { value: "custom_http", label: "Custom HTTP Provider" },
+  { value: "africas_talking", label: "Africa's Talking", tagline: "Kenya & Africa — recommended", color: "border-emerald-400 bg-emerald-50 text-emerald-800", dot: "bg-emerald-500" },
+  { value: "twilio",          label: "Twilio",           tagline: "Global leader, any country",  color: "border-red-300 bg-red-50 text-red-800",         dot: "bg-red-500" },
+  { value: "mtech",           label: "MTech Africa",     tagline: "Local African provider",      color: "border-blue-300 bg-blue-50 text-blue-800",      dot: "bg-blue-500" },
+  { value: "custom_http",     label: "Custom HTTP",      tagline: "Any REST SMS API",            color: "border-violet-300 bg-violet-50 text-violet-800",dot: "bg-violet-500" },
+  { value: "generic",         label: "Generic API",      tagline: "Fallback / unknown provider", color: "border-slate-300 bg-slate-50 text-slate-700",   dot: "bg-slate-400" },
 ];
 
 const smsProviderHints = {
-  africas_talking: { username: "Africa's Talking username", apiKey: "Africa's Talking API key (required)", apiSecret: "Not required for Africa's Talking", callback: "Leave blank (not used)" },
-  twilio: { username: "Twilio Account SID (required)", apiKey: "Twilio Auth Token (required)", apiSecret: "Not required", callback: "Leave blank (not used)" },
-  mtech: { username: "MTech username (optional)", apiKey: "MTech API key (required)", apiSecret: "Not required for MTech", callback: "MTech API endpoint URL — required (e.g. https://your-mtech-url/api/sms/send)" },
-  custom_http: { username: "Provider account username", apiKey: "API key / Bearer token", apiSecret: "API secret (if required by provider)", callback: "Full provider endpoint URL (required)" },
-  generic: { username: "Account username", apiKey: "API key", apiSecret: "API secret or token", callback: "Provider endpoint URL (required)" },
+  africas_talking: { username: "Africa's Talking username (e.g. sandbox)", apiKey: "Africa's Talking API key (required)", apiSecret: null, callback: null },
+  twilio:          { username: "Twilio Account SID (required)",             apiKey: "Twilio Auth Token (required)",        apiSecret: null, callback: null },
+  mtech:           { username: "MTech username (optional)",                 apiKey: "MTech API key (required)",            apiSecret: null, callback: "MTech endpoint URL — required" },
+  custom_http:     { username: "Provider account username",                 apiKey: "API key / Bearer token",              apiSecret: "API secret (if required by provider)", callback: "Full provider endpoint URL (required)" },
+  generic:         { username: "Account username",                          apiKey: "API key",                             apiSecret: "API secret or token", callback: "Provider endpoint URL (required)" },
+};
+
+// Which fields are visible per provider
+const smsProviderFields = {
+  africas_talking: { username: true, apiSecret: false, callback: false, sandbox: true },
+  twilio:          { username: true, apiSecret: false, callback: false, sandbox: false },
+  mtech:           { username: true, apiSecret: false, callback: true,  sandbox: false },
+  custom_http:     { username: true, apiSecret: true,  callback: true,  sandbox: false },
+  generic:         { username: true, apiSecret: true,  callback: true,  sandbox: false },
 };
 
 const smsRecipientLabels = {
@@ -856,6 +865,7 @@ const createBlankSmsForm = (sequence = 1) => ({
   callbackUrl: "",
   enabled: false,
   isDefault: false,
+  useSandbox: false,
   lastUpdatedAt: null,
   status: "not_configured",
   statusLabel: "Not configured",
@@ -880,6 +890,7 @@ const normalizeSmsEditor = (config = {}) => {
     callbackUrl: config.callbackUrl || "",
     enabled: Boolean(config.enabled),
     isDefault: Boolean(config.isDefault),
+    useSandbox: Boolean(config.useSandbox),
     lastUpdatedAt: config.lastUpdatedAt || null,
     status: status.code,
     statusLabel: status.label,
@@ -4083,75 +4094,182 @@ export default function CompanySetupPage() {
           </div>
         }
       >
-        <div className={`rounded-2xl border p-4 ${smsTheme.panel}`}>
-          <div className="flex items-start gap-3">
-            <div className="mt-1 text-lg">{smsTheme.icon}</div>
+        {/* ── Status banner ── */}
+        <div className={`rounded-xl border p-3 ${smsTheme.panel}`}>
+          <div className="flex items-center gap-2.5">
+            <span className="text-base">{smsTheme.icon}</span>
             <div>
-              <div className="text-sm font-extrabold text-slate-900">{smsStatus.label}</div>
-              <div className="mt-1 text-xs leading-5 text-slate-700">{smsStatus.reason}</div>
+              <div className="text-xs font-bold text-slate-900">{smsStatus.label}</div>
+              <div className="text-xs leading-5 text-slate-600">{smsStatus.reason}</div>
             </div>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="md:col-span-2">
+        {/* ── Profile name + activation ── */}
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="lg:col-span-2">
             <label className="text-xs font-bold text-slate-700">Configuration Name</label>
-            <Input value={smsForm.name} onChange={(e) => setSmsForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Example: Main Tenant SMS" />
+            <Input value={smsForm.name} onChange={(e) => setSmsForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="e.g. Main Tenant SMS" />
           </div>
+          <ToggleRow
+            checked={smsForm.enabled}
+            onChange={(e) => setSmsForm((prev) => ({ ...prev, enabled: e.target.checked, isDefault: e.target.checked ? prev.isDefault : false }))}
+            title="Enable this profile"
+            description="Make this profile available for SMS sending."
+          />
+          <ToggleRow
+            checked={smsForm.isDefault}
+            onChange={(e) => setSmsForm((prev) => ({ ...prev, isDefault: e.target.checked, enabled: e.target.checked ? true : prev.enabled }))}
+            title="Set as default"
+            description="Templates with no specific profile assigned will use this one."
+          />
+        </div>
 
-          <div className="md:col-span-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <ToggleRow
-              checked={smsForm.enabled}
-              onChange={(e) => setSmsForm((prev) => ({ ...prev, enabled: e.target.checked, isDefault: e.target.checked ? prev.isDefault : false }))}
-              title="Enable this SMS configuration"
-              description="Turn this on when this provider profile should remain available for the active company."
-            />
-            <ToggleRow
-              checked={smsForm.isDefault}
-              onChange={(e) => setSmsForm((prev) => ({ ...prev, isDefault: e.target.checked, enabled: e.target.checked ? true : prev.enabled }))}
-              title="Set as default SMS profile"
-              description="The default enabled SMS profile can be used by templates that do not choose a specific provider profile."
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-slate-700">Provider</label>
-            <Select value={smsForm.provider} onChange={(e) => setSmsForm((prev) => ({ ...prev, provider: e.target.value }))}>
-              {smsProviderOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-700">Sender ID / Shortcode</label>
-            <Input value={smsForm.senderId} onChange={(e) => setSmsForm((prev) => ({ ...prev, senderId: e.target.value }))} placeholder="MILIK" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-700">Provider Account Username</label>
-            <Input value={smsForm.accountUsername} onChange={(e) => setSmsForm((prev) => ({ ...prev, accountUsername: e.target.value }))} placeholder={smsProviderHints[smsForm.provider]?.username || "Provider account username"} />
-            <div className="mt-1 text-xs text-slate-500">{smsProviderHints[smsForm.provider]?.username || "Account username for this provider."}</div>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-700">Default Country Code</label>
-            <Input value={smsForm.defaultCountryCode} onChange={(e) => setSmsForm((prev) => ({ ...prev, defaultCountryCode: e.target.value }))} placeholder="+254" />
-            <div className="mt-1 text-xs text-slate-500">Used to normalize local numbers, e.g. 0712345678 → +254712345678.</div>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-700">API Key</label>
-            <Input type="password" value={smsForm.apiKey} onChange={(e) => setSmsForm((prev) => ({ ...prev, apiKey: e.target.value }))} placeholder={smsForm.hasApiKey ? "Leave blank to keep saved API key" : (smsProviderHints[smsForm.provider]?.apiKey || "Enter API key")} />
-            <div className="mt-1 text-xs text-slate-500">{smsForm.hasApiKey ? (smsForm.apiKeyMasked || "Saved and masked") : (smsProviderHints[smsForm.provider]?.apiKey || "No saved API key yet.")}</div>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-700">API Secret / Token</label>
-            <Input type="password" value={smsForm.apiSecret} onChange={(e) => setSmsForm((prev) => ({ ...prev, apiSecret: e.target.value }))} placeholder={smsForm.hasApiSecret ? "Leave blank to keep saved secret" : "Optional"} />
-            <div className="mt-1 text-xs text-slate-500">{smsForm.hasApiSecret ? (smsForm.apiSecretMasked || "Saved and masked") : (smsProviderHints[smsForm.provider]?.apiSecret || "Optional if your provider only needs an API key.")}</div>
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-xs font-bold text-slate-700">Callback / Endpoint URL</label>
-            <Input value={smsForm.callbackUrl} onChange={(e) => setSmsForm((prev) => ({ ...prev, callbackUrl: e.target.value }))} placeholder={smsProviderHints[smsForm.provider]?.callback || "Optional provider callback URL"} />
-            <div className="mt-1 text-xs text-slate-500">{smsProviderHints[smsForm.provider]?.callback || "Store it now if your provider requires delivery callbacks later."}</div>
+        {/* ── Provider selection cards ── */}
+        <div className="mt-5">
+          <label className="text-xs font-bold text-slate-700">SMS Provider</label>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {smsProviderOptions.map((opt) => {
+              const active = smsForm.provider === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setSmsForm((prev) => ({ ...prev, provider: opt.value }))}
+                  className={`flex flex-col items-start gap-1 rounded-xl border-2 p-3 text-left transition-all ${
+                    active
+                      ? `${opt.color} shadow-sm ring-2 ring-offset-1 ring-current`
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <span className={`h-2 w-2 rounded-full ${active ? opt.dot : "bg-slate-300"}`} />
+                    {active && <span className="text-[8px] font-bold uppercase tracking-widest opacity-70">Selected</span>}
+                  </div>
+                  <div className="text-[11px] font-bold leading-tight">{opt.label}</div>
+                  <div className="text-[9px] leading-tight opacity-70">{opt.tagline}</div>
+                </button>
+              );
+            })}
           </div>
         </div>
+
+        {/* ── Credentials ── */}
+        {(() => {
+          const fields = smsProviderFields[smsForm.provider] || smsProviderFields.generic;
+          const hints   = smsProviderHints[smsForm.provider]  || smsProviderHints.generic;
+          return (
+            <div className="mt-5 space-y-4">
+              <div className="border-t border-slate-100 pt-4">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Credentials</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {/* Sender ID — always shown */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-700">Sender ID / Shortcode</label>
+                    <Input value={smsForm.senderId} onChange={(e) => setSmsForm((prev) => ({ ...prev, senderId: e.target.value }))} placeholder="e.g. MILIK" />
+                    <p className="mt-1 text-[10px] text-slate-400">Alphanumeric sender name or shortcode registered with your provider.</p>
+                  </div>
+
+                  {/* Country code — always shown */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-700">Default Country Code</label>
+                    <Input value={smsForm.defaultCountryCode} onChange={(e) => setSmsForm((prev) => ({ ...prev, defaultCountryCode: e.target.value }))} placeholder="+254" />
+                    <p className="mt-1 text-[10px] text-slate-400">Normalises local numbers — 0712345678 → +254712345678.</p>
+                  </div>
+
+                  {/* Username — conditional */}
+                  {fields.username && (
+                    <div>
+                      <label className="text-xs font-bold text-slate-700">
+                        {smsForm.provider === "twilio" ? "Account SID" : "Account Username"}
+                      </label>
+                      <Input
+                        value={smsForm.accountUsername}
+                        onChange={(e) => setSmsForm((prev) => ({ ...prev, accountUsername: e.target.value }))}
+                        placeholder={hints.username}
+                      />
+                      <p className="mt-1 text-[10px] text-slate-400">{hints.username}</p>
+                    </div>
+                  )}
+
+                  {/* API Key — always shown */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-700">
+                      {smsForm.provider === "twilio" ? "Auth Token" : "API Key"}
+                    </label>
+                    <Input
+                      type="password"
+                      value={smsForm.apiKey}
+                      onChange={(e) => setSmsForm((prev) => ({ ...prev, apiKey: e.target.value }))}
+                      placeholder={smsForm.hasApiKey ? "Leave blank to keep existing key" : hints.apiKey}
+                    />
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      {smsForm.hasApiKey ? (smsForm.apiKeyMasked || "Saved — masked for security") : hints.apiKey}
+                    </p>
+                  </div>
+
+                  {/* API Secret — conditional */}
+                  {fields.apiSecret && (
+                    <div>
+                      <label className="text-xs font-bold text-slate-700">API Secret / Token</label>
+                      <Input
+                        type="password"
+                        value={smsForm.apiSecret}
+                        onChange={(e) => setSmsForm((prev) => ({ ...prev, apiSecret: e.target.value }))}
+                        placeholder={smsForm.hasApiSecret ? "Leave blank to keep existing secret" : "Optional"}
+                      />
+                      <p className="mt-1 text-[10px] text-slate-400">
+                        {smsForm.hasApiSecret ? (smsForm.apiSecretMasked || "Saved — masked for security") : (hints.apiSecret || "Leave blank if not required.")}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Callback URL — conditional */}
+                  {fields.callback && (
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-bold text-slate-700">Endpoint / Callback URL</label>
+                      <Input
+                        value={smsForm.callbackUrl}
+                        onChange={(e) => setSmsForm((prev) => ({ ...prev, callbackUrl: e.target.value }))}
+                        placeholder={hints.callback || "https://provider.example.com/api/sms/send"}
+                      />
+                      <p className="mt-1 text-[10px] text-slate-400">{hints.callback}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Sandbox toggle — AT only */}
+              {fields.sandbox && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-bold text-amber-800">Sandbox / Test Mode</p>
+                      <p className="mt-0.5 text-[10px] text-amber-700">
+                        Routes messages to the Africa&apos;s Talking sandbox endpoint. Use username <strong>sandbox</strong> and your sandbox API key. Turn off before going live.
+                      </p>
+                    </div>
+                    <label className="relative mt-0.5 flex-shrink-0 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={smsForm.useSandbox}
+                        onChange={(e) => setSmsForm((prev) => ({ ...prev, useSandbox: e.target.checked }))}
+                      />
+                      <div className="h-5 w-9 rounded-full bg-slate-200 transition-colors peer-checked:bg-amber-500" />
+                      <div className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
+                    </label>
+                  </div>
+                  {smsForm.useSandbox && (
+                    <p className="mt-2 text-[10px] font-semibold text-amber-700">
+                      ⚠️ Sandbox active — messages will NOT be delivered to real phones.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </Modal>
 
       <Modal

@@ -242,11 +242,13 @@ const CarWashJobs = () => {
   };
 
   const openPaymentModal = async (job = null) => {
+    const jobPhone = String(job?.phone || "").trim();
     setPaymentForm({
       ...emptyPaymentForm,
       job: job?._id || "",
       amount: job?.price || "",
       cashbookAccount: preferredCashbookForMethod(cashbooks, emptyPaymentForm.method, cashbookDefaults),
+      receivedFromPhone: jobPhone,
     });
     setShowPaymentModal(true);
     try {
@@ -897,10 +899,23 @@ const CarWashJobs = () => {
             </div>
             {paymentForm.method === "mpesa" && (
               <div className="md:col-span-2">
-                <label className={labelClass}>
-                  Customer Phone
-                  <span className="ml-1 font-normal normal-case text-emerald-700">(saves to customer record + enables STK push)</span>
-                </label>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className={labelClass}>
+                    Customer Phone
+                    <span className="ml-1 font-normal normal-case text-emerald-700">(for STK push &amp; SMS)</span>
+                  </label>
+                  {(() => {
+                    const jobPhone = String(allPaymentJobs.find((j) => j._id === paymentForm.job)?.phone || "").trim();
+                    const formPhone = String(paymentForm.receivedFromPhone || "").trim();
+                    if (jobPhone && formPhone === jobPhone) {
+                      return <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">From job record</span>;
+                    }
+                    if (formPhone && formPhone !== jobPhone) {
+                      return <span className="text-[9px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">Edited</span>;
+                    }
+                    return null;
+                  })()}
+                </div>
                 <div className="flex gap-2">
                   <input
                     className={`${inputClass} flex-1`}
@@ -921,8 +936,9 @@ const CarWashJobs = () => {
                   </button>
                 </div>
                 <p className="mt-0.5 text-[10px] text-slate-400">
-                  Enter phone then click Push — customer receives an M-Pesa prompt to pay KES {Number(paymentForm.amount || 0).toLocaleString()}.
-                  Phone is saved to the job and loyalty record.
+                  {paymentForm.receivedFromPhone?.trim()
+                    ? `Push sends M-Pesa prompt to ${paymentForm.receivedFromPhone.trim()} — customer pays KES ${Number(paymentForm.amount || 0).toLocaleString()} on their phone.`
+                    : "Enter phone number to enable STK push. Saved to job and customer record."}
                 </p>
               </div>
             )}

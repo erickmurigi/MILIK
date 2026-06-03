@@ -89,6 +89,7 @@ const MENU_PERMISSION_MAP = {
   "carwash-service-report": { resource: "carwash-reports", action: "view", moduleKey: "carwash" },
   "carwash-staff-report": { resource: "carwash-reports", action: "view", moduleKey: "carwash" },
   "carwash-commissions": { resource: "carwash-commissions", action: "view", moduleKey: "carwash" },
+  "carwash-all-customers": { resource: "carwash-loyalty", action: "view", moduleKey: "carwash" },
   "carwash-loyalty": { resource: "carwash-loyalty", action: "view", moduleKey: "carwash" },
   "carwash-branches": { resource: "carwash-branches", action: "view", moduleKey: "carwash" },
   "carwash-settings": { resource: "carwash-settings", action: "view", moduleKey: "carwash" },
@@ -529,6 +530,7 @@ const TopToolbar = ({
         "carwash-service-report": "/carwash/reports/services",
         "carwash-staff-report": "/carwash/reports/staff",
         "carwash-commissions": "/carwash/commissions",
+        "carwash-all-customers": "/carwash/customers",
         "carwash-loyalty": "/carwash/loyalty",
         "carwash-accounts": "/carwash/accounts",
         "carwash-branches": "/carwash/branches",
@@ -997,8 +999,9 @@ const TopToolbar = ({
           label: "Customers",
           icon: FaUsers,
           submenu: [
-            { id: "carwash-loyalty",  label: "Loyalty Program",   icon: FaStar },
-            { id: "carwash-accounts", label: "Credit Accounts",   icon: FaFileInvoice },
+            { id: "carwash-all-customers", label: "All Customers",    icon: FaUsers },
+            { id: "carwash-accounts",      label: "Credit Accounts",  icon: FaFileInvoice },
+            { id: "carwash-loyalty",       label: "Loyalty Program",  icon: FaStar },
           ],
         },
         {

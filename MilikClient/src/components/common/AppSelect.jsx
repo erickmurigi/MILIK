@@ -358,5 +358,4 @@ const AppSelect = ({
     </div>
   );
 };
-
 export default AppSelect;
