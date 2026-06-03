@@ -390,6 +390,10 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null })
     { upsert: true, new: true }
   );
 
+  // Idempotency guard — a stamp for this exact job was already awarded (e.g. Done then Paid)
+  const jobIdStr = String(job._id);
+  if (card.stampHistory.some((h) => String(h.job) === jobIdStr)) return card;
+
   // 5. Handle stamp expiry
   if (program.stampExpiryDays > 0 && card.lastStampAt) {
     const daysSinceLast = (Date.now() - card.lastStampAt.getTime()) / (1000 * 60 * 60 * 24);

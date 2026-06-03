@@ -184,10 +184,14 @@ export const recordPayment = async (req, res, next) => {
 
     if (updatedJob.paymentStatus === "paid") {
       await markJobCommissionsPayable({ business, jobId: updatedJob._id });
+      // Safety-net stamp: fires when a job jumps straight to "paid" via full payment
+      // without ever passing through "done" status manually.
+      // awardLoyaltyStamp has an idempotency guard — safe even if already stamped at Done.
+      awardLoyaltyStamp({ business, job: updatedJob, overridePhone: receivedFromPhone || null })
+        .catch((err) => console.error("[CW Loyalty] Stamp (payment) failed job=%s: %s", updatedJob.jobNumber, err?.message || err));
     }
 
     // Payment confirmation SMS fires on every payment — partial or full.
-    // Includes outstanding balance so customer knows what's left.
     sendPaymentConfirmationSms({ business, job: updatedJob, amount, overridePhone: receivedFromPhone });
     await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId });
     res.status(201).json({ success: true, data: payment, payment, job: updatedJob, message: "Car Wash payment recorded" });
