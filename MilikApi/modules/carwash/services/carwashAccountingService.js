@@ -7,6 +7,7 @@
  */
 
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
+import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { postEntry, postReversal } from "../../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
 import { resolveAuditActorUserId } from "../../../utils/systemActor.js";
@@ -74,6 +75,15 @@ export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAc
   if (amount <= 0) return;
 
   try {
+    // Idempotency: skip if non-reversed entries already exist for this payment
+    const existingCount = await FinancialLedgerEntry.countDocuments({
+      business: new mongoose.Types.ObjectId(String(businessId)),
+      sourceTransactionType: "carwash_payment",
+      sourceTransactionId: String(payment._id),
+      status: { $ne: "reversed" },
+    });
+    if (existingCount > 0) return;
+
     const revenueAccount = await resolveCarWashAccount(businessId, "4400");
     // Resolve a valid actor — userId may be null for M-Pesa callbacks (no authenticated user)
     const actorId = userId && mongoose.Types.ObjectId.isValid(String(userId))
@@ -126,6 +136,15 @@ export const postCarWashCommissionAccrual = async ({ req, commission }) => {
   }
 
   const businessId = commission.business;
+
+  // DB-level backup guard: in case accrualLedgerEntries save failed on a prior call
+  const existingCount = await FinancialLedgerEntry.countDocuments({
+    business: new mongoose.Types.ObjectId(String(businessId)),
+    sourceTransactionType: "carwash_commission",
+    sourceTransactionId: String(commission._id),
+    status: { $ne: "reversed" },
+  });
+  if (existingCount > 0) return commission.accrualLedgerEntries;
   const actorUserId = await resolveAuditActorUserId({ req, businessId });
   const [expenseAccount, payableAccount] = await Promise.all([
     resolveCarWashAccount(businessId, "5311"),
@@ -464,6 +483,59 @@ export const repairOrphanedCarWashLedgerEntries = async (businessId, req = null)
     } catch (err) {
       if (/already reversed/i.test(String(err?.message || ""))) { reversed++; continue; }
       errors.push({ entryId: String(entry._id), error: err?.message || String(err) });
+    }
+  }
+
+  if (accountIds.size) await aggregateChartOfAccountBalances(businessId, [...accountIds]);
+  return { reversed, errors };
+};
+
+// ─── Deduplication: reverse extra ledger entries caused by double-posting ────────
+/**
+ * Finds every approved carwash_payment and carwash_commission FinancialLedgerEntry
+ * that has more than one non-reversed entry for the same (sourceTransactionId, direction),
+ * then reverses all but the oldest (original) entry per group.
+ *
+ * Safe to run multiple times — already-reversed entries are skipped.
+ * Returns { reversed, errors[] }.
+ */
+export const deduplicateCarWashLedgerEntries = async (businessId, req = null) => {
+  const businessOid = new mongoose.Types.ObjectId(String(businessId));
+  const actorId = await resolveAuditActorUserId({ req, businessId });
+
+  const entries = await FinancialLedgerEntry.find({
+    business: businessOid,
+    sourceTransactionType: { $in: ["carwash_payment", "carwash_commission"] },
+    status: "approved",
+  }).sort({ createdAt: 1 }).lean();
+
+  // Group by (sourceTransactionType, sourceTransactionId, direction)
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = `${entry.sourceTransactionType}::${String(entry.sourceTransactionId)}::${entry.direction}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  }
+
+  const accountIds = new Set();
+  let reversed = 0;
+  const errors = [];
+
+  for (const [, group] of groups) {
+    if (group.length <= 1) continue;
+    // Keep the oldest (first) entry, reverse the rest
+    for (const entry of group.slice(1)) {
+      try {
+        const { originalEntry, reversalEntry } = await reverseCwEntry(
+          entry, actorId, `Duplicate ledger entry removed (double-posting repair)`
+        );
+        if (originalEntry?.accountId) accountIds.add(String(originalEntry.accountId));
+        if (reversalEntry?.accountId) accountIds.add(String(reversalEntry.accountId));
+        reversed++;
+      } catch (err) {
+        if (/already reversed/i.test(String(err?.message || ""))) { reversed++; continue; }
+        errors.push({ entryId: String(entry._id), error: err?.message || String(err) });
+      }
     }
   }
 

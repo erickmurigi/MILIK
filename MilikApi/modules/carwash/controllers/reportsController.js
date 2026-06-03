@@ -5,7 +5,7 @@ import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
-import { backfillCarWashPaymentLedger, repairOrphanedCarWashLedgerEntries } from "../services/carwashAccountingService.js";
+import { backfillCarWashPaymentLedger, deduplicateCarWashLedgerEntries, repairOrphanedCarWashLedgerEntries } from "../services/carwashAccountingService.js";
 
 const CW_LEDGER_SOURCE_TYPES = ["carwash_payment", "carwash_expense", "carwash_commission", "carwash_commission_payout"];
 
@@ -462,16 +462,23 @@ export const serviceReport = async (req, res, next) => {
   }
 };
 
-// Reverse any approved payment ledger entries whose CarWashPayment no longer exists.
+// Reverse orphaned entries AND deduplicate double-posted entries.
 export const repairLedger = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { reversed, errors } = await repairOrphanedCarWashLedgerEntries(business, req);
+    const [orphan, dedup] = await Promise.all([
+      repairOrphanedCarWashLedgerEntries(business, req),
+      deduplicateCarWashLedgerEntries(business, req),
+    ]);
+    const totalReversed = orphan.reversed + dedup.reversed;
+    const allErrors = [...orphan.errors, ...dedup.errors];
     res.json({
       success: true,
-      message: `Repair complete: ${reversed} orphaned entr${reversed === 1 ? "y" : "ies"} reversed, ${errors.length} errors.`,
-      reversed,
-      errors,
+      message: `Repair complete: ${orphan.reversed} orphaned + ${dedup.reversed} duplicate entr${totalReversed === 1 ? "y" : "ies"} reversed, ${allErrors.length} errors.`,
+      orphanedReversed: orphan.reversed,
+      duplicatesReversed: dedup.reversed,
+      totalReversed,
+      errors: allErrors,
     });
   } catch (error) {
     next(error);
