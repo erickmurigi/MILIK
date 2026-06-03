@@ -385,6 +385,17 @@ const postCommissionAccrualForProcessedStatement = async ({ processedStatement, 
     touchedAccounts.push(String(outputVatAccount._id));
   }
 
+  // Also refresh the PCTRL control account for this property so the CoA view
+  // reflects the updated landlord payable balance.
+  if (processedStatement.property) {
+    const pctrlAcct = await ChartOfAccount.findOne({
+      business: processedStatement.business,
+      property: processedStatement.property,
+      code: { $regex: /^PCTRL-/ },
+    }).select("_id").lean();
+    if (pctrlAcct) touchedAccounts.push(String(pctrlAcct._id));
+  }
+
   await aggregateChartOfAccountBalances(processedStatement.business, touchedAccounts);
 
   return entries;
@@ -722,6 +733,35 @@ export const closeStatement = async (req, res) => {
 
     if (start.getTime() > end.getTime()) {
       return res.status(400).json({ message: "periodStart cannot be after periodEnd" });
+    }
+
+    // Validate period start against the most recent processed statement for this property.
+    // periodStart must be the day after the last statement's cutoffAt — no gaps, no overlaps.
+    const lastProcessed = await ProcessedStatement.findOne({
+      business,
+      landlord,
+      property,
+      status: { $ne: "reversed" },
+    })
+      .sort({ cutoffAt: -1, closedAt: -1, periodEnd: -1 })
+      .select("cutoffAt closedAt periodEnd periodStart")
+      .lean();
+
+    if (lastProcessed) {
+      const lastCutoff = lastProcessed.cutoffAt || lastProcessed.closedAt || lastProcessed.periodEnd;
+      if (lastCutoff) {
+        const lastCutoffDate = new Date(lastCutoff);
+        const expectedStart = new Date(lastCutoffDate.getTime() + 1);
+        expectedStart.setHours(0, 0, 0, 0);
+
+        if (start.getTime() < expectedStart.getTime()) {
+          const fmt = (d) => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+          return res.status(400).json({
+            message: `Period start (${fmt(start)}) overlaps the previous statement which closed on ${fmt(lastCutoffDate)}. The next period must start on ${fmt(expectedStart)} or later.`,
+            expectedPeriodStart: expectedStart.toISOString(),
+          });
+        }
+      }
     }
 
     const processingCutoffAt = resolveProcessedStatementCutoffAt(

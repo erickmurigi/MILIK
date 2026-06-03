@@ -94,6 +94,8 @@ export const generateReceiptPdf = async (receiptId, businessId) => {
 
     const tenant = receipt.tenant || {};
     const tenantName = esc(tenant.name || '');
+    const tenantCode = esc(tenant.tenantCode || '');
+    const tenantPhone = esc(tenant.phone || '');
     const property = receipt.property || {};
     const propertyName = esc(property.propertyName || '');
     const unit = receipt.unit || {};
@@ -105,108 +107,153 @@ export const generateReceiptPdf = async (receiptId, businessId) => {
     const statusBgColor = confirmed ? '#dcfce7' : '#fef3c7';
     const statusLabel = confirmed ? 'CONFIRMED' : 'PENDING CONFIRMATION';
 
+    // Build allocation rows from allocationSummary
+    const alloc = receipt.allocationSummary || {};
+    const allocRows = [
+      { label: 'Rent', amount: Number(alloc.rent || 0) },
+      { label: 'Utilities', amount: Number(alloc.utility || 0) },
+      { label: 'Security Deposit', amount: Number(alloc.deposit || 0) },
+      { label: 'Late Penalty', amount: Number(alloc.latePenalty || 0) },
+      { label: 'Other Charges', amount: Number(alloc.other || 0) },
+      { label: 'Unapplied / Advance', amount: Number(alloc.unapplied || 0) },
+    ].filter((r) => r.amount > 0);
+
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <title>Receipt ${esc(receipt.receiptNumber || '')}</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 13px; color: #0f172a; background: #fff; }
-  .page { width: 794px; min-height: 1123px; margin: 0 auto; padding: 48px 56px; display: flex; flex-direction: column; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; }
-  .logo-block { display: flex; flex-direction: column; gap: 4px; }
-  .logo-img { max-height: 60px; max-width: 150px; object-fit: contain; border-radius: 6px; }
-  .logo-fb { width: 56px; height: 56px; border-radius: 10px; background: #0B3B2E; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; }
-  .co-detail { font-size: 11px; color: #64748b; }
-  .rcpt-title { text-align: right; }
-  .rcpt-label { font-size: 38px; font-weight: 900; color: #0f172a; letter-spacing: -0.03em; line-height: 1; }
-  .rcpt-number { font-size: 14px; color: #64748b; margin-top: 6px; }
-  .divider { height: 2px; background: linear-gradient(90deg, #0B3B2E, #E65F1A); border-radius: 2px; margin: 16px 0 20px; }
-  .body-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 20px; }
-  .sec-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.18em; color: #94a3b8; margin-bottom: 12px; }
-  .fk { font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 8px; }
-  .fv { font-size: 13px; font-weight: 700; color: #0f172a; }
-  .fv.lg { font-size: 16px; font-weight: 800; }
-  .status-badge { display: inline-block; padding: 4px 14px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 18px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-  thead tr { background: #1e293b; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  th { padding: 10px 14px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #fff; }
-  th.r { text-align: right; }
-  tbody tr { border-bottom: 1px solid #f1f5f9; }
-  td { padding: 11px 14px; font-size: 13px; color: #0f172a; }
-  td.r { text-align: right; font-weight: 600; }
-  .totals { width: 280px; margin-left: auto; border-top: 1px solid #e2e8f0; padding-top: 10px; }
-  .t-row { display: flex; justify-content: space-between; padding: 7px 0; font-size: 13px; border-bottom: 1px solid #f8fafc; }
-  .t-row .tl { color: #64748b; }
-  .t-row .tv { font-weight: 700; }
-  .t-row.grand { border-top: 2px solid #0f172a; border-bottom: none; padding-top: 12px; margin-top: 4px; }
-  .t-row.grand .tl, .t-row.grand .tv { font-size: 15px; font-weight: 800; color: #0f172a; }
-  .footer-note { margin-top: 28px; padding-top: 12px; border-top: 1px solid #f1f5f9; font-size: 11px; color: #94a3b8; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff}
+  .page{width:794px;min-height:1123px;margin:0 auto;padding:44px 52px;display:flex;flex-direction:column}
+  .hdr{display:grid;grid-template-columns:1fr auto;align-items:flex-start;gap:20px;margin-bottom:20px}
+  .logo-img{max-height:56px;max-width:148px;object-fit:contain}
+  .logo-fb{font-size:18px;font-weight:900;color:#0B3B2E;letter-spacing:-0.5px}
+  .co-detail{font-size:10px;color:#64748b;margin-top:2px;line-height:1.5}
+  .doc-title{text-align:right}
+  .doc-label{font-size:32px;font-weight:900;color:#0B3B2E;letter-spacing:-0.06em;line-height:1;text-transform:uppercase}
+  .doc-number{font-size:13px;font-weight:700;color:#475569;margin-top:5px}
+  .accent{height:3px;background:#0B3B2E;border-radius:2px;margin-bottom:24px}
+  /* Amount hero */
+  .amount-hero{background:#f0faf5;border:1.5px solid #0B3B2E;border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+  .hero-left .hero-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.12em;color:#0B3B2E}
+  .hero-left .hero-amount{font-size:30px;font-weight:900;color:#0B3B2E;letter-spacing:-0.04em;margin-top:2px;font-variant-numeric:tabular-nums}
+  .hero-right{text-align:right}
+  .status-badge-hero{display:inline-block;padding:5px 14px;border-radius:6px;font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase}
+  /* Meta */
+  .meta{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px}
+  .meta-title{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.16em;color:#94a3b8;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #f1f5f9}
+  .field{margin-bottom:7px}
+  .fk{font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.08em}
+  .fv{font-size:12px;font-weight:600;color:#0f172a;margin-top:1px}
+  /* Allocation table */
+  .tbl-wrap{margin-bottom:20px}
+  table{width:100%;border-collapse:collapse}
+  thead tr{background:#0B3B2E;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  th{padding:9px 12px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:#fff}
+  th.r{text-align:right}
+  td{padding:10px 12px;font-size:12px;color:#1e293b;border-bottom:1px solid #f1f5f9}
+  td.r{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:none}
+  /* Totals */
+  .totals{width:260px;margin-left:auto;margin-bottom:24px}
+  .t-row{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#475569;border-bottom:1px solid #f8fafc}
+  .t-row.grand{border-top:2px solid #0f172a;border-bottom:none;padding-top:10px;margin-top:4px}
+  .t-row.grand span{font-size:15px;font-weight:900;color:#0f172a;font-variant-numeric:tabular-nums}
+  /* Confirmation box */
+  .confirm-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;margin-bottom:20px}
+  .confirm-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.12em;color:#15803d;margin-bottom:4px}
+  .confirm-body{font-size:11px;color:#166534;line-height:1.6}
+  .pending-box{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:20px}
+  .pending-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.12em;color:#92400e;margin-bottom:4px}
+  .pending-body{font-size:11px;color:#78350f;line-height:1.6}
+  /* Footer */
+  .footer{margin-top:auto;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:flex-end}
+  .footer-note{font-size:9px;color:#94a3b8;line-height:1.6}
+  .footer-brand{font-size:9px;color:#cbd5e1;font-weight:700;letter-spacing:0.06em}
 </style>
 </head>
 <body>
 <div class="page">
-  <div class="header">
-    <div class="logo-block">
-      ${companyLogo ? `<img class="logo-img" src="${esc(companyLogo)}" alt="${companyName}" />` : `<div class="logo-fb">${companyName.slice(0, 1).toUpperCase()}</div>`}
+
+  <div class="hdr">
+    <div>
+      ${companyLogo
+        ? `<img class="logo-img" src="${esc(companyLogo)}" alt="${companyName}"/>`
+        : `<div class="logo-fb">${companyName}</div>`}
       ${companyAddress ? `<div class="co-detail">${companyAddress}</div>` : ''}
       ${companyPhone ? `<div class="co-detail">Tel: ${companyPhone}</div>` : ''}
       ${companyEmail ? `<div class="co-detail">${companyEmail}</div>` : ''}
     </div>
-    <div class="rcpt-title">
-      <div class="rcpt-label">RECEIPT</div>
-      <div class="rcpt-number"># ${esc(receipt.receiptNumber || receipt.referenceNumber || '-')}</div>
+    <div class="doc-title">
+      <div class="doc-label">Receipt</div>
+      <div class="doc-number"># ${esc(receipt.receiptNumber || receipt.referenceNumber || '—')}</div>
     </div>
   </div>
 
-  <div class="divider"></div>
+  <div class="accent"></div>
 
-  <div class="body-grid">
-    <div>
-      <div class="sec-label">Received From</div>
-      <div class="fk">Tenant</div>
-      <div class="fv lg">${tenantName}</div>
-      ${propertyName ? `<div class="fk">Property</div><div class="fv">${propertyName}</div>` : ''}
-      ${unitNumber ? `<div class="fk">Unit</div><div class="fv">${unitNumber}</div>` : ''}
+  <div class="amount-hero">
+    <div class="hero-left">
+      <div class="hero-label">Amount Received</div>
+      <div class="hero-amount">KES ${formatCurrency(amount)}</div>
     </div>
-    <div>
-      <div class="sec-label">Receipt Details</div>
-      <div class="fk">Receipt Date</div>
-      <div class="fv">${formatDate(receipt.receiptDate || receipt.paymentDate || receipt.createdAt)}</div>
-      <div class="fk">Payment Method</div>
-      <div class="fv">${esc(humanizeSnake(receipt.paymentMethod || ''))}</div>
-      ${receipt.referenceNumber ? `<div class="fk">Reference</div><div class="fv">${esc(receipt.referenceNumber)}</div>` : ''}
-      <div class="fk">Cashbook</div>
-      <div class="fv">${esc(receipt.cashbook || 'Main Cashbook')}</div>
+    <div class="hero-right">
+      <span class="status-badge-hero" style="background:${statusBgColor};color:${statusColor};">${statusLabel}</span>
     </div>
   </div>
 
-  <span class="status-badge" style="background:${statusBgColor};color:${statusColor};">${statusLabel}</span>
+  <div class="meta">
+    <div>
+      <div class="meta-title">Received From</div>
+      <div class="field"><div class="fk">Tenant</div><div class="fv">${tenantName}</div></div>
+      ${tenantCode ? `<div class="field"><div class="fk">Tenant Code</div><div class="fv">${tenantCode}</div></div>` : ''}
+      ${tenantPhone ? `<div class="field"><div class="fk">Phone</div><div class="fv">${tenantPhone}</div></div>` : ''}
+      ${propertyName ? `<div class="field"><div class="fk">Property</div><div class="fv">${propertyName}</div></div>` : ''}
+      ${unitNumber ? `<div class="field"><div class="fk">Unit</div><div class="fv">${unitNumber}</div></div>` : ''}
+    </div>
+    <div>
+      <div class="meta-title">Payment Details</div>
+      <div class="field"><div class="fk">Date</div><div class="fv">${formatDate(receipt.receiptDate || receipt.paymentDate || receipt.createdAt)}</div></div>
+      <div class="field"><div class="fk">Method</div><div class="fv">${esc(humanizeSnake(receipt.paymentMethod || 'Payment'))}</div></div>
+      ${receipt.referenceNumber ? `<div class="field"><div class="fk">Transaction Ref</div><div class="fv">${esc(receipt.referenceNumber)}</div></div>` : ''}
+      ${receipt.cashbook ? `<div class="field"><div class="fk">Cashbook</div><div class="fv">${esc(receipt.cashbook)}</div></div>` : ''}
+    </div>
+  </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Description</th>
-        <th class="r">Amount (KES)</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>${esc(humanizeSnake(receipt.paymentType || 'Payment'))}${receipt.description ? `<br/><span style="font-size:11px;color:#64748b;font-weight:400;">${esc(receipt.description)}</span>` : ''}</td>
-        <td class="r">${formatCurrency(amount)}</td>
-      </tr>
-    </tbody>
-  </table>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Applied To</th>
+          <th class="r">Amount (KES)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${allocRows.length > 0
+          ? allocRows.map((r) => `<tr><td>${esc(r.label)}</td><td class="r">${formatCurrency(r.amount)}</td></tr>`).join('')
+          : `<tr><td>${esc(humanizeSnake(receipt.paymentType || 'Payment'))}${receipt.description ? `<br/><span style="font-size:11px;color:#64748b;font-weight:400">${esc(receipt.description)}</span>` : ''}</td><td class="r">${formatCurrency(amount)}</td></tr>`}
+      </tbody>
+    </table>
+  </div>
 
   <div class="totals">
-    <div class="t-row grand"><span class="tl">Total Received</span><span class="tv">KES ${formatCurrency(amount)}</span></div>
+    <div class="t-row grand"><span>Total Received</span><span>KES ${formatCurrency(amount)}</span></div>
   </div>
 
-  <div class="footer-note">
-    This is an official receipt confirming payment received by ${companyName}.<br/>
-    Generated by ${companyName} &bull; Milik Property Management System
+  ${confirmed
+    ? `<div class="confirm-box"><div class="confirm-title">Payment Confirmed</div><div class="confirm-body">This receipt confirms that the above payment of <strong>KES ${formatCurrency(amount)}</strong> has been received and applied to the tenant's account by ${companyName}.</div></div>`
+    : `<div class="pending-box"><div class="pending-title">Pending Confirmation</div><div class="pending-body">This payment is awaiting confirmation by ${companyName}. Please retain this document until the payment is confirmed.</div></div>`}
+
+  <div class="footer">
+    <div class="footer-note">
+      Official payment receipt &bull; ${companyName}<br/>
+      Powered by Milik Property Management System
+    </div>
+    <div class="footer-brand">MILIK PMS</div>
   </div>
+
 </div>
 </body>
 </html>`;

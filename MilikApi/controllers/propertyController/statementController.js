@@ -228,12 +228,19 @@ export const createDraft = async (req, res, next) => {
       propertyId,
     });
 
+    // Return full data (statement + lines) so the client does not need a second getStatement call.
+    const full = await getStatementById(String(result.statement._id), {
+      includeLines: true,
+      populateRefs: true,
+    });
+
     res.status(201).json({
       success: true,
       message: "Draft statement created successfully",
       data: {
-        statement: result.statement,
-        lineCount: result.lineCount,
+        statement: full.statement || result.statement,
+        lines: full.lines || [],
+        lineCount: full.lines?.length ?? result.lineCount,
         isExisting: false,
       },
     });

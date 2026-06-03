@@ -10,7 +10,8 @@ import {
   deleteProperty,
   getPropertyUnits,
   getPropertyTenants,
-  bulkImportProperties
+  bulkImportProperties,
+  backfillPropertyAccounts,
 } from "../../controllers/propertyController/property.js"
 import { verifyUser } from "../../controllers/verifyToken.js"
 
@@ -21,6 +22,9 @@ router.post("/", verifyUser, validateRequest(createPropertySchema), createProper
 
 // Bulk import properties
 router.post("/bulk-import", verifyUser, bulkImportProperties)
+
+// Backfill GL sub-accounts for all existing In-GL properties (idempotent migration)
+router.post("/backfill-accounts", verifyUser, backfillPropertyAccounts)
 
 // Get all properties
 router.get("/", verifyUser, getProperties)

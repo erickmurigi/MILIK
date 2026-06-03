@@ -1778,17 +1778,17 @@ const confirmTransferUnit = async () => {
                               {tenant.moveOutDate}
                             </td>
                             <td className="px-2 py-1 font-bold text-right border-r border-gray-200">
-                              <span
-                                className={`${
-                                  tenant.balance > 0
-                                    ? "text-red-600"
-                                    : tenant.balance < 0
-                                    ? "text-green-600"
-                                    : "text-gray-600"
-                                }`}
-                              >
-                                Ksh {tenant.balance.toLocaleString()}
-                              </span>
+                              {tenant.balance < -0.009 ? (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                                  CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                                </span>
+                              ) : tenant.balance > 0.009 ? (
+                                <span className="font-bold text-red-600">
+                                  KES {tenant.balance.toLocaleString()}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
                             </td>
                             <td className="px-2 py-1 font-bold text-right text-gray-900 border-r border-gray-200">
                               Ksh {tenant.depositHeld.toLocaleString()}
@@ -1824,17 +1824,17 @@ const confirmTransferUnit = async () => {
                               {tenant.rent}
                             </td>
                             <td className="px-2 py-1 font-bold text-right border-r border-gray-200">
-                              <span
-                                className={`${
-                                  tenant.balance > 0
-                                    ? "text-red-600"
-                                    : tenant.balance < 0
-                                    ? "text-green-600"
-                                    : "text-gray-600"
-                                }`}
-                              >
-                                Ksh {tenant.balance.toLocaleString()}
-                              </span>
+                              {tenant.balance < -0.009 ? (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                                  CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                                </span>
+                              ) : tenant.balance > 0.009 ? (
+                                <span className="font-bold text-red-600">
+                                  KES {tenant.balance.toLocaleString()}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
                             </td>
                             <td className="px-2 py-1 text-center border-r border-gray-200">
                               <div className="flex flex-col items-center gap-1">
@@ -1916,17 +1916,15 @@ const confirmTransferUnit = async () => {
                                   </div>
                                   <div>
                                     <span className="font-bold text-gray-700 block text-xs">Balance:</span>
-                                    <p
-                                      className={`font-bold ${
-                                        tenant.balance > 0
-                                          ? "text-red-600"
-                                          : tenant.balance < 0
-                                          ? "text-green-600"
-                                          : "text-gray-600"
-                                      }`}
-                                    >
-                                      Ksh {tenant.balance.toLocaleString()}
-                                    </p>
+                                    {tenant.balance < -0.009 ? (
+                                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                                        CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                                      </span>
+                                    ) : (
+                                      <p className={`font-bold ${tenant.balance > 0 ? "text-red-600" : "text-gray-400"}`}>
+                                        {tenant.balance > 0 ? `KES ${tenant.balance.toLocaleString()}` : "—"}
+                                      </p>
+                                    )}
                                   </div>
                                   <div>
                                     <span className="font-bold text-gray-700 block text-xs">Status:</span>

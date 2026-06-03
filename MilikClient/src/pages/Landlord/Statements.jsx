@@ -25,6 +25,24 @@ const currency = (value) =>
 
 const depositMemoCurrency = (value) => currency(Math.abs(Number(value || 0)));
 
+// Returns payment status for a single statement row.
+const getRowPaymentStatus = (row) => {
+  if (!row.tenantId || String(row.tenantName || "").toLowerCase() === "vacant") return "vacant";
+  const invoiced = Number(row.invoicedRent || 0);
+  if (invoiced === 0) return "vacant";
+  const paid = Number(row.paidRent || 0);
+  if (paid >= invoiced) return "paid";
+  if (paid > 0) return "partial";
+  return "unpaid";
+};
+
+const ROW_STATUS = {
+  paid:    { border: "border-l-[3px] border-l-emerald-400", badge: "bg-emerald-100 text-emerald-700", label: "PAID",    textMuted: false },
+  partial: { border: "border-l-[3px] border-l-amber-400",   badge: "bg-amber-100 text-amber-700",   label: "PART",    textMuted: false },
+  unpaid:  { border: "border-l-[3px] border-l-red-400",     badge: "bg-red-100 text-red-700",       label: "UNPAID",  textMuted: false },
+  vacant:  { border: "border-l-[3px] border-l-slate-200",   badge: "bg-slate-100 text-slate-400",   label: "VACANT",  textMuted: true  },
+};
+
 const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -511,6 +529,7 @@ const Statements = () => {
     year: String(today.getFullYear()),
     periodStart: initialPeriod.periodStart,
     periodEnd: initialPeriod.periodEnd,
+    periodEndIsCustom: false,
     draftStatement: null,
     activeTab: "workspace",
     collapseAdditionalUnitRows: false,
@@ -527,6 +546,8 @@ const Statements = () => {
   const setPeriodStart = (value) => setStatementDraft((prev) => ({ ...prev, periodStart: typeof value === "function" ? value(prev.periodStart || initialPeriod.periodStart) : value }));
   const periodEnd = statementDraft.periodEnd || initialPeriod.periodEnd;
   const setPeriodEnd = (value) => setStatementDraft((prev) => ({ ...prev, periodEnd: typeof value === "function" ? value(prev.periodEnd || initialPeriod.periodEnd) : value }));
+  const periodEndIsCustom = Boolean(statementDraft.periodEndIsCustom);
+  const setPeriodEndIsCustom = (value) => setStatementDraft((prev) => ({ ...prev, periodEndIsCustom: Boolean(value) }));
   const draftStatement = statementDraft.draftStatement || null;
   const setDraftStatement = (value) => setStatementDraft((prev) => ({ ...prev, draftStatement: typeof value === "function" ? value(prev.draftStatement || null) : value }));
   const [loadingDraft, setLoadingDraft] = useState(false);
@@ -546,6 +567,17 @@ const Statements = () => {
   const pendingReopenContextRef = useRef(null);
   const draftAbortControllerRef = useRef(null);
   const processedAbortControllerRef = useRef(null);
+  // Track last context that triggered a period-date reset so user edits to
+  // periodEnd do not cause the effect to re-run and reset back to today.
+  const lastResetContextRef = useRef("");
+  const periodStartRef = useRef(periodStart);
+  const periodEndRef = useRef(periodEnd);
+  // Read periodEndIsCustom in the effect without adding it to deps (avoids circular)
+  const periodEndIsCustomRef = useRef(periodEndIsCustom);
+  // Keep refs in sync on every render (cheap, no extra effect)
+  periodStartRef.current = periodStart;
+  periodEndRef.current = periodEnd;
+  periodEndIsCustomRef.current = periodEndIsCustom;
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -697,10 +729,11 @@ const Statements = () => {
   useEffect(() => {
     const pendingReopenContext = pendingReopenContextRef.current;
     if (pendingReopenContext) {
+      // Use refs so we read current values without adding periodStart/periodEnd to deps
       const matchesPendingSelection =
         normalizeId(selectedPropertyId) === normalizeId(pendingReopenContext.propertyId) &&
-        resolveDayKey(periodStart) === resolveDayKey(pendingReopenContext.periodStart) &&
-        resolveDayKey(periodEnd) === resolveDayKey(pendingReopenContext.periodEnd);
+        resolveDayKey(periodStartRef.current) === resolveDayKey(pendingReopenContext.periodStart) &&
+        resolveDayKey(periodEndRef.current) === resolveDayKey(pendingReopenContext.periodEnd);
 
       if (!processedContextLoaded || matchesPendingSelection) {
         setDraftStatement(null);
@@ -710,7 +743,34 @@ const Statements = () => {
       pendingReopenContextRef.current = null;
     }
 
+    // Build a key from the things that should trigger a period-date reset.
+    // Does NOT include periodEnd/periodStart — those are user-controlled values.
+    // The key also does NOT change when only processedContextLoaded flips,
+    // because the loaded flag is handled separately below.
+    const contextKey = `${selectedPropertyId}|${month}|${year}|${latestProcessedCutoffAt || ""}`;
+    const contextChanged = lastResetContextRef.current !== contextKey;
+    if (!contextChanged && lastResetContextRef.current !== "") {
+      // Only periodEnd/periodStart or processedContextLoaded changed — don't reset dates.
+      // Still update periodStart when processedContext finishes loading (so the locked
+      // start date reflects the actual last-statement cutoff).
+      if (processedContextLoaded && selectedPropertyId) {
+        setPeriodStart(
+          getDefaultPeriodStart({
+            month,
+            year,
+            latestProcessedCutoffAt,
+            propertyDateAcquired: selectedProperty?.dateAcquired,
+            todayIso,
+          })
+        );
+      }
+      return;
+    }
+    lastResetContextRef.current = contextKey;
+
     if (!selectedPropertyId) {
+      // No property — clear everything including custom flag
+      setPeriodEndIsCustom(false);
       const nextPeriod = buildPeriod(month, year);
       setPeriodStart(nextPeriod.periodStart);
       setPeriodEnd("");
@@ -719,11 +779,16 @@ const Statements = () => {
     }
 
     if (!processedContextLoaded) {
-      setPeriodEnd(todayIso);
+      // Context is still loading — set period start from month/year only,
+      // do not reset periodEnd (preserve custom date from session draft).
+      setPeriodStart(buildPeriod(month, year).periodStart);
       setDraftStatement(null);
       return;
     }
 
+    // Context changed and loaded — recalculate period start.
+    // Only reset periodEnd to today if the user hasn't set a custom close date.
+    setPeriodEndIsCustom(false);
     setPeriodStart(
       getDefaultPeriodStart({
         month,
@@ -921,6 +986,31 @@ const Statements = () => {
         )
       );
   }, [collapseAdditionalUnitRows, preparedRows, statementColumns, tenantUnitMeta]);
+  const [rowFilter, setRowFilter] = useState("all"); // all | unpaid | partial | paid | vacant
+
+  const collectionStats = useMemo(() => {
+    if (!draftStatement || !preparedRows.length) return null;
+    const totalInvoiced = Number(totals.invoicedRent || 0) +
+      statementColumns.reduce((s, c) => s + Number(c.invoiced || 0), 0);
+    const totalCollected = Number(totals.paidRent || 0) +
+      statementColumns.reduce((s, c) => s + Number(c.paid || 0), 0);
+    const rate = totalInvoiced > 0 ? Math.round((totalCollected / totalInvoiced) * 100) : null;
+    let paidCount = 0, partialCount = 0, unpaidCount = 0, vacantCount = 0;
+    preparedRows.forEach((row) => {
+      const s = getRowPaymentStatus(row);
+      if (s === "paid") paidCount++;
+      else if (s === "partial") partialCount++;
+      else if (s === "unpaid") unpaidCount++;
+      else vacantCount++;
+    });
+    return { totalInvoiced, totalCollected, rate, paid: paidCount, partial: partialCount, unpaid: unpaidCount, vacant: vacantCount, occupied: paidCount + partialCount + unpaidCount };
+  }, [draftStatement, totals, statementColumns, preparedRows]);
+
+  const filteredTableRows = useMemo(() => {
+    if (rowFilter === "all") return statementDisplayRows;
+    return statementDisplayRows.filter((r) => getRowPaymentStatus(r) === rowFilter);
+  }, [statementDisplayRows, rowFilter]);
+
   const nonDepositAdditionRows = useMemo(
     () => additionRows.filter((item) => String(item?.category || "") !== "deposit_remittance"),
     [additionRows]
@@ -1013,7 +1103,7 @@ const Statements = () => {
 
     setLoadingDraft(true);
     try {
-      const created = await dispatch(
+      const result = await dispatch(
         createDraftStatement({
           propertyId: selectedPropertyId,
           landlordId: landlordId || undefined,
@@ -1028,8 +1118,8 @@ const Statements = () => {
 
       if (controller.signal.aborted) return;
 
-      const full = await dispatch(getStatement(created._id));
-      const nextStatement = full?.statement || null;
+      // Backend now returns { statement, lines } in one call — no second getStatement needed.
+      const nextStatement = result?.statement || null;
 
       const nextPeriodStart = nextStatement?.periodStart ? toIsoDate(nextStatement.periodStart) : periodStart;
       const nextPeriodEnd = nextStatement?.periodEnd ? toIsoDate(nextStatement.periodEnd) : periodEnd;
@@ -1314,7 +1404,7 @@ const Statements = () => {
           <div className="h-0.5 bg-gradient-to-r from-[#0B3B2E] via-[#1a6b4e] to-[#0B3B2E]" />
 
           {/* Filter grid */}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-3 xl:grid-cols-7">
+          <div className="grid grid-cols-2 items-start gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-3 xl:grid-cols-7">
             <div>
               <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Statement Type</label>
               <SearchableSelect
@@ -1359,34 +1449,67 @@ const Statements = () => {
             </div>
 
             <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Period Start</label>
-              <input
-                type="date"
-                value={periodStart}
-                max={todayIso}
-                onChange={(e) => setPeriodStart(e.target.value)}
-                className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
-              />
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                Period Start
+              </label>
+              {latestProcessedCutoffAt ? (
+                // Locked — must continue from the day after the last statement closed
+                <div className="flex h-8 w-full items-center gap-1.5 rounded-md border border-slate-300 bg-slate-100 px-2.5 text-xs font-semibold text-slate-500">
+                  <span className="truncate">{periodStart || "—"}</span>
+                  <span className="ml-auto shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-bold uppercase text-slate-500">locked</span>
+                </div>
+              ) : (
+                // First statement — freely editable
+                <input
+                  type="date"
+                  value={periodStart}
+                  max={todayIso}
+                  onChange={(e) => setPeriodStart(e.target.value)}
+                  className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                />
+              )}
+              <p className="mt-0.5 text-[9px] text-slate-400 truncate">
+                {latestProcessedCutoffAt
+                  ? `Continues from ${new Date(latestProcessedCutoffAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`
+                  : "First statement — pick a start date"}
+              </p>
             </div>
 
             <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Period End</label>
+              <label className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                Period End
+                {periodEnd && periodEnd !== todayIso && (
+                  <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-700 normal-case tracking-normal">
+                    Custom
+                  </span>
+                )}
+              </label>
               <input
                 type="date"
                 value={periodEnd}
                 min={periodStart || undefined}
                 max={todayIso}
-                onChange={(e) => setPeriodEnd(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPeriodEnd(v);
+                  setPeriodEndIsCustom(v !== todayIso && v !== "");
+                }}
                 className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
               />
+              <p className="mt-0.5 text-[9px] text-slate-400 truncate">
+                {periodEnd && periodEnd !== todayIso
+                  ? `Custom close — must be ≥ ${periodStart || "period start"}`
+                  : "Defaults to today — change to close earlier"}
+              </p>
             </div>
 
-            <div className="flex items-end">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-transparent select-none">·</label>
               <button
                 type="button"
                 onClick={() => loadDraftWorkspace({ refresh: true })}
                 disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-[#0a3228] disabled:cursor-not-allowed disabled:opacity-55"
+                className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 text-xs font-bold text-white shadow-sm transition-colors hover:bg-[#0a3228] disabled:cursor-not-allowed disabled:opacity-55"
               >
                 <FaSyncAlt className={loadingDraft ? "animate-spin" : ""} size={11} />
                 {loadingDraft ? "Loading…" : loadingProcessedContext ? "Checking…" : "Generate"}
@@ -1416,58 +1539,73 @@ const Statements = () => {
                 </button>
               ))}
               {draftStatement?.status && (
-                <span className={`ml-3 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                  draftStatement.status === "approved"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-amber-100 text-amber-700"
+                <span className={`ml-2 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                  draftStatement.status === "approved" ? "bg-emerald-100 text-emerald-700" :
+                  draftStatement.status === "sent"     ? "bg-sky-100 text-sky-700" :
+                  "bg-amber-100 text-amber-700"
                 }`}>
                   {draftStatement.status}
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-1.5 py-2">
+            <div className="flex items-center gap-1 py-1.5">
+              {/* Tertiary: Regenerate */}
               <button
                 type="button"
                 onClick={handleRegenerateDraft}
                 disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+                title="Regenerate draft from current ledger data"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
               >
-                <FaSyncAlt size={9} />
-                Regenerate
+                <FaSyncAlt size={10} className={loadingDraft ? "animate-spin" : ""} />
               </button>
-              <button
-                type="button"
-                onClick={handleApprove}
-                disabled={!canApproveStatement || !draftStatement?._id}
-                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-40"
-              >
-                <FaCheckCircle size={9} />
-                Approve
-              </button>
+
+              {/* Tertiary: Print + PDF */}
               <button
                 type="button"
                 onClick={handlePrint}
                 disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
-                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+                title="Print statement"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
               >
-                <FaPrint size={9} className={loadingPdfPreview ? "animate-pulse" : ""} />
-                Print
+                <FaPrint size={10} className={loadingPdfPreview ? "animate-pulse" : ""} />
               </button>
               <button
                 type="button"
                 onClick={handleOpenPdf}
                 disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
-                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+                title="Download PDF"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
               >
-                <FaDownload size={9} className={loadingPdfPreview ? "animate-pulse" : ""} />
-                PDF
+                <FaDownload size={10} />
               </button>
+
+              <div className="mx-1 h-5 w-px bg-slate-200" />
+
+              {/* Secondary: Approve */}
+              <button
+                type="button"
+                onClick={handleApprove}
+                disabled={!canApproveStatement || !draftStatement?._id || draftStatement?.status === "approved"}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-35"
+              >
+                <FaCheckCircle size={9} />
+                {draftStatement?.status === "approved" ? "Approved ✓" : "Approve"}
+              </button>
+
+              {/* Primary: Process */}
               <button
                 type="button"
                 onClick={handleProcessStatement}
-                disabled={!canApproveStatement || !draftStatement?._id || processing || !hasValidPeriodSelection}
-                className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white transition-colors hover:bg-[#0a3228] disabled:opacity-40"
+                disabled={!canApproveStatement || !draftStatement?._id || processing || !hasValidPeriodSelection || draftStatement?.status !== "approved"}
+                title={
+                  !draftStatement?._id ? "Generate a draft first" :
+                  draftStatement?.status !== "approved" ? "Approve the statement first to enable processing" :
+                  !canApproveStatement ? "You do not have permission to process statements" :
+                  "Finalise and post this statement to the landlord account"
+                }
+                className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-4 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-[#0a3228] disabled:cursor-not-allowed disabled:opacity-35"
               >
                 <FaFileAlt size={9} />
                 {processing ? "Processing…" : "Process"}
@@ -1647,38 +1785,122 @@ const Statements = () => {
               /* ══════════ WORKSPACE TAB ══════════ */
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 {/* Header banner */}
-                <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-3 bg-[#0B3B2E] px-5 py-3">
-                  <div>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Workspace Preview</p>
-                    <h3 className="mt-1 text-sm font-bold text-white">
-                      {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Workspace"}
-                    </h3>
-                    {landlord && (
-                      <p className="mt-0.5 text-xs text-green-100/60">{landlord.name || landlord.fullName || ""}</p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-right">
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Period</p>
-                      <p className="mt-0.5 text-xs font-bold text-white">{statementPeriodLabel}</p>
+                <div className="flex-shrink-0 bg-[#0B3B2E] px-5 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Workspace Preview</p>
+                      <h3 className="mt-0.5 truncate text-sm font-bold text-white">
+                        {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Workspace"}
+                      </h3>
+                      {landlord && (
+                        <p className="text-[11px] text-green-100/60">{landlord.name || landlord.fullName || ""}</p>
+                      )}
                     </div>
-                    <div className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-right">
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Rows</p>
-                      <p className="mt-0.5 text-xs font-bold text-white">{statementDisplayRows.length}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="rounded-md border border-white/15 bg-white/10 px-3 py-1.5">
+                        <p className="text-[8px] font-bold uppercase tracking-widest text-green-200/50">Period</p>
+                        <p className="text-[11px] font-bold text-white">{statementPeriodLabel}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCollapseAdditionalUnitRows(!collapseAdditionalUnitRows)}
+                        className={`rounded-md border px-2.5 py-1.5 text-[10px] font-semibold transition-colors ${
+                          collapseAdditionalUnitRows
+                            ? "border-green-300/40 bg-green-500/30 text-white"
+                            : "border-white/20 bg-white/10 text-green-100/70 hover:bg-white/20"
+                        }`}
+                      >
+                        {collapseAdditionalUnitRows ? "Collapsed" : "Collapse Multi"}
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setCollapseAdditionalUnitRows(!collapseAdditionalUnitRows)}
-                      className={`rounded-lg border px-3 py-1.5 text-[10px] font-semibold transition-colors ${
-                        collapseAdditionalUnitRows
-                          ? "border-green-300/40 bg-green-500/30 text-white"
-                          : "border-white/20 bg-white/10 text-green-100/80 hover:bg-white/20"
-                      }`}
-                    >
-                      {collapseAdditionalUnitRows ? "Multi-Unit: Collapsed" : "Collapse Multi-Unit"}
-                    </button>
                   </div>
+
+                  {/* Collection rate bar */}
+                  {collectionStats && collectionStats.rate !== null && (
+                    <div className="mt-2.5">
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">
+                          Collection Rate
+                        </span>
+                        <span className={`text-[11px] font-bold ${
+                          collectionStats.rate >= 80 ? "text-emerald-300" :
+                          collectionStats.rate >= 50 ? "text-amber-300" : "text-red-300"
+                        }`}>
+                          {collectionStats.rate}% · {currency(collectionStats.totalCollected)} of {currency(collectionStats.totalInvoiced)}
+                        </span>
+                      </div>
+                      <div className="relative h-2 w-full overflow-hidden rounded-full bg-white/15">
+                        {/* Track label at 0% */}
+                        {collectionStats.rate === 0 && (
+                          <span className="absolute left-1 top-0 flex h-full items-center text-[8px] font-bold text-white/40">0%</span>
+                        )}
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            collectionStats.rate >= 80 ? "bg-emerald-400" :
+                            collectionStats.rate >= 50 ? "bg-amber-400" : "bg-red-400/80"
+                          }`}
+                          style={{ width: `${Math.max(0.5, Math.min(100, collectionStats.rate))}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* KPI strip */}
+                {collectionStats && (
+                  <div className="flex-shrink-0 grid grid-cols-5 divide-x divide-slate-100 border-b border-slate-200 bg-white">
+                    {[
+                      {
+                        label: "Units",
+                        value: `${collectionStats.occupied} occ`,
+                        sub: collectionStats.vacant > 0 ? `${collectionStats.vacant} vacant` : "fully occupied",
+                        color: "text-slate-800",
+                        subColor: collectionStats.vacant > 0 ? "text-amber-500" : "text-emerald-500",
+                      },
+                      { label: "Paid in Full", value: collectionStats.paid,    sub: "tenants", color: collectionStats.paid > 0 ? "text-emerald-700" : "text-slate-400",  subColor: "text-slate-400" },
+                      { label: "Partial",      value: collectionStats.partial,  sub: "tenants", color: collectionStats.partial > 0 ? "text-amber-700" : "text-slate-400", subColor: "text-slate-400" },
+                      { label: "Not Paid",     value: collectionStats.unpaid,   sub: "tenants", color: collectionStats.unpaid > 0 ? "text-red-600" : "text-slate-400",   subColor: "text-slate-400" },
+                      {
+                        label: "Net to Landlord",
+                        value: currency(settlement.amount),
+                        sub: settlement.isNegative ? settlement.label : "Incl. b/f balances & adj.",
+                        color: settlement.isNegative ? "text-red-700" : "text-[#0B3B2E]",
+                        subColor: "text-slate-400",
+                      },
+                    ].map((kpi) => (
+                      <div key={kpi.label} className="px-4 py-2.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{kpi.label}</p>
+                        <p className={`mt-0.5 text-sm font-bold ${kpi.color}`}>{kpi.value}</p>
+                        {kpi.sub && <p className={`text-[9px] ${kpi.subColor || "text-slate-400"}`}>{kpi.sub}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Row filter chips */}
+                {draftStatement && preparedRows.length > 0 && (
+                  <div className="flex-shrink-0 flex items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-5 py-2">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mr-1">Filter:</span>
+                    {[
+                      { key: "all",     label: `All (${preparedRows.length})`,              cls: "border-slate-300 bg-white text-slate-700" },
+                      { key: "unpaid",  label: `Unpaid (${collectionStats?.unpaid ?? 0})`,  cls: "border-red-200 bg-red-50 text-red-700" },
+                      { key: "partial", label: `Partial (${collectionStats?.partial ?? 0})`,cls: "border-amber-200 bg-amber-50 text-amber-700" },
+                      { key: "paid",    label: `Paid (${collectionStats?.paid ?? 0})`,      cls: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+                      { key: "vacant",  label: `Vacant (${collectionStats?.vacant ?? 0})`,  cls: "border-slate-200 bg-slate-100 text-slate-500" },
+                    ].map((chip) => (
+                      <button
+                        key={chip.key}
+                        type="button"
+                        onClick={() => setRowFilter(chip.key)}
+                        className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition-colors ${chip.cls} ${
+                          rowFilter === chip.key ? "ring-2 ring-offset-1 ring-[#0B3B2E] opacity-100" : "opacity-65 hover:opacity-100"
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Scrollable table + detail sections */}
                 <div className="min-h-0 flex-1 overflow-auto bg-white">
@@ -1746,68 +1968,122 @@ const Statements = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white">
-                      {statementDisplayRows.length === 0 ? (
+                      {filteredTableRows.length === 0 ? (
                         <tr>
-                          <td colSpan={statementColSpan} className="px-4 py-14 text-center">
-                            <div className="flex flex-col items-center gap-3">
-                              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100">
-                                <FaFileAlt className="text-slate-400" size={16} />
+                          <td colSpan={statementColSpan} className="px-4 py-10 text-center">
+                            <div className="flex flex-col items-center gap-2">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+                                <FaFileAlt className="text-slate-400" size={14} />
                               </div>
-                              <div>
-                                <p className="text-sm font-semibold text-slate-700">No rows generated</p>
-                                <p className="mt-0.5 text-xs text-slate-400">Adjust the date range and regenerate the draft.</p>
-                              </div>
+                              <p className="text-sm font-semibold text-slate-700">
+                                {rowFilter === "all" ? "No rows generated" : `No ${rowFilter} tenants`}
+                              </p>
+                              {rowFilter !== "all" && (
+                                <button type="button" onClick={() => setRowFilter("all")} className="text-xs text-[#0B3B2E] underline">Show all rows</button>
+                              )}
                             </div>
                           </td>
                         </tr>
                       ) : (
-                        statementDisplayRows.map((row, index) => {
+                        filteredTableRows.map((row, index) => {
                           const closingBal = Number(row.closingBalance ?? row.balanceCF ?? row.balance ?? 0);
+                          const status = getRowPaymentStatus(row);
+                          const st = ROW_STATUS[status];
+                          const isVacant = status === "vacant";
                           const isOdd = index % 2 !== 0;
                           const rowBase = isOdd ? "bg-slate-50" : "bg-white";
+
+                          // Helper: paid columns — only show green amount when actually > 0,
+                          // otherwise show a muted dash (zero payment ≠ good, don't colour it green).
+                          const paidCell = (val) => {
+                            if (isVacant) return { text: "—", cls: "text-slate-300" };
+                            const n = Number(val || 0);
+                            return n > 0.005
+                              ? { text: currency(n), cls: "text-emerald-700 font-medium" }
+                              : { text: "—", cls: "text-slate-300" };
+                          };
+
+                          // Bal C/F: positive = tenant owes (arrears = red),
+                          //          negative = tenant has credit (green),
+                          //          zero = settled (muted).
+                          const balCls = isVacant ? "text-slate-300"
+                            : closingBal > 0.005  ? "text-red-600 font-semibold"
+                            : closingBal < -0.005 ? "text-emerald-700 font-semibold"
+                            : "text-slate-400";
+
+                          const paidRentCell   = paidCell(row.paidRent);
+                          const paidTaxCell    = paidCell(row.paidTax);
+                          const totalPaidCell  = paidCell(row.totalPaid);
+
+                          // Only show the inline badge when it adds info beyond the left-border colour.
+                          // UNPAID is the dominant status — the red border already communicates it.
+                          // Show badge for PAID, PARTIAL, VACANT to highlight exceptions.
+                          const showBadge = status !== "unpaid" || isVacant;
+
                           return (
                             <tr
                               key={`${row.unitId || row.unitNumber || "row"}-${index}`}
-                              className={`${rowBase} border-b border-slate-100 transition-colors hover:bg-orange-50/30`}
+                              className={`${rowBase} border-b border-slate-100 transition-colors hover:bg-blue-50/20`}
                             >
-                              <td className={`sticky left-0 z-10 w-[88px] min-w-[88px] ${rowBase} px-3 py-2.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.1)]`}>
-                                <div className="text-xs font-semibold text-slate-900">{row.displayUnitLabel || row.unit || row.unitNumber || "—"}</div>
+                              <td className={`sticky left-0 z-10 w-[88px] min-w-[88px] ${rowBase} ${st.border} px-3 py-2.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
+                                <div className={`text-xs font-semibold ${isVacant ? "text-slate-400" : "text-slate-900"}`}>{row.displayUnitLabel || row.unit || row.unitNumber || "—"}</div>
                                 {Array.isArray(row.allUnitLabels) && row.allUnitLabels.length > 1 && (
-                                  <div className="mt-0.5 text-[10px] text-slate-400 truncate max-w-[76px]">{row.allUnitLabels.join(", ")}</div>
+                                  <div className="mt-0.5 truncate max-w-[76px] text-[10px] text-slate-400">{row.allUnitLabels.join(", ")}</div>
                                 )}
                               </td>
-                              <td className={`sticky left-[88px] z-10 w-[155px] min-w-[155px] ${rowBase} border-r border-slate-100 px-3 py-2.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.1)]`}>
-                                <div className="max-w-[135px] truncate text-xs font-medium text-slate-800">{row.tenantName || "—"}</div>
+                              <td className={`sticky left-[88px] z-10 w-[155px] min-w-[155px] ${rowBase} border-r border-slate-100 px-3 py-2.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
+                                <div className="flex items-center justify-between gap-1">
+                                  <div className={`truncate text-xs font-medium ${isVacant ? "text-slate-400 italic" : "text-slate-800"} ${showBadge ? "max-w-[105px]" : "max-w-[135px]"}`}>
+                                    {row.tenantName || "—"}
+                                  </div>
+                                  {showBadge && (
+                                    <span className={`shrink-0 rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide ${st.badge}`}>
+                                      {st.label}
+                                    </span>
+                                  )}
+                                </div>
                                 {Number(row.multiUnitCount || 1) > 1 && (
-                                  <div className="mt-1 inline-flex rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700">
+                                  <div className="mt-0.5 inline-flex rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700">
                                     {row.multiUnitCount} units
                                   </div>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-right text-slate-500">{currency(row.openingBalance ?? row.balanceBF ?? 0)}</td>
-                              <td className="border-l border-slate-100 px-3 py-2.5 text-right text-slate-700">{currency(row.invoicedRent)}</td>
+                              {/* Bal B/F — muted, context only */}
+                              <td className="px-3 py-2.5 text-right text-slate-400 text-[11px]">
+                                {isVacant ? "—" : (Number(row.openingBalance ?? row.balanceBF ?? 0) !== 0 ? currency(row.openingBalance ?? row.balanceBF ?? 0) : "—")}
+                              </td>
+                              {/* Rent Invoiced */}
+                              <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${isVacant ? "text-slate-300" : "text-slate-700"}`}>
+                                {isVacant ? "—" : currency(row.invoicedRent)}
+                              </td>
                               {hasInvoiceVatColumn && (
-                                <td className="px-3 py-2.5 text-right text-slate-500">{currency(row.invoicedTax ?? 0)}</td>
+                                <td className={`px-3 py-2.5 text-right text-[11px] ${isVacant ? "text-slate-300" : "text-slate-500"}`}>
+                                  {isVacant ? "—" : currency(row.invoicedTax ?? 0)}
+                                </td>
                               )}
-                              <td className="px-3 py-2.5 text-right font-medium text-emerald-700">{currency(row.paidRent)}</td>
+                              {/* Rent Paid — green only when > 0 */}
+                              <td className={`px-3 py-2.5 text-right text-xs ${paidRentCell.cls}`}>{paidRentCell.text}</td>
                               {hasInvoiceVatColumn && (
-                                <td className="px-3 py-2.5 text-right text-emerald-600">{currency(row.paidTax ?? 0)}</td>
+                                <td className={`px-3 py-2.5 text-right text-[11px] ${paidTaxCell.cls}`}>{paidTaxCell.text}</td>
                               )}
-                              {statementColumns.map((column) => (
-                                <React.Fragment key={`${row.unitId || row.unitNumber || "row"}-${column.key}`}>
-                                  <td className="border-l border-slate-100 px-3 py-2.5 text-right text-slate-700">
-                                    {currency(getPreparedStatementColumnValue(row, column.key, "invoiced"))}
-                                  </td>
-                                  <td className="px-3 py-2.5 text-right font-medium text-emerald-700">
-                                    {currency(getPreparedStatementColumnValue(row, column.key, "paid"))}
-                                  </td>
-                                </React.Fragment>
-                              ))}
-                              <td className="border-l border-slate-100 px-3 py-2.5 text-right font-semibold text-slate-900">{currency(row.totalPaid)}</td>
-                              <td className={`px-3 py-2.5 text-right font-semibold ${
-                                closingBal < 0 ? "text-red-600" : closingBal > 0 ? "text-emerald-700" : "text-slate-400"
-                              }`}>
-                                {currency(closingBal)}
+                              {/* Utility columns */}
+                              {statementColumns.map((column) => {
+                                const invVal = getPreparedStatementColumnValue(row, column.key, "invoiced");
+                                const padVal = paidCell(getPreparedStatementColumnValue(row, column.key, "paid"));
+                                return (
+                                  <React.Fragment key={`${row.unitId || row.unitNumber || "row"}-${column.key}`}>
+                                    <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${isVacant ? "text-slate-300" : "text-slate-700"}`}>
+                                      {isVacant ? "—" : currency(invVal)}
+                                    </td>
+                                    <td className={`px-3 py-2.5 text-right text-xs ${padVal.cls}`}>{padVal.text}</td>
+                                  </React.Fragment>
+                                );
+                              })}
+                              {/* Total Paid */}
+                              <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${totalPaidCell.cls}`}>{totalPaidCell.text}</td>
+                              {/* Bal C/F — positive = arrears (red), negative = credit (green) */}
+                              <td className={`px-3 py-2.5 text-right text-xs ${balCls}`}>
+                                {isVacant ? "—" : closingBal !== 0 ? currency(closingBal) : "—"}
                               </td>
                             </tr>
                           );
@@ -2090,30 +2366,55 @@ const Statements = () => {
 
                 {/* KPI footer */}
                 <div className="flex-shrink-0 border-t border-slate-200 bg-white shadow-[0_-2px_6px_rgba(0,0,0,0.05)]">
-                  <div className="grid grid-cols-2 divide-x divide-slate-100 md:grid-cols-4">
-                    <div className="px-5 py-3.5">
+                  <div className="grid grid-cols-2 divide-x divide-slate-100 md:grid-cols-5">
+                    {/* Total Invoiced */}
+                    <div className="px-4 py-3">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Total Invoiced</p>
+                      <p className="mt-1 text-sm font-bold text-slate-700">{currency(collectionStats?.totalInvoiced ?? totals.invoicedRent)}</p>
+                      {collectionStats?.rate !== null && collectionStats?.rate !== undefined && (
+                        <p className={`mt-0.5 text-[10px] font-semibold ${
+                          collectionStats.rate >= 80 ? "text-emerald-600" :
+                          collectionStats.rate >= 50 ? "text-amber-600" :
+                          collectionStats.rate > 0  ? "text-orange-500" : "text-slate-400"
+                        }`}>
+                          {collectionStats.rate > 0 ? `${collectionStats.rate}% collected` : "Nothing collected yet"}
+                        </p>
+                      )}
+                    </div>
+                    {/* Rent Collected */}
+                    <div className="px-4 py-3">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Rent Collected</p>
-                      <p className="mt-1.5 text-sm font-bold text-slate-900">{currency(totals.rentPaid)}</p>
-                      {hasInvoiceVatColumn && (
+                      <p className={`mt-1 text-sm font-bold ${Number(totals.rentPaid || 0) > 0 ? "text-emerald-700" : "text-slate-400"}`}>
+                        {Number(totals.rentPaid || 0) > 0 ? currency(totals.rentPaid) : "—"}
+                      </p>
+                      {hasInvoiceVatColumn && Number(totalInvoiceVatReceived || 0) > 0 && (
                         <p className="mt-0.5 text-[10px] text-slate-400">VAT: {currency(totalInvoiceVatReceived)}</p>
                       )}
                     </div>
-                    <div className="px-5 py-3.5">
+                    {/* Utilities Paid */}
+                    <div className="px-4 py-3">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Utilities Paid</p>
-                      <p className="mt-1.5 text-sm font-bold text-slate-900">{currency(totals.utilityPaid)}</p>
+                      <p className={`mt-1 text-sm font-bold ${Number(totals.utilityPaid || 0) > 0 ? "text-emerald-700" : "text-slate-400"}`}>
+                        {Number(totals.utilityPaid || 0) > 0 ? currency(totals.utilityPaid) : "—"}
+                      </p>
                     </div>
-                    <div className="px-5 py-3.5">
+                    {/* Expenses */}
+                    <div className="px-4 py-3">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Expenses</p>
-                      <p className={`mt-1.5 text-sm font-bold ${Number(totals.expenses || 0) > 0 ? "text-amber-700" : "text-slate-900"}`}>
-                        {currency(totals.expenses)}
+                      <p className={`mt-1 text-sm font-bold ${Number(totals.expenses || 0) > 0 ? "text-amber-700" : "text-slate-400"}`}>
+                        {Number(totals.expenses || 0) > 0 ? currency(totals.expenses) : "—"}
                       </p>
                     </div>
-                    <div className={`px-5 py-3.5 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
+                    {/* Net to Landlord */}
+                    <div className={`px-4 py-3 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
                       <p className={`text-[9px] font-bold uppercase tracking-widest ${settlement.isNegative ? "text-red-500" : "text-green-200/60"}`}>
-                        {settlement.label}
+                        Net to Landlord
                       </p>
-                      <p className={`mt-1.5 text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>
+                      <p className={`mt-1 text-base font-black ${settlement.isNegative ? "text-red-700" : "text-white"}`}>
                         {currency(settlement.amount)}
+                      </p>
+                      <p className={`text-[9px] ${settlement.isNegative ? "text-red-400" : "text-green-200/40"}`}>
+                        {settlement.isNegative ? settlement.label : "Incl. b/f balances"}
                       </p>
                     </div>
                   </div>

@@ -725,19 +725,23 @@ export const generateStatementPdf = async (statementId, businessId) => {
           .header-table td { vertical-align: top; }
           .brand-cell { width: 78px; padding-right: 10px; }
           .brand-logo { width: 62px; height: 62px; object-fit: contain; }
-          .brand-fallback { width: 62px; height: 62px; border: 1px solid #111827; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; }
-          .business-name { font-size: 20px; font-weight: 700; margin: 0 0 2px; }
-          .business-line { margin: 1px 0; color: #374151; }
-          .statement-title { text-align: center; font-size: 13px; font-weight: 700; margin: 10px 0 4px; text-transform: uppercase; }
-          .statement-subtitle { text-align: center; margin-bottom: 10px; font-size: 9px; color: #4b5563; }
-          .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-          .meta-table td { padding: 2px 4px; vertical-align: top; }
-          .meta-label { width: 86px; font-weight: 700; text-transform: uppercase; }
-          .meta-value { font-weight: 700; }
-          .period-cell { text-align: right; font-weight: 700; white-space: nowrap; }
-          .section-title { margin: 10px 0 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #111827; padding-bottom: 2px; }
+          .brand-fallback { width: 62px; height: 62px; background: #0B3B2E; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; border-radius: 6px; }
+          .business-name { font-size: 18px; font-weight: 900; margin: 0 0 2px; color: #0B3B2E; letter-spacing: -0.3px; }
+          .business-line { margin: 1px 0; color: #374151; font-size: 8.5px; }
+          .accent-bar { height: 2px; background: #0B3B2E; border-radius: 1px; margin: 6px 0 8px; }
+          .statement-title { text-align: center; font-size: 12px; font-weight: 900; margin: 6px 0 3px; text-transform: uppercase; color: #0B3B2E; letter-spacing: 0.04em; }
+          .statement-subtitle { text-align: center; margin-bottom: 8px; font-size: 8.5px; color: #4b5563; }
+          .meta-box { border: 1px solid #e5e7eb; border-radius: 4px; padding: 5px 8px; margin-bottom: 8px; background: #f9fafb; display: flex; justify-content: space-between; align-items: flex-start; }
+          .meta-block {}
+          .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+          .meta-table td { padding: 1px 4px; vertical-align: top; border: none; }
+          .meta-label { width: 70px; font-weight: 800; text-transform: uppercase; font-size: 8px; color: #6b7280; letter-spacing: 0.08em; }
+          .meta-value { font-weight: 700; font-size: 9px; color: #111827; }
+          .period-cell { text-align: right; font-weight: 700; white-space: nowrap; font-size: 8.5px; color: #374151; }
+          .period-badge { display: inline-block; background: #0B3B2E; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 8px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 3px; }
+          .section-title { margin: 8px 0 4px; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: #0B3B2E; border-bottom: 2px solid #0B3B2E; padding-bottom: 2px; }
           table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1px solid #111827; padding: 3px 4px; vertical-align: middle; }
+          th, td { border: 1px solid #d1d5db; padding: 3px 4px; vertical-align: middle; }
           th { background: #f3f4f6; font-weight: 700; }
           .num { text-align: right; white-space: nowrap; }
           .center { text-align: center; }
@@ -755,9 +759,9 @@ export const generateStatementPdf = async (statementId, businessId) => {
           .summary-head th { background: #0B3B2E; color: #ffffff; }
           .summary-table td, .summary-table th { padding: 4px 5px; }
           .summary-table .label { font-weight: 700; }
-          .summary-table .final-row td { font-weight: 700; font-size: 10px; background: #f3f4f6; }
+          .summary-table .final-row td { font-weight: 700; font-size: 10px; background: #f0faf5; }
           .negative { color: #991b1b; }
-          .footnote { margin-top: 8px; font-size: 8px; color: #6b7280; }
+          .footnote { margin-top: 8px; font-size: 7.5px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 4px; }
         </style>
       </head>
       <body>
@@ -765,30 +769,33 @@ export const generateStatementPdf = async (statementId, businessId) => {
           <table class="header-table">
             <tr>
               <td class="brand-cell">
-                ${businessLogo ? `<img src="${esc(businessLogo)}" alt="logo" class="brand-logo" />` : `<div class="brand-fallback">M</div>`}
+                ${businessLogo ? `<img src="${esc(businessLogo)}" alt="logo" class="brand-logo" />` : `<div class="brand-fallback">${esc(String(businessName || "M").charAt(0).toUpperCase())}</div>`}
               </td>
               <td>
                 <div class="business-name">${esc(businessName)}</div>
                 ${businessSlogan ? `<div class="business-line">${esc(businessSlogan)}</div>` : ""}
                 ${businessPostalAddress ? `<div class="business-line">${esc(businessPostalAddress)}</div>` : ""}
                 ${businessLocation ? `<div class="business-line">${esc(businessLocation)}</div>` : ""}
-                <div class="business-line">${businessPhone ? `TEL: ${esc(businessPhone)}` : ""}${businessPhone && businessEmail ? " | " : ""}${businessEmail ? `EMAIL: ${esc(businessEmail)}` : ""}</div>
+                <div class="business-line">${businessPhone ? `Tel: ${esc(businessPhone)}` : ""}${businessPhone && businessEmail ? " &bull; " : ""}${businessEmail ? esc(businessEmail) : ""}</div>
               </td>
               <td class="period-cell">
-                <div>Statement No: ${esc(statement.statementNumber || "-")}</div>
+                <div class="period-badge">LANDLORD STATEMENT</div>
+                <div>Ref: ${esc(statement.statementNumber || "-")}</div>
                 <div>Generated: ${formatDate(statement.generatedAt || statement.updatedAt || new Date())}</div>
               </td>
             </tr>
           </table>
 
-          <div class="statement-title">LANDLORD STATEMENT - ${esc(String(statement?.metadata?.statementType || statement?.metadata?.workspace?.statementType || statement?.statementType || "Provisional").toUpperCase())}</div>
-          <div class="statement-subtitle">Professional landlord schedule and settlement summary</div>
+          <div class="accent-bar"></div>
 
-          <table class="meta-table">
+          <div class="statement-title">${esc(String(statement?.metadata?.statementType || statement?.metadata?.workspace?.statementType || statement?.statementType || "Provisional Statement").toUpperCase())}</div>
+          <div class="statement-subtitle">Property management schedule and settlement summary</div>
+
+          <table class="meta-table" style="margin-bottom:8px">
             <tr>
-              <td class="meta-label">Landlord</td>
+              <td class="meta-label">Landlord / Owner</td>
               <td class="meta-value">${esc(landlordName)}</td>
-              <td class="period-cell">STATEMENT PERIOD: ${esc(statementPeriodLabel)}</td>
+              <td class="period-cell" style="font-weight:800;color:#0B3B2E">PERIOD: ${esc(statementPeriodLabel)}</td>
             </tr>
             <tr>
               <td class="meta-label">Property</td>

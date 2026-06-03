@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useDebounce from "../../hooks/useDebounce";
 import {
   FaCheck,
@@ -67,6 +67,8 @@ const ExpenseRequisition = () => {
   const properties = useSelector(selectAllProperties);
 
   const [rows, setRows] = useState([]);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [serverPages, setServerPages] = useState(1);
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -107,22 +109,33 @@ const ExpenseRequisition = () => {
     dispatch(getProperties({ business: currentCompany._id }));
   }, [dispatch, currentCompany?._id]);
 
-  const loadRows = async () => {
+  const loadRows = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
-      const reqs = await getExpenseRequisitions({ business: currentCompany._id, company: currentCompany._id, ...filters, search: debouncedSearch });
-      setRows(Array.isArray(reqs) ? reqs : []);
+      const params = {
+        business: currentCompany._id,
+        company: currentCompany._id,
+        page: currentPage,
+        limit: pageSize,
+        search: debouncedSearch || undefined,
+        status: filters.status !== "all" ? filters.status : undefined,
+        propertyId: filters.propertyId !== "all" ? filters.propertyId : undefined,
+      };
+      const res = await getExpenseRequisitions(params);
+      const data = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+      setRows(data);
+      setServerTotal(res?.total ?? data.length);
+      setServerPages(res?.pages ?? 1);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load expense requisitions");
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCompany?._id, currentPage, pageSize, debouncedSearch, filters.status, filters.propertyId]);
 
-  useEffect(() => {
-    loadRows();
-  }, [currentCompany?._id, debouncedSearch, filters.status]);
+  useEffect(() => { loadRows(); }, [loadRows]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, filters.status, filters.propertyId, pageSize]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -131,41 +144,18 @@ const ExpenseRequisition = () => {
       .catch(() => {});
   }, [currentCompany?._id]);
 
-  const filteredRows = useMemo(
-    () =>
-      rows.filter((row) => {
-        if (filters.propertyId !== "all") {
-          const propertyId = String(row?.property?._id || row?.property || "");
-          if (propertyId !== String(filters.propertyId || "")) return false;
-        }
-        return true;
-      }),
-    [rows, filters.propertyId]
-  );
-
-
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const totalPages = Math.max(1, serverPages);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = filteredRows.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const currentPageRows = filteredRows.slice(startIndex, endIndex);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch, filters.status, filters.propertyId, filteredRows.length, pageSize]);
-
-  useEffect(() => {
-    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
-  }, [currentPage, safeCurrentPage]);
+  const currentPageRows = rows; // server returns the correct page slice
 
   const stats = useMemo(
     () => ({
-      total: filteredRows.length,
-      submitted: filteredRows.filter((row) => row.status === "submitted").length,
-      approvedReady: filteredRows.filter((row) => row.status === "approved" && !row.linkedVoucher).length,
-      converted: filteredRows.filter((row) => row.status === "converted").length,
+      total: serverTotal,
+      submitted: rows.filter((row) => row.status === "submitted").length,
+      approvedReady: rows.filter((row) => row.status === "approved" && !row.linkedVoucher).length,
+      converted: rows.filter((row) => row.status === "converted").length,
     }),
-    [filteredRows]
+    [rows, serverTotal]
   );
 
   const toggleSelect = (id) => {
@@ -174,7 +164,7 @@ const ExpenseRequisition = () => {
 
   const toggleSelectAll = () => {
     setSelectedIds((prev) =>
-      prev.length === filteredRows.length ? [] : filteredRows.map((row) => row._id)
+      prev.length === rows.length ? [] : rows.map((row) => row._id)
     );
   };
 
@@ -509,7 +499,7 @@ const ExpenseRequisition = () => {
               <table className="w-full min-w-[1120px] text-xs">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filteredRows.length && filteredRows.length > 0 ? <FaCheck className="text-white" /> : <FaSquare className="text-white/80" />}</button></th>
+                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === rows.length && rows.length > 0 ? <FaCheck className="text-white" /> : <FaSquare className="text-white/80" />}</button></th>
                     <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Requisition</th>
                     <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Property / Provider</th>
                     <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Needed By</th>
@@ -521,7 +511,7 @@ const ExpenseRequisition = () => {
                 <tbody>
                   {loading ? (
                     <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">Loading requisitions...</td></tr>
-                  ) : filteredRows.length === 0 ? (
+                  ) : rows.length === 0 ? (
                     <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">No expense requisitions found.</td></tr>
                   ) : (
                     currentPageRows.map((row, index) => (
@@ -541,7 +531,7 @@ const ExpenseRequisition = () => {
             </div>
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
               <div className="font-semibold">
-                Showing <span className="font-bold text-slate-900">{filteredRows.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> requisition(s)
+                Showing <span className="font-bold text-slate-900">{serverTotal === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> requisition(s)
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">

@@ -26,7 +26,9 @@ import ExpenseProperty from "../../models/ExpenseProperty.js";
 import ExpenseRequisition from "../../models/ExpenseRequisition.js";
 import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
-import { ensurePropertyControlAccount } from "../../services/propertyAccountingService.js";
+import {
+  ensurePropertyControlAccount,
+} from "../../services/propertyAccountingService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules.js";
 
@@ -861,6 +863,29 @@ export const getProperties = async (req, res, next) => {
       Property.countDocuments(query),
     ]);
 
+    // Attach fresh PCTRL balance to each property — how much the PM currently holds
+    // for each landlord — using a single 2110 aggregate for the whole page.
+    if (properties.length > 0) {
+      const remittanceAcct = await ChartOfAccount.findOne({ business: businessId, code: "2110" })
+        .select("_id").lean();
+      if (remittanceAcct) {
+        const propertyIds = properties.map((p) => p._id);
+        const rows = await FinancialLedgerEntry.aggregate([
+          {
+            $match: {
+              business: new mongoose.Types.ObjectId(String(businessId)),
+              accountId: remittanceAcct._id,
+              property: { $in: propertyIds },
+              status: { $nin: ["void", "draft"] },
+            },
+          },
+          { $group: { _id: "$property", credit: { $sum: "$credit" }, debit: { $sum: "$debit" } } },
+        ]);
+        const pctrlMap = new Map(rows.map((r) => [String(r._id), Math.max(0, r.credit - r.debit)]));
+        properties.forEach((p) => { p.pctrlBalance = pctrlMap.get(String(p._id)) || 0; });
+      }
+    }
+
     res.json({
       success: true,
       data: properties,
@@ -883,7 +908,7 @@ export const getProperty = async (req, res, next) => {
       .populate("createdBy", "surname otherNames email")
       .populate("updatedBy", "surname otherNames email")
       .populate("landlords.landlordId", "_id landlordName firstName lastName email")
-      .populate("controlAccount", "code name type group subGroup")
+      .populate("controlAccount", "code name type group subGroup balance")
       .lean();
 
     if (!property) {
@@ -902,6 +927,29 @@ export const getProperty = async (req, res, next) => {
           message: "Not authorized to access this property",
         });
       }
+    }
+
+    // Compute fresh PCTRL balance from 2110 entries tagged with this property
+    const businessId = property.business?._id || property.business;
+    const remittanceAcct = await ChartOfAccount.findOne({ business: businessId, code: "2110" })
+      .select("_id").lean();
+    if (remittanceAcct) {
+      const rows = await FinancialLedgerEntry.aggregate([
+        {
+          $match: {
+            business: new mongoose.Types.ObjectId(String(businessId)),
+            accountId: remittanceAcct._id,
+            property: new mongoose.Types.ObjectId(String(property._id)),
+            status: { $nin: ["void", "draft"] },
+          },
+        },
+        { $group: { _id: null, credit: { $sum: "$credit" }, debit: { $sum: "$debit" } } },
+      ]);
+      property.pctrlBalance = rows.length > 0
+        ? Math.max(0, rows[0].credit - rows[0].debit)
+        : 0;
+    } else {
+      property.pctrlBalance = 0;
     }
 
     res.json({
@@ -1652,6 +1700,58 @@ export const bulkImportProperties = async (req, res, next) => {
     const allFailed = results.successful.length === 0 && results.failed.length > 0;
     res.status(200).json({
       success: !allFailed,
+      ...results,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Ensures every property has a PCTRL-{CODE} control account.
+// Idempotent — safe to run multiple times.
+export const backfillPropertyAccounts = async (req, res, next) => {
+  try {
+    const businessId =
+      req.user?.company?._id ||
+      req.user?.company ||
+      req.query?.business ||
+      req.body?.business ||
+      null;
+
+    if (!businessId) {
+      return res.status(400).json({ success: false, message: "Company context is required." });
+    }
+
+    const properties = await Property.find({ business: businessId })
+      .select("_id propertyCode propertyName controlAccount")
+      .lean();
+
+    const results = { total: properties.length, processed: 0, alreadyComplete: 0, failed: 0, errors: [] };
+
+    for (const prop of properties) {
+      if (prop.controlAccount) { results.alreadyComplete++; continue; }
+
+      try {
+        await ensurePropertyControlAccount({
+          businessId,
+          propertyId: prop._id,
+          propertyCode: prop.propertyCode,
+          propertyName: prop.propertyName,
+        });
+        results.processed++;
+      } catch (err) {
+        results.failed++;
+        results.errors.push({
+          propertyId: String(prop._id),
+          propertyName: prop.propertyName,
+          error: err.message,
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Control account backfill complete. ${results.processed} propert${results.processed === 1 ? "y" : "ies"} updated, ${results.alreadyComplete} already complete${results.failed > 0 ? `, ${results.failed} failed` : ""}.`,
       ...results,
     });
   } catch (err) {

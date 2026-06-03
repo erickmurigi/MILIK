@@ -20,7 +20,8 @@
       "Bash(grep -E \"\\\\.\\(js|ts\\)$\")",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\components\" -Recurse -Filter \"*.jsx\" -File)",
       "Bash(Select-Object -ExpandProperty Name)",
-      "Bash(powershell -Command \"Get-ChildItem -Recurse -Include '*.jsx','*.js' | Select-String -Pattern 'html2pdf' | Select-Object -First 5\")"
+      "Bash(powershell -Command \"Get-ChildItem -Recurse -Include '*.jsx','*.js' | Select-String -Pattern 'html2pdf' | Select-Object -First 5\")",
+      "Bash(grep -n \"const html = \\\\`\" \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\services\\\\statementPdfService.js\")"
     ]
   }
 }

@@ -104,9 +104,9 @@ const buildInvoicePdfCacheKey = (invoice) => {
 export const generateInvoicePdf = async (invoiceId, businessId) => {
   const invoice = await TenantInvoice.findOne({ _id: invoiceId, business: businessId })
     .populate('tenant', 'name email tenantCode phone')
-    .populate('property', 'propertyName propertyCode address')
+    .populate('property', 'propertyName propertyCode address invoicePaymentTerms mpesaPaybill')
     .populate('unit', 'unitNumber name')
-    .populate('business', 'companyName name address phone email logo slogan')
+    .populate('business', 'companyName name address phone email logo slogan invoicePaymentTerms')
     .lean();
 
   if (!invoice) { const e = new Error('Invoice not found or access denied'); e.status = 404; throw e; }
@@ -131,6 +131,7 @@ export const generateInvoicePdf = async (invoiceId, businessId) => {
     const tenantName = esc(tenant.name || '');
     const tenantCode = esc(tenant.tenantCode || '');
     const tenantEmail = esc(tenant.email || '');
+    const tenantPhone = esc(tenant.phone || '');
 
     const property = invoice.property || {};
     const propertyName = esc(property.propertyName || '');
@@ -147,6 +148,16 @@ export const generateInvoicePdf = async (invoiceId, businessId) => {
     const grossAmount = Number(tax.grossAmount || invoice.amount || 0);
     const displayAmount = isTaxable ? grossAmount : Number(invoice.amount || 0);
 
+    const paymentTerms = esc(
+      property.invoicePaymentTerms ||
+      company.invoicePaymentTerms ||
+      'Please pay your invoice before the due date to avoid late penalties.'
+    );
+
+    const now = new Date();
+    const dueDate = invoice.dueDate ? new Date(invoice.dueDate) : null;
+    const isOverdue = dueDate && dueDate < now && !['paid', 'cancelled', 'reversed'].includes(invoice.status);
+
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -154,110 +165,137 @@ export const generateInvoicePdf = async (invoiceId, businessId) => {
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Invoice ${esc(invoice.invoiceNumber || '')}</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 13px; color: #1e293b; background: #fff; }
-  .page { width: 794px; min-height: 1123px; margin: 0 auto; padding: 48px 56px; display: flex; flex-direction: column; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; }
-  .company-block { display: flex; flex-direction: column; gap: 2px; }
-  .company-name { font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px; }
-  .company-detail { font-size: 11px; color: #64748b; }
-  .logo { max-height: 60px; max-width: 160px; object-fit: contain; }
-  .invoice-title-block { text-align: right; }
-  .invoice-label { font-size: 28px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; text-transform: uppercase; }
-  .invoice-number { font-size: 13px; color: #64748b; margin-top: 4px; }
-  .divider { height: 2px; background: linear-gradient(90deg, #0B3B2E, #E65F1A); border-radius: 1px; margin-bottom: 32px; }
-  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
-  .meta-section { }
-  .meta-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #94a3b8; margin-bottom: 10px; }
-  .meta-row { display: flex; flex-direction: column; margin-bottom: 6px; }
-  .meta-key { font-size: 10px; color: #94a3b8; }
-  .meta-value { font-size: 13px; font-weight: 600; color: #0f172a; }
-  .table-wrap { margin-bottom: 24px; }
-  table { width: 100%; border-collapse: collapse; }
-  thead tr { background: #1e293b; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  th { padding: 10px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #fff; }
-  th.right { text-align: right; }
-  td { padding: 12px; font-size: 13px; color: #1e293b; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-  td.right { text-align: right; }
-  td.label { font-weight: 600; }
-  .totals { width: 280px; margin-left: auto; margin-bottom: 32px; }
-  .totals-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #475569; border-bottom: 1px solid #f1f5f9; }
-  .totals-row.total { font-size: 15px; font-weight: 800; color: #0f172a; border-bottom: none; padding-top: 10px; }
-  .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
-  .status-label { font-size: 11px; color: #94a3b8; font-weight: 600; }
-  .footer { margin-top: auto; padding-top: 24px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: flex-end; }
-  .footer-note { font-size: 10px; color: #94a3b8; }
-  .footer-brand { font-size: 10px; color: #cbd5e1; font-weight: 600; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;color:#1e293b;background:#fff}
+  .page{width:794px;min-height:1123px;margin:0 auto;padding:44px 52px;display:flex;flex-direction:column}
+  /* ── Header ── */
+  .hdr{display:grid;grid-template-columns:1fr auto;align-items:flex-start;gap:20px;margin-bottom:20px}
+  .logo-img{max-height:58px;max-width:150px;object-fit:contain}
+  .logo-fb{font-size:18px;font-weight:900;color:#0B3B2E;letter-spacing:-0.5px}
+  .co-detail{font-size:10px;color:#64748b;margin-top:2px;line-height:1.5}
+  .doc-title{text-align:right}
+  .doc-label{font-size:32px;font-weight:900;color:#0B3B2E;letter-spacing:-0.06em;line-height:1;text-transform:uppercase}
+  .doc-number{font-size:13px;font-weight:700;color:#475569;margin-top:5px}
+  /* ── Accent bar ── */
+  .accent{height:3px;background:#0B3B2E;border-radius:2px;margin-bottom:24px}
+  /* ── Amount hero ── */
+  .amount-hero{background:#f0faf5;border:1.5px solid #0B3B2E;border-radius:10px;padding:14px 20px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center}
+  .hero-left{}
+  .hero-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.12em;color:#0B3B2E}
+  .hero-amount{font-size:28px;font-weight:900;color:#0B3B2E;letter-spacing:-0.04em;font-variant-numeric:tabular-nums;margin-top:2px}
+  .hero-right{text-align:right}
+  .hero-meta{font-size:10px;color:#64748b;margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em}
+  .hero-due{font-size:14px;font-weight:800;color:${isOverdue ? '#dc2626' : '#0f172a'}}
+  .overdue-badge{display:inline-block;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-top:4px}
+  /* ── Status ── */
+  .status-strip{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+  .s-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8}
+  /* ── Meta grid ── */
+  .meta{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px}
+  .meta-sec{}
+  .meta-title{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.16em;color:#94a3b8;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #f1f5f9}
+  .field{margin-bottom:7px}
+  .fk{font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.08em}
+  .fv{font-size:12px;font-weight:600;color:#0f172a;margin-top:1px}
+  /* ── Line items table ── */
+  .tbl-wrap{margin-bottom:20px}
+  table{width:100%;border-collapse:collapse}
+  thead tr{background:#0B3B2E;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  th{padding:9px 12px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:#fff}
+  th.r{text-align:right}
+  td{padding:11px 12px;font-size:12px;color:#1e293b;border-bottom:1px solid #f1f5f9;vertical-align:top}
+  td.r{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:none}
+  /* ── Totals ── */
+  .totals{width:260px;margin-left:auto;margin-bottom:24px}
+  .t-row{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#475569;border-bottom:1px solid #f8fafc}
+  .t-row.grand{border-top:2px solid #0f172a;border-bottom:none;padding-top:8px;margin-top:4px}
+  .t-row.grand span{font-size:14px;font-weight:900;color:#0f172a;font-variant-numeric:tabular-nums}
+  /* ── Payment terms ── */
+  .terms{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:20px}
+  .terms-title{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.12em;color:#92400e;margin-bottom:4px}
+  .terms-body{font-size:11px;color:#78350f;line-height:1.6}
+  /* ── Footer ── */
+  .footer{margin-top:auto;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:flex-end}
+  .footer-note{font-size:9px;color:#94a3b8;line-height:1.6}
+  .footer-brand{font-size:9px;color:#cbd5e1;font-weight:700;letter-spacing:0.06em}
 </style>
 </head>
 <body>
 <div class="page">
-  <div class="header">
-    <div class="company-block">
-      ${companyLogo ? `<img src="${esc(companyLogo)}" class="logo" alt="${companyName}" />` : `<div class="company-name">${companyName}</div>`}
-      ${companyAddress ? `<div class="company-detail">${companyAddress}</div>` : ''}
-      ${companyPhone ? `<div class="company-detail">Tel: ${companyPhone}</div>` : ''}
-      ${companyEmail ? `<div class="company-detail">${companyEmail}</div>` : ''}
+
+  <div class="hdr">
+    <div>
+      ${companyLogo
+        ? `<img src="${esc(companyLogo)}" class="logo-img" alt="${companyName}"/>`
+        : `<div class="logo-fb">${companyName}</div>`}
+      ${companyAddress ? `<div class="co-detail">${companyAddress}</div>` : ''}
+      ${companyPhone ? `<div class="co-detail">Tel: ${companyPhone}</div>` : ''}
+      ${companyEmail ? `<div class="co-detail">${companyEmail}</div>` : ''}
     </div>
-    <div class="invoice-title-block">
-      <div class="invoice-label">Invoice</div>
-      <div class="invoice-number"># ${esc(invoice.invoiceNumber || '')}</div>
+    <div class="doc-title">
+      <div class="doc-label">Invoice</div>
+      <div class="doc-number"># ${esc(invoice.invoiceNumber || '')}</div>
     </div>
   </div>
 
-  <div class="divider"></div>
+  <div class="accent"></div>
 
-  <div class="meta-grid">
-    <div class="meta-section">
-      <div class="meta-title">Billed To</div>
-      <div class="meta-row">
-        <span class="meta-key">Tenant</span>
-        <span class="meta-value">${tenantName}</span>
-      </div>
-      ${tenantCode ? `<div class="meta-row"><span class="meta-key">Tenant Code</span><span class="meta-value">${tenantCode}</span></div>` : ''}
-      ${tenantEmail ? `<div class="meta-row"><span class="meta-key">Email</span><span class="meta-value">${tenantEmail}</span></div>` : ''}
-      ${propertyName ? `<div class="meta-row"><span class="meta-key">Property</span><span class="meta-value">${propertyName}${propertyCode ? ` (${propertyCode})` : ''}</span></div>` : ''}
-      ${unitNumber ? `<div class="meta-row"><span class="meta-key">Unit</span><span class="meta-value">${unitNumber}</span></div>` : ''}
+  <div class="amount-hero">
+    <div class="hero-left">
+      <div class="hero-label">Amount Due</div>
+      <div class="hero-amount">KES ${formatCurrency(displayAmount)}</div>
     </div>
-    <div class="meta-section">
-      <div class="meta-title">Invoice Details</div>
-      <div class="meta-row">
-        <span class="meta-key">Invoice Date</span>
-        <span class="meta-value">${formatDate(invoice.invoiceDate)}</span>
-      </div>
-      <div class="meta-row">
-        <span class="meta-key">Due Date</span>
-        <span class="meta-value">${formatDate(invoice.dueDate)}</span>
-      </div>
-      <div class="meta-row">
-        <span class="meta-key">Category</span>
-        <span class="meta-value">${esc(categoryLabel(invoice.category))}</span>
-      </div>
+    <div class="hero-right">
+      <div class="hero-meta">Due Date</div>
+      <div class="hero-due">${formatDate(invoice.dueDate) || '—'}</div>
+      ${isOverdue ? '<div class="overdue-badge">Overdue</div>' : ''}
     </div>
   </div>
 
-  <div class="status-row">
-    <span class="status-label">Status</span>
+  <div class="status-strip">
+    <span class="s-label">Status</span>
     ${statusBadge(invoice.status)}
   </div>
 
-  <div class="table-wrap">
+  <div class="meta">
+    <div class="meta-sec">
+      <div class="meta-title">Billed To</div>
+      <div class="field"><div class="fk">Name</div><div class="fv">${tenantName}</div></div>
+      ${tenantCode ? `<div class="field"><div class="fk">Tenant Code</div><div class="fv">${tenantCode}</div></div>` : ''}
+      ${tenantPhone ? `<div class="field"><div class="fk">Phone</div><div class="fv">${tenantPhone}</div></div>` : ''}
+      ${tenantEmail ? `<div class="field"><div class="fk">Email</div><div class="fv">${tenantEmail}</div></div>` : ''}
+      ${propertyName ? `<div class="field"><div class="fk">Property</div><div class="fv">${propertyName}${propertyCode ? ` (${propertyCode})` : ''}</div></div>` : ''}
+      ${unitNumber ? `<div class="field"><div class="fk">Unit</div><div class="fv">${unitNumber}</div></div>` : ''}
+    </div>
+    <div class="meta-sec">
+      <div class="meta-title">Invoice Details</div>
+      <div class="field"><div class="fk">Invoice Date</div><div class="fv">${formatDate(invoice.invoiceDate)}</div></div>
+      <div class="field"><div class="fk">Due Date</div><div class="fv" style="color:${isOverdue ? '#dc2626' : 'inherit'};font-weight:700">${formatDate(invoice.dueDate) || '—'}</div></div>
+      <div class="field"><div class="fk">Category</div><div class="fv">${esc(categoryLabel(invoice.category))}</div></div>
+      ${invoice.invoiceNumber ? `<div class="field"><div class="fk">Invoice #</div><div class="fv">${esc(invoice.invoiceNumber)}</div></div>` : ''}
+    </div>
+  </div>
+
+  <div class="tbl-wrap">
     <table>
       <thead>
         <tr>
           <th>Description</th>
-          <th class="right">Amount (KES)</th>
+          <th class="r">Amount (KES)</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td class="label">${esc(categoryLabel(invoice.category))}${invoice.description ? `<br/><span style="font-weight:400;color:#64748b;font-size:11px;">${esc(invoice.description)}</span>` : ''}</td>
-          <td class="right">${formatCurrency(isTaxable ? netAmount : invoice.amount)}</td>
+          <td style="font-weight:600">${esc(categoryLabel(invoice.category))}${invoice.description
+            ? `<br/><span style="font-weight:400;color:#64748b;font-size:11px;line-height:1.6">${esc(invoice.description)}</span>`
+            : ''}</td>
+          <td class="r">${formatCurrency(isTaxable ? netAmount : displayAmount)}</td>
         </tr>
         ${isTaxable && taxAmount > 0 ? `
         <tr>
-          <td style="color:#64748b;">Tax (${taxRate}%)</td>
-          <td class="right" style="color:#64748b;">${formatCurrency(taxAmount)}</td>
+          <td style="color:#64748b">VAT / Tax (${taxRate}%)</td>
+          <td class="r" style="color:#64748b">${formatCurrency(taxAmount)}</td>
         </tr>` : ''}
       </tbody>
     </table>
@@ -265,24 +303,24 @@ export const generateInvoicePdf = async (invoiceId, businessId) => {
 
   <div class="totals">
     ${isTaxable ? `
-    <div class="totals-row">
-      <span>Subtotal</span>
-      <span>KES ${formatCurrency(netAmount)}</span>
-    </div>
-    <div class="totals-row">
-      <span>Tax (${taxRate}%)</span>
-      <span>KES ${formatCurrency(taxAmount)}</span>
-    </div>` : ''}
-    <div class="totals-row total">
-      <span>Total Due</span>
-      <span>KES ${formatCurrency(displayAmount)}</span>
-    </div>
+    <div class="t-row"><span>Subtotal</span><span>KES ${formatCurrency(netAmount)}</span></div>
+    <div class="t-row"><span>VAT / Tax (${taxRate}%)</span><span>KES ${formatCurrency(taxAmount)}</span></div>` : ''}
+    <div class="t-row grand"><span>Total Due</span><span>KES ${formatCurrency(displayAmount)}</span></div>
+  </div>
+
+  <div class="terms">
+    <div class="terms-title">Payment Terms</div>
+    <div class="terms-body">${paymentTerms}</div>
   </div>
 
   <div class="footer">
-    <div class="footer-note">Thank you for your business. Please ensure payment is made by the due date.</div>
+    <div class="footer-note">
+      This is a computer-generated invoice and is valid without a signature.<br/>
+      ${companyName} &bull; Powered by Milik Property Management System
+    </div>
     <div class="footer-brand">MILIK PMS</div>
   </div>
+
 </div>
 </body>
 </html>`;

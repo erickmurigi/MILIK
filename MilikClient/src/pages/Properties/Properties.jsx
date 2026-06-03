@@ -887,6 +887,18 @@ const Properties = () => {
                                         <p className="text-sm font-bold text-gray-900 mt-1">{property.accountLedgerType || "N/A"}</p>
                                       </div>
                                       <div>
+                                        <span className="text-xs font-semibold text-gray-700">Held for Landlord:</span>
+                                        {property.pctrlBalance > 0 ? (
+                                          <p className="text-sm font-bold text-emerald-700 mt-1">
+                                            KES {Number(property.pctrlBalance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                                          </p>
+                                        ) : (
+                                          <p className="text-sm font-bold text-slate-400 mt-1">
+                                            {property.controlAccount ? "KES 0.00" : "⚠ No control account"}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div>
                                         <span className="text-xs font-semibold text-gray-700">Invoice Prefix:</span>
                                         <p className="text-sm font-bold text-gray-900 mt-1">{property.invoicePrefix || "N/A"}</p>
                                       </div>

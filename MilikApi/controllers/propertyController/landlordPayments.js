@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Landlord from "../../models/Landlord.js";
+import Property from "../../models/Property.js";
 import LandlordPayment from "../../models/LandlordPayment.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
@@ -132,10 +133,22 @@ export const createLandlordPayment = async (req, res, next) => {
       status: "confirmed",
     });
 
+    // Resolve the property dimension for this payment.
+    // If the landlord owns exactly one active property we can tag it, enabling
+    // property-scoped PCTRL balance computation. Multi-property landlords remain
+    // unscoped — the 2110 payment debit won't reduce per-property PCTRL balances.
+    const landlordProperties = await Property.find({
+      "landlords.landlordId": landlordId,
+      business: businessId,
+      status: { $ne: "archived" },
+    }).select("_id").lean();
+    const singlePropertyId = landlordProperties.length === 1 ? landlordProperties[0]._id : null;
+
     const journalGroupId = new mongoose.Types.ObjectId();
     const common = {
       business: businessId,
       landlord: landlordId,
+      ...(singlePropertyId ? { property: singlePropertyId } : { allowUnscoped: true }),
       sourceTransactionType: "landlord_payment",
       sourceTransactionId: String(payment._id),
       transactionDate: postingDate,
@@ -148,7 +161,6 @@ export const createLandlordPayment = async (req, res, next) => {
       approvedBy: actorUserId,
       approvedAt: postingDate,
       status: "approved",
-      allowUnscoped: true,
     };
 
     const debitLeg = await postEntry({
@@ -175,7 +187,17 @@ export const createLandlordPayment = async (req, res, next) => {
     payment.journalGroupId = journalGroupId;
     await payment.save();
 
-    await aggregateChartOfAccountBalances(businessId, [String(payableAccount._id), String(cashbookAccount._id)]);
+    // Refresh PCTRL balance for the tagged property (single-property landlords only)
+    const accountsToRefresh = [String(payableAccount._id), String(cashbookAccount._id)];
+    if (singlePropertyId) {
+      const pctrlAcct = await ChartOfAccount.findOne({
+        business: businessId,
+        property: singlePropertyId,
+        code: { $regex: /^PCTRL-/ },
+      }).select("_id").lean();
+      if (pctrlAcct) accountsToRefresh.push(String(pctrlAcct._id));
+    }
+    await aggregateChartOfAccountBalances(businessId, accountsToRefresh);
     const balance = await getLandlordBalance(landlordId, businessId);
 
     res.status(201).json({ success: true, message: "Landlord payment recorded successfully.", data: { payment, balance } });

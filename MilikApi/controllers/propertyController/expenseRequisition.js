@@ -321,7 +321,8 @@ export const getExpenseRequisitions = async (req, res, next) => {
 
     const filter = { business: businessId };
     if (req.query?.status && req.query.status !== "all") filter.status = req.query.status;
-    if (req.query?.property && isValidObjectId(req.query.property)) filter.property = req.query.property;
+    const propId = req.query?.property || req.query?.propertyId;
+    if (propId && isValidObjectId(propId)) filter.property = propId;
     if (req.query?.serviceProvider && isValidObjectId(req.query.serviceProvider)) filter.serviceProvider = req.query.serviceProvider;
     if (req.query?.search) {
       const term = String(req.query.search).trim();
@@ -336,8 +337,20 @@ export const getExpenseRequisitions = async (req, res, next) => {
       ];
     }
 
-    const rows = await populateQuery(ExpenseRequisition.find(filter).sort({ createdAt: -1 })).lean();
-    res.status(200).json(rows);
+    const pageNum  = Math.max(parseInt(req.query.page  || "1",  10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(req.query.limit || "50", 10) || 50, 1), 200);
+
+    const [rows, total] = await Promise.all([
+      populateQuery(
+        ExpenseRequisition.find(filter)
+          .sort({ createdAt: -1 })
+          .skip((pageNum - 1) * limitNum)
+          .limit(limitNum)
+      ).lean(),
+      ExpenseRequisition.countDocuments(filter),
+    ]);
+
+    res.status(200).json({ success: true, data: rows, total, page: pageNum, pages: Math.ceil(total / limitNum) });
   } catch (error) {
     next(error);
   }

@@ -54,21 +54,43 @@ export const getInspections = async (req, res, next) => {
       return res.status(400).json({ message: "Business context is required" });
     }
 
-    const { status, type, property, unit, tenant } = req.query;
+    const { status, type, property, unit, tenant, search, page = 1, limit = 50 } = req.query;
     const filter = { business };
-    if (status) filter.status = status;
-    if (type) filter.type = type;
-    if (property) filter.property = property;
+    if (status && status !== "all") filter.status = status;
+    if (type && type !== "all") filter.type = type;
+    if (property && property !== "all") filter.property = property;
     if (unit) filter.unit = unit;
     if (tenant) filter.tenant = tenant;
+    if (search && search.trim()) {
+      const term = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = [
+        { title: { $regex: term, $options: "i" } },
+        { notes: { $regex: term, $options: "i" } },
+        { inspectionNumber: { $regex: term, $options: "i" } },
+      ];
+    }
 
-    const inspections = await Inspection.find(filter)
-      .populate("property", "propertyName propertyCode")
-      .populate("unit", "unitNumber property")
-      .populate("tenant", "name phone")
-      .sort({ scheduledDate: -1, createdAt: -1 });
+    const pageNum  = Math.max(parseInt(page,  10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
 
-    res.status(200).json(inspections);
+    const [inspections, total] = await Promise.all([
+      Inspection.find(filter)
+        .populate("property", "propertyName propertyCode")
+        .populate("unit", "unitNumber property")
+        .populate("tenant", "name phone")
+        .sort({ scheduledDate: -1, createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum),
+      Inspection.countDocuments(filter),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: inspections,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+    });
   } catch (error) {
     next(error);
   }

@@ -1221,11 +1221,17 @@ export const generateLandlordStatement = async ({
   const propertyObjectId = oid(propertyId);
   const landlordObjectId = oid(landlordId);
 
-  const property = await Property.findById(propertyObjectId)
-    .select(
-      "dateAcquired propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount commissionTaxSettings totalUnits business landlords depositHeldBy letManage"
-    )
-    .lean();
+  // Round-trip 1: property + landlord fetched in parallel (landlord business validated after).
+  const [property, landlordRecord] = await Promise.all([
+    Property.findById(propertyObjectId)
+      .select(
+        "dateAcquired propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount commissionTaxSettings totalUnits business landlords depositHeldBy letManage"
+      )
+      .lean(),
+    Landlord.findOne({ _id: landlordObjectId })
+      .select("landlordName email phoneNumber company")
+      .lean(),
+  ]);
 
   if (!property) throw new Error("Property not found");
   if (String(property?.letManage || "").trim().toLowerCase() === "letting") {
@@ -1239,38 +1245,12 @@ export const generateLandlordStatement = async ({
     throw new Error("Property is missing business scope. Cannot generate landlord statement safely.");
   }
 
-  const landlordRecord = await Landlord.findOne({
-    _id: landlordObjectId,
-    company: property.business,
-  })
-    .select("landlordName email phoneNumber")
-    .lean();
-
-  if (!landlordRecord) {
+  if (!landlordRecord || String(landlordRecord.company || "") !== String(property.business)) {
     throw new Error("Landlord not found for the supplied property business scope.");
   }
 
   const businessId = String(property.business);
   const businessObjectId = oid(property.business);
-
-  const {
-    effectiveStartAt,
-    effectiveEndAt,
-    previousCutoffAt,
-    latestProcessedStatement,
-    openingLandlordSettlementBalance,
-  } = await resolveEffectiveStatementWindow({
-    businessId: businessObjectId,
-    propertyId: propertyObjectId,
-    landlordId: landlordObjectId,
-    statementPeriodStart,
-    statementPeriodEnd,
-    cutoffAt,
-    propertyDateAcquired: property.dateAcquired || null,
-  });
-
-  const periodStart = effectiveStartAt;
-  const periodEnd = effectiveEndAt;
 
   const landlordLinkedToProperty = (Array.isArray(property.landlords) ? property.landlords : []).some(
     (item) => String(item?.landlordId || "") === String(landlordObjectId)
@@ -1280,22 +1260,45 @@ export const generateLandlordStatement = async ({
     throw new Error("Landlord is not linked to the supplied property.");
   }
 
-  // Phase 0.5: find the most recent approved statement for this property/landlord that ended
-  // before the current period.  If found, use its per-tenant balance snapshots as opening
-  // balances so Phase 1/2 queries only need to scan the gap since that statement, not all history.
-  const lastApproved = await LandlordStatement.findOne({
-    business: businessObjectId,
-    property: propertyObjectId,
-    landlord: landlordObjectId,
-    status: { $in: ["approved", "sent"] },
-    periodEnd: { $lt: periodStart },
-  })
-    .sort({ periodEnd: -1 })
-    .select("_id periodEnd")
-    .lean();
+  // Round-trip 2: statement window resolution + last-approved lookup in parallel.
+  // lastApproved uses statementPeriodStart directly (safe — effectiveStartAt can only be
+  // equal to or later than startOfDay(statementPeriodStart), never earlier).
+  const [windowResult, lastApproved] = await Promise.all([
+    resolveEffectiveStatementWindow({
+      businessId: businessObjectId,
+      propertyId: propertyObjectId,
+      landlordId: landlordObjectId,
+      statementPeriodStart,
+      statementPeriodEnd,
+      cutoffAt,
+      propertyDateAcquired: property.dateAcquired || null,
+    }),
+    LandlordStatement.findOne({
+      business: businessObjectId,
+      property: propertyObjectId,
+      landlord: landlordObjectId,
+      status: { $in: ["approved", "sent"] },
+      periodEnd: { $lt: startOfDay(statementPeriodStart) },
+    })
+      .sort({ periodEnd: -1 })
+      .select("_id periodEnd")
+      .lean(),
+  ]);
+
+  const {
+    effectiveStartAt,
+    effectiveEndAt,
+    previousCutoffAt,
+    latestProcessedStatement,
+    openingLandlordSettlementBalance,
+  } = windowResult;
+
+  const periodStart = effectiveStartAt;
+  const periodEnd = effectiveEndAt;
 
   const snapshotDate = lastApproved ? new Date(lastApproved.periodEnd) : null;
 
+  // Round-trip 3: tenant balance snapshots (must follow lastApproved)
   const tenantBalanceSnapshots = snapshotDate
     ? await LandlordStatementTenantBalance.find({ statement: lastApproved._id })
         .select("tenantKey balanceCF")
@@ -1412,12 +1415,23 @@ export const generateLandlordStatement = async ({
 
   const unitIds = units.map((u) => u._id);
 
-  // Phase 2: tenant + payment queries that depend on unitIds
-  const [
-    tenants,
-    standardReceiptsForStatementWindow,
-    depositReceiptsForStatementWindow,
-  ] = await Promise.all([
+  // Phase 2: tenant + payment queries that depend on unitIds.
+  // All payment types fetched in a single RentPayment query and split in memory.
+  const dateOrFilter = snapshotDate
+    ? [
+        { paymentDate: { $gte: snapshotDate, $lte: periodEnd } },
+        { confirmedAt: { $gte: snapshotDate, $lte: periodEnd } },
+        { recordDate:  { $gte: snapshotDate, $lte: periodEnd } },
+        { createdAt:   { $gte: snapshotDate, $lte: periodEnd } },
+      ]
+    : [
+        { paymentDate: { $lte: periodEnd } },
+        { confirmedAt: { $lte: periodEnd } },
+        { recordDate:  { $lte: periodEnd } },
+        { createdAt:   { $lte: periodEnd } },
+      ];
+
+  const [tenants, allPaymentsForStatementWindow] = await Promise.all([
     Tenant.find({
       unit: { $in: unitIds },
       business: businessObjectId,
@@ -1436,40 +1450,21 @@ export const generateLandlordStatement = async ({
       isReversed: { $ne: true },
       reversalOf: null,
       isCancellationEntry: { $ne: true },
-      paymentType: { $in: ["rent", "utility"] },
-      $or: [
-        snapshotDate ? { paymentDate: { $gte: snapshotDate, $lte: periodEnd } } : { paymentDate: { $lte: periodEnd } },
-        snapshotDate ? { confirmedAt: { $gte: snapshotDate, $lte: periodEnd } } : { confirmedAt: { $lte: periodEnd } },
-        snapshotDate ? { recordDate: { $gte: snapshotDate, $lte: periodEnd } } : { recordDate: { $lte: periodEnd } },
-        snapshotDate ? { createdAt: { $gte: snapshotDate, $lte: periodEnd } } : { createdAt: { $lte: periodEnd } },
-      ],
+      paymentType: { $in: ["rent", "utility", "deposit"] },
+      $or: dateOrFilter,
     })
       .select(
-        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber breakdown utilities allocations allocationSummary metadata confirmedAt recordDate createdAt"
-      )
-      .lean(),
-
-    RentPayment.find({
-      business: businessObjectId,
-      unit: { $in: unitIds },
-      isConfirmed: true,
-      isCancelled: { $ne: true },
-      isReversed: { $ne: true },
-      reversalOf: null,
-      isCancellationEntry: { $ne: true },
-      paymentType: "deposit",
-      $or: [
-        snapshotDate ? { paymentDate: { $gte: snapshotDate, $lte: periodEnd } } : { paymentDate: { $lte: periodEnd } },
-        snapshotDate ? { confirmedAt: { $gte: snapshotDate, $lte: periodEnd } } : { confirmedAt: { $lte: periodEnd } },
-        snapshotDate ? { recordDate: { $gte: snapshotDate, $lte: periodEnd } } : { recordDate: { $lte: periodEnd } },
-        snapshotDate ? { createdAt: { $gte: snapshotDate, $lte: periodEnd } } : { createdAt: { $lte: periodEnd } },
-      ],
-    })
-      .select(
-        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber allocations allocationSummary metadata depositHeldBy ledgerMode confirmedAt recordDate createdAt"
+        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber breakdown utilities allocations allocationSummary metadata depositHeldBy ledgerMode confirmedAt recordDate createdAt"
       )
       .lean(),
   ]);
+
+  const standardReceiptsForStatementWindow = allPaymentsForStatementWindow.filter(
+    (p) => p.paymentType === "rent" || p.paymentType === "utility"
+  );
+  const depositReceiptsForStatementWindow = allPaymentsForStatementWindow.filter(
+    (p) => p.paymentType === "deposit"
+  );
 
   const unitMap = new Map(units.map((u) => [String(u._id), u]));
   const tenantMap = new Map(tenants.map((t) => [String(t._id), t]));

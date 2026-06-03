@@ -170,6 +170,7 @@ const AddReceipt = () => {
     },
     priorityInvoiceKeys: [],
     manualSelectionMode: false,
+    creditOnAccountMode: false,
     includeTerminatedTenants: Boolean(preselectedTenantId || prefilledTenantCode),
   });
   const formData = receiptDraft.formData || {};
@@ -189,6 +190,16 @@ const AddReceipt = () => {
   const [tenantInvoices, setTenantInvoices] = useState([]);
   const [cashbookOptions, setCashbookOptions] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const creditOnAccountMode = Boolean(receiptDraft.creditOnAccountMode);
+  const setCreditOnAccountMode = (value) => {
+    setReceiptDraft((prev) => ({
+      ...prev,
+      creditOnAccountMode: Boolean(value),
+      // turning on credit-on-account clears manual invoice selection
+      ...(value ? { manualSelectionMode: true, priorityInvoiceKeys: [] } : {}),
+    }));
+  };
+
   const manualSelectionMode = Boolean(receiptDraft.manualSelectionMode);
   const setManualSelectionMode = (updater) => {
     setReceiptDraft((prev) => ({
@@ -551,7 +562,9 @@ const AddReceipt = () => {
         appliedAmount: Number(line.apply || 0),
       }));
 
-    const shouldUseManualAllocations = manualSelectionMode || priorityInvoiceKeys.length > 0;
+    // Credit on account → send empty allocations so entire amount goes to 2130
+    const shouldUseManualAllocations = creditOnAccountMode || manualSelectionMode || priorityInvoiceKeys.length > 0;
+    const creditAllocations = creditOnAccountMode ? [] : undefined;
     const payload = {
       tenant: formData.tenantId,
       unit: unitId,
@@ -569,8 +582,8 @@ const AddReceipt = () => {
       month: paymentDateObj.getMonth() + 1,
       year: paymentDateObj.getFullYear(),
       business: currentCompany._id,
-      allocations: shouldUseManualAllocations ? manualAllocationRows : undefined,
-      allocationMode: shouldUseManualAllocations ? "manual" : undefined,
+      allocations: creditOnAccountMode ? creditAllocations : (shouldUseManualAllocations ? manualAllocationRows : undefined),
+      allocationMode: creditOnAccountMode ? "credit_on_account" : (shouldUseManualAllocations ? "manual" : undefined),
       metadata: prefilledCollectionId
         ? {
             mpesa: {
@@ -859,6 +872,21 @@ const AddReceipt = () => {
                 </div>
               </div>
 
+              {/* ── EXISTING CREDIT BANNER ── */}
+              {formData.tenantId && balanceSummary.balance < -0.009 && !creditOnAccountMode && (
+                <div className="mb-3 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-200 text-emerald-800 font-bold text-xs">CR</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-emerald-800">
+                      This tenant has KES {Math.abs(balanceSummary.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })} credit on account
+                    </p>
+                    <p className="mt-0.5 text-xs text-emerald-700">
+                      The credit is held in 2130 Unallocated Receipts and will be applied to open invoices. New receipt will be allocated after the credit is consumed.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* ── INVOICE PREVIEW (bottom) ── */}
               {formData.tenantId && (
                 <div className="mb-4 space-y-3">
@@ -870,20 +898,35 @@ const AddReceipt = () => {
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">Invoice Preview</p>
                         <p className="mt-0.5 text-[11px] text-white/75">
-                          {manualSelectionMode
+                          {creditOnAccountMode
+                            ? "Credit on account — full amount held in 2130 (Unallocated Receipts). Apply to a future invoice manually."
+                            : manualSelectionMode
                             ? "Manual mode — only checked invoices will be allocated; remainder held as prepayment."
                             : "Only open invoices shown. Fully paid invoices are hidden."}
                         </p>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-semibold text-white/80">
+                      <div className="flex items-center gap-3">
+                        {/* Credit on Account primary toggle */}
+                        <button
+                          type="button"
+                          onClick={() => setCreditOnAccountMode(!creditOnAccountMode)}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold transition-colors ${
+                            creditOnAccountMode
+                              ? "border-emerald-300/60 bg-emerald-500/30 text-white"
+                              : "border-white/20 bg-white/10 text-white/70 hover:bg-white/20"
+                          }`}
+                        >
+                          {creditOnAccountMode ? "✓ Credit on Account" : "Credit on Account"}
+                        </button>
+
+                        <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-semibold text-white/70">
                           <input
                             type="checkbox"
-                            checked={manualSelectionMode}
-                            onChange={(e) => setManualSelectionMode(e.target.checked)}
+                            checked={manualSelectionMode && !creditOnAccountMode}
+                            onChange={(e) => { setCreditOnAccountMode(false); setManualSelectionMode(e.target.checked); }}
                             className="h-3.5 w-3.5 rounded border-white/40 text-[#0B3B2E] focus:ring-white/30"
                           />
-                          Manual selection / prepayment mode
+                          Manual
                         </label>
                         {priorityInvoiceKeys.length > 0 && (
                           <button
@@ -897,7 +940,28 @@ const AddReceipt = () => {
                       </div>
                     </div>
 
-                    {outstandingInvoices.length > 0 ? (
+                    {/* Credit on Account — bypass invoice table entirely */}
+                    {creditOnAccountMode ? (
+                      <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+                          <span className="text-xl">💳</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-emerald-800">Holding as Credit on Account</p>
+                          <p className="mt-1 text-xs text-slate-500 max-w-sm">
+                            KES {Number(formData.amount || 0).toLocaleString()} will be held in{" "}
+                            <span className="font-semibold">2130 Unallocated Receipts</span> (liability). The PM can apply this credit to any future invoice for this tenant — no invoice allocation is needed now.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCreditOnAccountMode(false)}
+                          className="text-xs text-[#0B3B2E] underline"
+                        >
+                          Apply to invoices instead
+                        </button>
+                      </div>
+                    ) : outstandingInvoices.length > 0 ? (
                       <div className="overflow-auto">
                         <table className="w-full border-collapse text-xs">
                           <thead className="sticky top-0 z-10 bg-slate-50">

@@ -2247,8 +2247,9 @@ export const createDraftStatement = (payload) => async (dispatch, getState) => {
       ...(_signal ? { signal: _signal } : {}),
     });
     const statement = res.data?.data?.statement;
+    const lines = res.data?.data?.lines || [];
     dispatch(createDraftSuccess(statement));
-    return statement;
+    return { statement, lines };
   } catch (err) {
     dispatch(createDraftFailure(err.response?.data?.message || err.message));
     throw err;

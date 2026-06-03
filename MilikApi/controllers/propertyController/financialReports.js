@@ -66,11 +66,16 @@ const resolveInvoiceDueDateForReports = (invoice = {}) => {
 
 // isManagerIncomeAccount and isManagerExpenseAccount imported from accountClassifiers.js
 
-const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, endDate = null }) => {
+const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, endDate = null, propertyId = null }) => {
   const match = {
     business: businessId,
     status: { $in: REPORT_LEDGER_STATUSES },
   };
+
+  // When propertyId is provided, scope the ledger map to entries for that property only.
+  if (propertyId) {
+    match.property = propertyId;
+  }
 
   if (startDate || endDate || asOfDate) {
     match.transactionDate = {};
@@ -304,16 +309,25 @@ export const getIncomeStatementReport = async (req, res, next) => {
       return res.status(400).json({ success: false, error: "Start date cannot be after end date." });
     }
 
+    // Optional property scope — filters ledger entries by the property dimension.
+    // Accounts remain generic; only entries tagged with this property are included.
+    const scopePropertyId = req.query.propertyId ? toObjectId(req.query.propertyId) : null;
+
+    const accountQuery = {
+      business: businessId,
+      isPosting: { $ne: false },
+      isHeader: { $ne: true },
+      type: { $in: ["income", "expense"] },
+    };
+
     const [accounts, ledgerMap] = await Promise.all([
-      ChartOfAccount.find({
-        business: businessId,
-        isPosting: { $ne: false },
-        isHeader: { $ne: true },
-        type: { $in: ["income", "expense"] },
-      })
-        .sort({ code: 1 })
-        .lean(),
-      buildLedgerMap({ businessId, startDate, endDate }),
+      ChartOfAccount.find(accountQuery).sort({ code: 1 }).lean(),
+      buildLedgerMap({
+        businessId,
+        startDate,
+        endDate,
+        propertyId: scopePropertyId,
+      }),
     ]);
 
     const incomeRows = [];
@@ -1083,18 +1097,51 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
       ]),
     ]);
 
-    // Collect all referenced property IDs, then fetch names in one query
+    // Collect all referenced property IDs, then fetch names + sub-accounts in one query
     const allPropertyIds = new Set();
     invoicesByProperty.forEach((r) => r._id && allPropertyIds.add(String(r._id)));
     receiptsByProperty.forEach((r) => r._id && allPropertyIds.add(String(r._id)));
     expensesByPropertyAndCategory.forEach((r) => r._id?.property && allPropertyIds.add(String(r._id.property)));
 
     const propertyDocs = allPropertyIds.size
-      ? await Property.find({ _id: { $in: Array.from(allPropertyIds) } }).select("_id propertyName name").lean()
+      ? await Property.find({ _id: { $in: Array.from(allPropertyIds) } })
+          .select("_id propertyName name")
+          .lean()
       : [];
     const propertyNameMap = new Map(
       propertyDocs.map((p) => [String(p._id), p.propertyName || p.name || "Unknown Property"])
     );
+
+    // Supplement invoice-based income with manual GL journal adjustments tagged with a
+    // property dimension. Auto-posted entries are excluded to avoid double-counting.
+    const glAdjustmentByProperty = new Map();
+    if (allPropertyIds.size > 0) {
+      const allPropIds = Array.from(allPropertyIds).map((id) => new mongoose.Types.ObjectId(id));
+      const glRows = await FinancialLedgerEntry.aggregate([
+        {
+          $match: {
+            business: businessId,
+            property: { $in: allPropIds },
+            status: { $in: REPORT_LEDGER_STATUSES },
+            sourceTransactionType: "manual_adjustment",
+            transactionDate: { $gte: startDate, $lte: endDate },
+          },
+        },
+        {
+          $group: {
+            _id: "$property",
+            credit: { $sum: "$credit" },
+            debit:  { $sum: "$debit"  },
+          },
+        },
+      ]);
+      for (const row of glRows) {
+        const pid = String(row._id);
+        const net = round2(Number(row.credit || 0) - Number(row.debit || 0));
+        if (net === 0) continue;
+        glAdjustmentByProperty.set(pid, round2((glAdjustmentByProperty.get(pid) || 0) + net));
+      }
+    }
 
     const propertyMap = new Map();
     const ensureRow = (pid) => {
@@ -1150,7 +1197,9 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
     let grandTotalExpenses = 0;
 
     for (const entry of propertyMap.values()) {
-      entry.netIncome = round2(entry.totalCollected - entry.totalExpenses);
+      const key = String(entry.propertyId || "");
+      entry.glAdjustmentIncome = glAdjustmentByProperty.get(key) || 0;
+      entry.netIncome = round2(entry.totalCollected + entry.glAdjustmentIncome - entry.totalExpenses);
       entry.collectionRate = entry.totalInvoiced > 0
         ? round2((entry.totalCollected / entry.totalInvoiced) * 100)
         : null;
@@ -1177,7 +1226,12 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
         totalInvoiced: round2(grandTotalInvoiced),
         totalCollected: round2(grandTotalCollected),
         totalExpenses: round2(grandTotalExpenses),
-        netIncome: round2(grandTotalCollected - grandTotalExpenses),
+        totalGlAdjustments: round2(Array.from(glAdjustmentByProperty.values()).reduce((s, v) => s + v, 0)),
+        netIncome: round2(
+          grandTotalCollected
+          + Array.from(glAdjustmentByProperty.values()).reduce((s, v) => s + v, 0)
+          - grandTotalExpenses
+        ),
         collectionRate: grandTotalInvoiced > 0
           ? round2((grandTotalCollected / grandTotalInvoiced) * 100)
           : null,

@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import useDebounce from "../../hooks/useDebounce";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import {
@@ -131,7 +132,11 @@ const Maintenances = () => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [serverPages, setServerPages] = useState(1);
   const [updatingId, setUpdatingId] = useState("");
+
+  const debouncedSearch = useDebounce(searchTerm, 400);
 
   // Draft persistence — survives tab switches for new-record modal only
   const _mDraftKey = (currentCompany?._id && (currentUser?._id || currentUser?.id))
@@ -156,29 +161,49 @@ const Maintenances = () => {
     try { window.sessionStorage.setItem(_mDraftKey, JSON.stringify({ form })); } catch {}
   }, [_mDraftKey, form, isModalOpen, editingRequest]);
 
-  const loadData = async () => {
+  const loadRequests = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
+      const params = new URLSearchParams({
+        business: currentCompany._id,
+        page: currentPage,
+        limit: pageSize,
+      });
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (priorityFilter !== "all") params.set("priority", priorityFilter);
+      if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+
+      const res = await adminRequests.get(`/maintenances?${params}`);
+      setRequests(toList(res.data?.data ?? res.data));
+      setServerTotal(res.data?.total ?? 0);
+      setServerPages(res.data?.pages ?? 1);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to load maintenance requests");
+    } finally {
+      setLoading(false);
+    }
+  }, [currentCompany?._id, currentPage, pageSize, statusFilter, priorityFilter, debouncedSearch]);
+
+  const loadFormData = useCallback(async () => {
+    if (!currentCompany?._id) return;
+    try {
       const business = currentCompany._id;
-      const [maintenanceRes, unitsRes, tenantsRes, propertiesRes] = await Promise.all([
-        adminRequests.get(`/maintenances?business=${business}`),
+      const [unitsRes, tenantsRes, propertiesRes] = await Promise.all([
         adminRequests.get(`/units?business=${business}&limit=1000`),
         adminRequests.get(`/tenants?business=${business}&limit=1000`),
         adminRequests.get(`/properties?business=${business}&limit=1000`),
       ]);
-      setRequests(toList(maintenanceRes.data));
       setUnits(toList(unitsRes.data));
       setTenants(toList(tenantsRes.data));
       setProperties(toList(propertiesRes.data));
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to load maintenance data");
-    } finally {
-      setLoading(false);
-    }
-  };
+    } catch { /* non-critical */ }
+  }, [currentCompany?._id]);
 
-  useEffect(() => { loadData(); }, [currentCompany?._id]);
+  useEffect(() => { loadRequests(); }, [loadRequests]);
+  useEffect(() => { loadFormData(); }, [loadFormData]);
+
+  useEffect(() => { setCurrentPage(1); }, [statusFilter, priorityFilter, debouncedSearch, pageSize]);
 
   const availableTenants = useMemo(() => {
     if (!form.unit) return tenants;
@@ -203,10 +228,9 @@ const Maintenances = () => {
   }, [availableTenants, form.tenant, form.unit]);
 
   const filteredRequests = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
+    // Server-side filtering is active; client-side pass-through for display only.
+    const query = ""; // search already sent to server
     return requests.filter((item) => {
-      if (statusFilter !== "all" && item?.status !== statusFilter) return false;
-      if (priorityFilter !== "all" && item?.priority !== priorityFilter) return false;
       if (query) {
         const haystack = [item?.title, item?.description, item?.assignedTo, item?.tenant?.name, item?.unit?.unitNumber, getRequestPropertyName(item)]
           .filter(Boolean).join(" ").toLowerCase();
@@ -217,7 +241,7 @@ const Maintenances = () => {
   }, [priorityFilter, requests, searchTerm, statusFilter]);
 
   const stats = useMemo(() => {
-    const acc = { total: requests.length, pending: 0, inProgress: 0, completed: 0, emergency: 0 };
+    const acc = { total: serverTotal, pending: 0, inProgress: 0, completed: 0, emergency: 0 };
     requests.forEach(r => {
       if (r?.status === "pending") acc.pending++;
       if (r?.status === "in_progress") acc.inProgress++;
@@ -225,7 +249,7 @@ const Maintenances = () => {
       if (r?.priority === "emergency") acc.emergency++;
     });
     return acc;
-  }, [requests]);
+  }, [requests, serverTotal]);
 
   const statsCards = useMemo(() => [
     { label: "Total",     value: stats.total,     cls: "bg-slate-900 text-white",                                  icon: <FaTools /> },
@@ -235,14 +259,9 @@ const Maintenances = () => {
     { label: "Emergency", value: stats.emergency, cls: "bg-rose-50 text-rose-800 border border-rose-200",          icon: <FaExclamationTriangle /> },
   ], [stats]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
+  const totalPages = Math.max(1, serverPages);
   const safePage = Math.min(currentPage, totalPages);
-  const pageRows = useMemo(
-    () => filteredRequests.slice((safePage - 1) * pageSize, safePage * pageSize),
-    [filteredRequests, safePage, pageSize]
-  );
-
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, priorityFilter, pageSize]);
+  const pageRows = requests; // server already returns the correct page slice
 
   const openCreateModal = () => {
     if (isDemoUser) { toast.info("Demo mode is read-only."); return; }
@@ -312,7 +331,7 @@ const Maintenances = () => {
         await adminRequests.post("/maintenances", payload);
         toast.success("Maintenance request created");
       }
-      await loadData();
+      await loadRequests();
       closeModal();
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to save maintenance request");
@@ -332,7 +351,7 @@ const Maintenances = () => {
         ...(newStatus === "completed" ? { completedDate: new Date().toISOString().slice(0, 10) } : {}),
       });
       toast.success(`Marked as ${newStatus.replace("_", " ")}`);
-      await loadData();
+      await loadRequests();
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to update status");
     } finally {
@@ -347,7 +366,7 @@ const Maintenances = () => {
     try {
       await adminRequests.delete(`/maintenances/${item._id}`);
       toast.success("Deleted");
-      await loadData();
+      await loadRequests();
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to delete");
     }
@@ -403,7 +422,7 @@ const Maintenances = () => {
                   {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
                 <button onClick={() => { setSearchTerm(""); setStatusFilter("all"); setPriorityFilter("all"); }} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
-                <button onClick={loadData} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
+                <button onClick={loadRequests} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <button onClick={exportCsv} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
                 <button onClick={openCreateModal} disabled={isDemoUser || !canCreate} className="h-7 shrink-0 inline-flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus size={9} /> New Request</button>
@@ -426,7 +445,7 @@ const Maintenances = () => {
                 <tbody>
                   {loading ? (
                     <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">Loading maintenance requests…</td></tr>
-                  ) : filteredRequests.length === 0 ? (
+                  ) : requests.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-4 py-14 text-center">
                         <div className="mx-auto flex w-fit flex-col items-center gap-2 text-slate-400">
@@ -529,7 +548,7 @@ const Maintenances = () => {
             {/* Pagination */}
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
               <div className="font-semibold">
-                Showing <span className="font-bold text-slate-900">{filteredRequests.length === 0 ? 0 : (safePage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safePage * pageSize, filteredRequests.length)}</span> of <span className="font-bold text-slate-900">{filteredRequests.length}</span> request(s)
+                Showing <span className="font-bold text-slate-900">{serverTotal === 0 ? 0 : (safePage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safePage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> request(s)
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">

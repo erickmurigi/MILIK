@@ -4,6 +4,7 @@ import { requireCompanyModule, verifyUser, GL_ACCESS_MODULES } from "../controll
 import ChartOfAccount from "../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import TenantInvoice from "../models/TenantInvoice.js";
+import Property from "../models/Property.js";
 import {
   ensureSystemChartOfAccounts,
   findChartOfAccounts,
@@ -561,6 +562,45 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
     return res.status(500).json({
       error: err?.message || "Failed to delete ChartOfAccount",
     });
+  }
+});
+
+// One-time migration: remove property GL sub-accounts (1200-PRO001 etc.) and clean up
+// the stale propertyAccounts field from Property documents.
+// Safe to run multiple times. Requires admin access.
+router.post("/admin/cleanup-property-sub-accounts", verifyUser, async (req, res) => {
+  try {
+    if (!req.user?.superAdminAccess && !req.user?.adminAccess && !req.user?.isSystemAdmin) {
+      return res.status(403).json({ error: "Admin access required." });
+    }
+
+    const business = resolveBusiness(req);
+    if (!business) {
+      return res.status(400).json({ error: "business is required" });
+    }
+
+    // Delete all property-specific sub-accounts (have a property ref, code is NOT PCTRL-)
+    const deleteResult = await ChartOfAccount.deleteMany({
+      business,
+      property: { $exists: true, $ne: null },
+      code: { $not: /^PCTRL-/ },
+    });
+
+    // Remove stale propertyAccounts subdoc from Property documents
+    const unsetResult = await Property.updateMany(
+      { business, propertyAccounts: { $exists: true } },
+      { $unset: { propertyAccounts: "" } }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Cleanup complete. ${deleteResult.deletedCount} sub-accounts deleted, ${unsetResult.modifiedCount} property documents cleaned.`,
+      deletedAccounts: deleteResult.deletedCount,
+      cleanedProperties: unsetResult.modifiedCount,
+    });
+  } catch (err) {
+    console.error("Cleanup failed:", err);
+    return res.status(500).json({ error: err?.message || "Cleanup failed" });
   }
 });
 

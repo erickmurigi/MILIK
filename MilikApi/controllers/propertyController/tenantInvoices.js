@@ -3805,6 +3805,7 @@ export const createTenantInvoice = async (req, res) => {
     });
 
     let invoice;
+    let availableCredits = 0;
     if (result?.tenantId) {
       const { invoice: deferredInvoice, touchedAccountIds, tenantId, businessId } = result;
       if (touchedAccountIds.length > 0) {
@@ -3815,11 +3816,33 @@ export const createTenantInvoice = async (req, res) => {
         .populate("chartAccount", "code name type")
         .populate("ledgerEntries")
         .populate("createdBy", "surname otherNames email profile");
+
+      // Check if this tenant has unallocated receipts (credits on account).
+      // We include the total in the response so the frontend can prompt the PM
+      // to apply available credits to the new invoice immediately.
+      const RentPayment = (await import("../../models/RentPayment.js")).default;
+      const creditTotals = await RentPayment.aggregate([
+        {
+          $match: {
+            tenant: new mongoose.Types.ObjectId(String(tenantId)),
+            business: new mongoose.Types.ObjectId(String(businessId)),
+            isConfirmed: true,
+            isCancelled: { $ne: true },
+            isReversed: { $ne: true },
+            "allocationSummary.unapplied": { $gt: 0 },
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$allocationSummary.unapplied" } } },
+      ]);
+      availableCredits = creditTotals[0]?.total || 0;
     } else {
       invoice = result;
     }
 
-    return res.status(201).json(invoice);
+    return res.status(201).json({
+      ...(invoice?.toObject ? invoice.toObject() : invoice),
+      availableCredits: Math.round(availableCredits * 100) / 100,
+    });
   } catch (error) {
     console.error("TenantInvoice creation error:", error);
 

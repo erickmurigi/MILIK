@@ -36,14 +36,22 @@ export const createMaintenance = async (req, res, next) => {
 
 // Get all maintenance requests
 export const getMaintenances = async (req, res, next) => {
-  const { status, priority, unit, tenant, page = 1, limit = 50 } = req.query;
+  const { status, priority, unit, tenant, search, page = 1, limit = 50 } = req.query;
   try {
     const business = resolveBusinessId(req);
     const filter = { business };
-    if (status) filter.status = status;
-    if (priority) filter.priority = priority;
+    if (status && status !== "all") filter.status = status;
+    if (priority && priority !== "all") filter.priority = priority;
     if (unit) filter.unit = unit;
     if (tenant) filter.tenant = tenant;
+    if (search && search.trim()) {
+      const term = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = [
+        { title: { $regex: term, $options: "i" } },
+        { description: { $regex: term, $options: "i" } },
+        { assignedTo: { $regex: term, $options: "i" } },
+      ];
+    }
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);

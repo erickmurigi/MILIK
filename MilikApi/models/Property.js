@@ -230,18 +230,6 @@ const PropertySchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Auto-created GL sub-accounts for In-GL properties.
-    // Populated by ensurePropertyChartOfAccounts() when the property is saved.
-    propertyAccounts: {
-      receivables:         { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
-      depositsPayable:     { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
-      landlordRemittance:  { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
-      rentIncome:          { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
-      serviceChargeIncome: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
-      utilityRecharge:     { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
-      penaltyIncome:       { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
-    },
-
     primaryBank: { type: String, trim: true },
     alternativeTaxPin: { type: String, trim: true },
     invoicePrefix: { type: String, trim: true },

@@ -6,7 +6,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "fix:rent-payment-indexes": "node scripts/fixRentPaymentIndexes.js",
-    "fix:shifted-monthly-invoices": "node scripts/fixShiftedMonthlyInvoices.js"
+    "fix:shifted-monthly-invoices": "node scripts/fixShiftedMonthlyInvoices.js",
+    "cleanup:property-sub-accounts": "node scripts/cleanupPropertySubAccounts.js"
   },
   "repository": "https://github.com/Vincent-mumo/betterbiz_api.git",
   "license": "MIT",

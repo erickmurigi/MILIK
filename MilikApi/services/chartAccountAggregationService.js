@@ -27,69 +27,101 @@ export async function aggregateChartOfAccountBalances(businessId, accountIds = [
   }
 
   const accounts = await ChartOfAccount.find(accountQuery).select(
-    "_id type balance business code name group subGroup isHeader isPosting"
+    "_id type balance business code name group subGroup isHeader isPosting property"
   );
 
-  if (accounts.length === 0) {
-    return [];
-  }
+  if (accounts.length === 0) return [];
 
-  const targetAccountIds = accounts.map((account) => account._id);
+  // PCTRL accounts are non-posting summaries — their balance is the net credit on
+  // account 2110 (Landlord Remittance Payable) tagged with their property.
+  // This represents what the PM currently holds on behalf of each landlord.
+  const pctrlAccounts = accounts.filter(
+    (a) => String(a.code || "").startsWith("PCTRL-") && a.property
+  );
+  const regularAccounts = accounts.filter(
+    (a) => !String(a.code || "").startsWith("PCTRL-") || !a.property
+  );
 
-  const grouped = await FinancialLedgerEntry.aggregate([
-    {
-      $match: {
-        business: businessObjectId,
-        accountId: { $in: targetAccountIds },
-        status: { $nin: ["void", "draft"] },
-      },
-    },
-    {
-      $group: {
-        _id: {
-          accountId: "$accountId",
-          direction: "$direction",
-        },
-        total: { $sum: "$amount" },
-      },
-    },
-  ]);
-
-  const totalsMap = new Map();
-
-  for (const row of grouped) {
-    const accountId = String(row?._id?.accountId || "");
-    const direction = String(row?._id?.direction || "").toLowerCase();
-    if (!accountId) continue;
-
-    const current = totalsMap.get(accountId) || { debit: 0, credit: 0 };
-    if (direction === "debit") current.debit = Number(row?.total || 0);
-    if (direction === "credit") current.credit = Number(row?.total || 0);
-    totalsMap.set(accountId, current);
-  }
-
-  // Build bulk operations instead of individual saves
   const bulkOps = [];
 
-  for (const account of accounts) {
-    const totals = totalsMap.get(String(account._id)) || { debit: 0, credit: 0 };
-    const nextBalance = computeAccountBalance({
-      type: account.type,
-      debit: totals.debit,
-      credit: totals.credit,
-    });
+  // ── Regular posting accounts ────────────────────────────────────────────────
+  if (regularAccounts.length > 0) {
+    const targetAccountIds = regularAccounts.map((a) => a._id);
 
-    if (Number(account.balance || 0) !== Number(nextBalance || 0)) {
-      bulkOps.push({
-        updateOne: {
-          filter: { _id: account._id },
-          update: { $set: { balance: nextBalance } },
+    const grouped = await FinancialLedgerEntry.aggregate([
+      {
+        $match: {
+          business: businessObjectId,
+          accountId: { $in: targetAccountIds },
+          status: { $nin: ["void", "draft"] },
         },
-      });
+      },
+      {
+        $group: {
+          _id: { accountId: "$accountId", direction: "$direction" },
+          total: { $sum: "$amount" },
+        },
+      },
+    ]);
+
+    const totalsMap = new Map();
+    for (const row of grouped) {
+      const accountId = String(row?._id?.accountId || "");
+      const direction = String(row?._id?.direction || "").toLowerCase();
+      if (!accountId) continue;
+      const current = totalsMap.get(accountId) || { debit: 0, credit: 0 };
+      if (direction === "debit") current.debit = Number(row?.total || 0);
+      if (direction === "credit") current.credit = Number(row?.total || 0);
+      totalsMap.set(accountId, current);
+    }
+
+    for (const account of regularAccounts) {
+      const totals = totalsMap.get(String(account._id)) || { debit: 0, credit: 0 };
+      const nextBalance = computeAccountBalance({ type: account.type, debit: totals.debit, credit: totals.credit });
+      if (Number(account.balance || 0) !== Number(nextBalance || 0)) {
+        bulkOps.push({ updateOne: { filter: { _id: account._id }, update: { $set: { balance: nextBalance } } } });
+      }
     }
   }
 
-  // Use bulkWrite for efficient batch updates
+  // ── PCTRL control accounts ──────────────────────────────────────────────────
+  if (pctrlAccounts.length > 0) {
+    const remittanceAcct = await ChartOfAccount.findOne({ business: businessObjectId, code: "2110" })
+      .select("_id").lean();
+
+    if (remittanceAcct) {
+      const propertyIds = pctrlAccounts.map((a) => a.property);
+      const rows = await FinancialLedgerEntry.aggregate([
+        {
+          $match: {
+            business: businessObjectId,
+            accountId: remittanceAcct._id,
+            property: { $in: propertyIds },
+            status: { $nin: ["void", "draft"] },
+          },
+        },
+        {
+          $group: {
+            _id: "$property",
+            credit: { $sum: "$credit" },
+            debit:  { $sum: "$debit"  },
+          },
+        },
+      ]);
+
+      const pctrlMap = new Map(
+        rows.map((r) => [String(r._id), Math.max(0, Number(r.credit || 0) - Number(r.debit || 0))])
+      );
+
+      for (const account of pctrlAccounts) {
+        const balance = pctrlMap.get(String(account.property)) || 0;
+        if (Number(account.balance || 0) !== balance) {
+          bulkOps.push({ updateOne: { filter: { _id: account._id }, update: { $set: { balance } } } });
+        }
+      }
+    }
+  }
+
   if (bulkOps.length > 0) {
     await ChartOfAccount.bulkWrite(bulkOps);
   }

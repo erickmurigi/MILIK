@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { FaChevronDown, FaChevronRight, FaFileDownload, FaFilePdf, FaSyncAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getIncomeStatementReport } from "../../redux/apiCalls";
+import { getProperties } from "../../redux/propertyRedux";
+import { selectAllProperties } from "../../redux/selectors";
 
 const GRN = "#0B3B2E";
 const GRN_BG = "bg-[#0B3B2E]";
@@ -72,8 +74,10 @@ const Section = ({ label, rows = [], total, accentColor }) => {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const IncomeStatementReport = () => {
+  const dispatch = useDispatch();
   const currentUser = useSelector((s) => s.auth?.currentUser);
   const currentCompany = useSelector((s) => s.company?.currentCompany);
+  const properties = useSelector(selectAllProperties);
   const canExport = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
 
   const businessId = useMemo(() => {
@@ -105,24 +109,31 @@ const IncomeStatementReport = () => {
     exclusions: [],
     reportBasis: "",
   });
-  const [filters, setFilters] = useState({ startDate: firstDayOfMonth(), endDate: todayString() });
+  const [filters, setFilters] = useState({ startDate: firstDayOfMonth(), endDate: todayString(), propertyId: "" });
+
+  useEffect(() => {
+    if (businessId) dispatch(getProperties({ business: businessId }));
+  }, [businessId, dispatch]);
+
+  const selectedProperty = useMemo(
+    () => properties.find((p) => p._id === filters.propertyId) || null,
+    [properties, filters.propertyId]
+  );
 
   const loadReport = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
     try {
-      const data = await getIncomeStatementReport({
-        business: businessId,
-        startDate: filters.startDate,
-        endDate: filters.endDate,
-      });
+      const params = { business: businessId, startDate: filters.startDate, endDate: filters.endDate };
+      if (filters.propertyId) params.propertyId = filters.propertyId;
+      const data = await getIncomeStatementReport(params);
       setReport(data);
     } catch (err) {
       toast.error(err?.response?.data?.error || err?.message || "Failed to load income statement");
     } finally {
       setLoading(false);
     }
-  }, [businessId, filters.startDate, filters.endDate]);
+  }, [businessId, filters.startDate, filters.endDate, filters.propertyId]);
 
   useEffect(() => { loadReport(); }, [loadReport]);
 
@@ -132,6 +143,7 @@ const IncomeStatementReport = () => {
     const lines = [
       "INCOME STATEMENT",
       `Period,${filters.startDate} to ${filters.endDate}`,
+      ...(selectedProperty ? [`Property,${selectedProperty.propertyCode} – ${selectedProperty.propertyName}`] : []),
       "",
       "INCOME",
     ];
@@ -212,11 +224,11 @@ const IncomeStatementReport = () => {
         @media print{body{padding:10px}@page{size:A4 portrait;margin:12mm}}
       </style></head><body>
       <h1>Income Statement</h1>
-      <p class="sub">Property manager income and operating expenses · ${escapeHtml(filters.startDate)} to ${escapeHtml(filters.endDate)}</p>
+      <p class="sub">${selectedProperty ? `${escapeHtml(selectedProperty.propertyCode)} – ${escapeHtml(selectedProperty.propertyName)} · ` : "Property manager income and operating expenses · "}${escapeHtml(filters.startDate)} to ${escapeHtml(filters.endDate)}</p>
       <div class="meta">
         <div class="meta-box"><div class="lbl">Business</div><div class="val">${escapeHtml(businessName)}</div></div>
         <div class="meta-box"><div class="lbl">Period</div><div class="val">${escapeHtml(filters.startDate)} → ${escapeHtml(filters.endDate)}</div></div>
-        <div class="meta-box"><div class="lbl">Basis</div><div class="val">${escapeHtml(report.reportBasis || "Manager income & expenses only")}</div></div>
+        <div class="meta-box"><div class="lbl">${selectedProperty ? "Property" : "Basis"}</div><div class="val">${selectedProperty ? escapeHtml(`${selectedProperty.propertyCode} – ${selectedProperty.propertyName}`) : escapeHtml(report.reportBasis || "Manager income & expenses only")}</div></div>
       </div>
       <div class="kpi">
         <div class="kpi-box"><div class="lbl">Total Income</div><div class="val" style="color:#166534">KES ${escapeHtml(fmt(report.summary?.totalIncome))}</div></div>
@@ -269,6 +281,19 @@ const IncomeStatementReport = () => {
                 />
               </div>
 
+              <select
+                value={filters.propertyId}
+                onChange={(e) => setFilters((p) => ({ ...p, propertyId: e.target.value }))}
+                className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              >
+                <option value="">All Properties</option>
+                {(properties || []).map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.propertyCode} – {p.propertyName}
+                  </option>
+                ))}
+              </select>
+
               <button
                 onClick={loadReport}
                 disabled={loading}
@@ -298,14 +323,20 @@ const IncomeStatementReport = () => {
               </button>
             </div>
 
-            {/* Business + basis badges */}
+            {/* Business + scope badges */}
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">
                 {businessName}
               </span>
-              <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                {report.reportBasis || "Property manager income and operating expenses only"}
-              </span>
+              {selectedProperty ? (
+                <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  {selectedProperty.propertyCode} – {selectedProperty.propertyName}
+                </span>
+              ) : (
+                <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                  {report.reportBasis || "Property manager income and operating expenses only"}
+                </span>
+              )}
             </div>
           </div>
 
