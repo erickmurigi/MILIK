@@ -11,6 +11,7 @@ import {
   redeemReward,
   getCustomerCard,
   sendCustomerSms,
+  backfillCustomersAndStamps,
   migrateToPerCustomerCards,
 } from '../controllers/loyaltyController.js';
 import { validateParamId } from '../middleware/validateObjectId.js';
@@ -35,6 +36,8 @@ router.post('/customers/:id/sms', validateParamId(), requireCompanyPermission('c
 // Redeem a reward on a specific job
 router.patch('/jobs/:jobId/redeem', validateParamId('jobId'), requireCompanyPermission('carwash-jobs', 'update', 'carwash'), redeemReward);
 
+// Backfill: create missing customers + award stamps for all existing jobs
+router.post('/admin/backfill', requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), backfillCustomersAndStamps);
 // One-time migration: merge per-plate cards into per-customer cards
 router.post('/admin/migrate-per-customer', requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), migrateToPerCustomerCards);
 

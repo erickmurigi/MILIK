@@ -118,21 +118,25 @@ export default function CarWashCustomers() {
   const [search, setSearch] = useState("");
   const [filterOutstanding, setFilterOutstanding] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const searchRef = useRef(null);
   const debounceRef = useRef(null);
 
   const load = useCallback(async (params = {}) => {
     setLoading(true);
+    const reqPage   = params.page   ?? page;
+    const reqSearch = params.search ?? search;
     try {
-      const result = await carWashApi.listCustomersEnriched({
-        page: params.page ?? page,
-        limit,
-        search: params.search ?? search,
-      });
-      const data = result?.data || result?.customers || [];
+      let result;
+      try {
+        result = await carWashApi.listCustomersEnriched({ page: reqPage, limit, search: reqSearch });
+      } catch {
+        result = await carWashApi.listLoyaltyCustomers({ page: reqPage, limit, search: reqSearch });
+      }
+      const data = Array.isArray(result) ? result : (result?.data ?? []);
       setCustomers(data);
-      setTotal(result?.total || 0);
+      setTotal(result?.total ?? data.length);
     } catch (err) {
       toast.error(err?.message || "Failed to load customers");
     } finally {
@@ -140,7 +144,8 @@ export default function CarWashCustomers() {
     }
   }, [page, limit, search]);
 
-  useEffect(() => { load(); }, [page]);
+  // Load on mount and whenever page changes
+  useEffect(() => { load(); }, [load]);
 
   // Debounced search
   const handleSearch = (val) => {
@@ -208,6 +213,24 @@ export default function CarWashCustomers() {
               >
                 <FaExclamationTriangle size={9} />
                 Outstanding only
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setSyncing(true);
+                  try {
+                    const r = await carWashApi.backfillCustomersAndStamps();
+                    toast.success(`Sync done — ${r?.customersCreated ?? 0} customers created, ${r?.stampsAwarded ?? 0} stamps awarded`);
+                    await load();
+                  } catch (err) {
+                    toast.error(err?.message || "Sync failed");
+                  } finally { setSyncing(false); }
+                }}
+                disabled={syncing || loading}
+                className="flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+              >
+                <FaRedoAlt size={9} className={syncing ? "animate-spin" : ""} />
+                {syncing ? "Syncing..." : "Sync Jobs"}
               </button>
               <button
                 type="button"

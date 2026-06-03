@@ -123,6 +123,7 @@ export const listCustomers = async (req, res, next) => {
 // All aggregations are batched (no N+1 queries).
 export const listCustomersEnriched = async (req, res, next) => {
   try {
+    res.set('Cache-Control', 'no-store');
     const business = resolveActiveBusinessId(req);
     const pageNum = Math.max(Number(req.query.page || 1), 1);
     const limitNum = Math.min(Math.max(Number(req.query.limit || 30), 1), 100);
@@ -373,14 +374,17 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null })
   const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
   if (!program) return customer;
 
-  // 3. Check service eligibility — empty applicableServices = all services qualify
+  // 3. Check service eligibility — empty applicableServices = all services qualify.
+  // If services were typed manually (not selected from catalog), service IDs are null —
+  // in that case we skip the check and allow the stamp (benefit of the doubt).
   if (program.applicableServices?.length) {
     const eligibleIds = new Set(program.applicableServices.map(s => String(s)));
     const jobServiceIds = [
       job.service,
       ...(Array.isArray(job.serviceLines) ? job.serviceLines.map(l => l.service) : []),
     ].filter(Boolean).map(String);
-    if (!jobServiceIds.some(id => eligibleIds.has(id))) return customer;
+    // Only enforce eligibility if we can actually determine the service IDs
+    if (jobServiceIds.length > 0 && !jobServiceIds.some(id => eligibleIds.has(id))) return customer;
   }
 
   // 4. Upsert loyalty card
@@ -657,6 +661,49 @@ export const revokeStampForJob = async ({ business, jobId, plate }) => {
     await card.save();
   } catch (err) {
     console.error('[Loyalty] revokeStampForJob failed job=%s plate=%s: %s', jobId, plate, err?.message || err);
+  }
+};
+
+/**
+ * Backfill: processes all existing vehicle jobs to ensure customers exist and
+ * stamps are awarded for jobs that are Done/Paid. Safe to run multiple times — idempotent.
+ */
+export const backfillCustomersAndStamps = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const jobs = await CarWashJob.find({
+      business,
+      jobType: 'vehicle',
+      plateNumber: { $exists: true, $ne: '' },
+      status: { $nin: ['cancelled'] },
+    }).lean();
+
+    let customersCreated = 0;
+    let stampsAwarded = 0;
+    let errors = 0;
+
+    for (const job of jobs) {
+      try {
+        // Always ensure customer exists
+        const before = await CarWashCustomer.countDocuments({ business, plates: job.plateNumber });
+        await ensureCarWashCustomer({ business, plate: job.plateNumber, customerName: job.customerName, phone: job.phone });
+        const after = await CarWashCustomer.countDocuments({ business, plates: job.plateNumber });
+        if (after > before) customersCreated++;
+
+        // Award stamp for completed jobs
+        if (['done', 'paid'].includes(job.status)) {
+          const result = await awardLoyaltyStamp({ business, job });
+          if (result?.card) stampsAwarded++;
+        }
+      } catch (err) {
+        console.error('[Backfill] job=%s plate=%s error=%s', job.jobNumber, job.plateNumber, err?.message);
+        errors++;
+      }
+    }
+
+    res.json({ success: true, message: `Backfill complete`, jobs: jobs.length, customersCreated, stampsAwarded, errors });
+  } catch (err) {
+    next(err);
   }
 };
 

@@ -289,10 +289,12 @@ export const createJob = async (req, res, next) => {
     }
 
     if (job.jobType === "vehicle" && job.plateNumber) {
-      // Single call — autoEnrollPlate handles customer creation + loyalty card internally.
-      // Fire-and-forget: job response must not block on async enrolment.
-      autoEnrollPlate({ business, plate: job.plateNumber, customerName: job.customerName, phone: job.phone })
-        .catch((err) => console.error("[CW Job] autoEnroll failed job=%s plate=%s: %s", job.jobNumber, job.plateNumber, err?.message || err));
+      // Awaited — guarantees customer + loyalty card exist before response is sent.
+      try {
+        await autoEnrollPlate({ business, plate: job.plateNumber, customerName: job.customerName, phone: job.phone });
+      } catch (err) {
+        console.error("[CW Job] autoEnroll failed job=%s plate=%s: %s", job.jobNumber, job.plateNumber, err?.message || err);
+      }
 
       if (resolvedCreditAccount && job.plateNumber) {
         CarWashCreditAccount.updateOne(
@@ -451,14 +453,14 @@ export const updateJobStatus = async (req, res, next) => {
       });
     } else {
       await accrueCommissionForJob({ req, job });
-      // Award stamp when job is Done or Paid.
-      // "Done" covers standard flow and credit customers.
-      // "Paid" covers jobs that jump straight from Waiting/Washing to Paid via full payment.
-      // awardLoyaltyStamp has an idempotency guard — safe to call on both transitions.
+      // Award stamp when job is Done or Paid — awaited so it's guaranteed.
+      // awardLoyaltyStamp has an idempotency guard — safe on both Done and Paid transitions.
       if (status === "done" || status === "paid") {
-        awardLoyaltyStamp({ business, job }).catch((err) =>
-          console.error("[CW Loyalty] Stamp award failed job=%s: %s", job.jobNumber, err?.message || err)
-        );
+        try {
+          await awardLoyaltyStamp({ business, job });
+        } catch (err) {
+          console.error("[CW Loyalty] Stamp award failed job=%s: %s", job.jobNumber, err?.message || err);
+        }
       }
     }
     res.status(200).json({ success: true, data: job, job, message: "Car Wash job status updated" });
