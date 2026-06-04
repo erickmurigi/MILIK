@@ -137,7 +137,19 @@ export const listJobs = async (req, res, next) => {
       // assignedStaff is now an array — $elemMatch or direct equality both work
       filter.assignedStaff = new mongoose.Types.ObjectId(req.query.staff);
     }
-    if (req.query.date) {
+    if (req.query.dateFrom || req.query.dateTo) {
+      filter.createdAt = {};
+      if (req.query.dateFrom) {
+        const from = new Date(req.query.dateFrom);
+        from.setUTCHours(0, 0, 0, 0);
+        filter.createdAt.$gte = from;
+      }
+      if (req.query.dateTo) {
+        const to = new Date(req.query.dateTo);
+        to.setUTCHours(23, 59, 59, 999);
+        filter.createdAt.$lte = to;
+      }
+    } else if (req.query.date) {
       const { start, end } = parseDateRange(req.query.date);
       filter.createdAt = { $gte: start, $lt: end };
     }

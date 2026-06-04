@@ -38,7 +38,31 @@ const defaultFilters = {
   status: "",
   paymentStatus: "",
   jobType: "",
-  date: todayISO(),
+  dateFrom: todayISO(),
+  dateTo: todayISO(),
+};
+
+const getWeekBounds = (offset = 0) => {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((day + 6) % 7) + offset * 7);
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return {
+    from: monday.toISOString().slice(0, 10),
+    to: sunday.toISOString().slice(0, 10),
+  };
+};
+
+const getMonthBounds = () => {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  return {
+    from: first.toISOString().slice(0, 10),
+    to: now.toISOString().slice(0, 10),
+  };
 };
 
 const statuses = ["waiting", "washing", "done", "paid", "cancelled"];
@@ -203,7 +227,8 @@ const CarWashJobs = () => {
     setLoading(true);
     try {
       const jobPayload = await carWashApi.listJobs({
-        date: appliedFilters.date,
+        dateFrom: appliedFilters.dateFrom || undefined,
+        dateTo: appliedFilters.dateTo || undefined,
         search: appliedFilters.search || undefined,
         customer: appliedFilters.customer || undefined,
         service: appliedFilters.service || undefined,
@@ -578,11 +603,36 @@ const CarWashJobs = () => {
           <option value="vehicle">Vehicle</option>
           <option value="carpet">Carpet</option>
         </select>
+        {/* Date presets */}
+        {[
+          { label: "Today",      action: () => { const d = todayISO(); setFilters((p) => ({ ...p, dateFrom: d, dateTo: d })); } },
+          { label: "This Week",  action: () => { const { from, to } = getWeekBounds(0);  setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
+          { label: "Last Week",  action: () => { const { from, to } = getWeekBounds(-1); setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
+          { label: "This Month", action: () => { const { from, to } = getMonthBounds();  setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
+        ].map(({ label, action }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={action}
+            className="h-8 border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 whitespace-nowrap"
+          >
+            {label}
+          </button>
+        ))}
         <input
           type="date"
+          title="From"
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.date}
-          onChange={(event) => setFilterValue("date", event.target.value)}
+          value={filters.dateFrom}
+          onChange={(e) => setFilterValue("dateFrom", e.target.value)}
+        />
+        <span className="text-xs font-bold text-slate-400">→</span>
+        <input
+          type="date"
+          title="To"
+          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          value={filters.dateTo}
+          onChange={(e) => setFilterValue("dateTo", e.target.value)}
         />
         <button type="submit" className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]">
           <FaSearch />
