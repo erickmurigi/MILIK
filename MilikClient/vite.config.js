@@ -34,8 +34,7 @@ export default defineConfig({
           "vendor-charts": ["recharts"],
           // Spreadsheet export — very large, only used on export pages
           "vendor-xlsx": ["xlsx"],
-          // PDF generation — large, only used on print pages
-          "vendor-pdf": ["html2pdf.js"],
+
           // Real-time comms
           "vendor-socket": ["socket.io-client"],
           // UI utilities
