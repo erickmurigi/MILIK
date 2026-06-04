@@ -66,13 +66,14 @@ export async function syncCriticalIndexes() {
     dropped.push("processedstatements.business_1_sourceStatement_1");
   }
 
-  // Drop the non-sparse phone index on CarWashCustomer so it can be recreated as sparse
-  // (allows multiple walk-in customers without a phone number per business)
+  // Drop old phone index if it lacks partialFilterExpression.
+  // sparse:true alone still indexes null values — partialFilterExpression is required
+  // to truly allow multiple customers with no phone number per business.
   if (
     await dropStaleIndexIfNeeded(
       CarWashCustomer,
       "business_1_phone_1",
-      (index) => Boolean(index?.unique) && !index?.sparse
+      (index) => Boolean(index?.unique) && !index?.partialFilterExpression
     )
   ) {
     dropped.push("carwashcustomers.business_1_phone_1");

@@ -453,42 +453,32 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
     if (!normalizedPlate) return null;
     const cleanPhone = String(phone || '').trim() || null;
 
+    // Plate is the sole identity key — every unique plate is its own customer record.
+    // Phone is stored as metadata only and is never used for lookup or merging.
     let customer = await CarWashCustomer.findOne({ business, plates: normalizedPlate }).lean();
-
-    if (!customer && cleanPhone) {
-      const byPhone = await CarWashCustomer.findOne({ business, phone: cleanPhone }).lean();
-      if (byPhone) {
-        await CarWashCustomer.updateOne({ _id: byPhone._id }, { $addToSet: { plates: normalizedPlate } });
-        customer = { ...byPhone };
-      }
-    }
 
     if (!customer) {
       try {
-        customer = await CarWashCustomer.create({
+        const doc = {
           business,
           name: String(customerName || normalizedPlate).trim() || normalizedPlate,
-          phone: cleanPhone,
           plates: [normalizedPlate],
           notes: 'Auto-enrolled at first wash',
-        });
+        };
+        if (cleanPhone) doc.phone = cleanPhone;
+        customer = await CarWashCustomer.create(doc);
       } catch (createErr) {
+        // Race condition: another request created the customer between our findOne and create
         if (createErr.code === 11000) {
-          if (cleanPhone) {
-            customer = await CarWashCustomer.findOneAndUpdate(
-              { business, phone: cleanPhone },
-              { $addToSet: { plates: normalizedPlate } },
-              { new: true }
-            ).lean();
-          }
-          if (!customer) customer = await CarWashCustomer.findOne({ business, plates: normalizedPlate }).lean();
+          customer = await CarWashCustomer.findOne({ business, plates: normalizedPlate }).lean();
         }
         if (!customer) throw createErr;
       }
     }
 
+    // Keep phone up to date if job has one and customer record doesn't yet
     if (customer && !customer.phone && cleanPhone) {
-      await CarWashCustomer.updateOne({ _id: customer._id }, { phone: cleanPhone });
+      await CarWashCustomer.updateOne({ _id: customer._id }, { $set: { phone: cleanPhone } });
     }
 
     return customer;

@@ -16,7 +16,10 @@ const carWashCustomerSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-carWashCustomerSchema.index({ business: 1, phone: 1 }, { unique: true, sparse: true });
+carWashCustomerSchema.index(
+  { business: 1, phone: 1 },
+  { unique: true, partialFilterExpression: { phone: { $type: 'string', $gt: '' } } }
+);
 carWashCustomerSchema.index({ business: 1, plates: 1 });
 carWashCustomerSchema.index({ business: 1, name: 1 });
 

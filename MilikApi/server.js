@@ -716,6 +716,15 @@ async function startServer() {
       console.error('[CW Loyalty] Migration warning (non-fatal):', migErr?.message || migErr);
     }
 
+    // ── Fix: unset phone:null on CarWashCustomers so the new partial index works ─
+    try {
+      const { default: CarWashCustomer } = await import('./modules/carwash/models/CarWashCustomer.js');
+      const r = await CarWashCustomer.updateMany({ phone: null }, { $unset: { phone: 1 } });
+      if (r.modifiedCount > 0) console.log(`[CW Customer] Unset phone:null on ${r.modifiedCount} customer(s) — partial phone index now correct`);
+    } catch (e) {
+      console.error('[CW Customer] phone cleanup warning (non-fatal):', e?.message || e);
+    }
+
     // ── Daily staff savings cron ────────────────────────────────────────────
     // Runs every day at 23:59 EAT (UTC+3 = 20:59 UTC).
     // Posts Ksh X standing-order savings for every active Car Wash staff member.
