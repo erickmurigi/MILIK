@@ -148,20 +148,36 @@ const ProgramPanel = ({ program, onSaved }) => {
         </div>
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2.5">
-        <button
-          onClick={async () => {
-            try {
-              const r = await carWashApi.migratePerCustomerCards();
-              toast.success(r?.message || "Migration complete");
-            } catch (e) {
-              toast.error(e?.response?.data?.message || "Migration failed");
-            }
-          }}
-          className="border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100"
-          title="Merge per-plate loyalty cards into one card per customer"
-        >
-          Migrate Cards
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              try {
+                const r = await carWashApi.backfillCustomersAndStamps();
+                toast.success(r?.message || `Backfill complete — ${r?.stampsAwarded ?? 0} stamps awarded`);
+              } catch (e) {
+                toast.error(e?.response?.data?.message || "Backfill failed");
+              }
+            }}
+            className="border border-emerald-600 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+            title="Award missed stamps for all existing Done/Paid jobs"
+          >
+            Backfill Stamps
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                const r = await carWashApi.migratePerCustomerCards();
+                toast.success(r?.message || "Migration complete");
+              } catch (e) {
+                toast.error(e?.response?.data?.message || "Migration failed");
+              }
+            }}
+            className="border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100"
+            title="Merge per-plate loyalty cards into one card per customer"
+          >
+            Migrate Cards
+          </button>
+        </div>
         <button
           onClick={save}
           disabled={saving || !dirty}

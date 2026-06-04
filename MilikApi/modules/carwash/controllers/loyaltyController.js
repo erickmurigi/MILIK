@@ -374,20 +374,9 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null })
   const program = await CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean();
   if (!program) return customer;
 
-  // 3. Check service eligibility — empty applicableServices = all services qualify.
-  // If services were typed manually (not selected from catalog), service IDs are null —
-  // in that case we skip the check and allow the stamp (benefit of the doubt).
-  if (program.applicableServices?.length) {
-    const eligibleIds = new Set(program.applicableServices.map(s => String(s)));
-    const jobServiceIds = [
-      job.service,
-      ...(Array.isArray(job.serviceLines) ? job.serviceLines.map(l => l.service) : []),
-    ].filter(Boolean).map(String);
-    // Only enforce eligibility if we can actually determine the service IDs
-    if (jobServiceIds.length > 0 && !jobServiceIds.some(id => eligibleIds.has(id))) return customer;
-  }
-
-  // 4. Upsert loyalty card
+  // 3. Always upsert the loyalty card first — card must exist even if this job is not eligible.
+  // Moving this before the eligibility check prevents "No card yet" for customers whose
+  // first jobs happen to use a non-eligible service.
   let card = await CarWashLoyaltyCard.findOneAndUpdate(
     { business, customer: customer._id },
     { $setOnInsert: { business, customer: customer._id, program: program._id } },
@@ -397,6 +386,19 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null })
   // Idempotency guard — a stamp for this exact job was already awarded (e.g. Done then Paid)
   const jobIdStr = String(job._id);
   if (card.stampHistory.some((h) => String(h.job) === jobIdStr)) return card;
+
+  // 4. Check service eligibility — empty applicableServices = all services qualify.
+  // If services were typed manually (not selected from catalog), service IDs are null —
+  // in that case we skip the check and allow the stamp (benefit of the doubt).
+  // Card is already created above; we only skip the STAMP, not the card.
+  if (program.applicableServices?.length) {
+    const eligibleIds = new Set(program.applicableServices.map(s => String(s)));
+    const jobServiceIds = [
+      job.service,
+      ...(Array.isArray(job.serviceLines) ? job.serviceLines.map(l => l.service) : []),
+    ].filter(Boolean).map(String);
+    if (jobServiceIds.length > 0 && !jobServiceIds.some(id => eligibleIds.has(id))) return card;
+  }
 
   // 5. Handle stamp expiry
   if (program.stampExpiryDays > 0 && card.lastStampAt) {

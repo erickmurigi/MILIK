@@ -700,6 +700,22 @@ async function startServer() {
       console.error("Index maintenance warning:", indexError);
     }
 
+    // ── One-time migration: clear applicableServices restrictions ──────────
+    // The UI never exposed this field, so any non-empty value silently blocks
+    // stamps for services not in the list. Clear it so all services qualify.
+    try {
+      const { default: CWLoyaltyProgram } = await import('./modules/carwash/models/CarWashLoyaltyProgram.js');
+      const migResult = await CWLoyaltyProgram.updateMany(
+        { 'applicableServices.0': { $exists: true } },
+        { $set: { applicableServices: [] } }
+      );
+      if (migResult.modifiedCount > 0) {
+        console.log(`[CW Loyalty] Cleared service restrictions from ${migResult.modifiedCount} program(s) — all services now eligible for stamps`);
+      }
+    } catch (migErr) {
+      console.error('[CW Loyalty] Migration warning (non-fatal):', migErr?.message || migErr);
+    }
+
     // ── Daily staff savings cron ────────────────────────────────────────────
     // Runs every day at 23:59 EAT (UTC+3 = 20:59 UTC).
     // Posts Ksh X standing-order savings for every active Car Wash staff member.

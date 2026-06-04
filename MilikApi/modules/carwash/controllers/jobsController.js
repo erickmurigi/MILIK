@@ -297,6 +297,15 @@ export const createJob = async (req, res, next) => {
         console.error("[CW Job] autoEnroll failed job=%s plate=%s: %s", job.jobNumber, job.plateNumber, err?.message || err);
       }
 
+      // If job is created already completed (e.g. manual entry), award the stamp immediately.
+      if (["done", "paid"].includes(job.status)) {
+        try {
+          await awardLoyaltyStamp({ business, job });
+        } catch (err) {
+          console.error("[CW Loyalty] Stamp award failed job=%s: %s", job.jobNumber, err?.message || err);
+        }
+      }
+
       if (resolvedCreditAccount && job.plateNumber) {
         CarWashCreditAccount.updateOne(
           { _id: resolvedCreditAccount },
@@ -408,6 +417,11 @@ export const updateJob = async (req, res, next) => {
       });
     } else {
       await accrueCommissionForJob({ req, job: existing });
+      try {
+        await awardLoyaltyStamp({ business, job: existing });
+      } catch (err) {
+        console.error("[CW Loyalty] Stamp award failed job=%s: %s", existing.jobNumber, err?.message || err);
+      }
     }
     res.status(200).json({ success: true, data: existing, job: existing, message: "Car Wash job updated" });
   } catch (error) {
