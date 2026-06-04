@@ -48,6 +48,8 @@ const carWashJobSchema = new mongoose.Schema(
     paymentStatus: { type: String, enum: PAYMENT_STATUSES, default: "unpaid", index: true },
     creditAccount: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashCreditAccount", default: null, index: true },
     notes: { type: String, trim: true, default: "" },
+    // Carpet job photos — stored as relative URL paths e.g. /uploads/carwash/carpets/uuid.jpg
+    photos: { type: [String], default: [] },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },

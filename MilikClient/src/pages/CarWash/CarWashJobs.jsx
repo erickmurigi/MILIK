@@ -2,12 +2,21 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
-import { FaChevronDown, FaChevronRight, FaEdit, FaMobileAlt, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrashAlt, FaUndoAlt } from "react-icons/fa";
+import { FaCamera, FaChevronDown, FaChevronRight, FaEdit, FaExpand, FaMobileAlt, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTimesCircle, FaTrashAlt, FaUndoAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
+import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, photoUrl, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import { useConfirm } from "../../context/ConfirmContext";
 import CwSmsModal from "./CwSmsModal";
+
+const Lightbox = ({ src, onClose }) => (
+  <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4" onClick={onClose}>
+    <button type="button" onClick={onClose} className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
+      <FaTimesCircle size={20} />
+    </button>
+    <img src={src} alt="Carpet" className="max-h-[90vh] max-w-[90vw] rounded object-contain shadow-2xl" onClick={(e) => e.stopPropagation()} />
+  </div>
+);
 
 const emptyPaymentForm = {
   job: "",
@@ -127,6 +136,7 @@ const CarWashJobs = () => {
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentJobPaidSoFar, setPaymentJobPaidSoFar] = useState(0);
   const [selectedIds, setSelectedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -137,6 +147,9 @@ const CarWashJobs = () => {
   const [smsTarget, setSmsTarget] = useState(null);
   const [smsBody, setSmsBody] = useState("");
   const [smsSending, setSmsSending] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState(null);
+  // Per-job photo state for inline uploads from the list: { [jobId]: string[] }
+  const [jobPhotos, setJobPhotos] = useState({});
   const [stkPushing, setStkPushing] = useState(false);
   // job-level payments: { [jobId]: { loading: bool, list: [] } }
   const [jobPayments, setJobPayments] = useState({});
@@ -161,6 +174,7 @@ const CarWashJobs = () => {
   }, [modalUnpaidJobs, jobs]);
   const selectedPaymentJob = useMemo(() => allPaymentJobs.find((job) => job._id === paymentForm.job), [allPaymentJobs, paymentForm.job]);
   const selectedCashbook = useMemo(() => cashbooks.find((item) => item._id === paymentForm.cashbookAccount), [cashbooks, paymentForm.cashbookAccount]);
+  const outstandingForModal = useMemo(() => Math.max(0, Number(selectedPaymentJob?.price || 0) - paymentJobPaidSoFar), [selectedPaymentJob, paymentJobPaidSoFar]);
 
   const loadReferenceData = async () => {
     try {
@@ -221,9 +235,9 @@ const CarWashJobs = () => {
     if (!selectedPaymentJob) return;
     setPaymentForm((prev) => ({
       ...prev,
-      amount: prev.amount || selectedPaymentJob.price || "",
+      amount: prev.amount || String(outstandingForModal || selectedPaymentJob.price || ""),
     }));
-  }, [selectedPaymentJob]);
+  }, [selectedPaymentJob, outstandingForModal]);
 
   useEffect(() => {
     if (!cashbooks.length || paymentForm.cashbookAccount) return;
@@ -239,21 +253,44 @@ const CarWashJobs = () => {
     setShowPaymentModal(false);
     setPaymentForm(emptyPaymentForm);
     setModalUnpaidJobs([]);
+    setPaymentJobPaidSoFar(0);
   };
 
   const openPaymentModal = async (job = null) => {
-    const jobPhone = String(job?.phone || "").trim();
+    // Compute paid-so-far from cache if available, otherwise start at 0 and refine async
+    const cachedList = job?._id ? jobPayments[job._id]?.list : null;
+    const cachedPaid = cachedList
+      ? cachedList.reduce((s, p) => s + Number(p.amount || 0) + Number(p.discountAmount || 0), 0)
+      : 0;
+    const initialOutstanding = Math.max(0, Number(job?.price || 0) - cachedPaid);
+
+    setPaymentJobPaidSoFar(cachedPaid);
     setPaymentForm({
       ...emptyPaymentForm,
       job: job?._id || "",
-      amount: job?.price || "",
+      amount: job ? String(initialOutstanding) : "",
       cashbookAccount: preferredCashbookForMethod(cashbooks, emptyPaymentForm.method, cashbookDefaults),
-      receivedFromPhone: jobPhone,
+      receivedFromPhone: String(job?.phone || "").trim(),
     });
     setShowPaymentModal(true);
+
     try {
-      const payload = await carWashApi.listJobs({ limit: 100 });
-      setModalUnpaidJobs(normalizeListPayload(payload, "jobs").filter((j) => j.paymentStatus !== "paid"));
+      // Fetch the full jobs list for the dropdown and (if needed) this job's payments
+      const needsPayments = job?._id && !cachedList;
+      const [jobsPayload, pmtsPayload] = await Promise.all([
+        carWashApi.listJobs({ limit: 100 }),
+        needsPayments ? carWashApi.listPayments({ job: job._id, limit: 20 }) : Promise.resolve(null),
+      ]);
+      setModalUnpaidJobs(normalizeListPayload(jobsPayload, "jobs").filter((j) => j.paymentStatus !== "paid"));
+
+      if (pmtsPayload && job) {
+        const list = normalizeListPayload(pmtsPayload, "payments");
+        const paid = list.reduce((s, p) => s + Number(p.amount || 0) + Number(p.discountAmount || 0), 0);
+        const precise = Math.max(0, Number(job.price || 0) - paid);
+        setPaymentJobPaidSoFar(paid);
+        // Only update amount if user hasn't started typing yet
+        setPaymentForm((prev) => prev.job === job._id ? { ...prev, amount: String(precise) } : prev);
+      }
     } catch {
       setModalUnpaidJobs(jobs.filter((j) => j.paymentStatus !== "paid"));
     }
@@ -725,6 +762,57 @@ const CarWashJobs = () => {
                             )}
                             <div className="md:col-span-5"><span className="font-extrabold uppercase text-slate-500">Notes:</span> {job.notes || "-"}</div>
 
+                            {/* Carpet photo gallery */}
+                            {job.jobType === "carpet" && (() => {
+                              const photos = jobPhotos[job._id] ?? (Array.isArray(job.photos) ? job.photos : []);
+                              const fileRef = React.createRef();
+                              const handleAdd = async (e) => {
+                                const files = Array.from(e.target.files || []);
+                                if (!files.length) return;
+                                if (photos.length + files.length > 5) { toast.error("Max 5 photos per job"); return; }
+                                try {
+                                  const result = await carWashApi.uploadJobPhotos(job._id, files);
+                                  setJobPhotos((prev) => ({ ...prev, [job._id]: result?.photos || photos }));
+                                  toast.success("Photo(s) added");
+                                } catch { toast.error("Upload failed"); }
+                                e.target.value = "";
+                              };
+                              const handleDelete = async (url) => {
+                                try {
+                                  const result = await carWashApi.deleteJobPhoto(job._id, url);
+                                  setJobPhotos((prev) => ({ ...prev, [job._id]: result?.photos || photos.filter((p) => p !== url) }));
+                                } catch { toast.error("Delete failed"); }
+                              };
+                              return (
+                                <div className="md:col-span-5">
+                                  <div className="mb-1.5 flex items-center gap-2">
+                                    <span className="font-extrabold uppercase text-slate-500">Carpet Photos:</span>
+                                    {photos.length < 5 && (
+                                      <button type="button" onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1 rounded border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                                        <FaCamera size={8} /> Add
+                                      </button>
+                                    )}
+                                    <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleAdd} />
+                                  </div>
+                                  {photos.length === 0 ? (
+                                    <span className="italic text-slate-400">No photos — click Add to take one</span>
+                                  ) : (
+                                    <div className="flex flex-wrap gap-2">
+                                      {photos.map((url) => (
+                                        <div key={url} className="group relative h-20 w-20 overflow-hidden rounded border border-slate-200 bg-slate-100">
+                                          <img src={photoUrl(url)} alt="Carpet" className="h-full w-full cursor-pointer object-cover" onClick={() => setLightboxSrc(photoUrl(url))} />
+                                          <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100">
+                                            <button type="button" onClick={() => setLightboxSrc(photoUrl(url))} className="rounded-full bg-white/80 p-1 text-slate-700"><FaExpand size={9} /></button>
+                                            <button type="button" onClick={() => handleDelete(url)} className="rounded-full bg-red-500/90 p-1 text-white"><FaTimesCircle size={9} /></button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
                             {/* Payments sub-section */}
                             <div className="md:col-span-5">
                               <span className="font-extrabold uppercase text-slate-500">Payments:</span>
@@ -833,10 +921,49 @@ const CarWashJobs = () => {
             </>
           }
         >
+          {/* Balance strip */}
+          {selectedPaymentJob && (
+            <div className="mb-3 grid grid-cols-3 divide-x divide-slate-200 rounded border border-slate-200 bg-slate-50 text-center text-[11px]">
+              <div className="px-3 py-2">
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Job Total</p>
+                <p className="mt-0.5 font-black text-slate-700 tabular-nums">{formatMoney(selectedPaymentJob.price)}</p>
+              </div>
+              <div className="px-3 py-2">
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Already Paid</p>
+                <p className="mt-0.5 font-black text-emerald-700 tabular-nums">{formatMoney(paymentJobPaidSoFar)}</p>
+              </div>
+              <div className="px-3 py-2">
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Outstanding</p>
+                <p className={`mt-0.5 font-black tabular-nums ${outstandingForModal > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                  {formatMoney(outstandingForModal)}
+                </p>
+              </div>
+            </div>
+          )}
           <form id="carwash-payment-form" onSubmit={recordPayment} className="grid gap-3 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className={labelClass}>Job *</label>
-              <select className={inputClass} value={paymentForm.job} onChange={(event) => setPaymentForm((prev) => ({ ...prev, job: event.target.value, amount: "" }))} required>
+              <select
+                className={inputClass}
+                value={paymentForm.job}
+                onChange={async (event) => {
+                  const jobId = event.target.value;
+                  setPaymentForm((prev) => ({ ...prev, job: jobId, amount: "" }));
+                  setPaymentJobPaidSoFar(0);
+                  if (!jobId) return;
+                  const cached = jobPayments[jobId]?.list;
+                  if (cached) {
+                    setPaymentJobPaidSoFar(cached.reduce((s, p) => s + Number(p.amount || 0) + Number(p.discountAmount || 0), 0));
+                  } else {
+                    try {
+                      const pl = await carWashApi.listPayments({ job: jobId, limit: 20 });
+                      const paid = normalizeListPayload(pl, "payments").reduce((s, p) => s + Number(p.amount || 0) + Number(p.discountAmount || 0), 0);
+                      setPaymentJobPaidSoFar(paid);
+                    } catch { /* keep 0 */ }
+                  }
+                }}
+                required
+              >
                 <option value="">Select job</option>
                 {allPaymentJobs.filter((j) => j.paymentStatus !== "paid").map((job) => (
                   <option key={job._id} value={job._id}>
@@ -846,8 +973,37 @@ const CarWashJobs = () => {
               </select>
             </div>
             <div>
-              <label className={labelClass}>Amount Received *</label>
-              <input className={inputClass} type="number" min="1" value={paymentForm.amount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))} required />
+              <div className="mb-1 flex items-center justify-between">
+                <label className={labelClass} style={{ marginBottom: 0 }}>Amount Received *</label>
+                {outstandingForModal > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPaymentForm((prev) => ({ ...prev, amount: String(outstandingForModal) }))}
+                    className="text-[9px] font-black uppercase tracking-wide text-[#0B3B2E] underline hover:text-[#FF8C00]"
+                  >
+                    Pay in Full ({formatMoney(outstandingForModal)})
+                  </button>
+                )}
+              </div>
+              <input
+                className={inputClass}
+                type="number"
+                min="1"
+                max={outstandingForModal || undefined}
+                step="1"
+                value={paymentForm.amount}
+                onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))}
+                required
+              />
+              {/* Live remaining preview */}
+              {selectedPaymentJob && Number(paymentForm.amount) > 0 && (() => {
+                const paying    = Number(paymentForm.amount || 0) + Number(paymentForm.discountAmount || 0);
+                const remaining = Math.max(0, outstandingForModal - paying);
+                const overPay   = paying > outstandingForModal + 0.01;
+                if (overPay) return <p className="mt-0.5 text-[10px] font-bold text-red-600">Exceeds outstanding balance by {formatMoney(paying - outstandingForModal)}</p>;
+                if (remaining === 0) return <p className="mt-0.5 text-[10px] font-bold text-emerald-700">Job will be fully paid ✓</p>;
+                return <p className="mt-0.5 text-[10px] text-slate-500">Remaining after payment: <strong>{formatMoney(remaining)}</strong></p>;
+              })()}
             </div>
             <div>
               <label className={labelClass}>
@@ -862,11 +1018,6 @@ const CarWashJobs = () => {
                 onChange={(event) => setPaymentForm((prev) => ({ ...prev, discountAmount: event.target.value }))}
                 placeholder="0"
               />
-              {Number(paymentForm.discountAmount) > 0 && Number(paymentForm.amount) > 0 && (
-                <p className="mt-0.5 text-[10px] text-emerald-700">
-                  Effective total: KES {(Number(paymentForm.amount || 0) + Number(paymentForm.discountAmount || 0)).toLocaleString()} — job cleared up to this amount
-                </p>
-              )}
             </div>
             <div>
               <label className={labelClass}>Method</label>
@@ -948,6 +1099,8 @@ const CarWashJobs = () => {
           </form>
         </Modal>
       )}
+
+      {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
 
       {smsTarget && (
         <CwSmsModal

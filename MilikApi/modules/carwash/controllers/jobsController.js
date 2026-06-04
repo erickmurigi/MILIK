@@ -7,6 +7,7 @@ import CarWashStaff from "../models/CarWashStaff.js";
 import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
+import { carpetUpload, fileUrlFromName, deletePhotoFile } from "../middleware/carpetUpload.js";
 import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
 
@@ -453,8 +454,6 @@ export const updateJobStatus = async (req, res, next) => {
       });
     } else {
       await accrueCommissionForJob({ req, job });
-      // Award stamp when job is Done or Paid — awaited so it's guaranteed.
-      // awardLoyaltyStamp has an idempotency guard — safe on both Done and Paid transitions.
       if (status === "done" || status === "paid") {
         try {
           await awardLoyaltyStamp({ business, job });
@@ -540,6 +539,54 @@ export const sendJobSms = async (req, res, next) => {
     res.json({ success: true, message: "SMS sent" });
   } catch (err) {
     next(err);
+  }
+};
+
+// ─── Carpet photo upload ──────────────────────────────────────────────────────
+export const uploadJobPhotos = (req, res, next) => {
+  carpetUpload(req, res, async (err) => {
+    if (err) return next(createError(400, err?.message || "Photo upload failed"));
+    try {
+      const business = resolveActiveBusinessId(req);
+      const job = await CarWashJob.findOne({ _id: req.params.id, business });
+      if (!job) return next(createError(404, "Car Wash job not found"));
+      if (job.jobType !== "carpet") return next(createError(400, "Photos can only be added to carpet jobs"));
+
+      const newUrls = (req.files || []).map((f) => fileUrlFromName(f.filename));
+      const total = (job.photos || []).length + newUrls.length;
+      if (total > 5) {
+        newUrls.forEach((url) => deletePhotoFile(url));
+        return next(createError(400, "A job can have at most 5 photos"));
+      }
+
+      job.photos = [...(job.photos || []), ...newUrls];
+      job.updatedBy = currentUserId(req);
+      await job.save();
+      res.status(201).json({ success: true, data: job, job, photos: job.photos, message: `${newUrls.length} photo(s) uploaded` });
+    } catch (error) {
+      next(error);
+    }
+  });
+};
+
+export const deleteJobPhoto = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const job = await CarWashJob.findOne({ _id: req.params.id, business });
+    if (!job) return next(createError(404, "Car Wash job not found"));
+
+    const photoUrl = decodeURIComponent(String(req.query.url || "").trim());
+    if (!photoUrl || !job.photos?.includes(photoUrl)) {
+      return next(createError(404, "Photo not found on this job"));
+    }
+
+    deletePhotoFile(photoUrl);
+    job.photos = job.photos.filter((p) => p !== photoUrl);
+    job.updatedBy = currentUserId(req);
+    await job.save();
+    res.json({ success: true, photos: job.photos, message: "Photo deleted" });
+  } catch (error) {
+    next(error);
   }
 };
 

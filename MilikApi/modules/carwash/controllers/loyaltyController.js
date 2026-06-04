@@ -182,7 +182,7 @@ export const listCustomersEnriched = async (req, res, next) => {
     const paymentTotals = allJobIds.length
       ? await CarWashPayment.aggregate([
           { $match: { business: businessOid, job: { $in: allJobIds } } },
-          { $group: { _id: '$job', paid: { $sum: '$amount' } } },
+          { $group: { _id: '$job', paid: { $sum: { $add: ['$amount', { $ifNull: ['$discountAmount', 0] }] } } } },
         ])
       : [];
 

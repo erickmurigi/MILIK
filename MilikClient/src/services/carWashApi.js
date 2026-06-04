@@ -72,6 +72,10 @@ export const carWashApi = {
   listCommissions: async (params = {}) => unwrap(await adminRequests.get("/carwash/commissions", { params })),
   listCommissionPayouts: async (params = {}) => unwrap(await adminRequests.get("/carwash/commissions/payouts", { params })),
   createCommissionPayout: async (payload) => unwrap(await adminRequests.post("/carwash/commissions/payouts", bb(payload))),
+  listSavings: async (params = {}) => unwrap(await adminRequests.get("/carwash/commissions/savings", { params: bp(params) })),
+  createSavingsPayout: async (payload) => unwrap(await adminRequests.post("/carwash/commissions/savings/payouts", bb(payload))),
+  processDailySavings: async (date) => unwrap(await adminRequests.post("/carwash/commissions/savings/process", bb(date ? { date } : {}))),
+  getStaffWallet: async (staffId) => unwrap(await adminRequests.get(`/carwash/commissions/staff/${staffId}/wallet`)),
   // Loyalty
   getLoyaltyProgram: async () => unwrap(await adminRequests.get("/carwash/loyalty/program")),
   saveLoyaltyProgram: async (payload) => unwrap(await adminRequests.post("/carwash/loyalty/program", payload)),
@@ -85,6 +89,12 @@ export const carWashApi = {
   getCustomerCard: async (customerId) => unwrap(await adminRequests.get(`/carwash/loyalty/customers/${customerId}/card`)),
   redeemLoyaltyReward: async (jobId) => unwrap(await adminRequests.patch(`/carwash/loyalty/jobs/${jobId}/redeem`)),
   sendJobSms: async (jobId, payload) => unwrap(await adminRequests.post(`/carwash/jobs/${jobId}/sms`, payload)),
+  uploadJobPhotos: async (jobId, files) => {
+    const fd = new FormData();
+    files.forEach((f) => fd.append("photos", f));
+    return unwrap(await adminRequests.post(`/carwash/jobs/${jobId}/photos`, fd, { headers: { "Content-Type": "multipart/form-data" } }));
+  },
+  deleteJobPhoto: async (jobId, url) => unwrap(await adminRequests.delete(`/carwash/jobs/${jobId}/photos`, { params: { url } })),
   sendCustomerSms: async (customerId, payload) => unwrap(await adminRequests.post(`/carwash/loyalty/customers/${customerId}/sms`, payload)),
   sendPaymentSms: async (paymentId, payload) => unwrap(await adminRequests.post(`/carwash/payments/${paymentId}/sms`, payload)),
 
@@ -103,6 +113,15 @@ export const carWashApi = {
 };
 
 export const todayISO = () => new Date().toISOString().slice(0, 10);
+
+// Converts a stored relative photo path (/uploads/carwash/carpets/x.jpg)
+// to a full URL using the configured API server origin.
+const _apiOrigin = (() => {
+  const raw = String(import.meta.env.VITE_API_URL || "").trim();
+  return raw ? raw.replace(/\/api\/?$/, "") : "";
+})();
+export const photoUrl = (relativePath) =>
+  relativePath ? `${_apiOrigin}${relativePath}` : "";
 
 export const formatMoney = (value) =>
   new Intl.NumberFormat("en-KE", {

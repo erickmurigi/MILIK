@@ -18,6 +18,7 @@ const CW_ACCOUNT_TEMPLATES = {
   "4400": { name: "Car Wash Service Income",            type: "income",    group: "income",      subGroup: "Car Wash Income" },
   "5311": { name: "Car Wash Staff Commissions",         type: "expense",   group: "expenses",    subGroup: "Car Wash Expenses" },
   "2160": { name: "Car Wash Staff Commissions Payable", type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
+  "2161": { name: "Car Wash Staff Savings Payable",     type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
 };
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -251,6 +252,159 @@ export const postCarWashCommissionPayout = async ({ req, payout, cashbookAccount
   payout.ledgerEntries = [debitLeg._id, creditLeg._id];
   await payout.save();
   return payout.ledgerEntries;
+};
+
+// ─── Savings held from commission payout: Dr Payable (2160) / Cr Cash + Cr Savings (2161) ──
+/**
+ * Called when a commission payout withholds part of the amount as savings.
+ * Replaces the standard postCarWashCommissionPayout when savingsHeld > 0.
+ * commissionAmount = full commission to clear from 2160
+ * netCash          = what the staff actually receives in hand (commissionAmount - savingsHeld)
+ * savingsHeld      = amount moved to 2161 (Staff Savings Payable)
+ */
+export const postCarWashCommissionPayoutWithSavings = async ({
+  req, payout, cashbookAccount, commissionAmount, netCash, savingsHeld,
+}) => {
+  const businessId = payout.business;
+  const actorUserId = await resolveAuditActorUserId({ req, businessId });
+  const [payableAccount, savingsAccount] = await Promise.all([
+    resolveCarWashAccount(businessId, "2160"),
+    resolveCarWashAccount(businessId, "2161"),
+  ]);
+
+  if (!payableAccount?._id || !cashbookAccount?._id || !savingsAccount?._id) {
+    throw new Error("Car Wash commission payout accounts are not available");
+  }
+
+  const { start, end } = dayRange(payout.payoutDate);
+  const base = {
+    business: businessId,
+    sourceTransactionType: "carwash_commission_payout",
+    sourceTransactionId: String(payout._id),
+    transactionDate: payout.payoutDate || new Date(),
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    category: "CARWASH_COMMISSION_PAYOUT",
+    payer: "manager",
+    receiver: "staff",
+    createdBy: actorUserId,
+    approvedBy: actorUserId,
+    allowUnscoped: true,
+  };
+
+  // Dr 2160 — clear the full commission payable
+  const debitLeg = await postEntry({
+    ...base,
+    accountId: payableAccount._id,
+    amount: round2(commissionAmount),
+    direction: "debit",
+    notes: `CW commission payout ${payout.payoutNumber}`,
+    metadata: { postingRole: "carwash_commission_payable_settlement", staff: String(payout.staff) },
+  });
+
+  const entryIds = [debitLeg._id];
+
+  // Cr Cashbook — net cash paid to staff
+  if (round2(netCash) > 0) {
+    const cashLeg = await postEntry({
+      ...base,
+      accountId: cashbookAccount._id,
+      amount: round2(netCash),
+      direction: "credit",
+      notes: `Cashbook payment for CW commission payout ${payout.payoutNumber} (net after savings)`,
+      metadata: {
+        postingRole: "cashbook_outflow",
+        staff: String(payout.staff),
+        cashbookAccountId: String(cashbookAccount._id),
+        offsetOfEntryId: String(debitLeg._id),
+      },
+    });
+    entryIds.push(cashLeg._id);
+  }
+
+  // Cr 2161 — savings held back
+  if (round2(savingsHeld) > 0) {
+    const savingsLeg = await postEntry({
+      ...base,
+      accountId: savingsAccount._id,
+      amount: round2(savingsHeld),
+      direction: "credit",
+      notes: `CW staff savings withheld from payout ${payout.payoutNumber}`,
+      metadata: {
+        postingRole: "carwash_savings_held",
+        staff: String(payout.staff),
+        offsetOfEntryId: String(debitLeg._id),
+      },
+    });
+    entryIds.push(savingsLeg._id);
+  }
+
+  const accountsToAggregate = [
+    String(payableAccount._id),
+    String(cashbookAccount._id),
+    String(savingsAccount._id),
+  ];
+  await aggregateChartOfAccountBalances(businessId, accountsToAggregate);
+  payout.ledgerEntries = entryIds;
+  await payout.save();
+  return payout.ledgerEntries;
+};
+
+// ─── Savings disbursement: Dr Savings Payable (2161) / Cr Cashbook ─────────
+/**
+ * Posts the annual (or on-demand) savings disbursement to a staff member.
+ * payout = { _id, business, staff, amount, payoutDate, payoutNumber (optional) }
+ */
+export const postCarWashSavingsDisbursement = async ({ req, savingsRecord, cashbookAccount }) => {
+  const businessId = savingsRecord.business;
+  const actorUserId = await resolveAuditActorUserId({ req, businessId });
+  const savingsAccount = await resolveCarWashAccount(businessId, "2161");
+
+  if (!savingsAccount?._id || !cashbookAccount?._id) {
+    throw new Error("Car Wash savings payout accounts are not available");
+  }
+
+  const { start, end } = dayRange(savingsRecord.date);
+  const amount = round2(savingsRecord.amount);
+  const base = {
+    business: businessId,
+    sourceTransactionType: "carwash_savings_disbursement",
+    sourceTransactionId: String(savingsRecord._id),
+    transactionDate: savingsRecord.date || new Date(),
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    category: "CARWASH_SAVINGS_DISBURSEMENT",
+    amount,
+    payer: "manager",
+    receiver: "staff",
+    createdBy: actorUserId,
+    approvedBy: actorUserId,
+    allowUnscoped: true,
+  };
+
+  const debitLeg = await postEntry({
+    ...base,
+    accountId: savingsAccount._id,
+    direction: "debit",
+    notes: `CW staff savings payout ${savingsRecord.savingsPayoutNumber || savingsRecord._id}`,
+    metadata: { postingRole: "carwash_savings_disbursement", staff: String(savingsRecord.staff) },
+  });
+  const creditLeg = await postEntry({
+    ...base,
+    accountId: cashbookAccount._id,
+    direction: "credit",
+    notes: `Cashbook payment for CW staff savings ${savingsRecord.savingsPayoutNumber || savingsRecord._id}`,
+    metadata: {
+      postingRole: "cashbook_outflow",
+      staff: String(savingsRecord.staff),
+      offsetOfEntryId: String(debitLeg._id),
+    },
+  });
+
+  await aggregateChartOfAccountBalances(businessId, [String(savingsAccount._id), String(cashbookAccount._id)]);
+  savingsRecord.ledgerEntries = [debitLeg._id, creditLeg._id];
+  await savingsRecord.save();
+  return savingsRecord.ledgerEntries;
 };
 
 // ─── Commission accrual reversal ──────────────────────────────────────────────

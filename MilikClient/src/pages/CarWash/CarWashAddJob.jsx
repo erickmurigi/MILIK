@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
-  FaArrowLeft, FaCar, FaExclamationTriangle, FaGift, FaMinus, FaPlus, FaSave, FaUser,
+  FaArrowLeft, FaCar, FaCamera, FaExclamationTriangle, FaGift, FaMinus, FaPlus, FaSave,
+  FaTimesCircle, FaUser, FaExpand,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
+import { carWashApi, formatMoney, normalizeListPayload, photoUrl } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -143,8 +144,210 @@ const CreditAccountBanner = ({ plate, onAccountDetected }) => {
 
 const emptyLine = () => ({ service: "", serviceName: "", vehicleType: "", price: "" });
 
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+const Lightbox = ({ src, onClose }) => (
+  <div
+    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4"
+    onClick={onClose}
+  >
+    <button
+      type="button"
+      onClick={onClose}
+      className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+    >
+      <FaTimesCircle size={20} />
+    </button>
+    <img
+      src={src}
+      alt="Carpet photo"
+      className="max-h-[90vh] max-w-[90vw] rounded object-contain shadow-2xl"
+      onClick={(e) => e.stopPropagation()}
+    />
+  </div>
+);
+
+// ─── Carpet photo panel ───────────────────────────────────────────────────────
+const CarpetPhotoPanel = ({ jobId, existingPhotos = [], onPhotosChange }) => {
+  const fileRef = useRef(null);
+  const [pending, setPending]       = useState([]); // { file, previewUrl }
+  const [uploading, setUploading]   = useState(false);
+  const [lightbox, setLightbox]     = useState(null);
+  const [deleting, setDeleting]     = useState(null);
+
+  const total = existingPhotos.length + pending.length;
+  const canAdd = total < 5;
+
+  const pickFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const allowed = existingPhotos.length + pending.length + files.length;
+    if (allowed > 5) { toast.error("Maximum 5 photos per job"); return; }
+    const newPending = files.map((f) => ({ file: f, previewUrl: URL.createObjectURL(f) }));
+    setPending((prev) => [...prev, ...newPending]);
+    e.target.value = "";
+  };
+
+  const removePending = (idx) => {
+    setPending((prev) => {
+      URL.revokeObjectURL(prev[idx].previewUrl);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  const upload = async () => {
+    if (!pending.length) return;
+    setUploading(true);
+    try {
+      const result = await carWashApi.uploadJobPhotos(jobId, pending.map((p) => p.file));
+      pending.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      setPending([]);
+      onPhotosChange(result?.photos || existingPhotos);
+      toast.success(`${result?.photos?.length - existingPhotos.length || ""} photo(s) saved`);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const deletePhoto = async (url) => {
+    setDeleting(url);
+    try {
+      const result = await carWashApi.deleteJobPhoto(jobId, url);
+      onPhotosChange(result?.photos || existingPhotos.filter((p) => p !== url));
+    } catch {
+      toast.error("Could not delete photo");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  return (
+    <div className="border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-[#EDF5F1] px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <FaCamera className="text-[#0B3B2E] text-[13px]" />
+          <span className="text-xs font-black uppercase tracking-wide text-[#0B3B2E]">
+            Carpet Photos
+          </span>
+          <span className="text-[10px] text-slate-500">{existingPhotos.length + pending.length}/5</span>
+        </div>
+        {canAdd && (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaCamera size={9} /> Add Photo
+          </button>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          multiple
+          className="hidden"
+          onChange={pickFiles}
+        />
+      </div>
+
+      <div className="p-4">
+        {existingPhotos.length === 0 && pending.length === 0 && (
+          <div className="flex flex-col items-center justify-center gap-2 rounded border-2 border-dashed border-slate-200 py-8 text-slate-400">
+            <FaCamera size={28} className="opacity-40" />
+            <p className="text-xs font-semibold">No photos yet</p>
+            <p className="text-[10px]">Tap "Add Photo" to take or upload a carpet image</p>
+          </div>
+        )}
+
+        {/* Existing saved photos */}
+        {existingPhotos.length > 0 && (
+          <div className="mb-3">
+            <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Saved</p>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {existingPhotos.map((url) => (
+                <div key={url} className="group relative aspect-square overflow-hidden rounded border border-slate-200 bg-slate-100">
+                  <img
+                    src={photoUrl(url)}
+                    alt="Carpet"
+                    className="h-full w-full cursor-pointer object-cover transition-transform group-hover:scale-105"
+                    onClick={() => setLightbox(photoUrl(url))}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => setLightbox(photoUrl(url))}
+                      className="rounded-full bg-white/80 p-1 text-slate-700 hover:bg-white"
+                      title="View full size"
+                    >
+                      <FaExpand size={10} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deletePhoto(url)}
+                      disabled={deleting === url}
+                      className="rounded-full bg-red-500/90 p-1 text-white hover:bg-red-600 disabled:opacity-50"
+                      title="Delete photo"
+                    >
+                      <FaTimesCircle size={10} />
+                    </button>
+                  </div>
+                  {deleting === url && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Pending (not yet uploaded) */}
+        {pending.length > 0 && (
+          <div className="mb-3">
+            <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
+              Pending Upload ({pending.length})
+            </p>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {pending.map((p, idx) => (
+                <div key={idx} className="group relative aspect-square overflow-hidden rounded border-2 border-dashed border-amber-300 bg-amber-50">
+                  <img src={p.previewUrl} alt="Preview" className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removePending(idx)}
+                    className="absolute right-1 top-1 rounded-full bg-red-500 p-0.5 text-white opacity-80 hover:opacity-100"
+                  >
+                    <FaTimesCircle size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={upload}
+              disabled={uploading}
+              className="mt-3 flex w-full items-center justify-center gap-2 bg-[#0B3B2E] py-2 text-xs font-extrabold uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-60"
+            >
+              {uploading ? (
+                <><div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" /> Uploading…</>
+              ) : (
+                <><FaCamera size={10} /> Save {pending.length} Photo{pending.length > 1 ? "s" : ""}</>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
+    </div>
+  );
+};
+
 const CarWashAddJob = () => {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const location  = useLocation();
   const { id: editId } = useParams();
   const isEditMode = Boolean(editId);
 
@@ -159,6 +362,9 @@ const CarWashAddJob = () => {
   const [creditAccount, setCreditAccount] = useState(null);
   const [notes, setNotes] = useState("");
   const [jobNumber, setJobNumber] = useState("");
+  const [photos, setPhotos] = useState([]);
+  // When redirected from new-carpet-job save, open photos immediately
+  const openPhotosOnLoad = Boolean(location.state?.openPhotos);
 
   const [services, setServices] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -207,6 +413,7 @@ const CarWashAddJob = () => {
         setPhone(job.phone || "");
         setNotes(job.notes || "");
         setJobNumber(job.jobNumber || "");
+        setPhotos(Array.isArray(job.photos) ? job.photos : []);
 
         const lines =
           Array.isArray(job.serviceLines) && job.serviceLines.length
@@ -301,11 +508,18 @@ const CarWashAddJob = () => {
       if (isEditMode) {
         await carWashApi.updateJob(editId, payload);
         toast.success("Job updated");
+        navigate("/carwash/jobs");
       } else {
-        await carWashApi.createJob(payload);
+        const result = await carWashApi.createJob(payload);
+        const newId = result?._id || result?.job?._id;
         toast.success(creditAccount ? "Job created and charged to credit account" : "Car Wash job created");
+        // Carpet jobs: redirect to edit so attendant can immediately add photos
+        if (jobType === "carpet" && newId) {
+          navigate(`/carwash/jobs/${newId}/edit`, { state: { openPhotos: true } });
+        } else {
+          navigate("/carwash/jobs");
+        }
       }
-      navigate("/carwash/jobs");
     } catch (error) {
       toast.error(error?.response?.data?.message || (isEditMode ? "Failed to update job" : "Failed to create job"));
     } finally {
@@ -624,8 +838,24 @@ const CarWashAddJob = () => {
               className="flex w-full items-center justify-center gap-2 bg-[#0B3B2E] py-3 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <FaSave />
-              {saving ? "Saving…" : isEditMode ? "Save Changes" : "Save Job"}
+              {saving ? "Saving…" : isEditMode ? "Save Changes" : jobType === "carpet" ? "Save & Add Photos →" : "Save Job"}
             </button>
+
+            {/* Carpet photos panel — edit mode only */}
+            {jobType === "carpet" && isEditMode && (
+              <div className={openPhotosOnLoad ? "ring-2 ring-[#0B3B2E] ring-offset-2 rounded" : ""}>
+                <CarpetPhotoPanel
+                  jobId={editId}
+                  existingPhotos={photos}
+                  onPhotosChange={setPhotos}
+                />
+                {openPhotosOnLoad && photos.length === 0 && (
+                  <p className="mt-2 text-center text-[10px] font-bold text-[#0B3B2E]">
+                    Job saved! Take photos of the carpet now for easy identification.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </form>

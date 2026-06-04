@@ -149,8 +149,11 @@ const CarWashStaff          = lazy(() => import("./pages/CarWash/CarWashStaff"))
 const CarWashReports        = lazy(() => import("./pages/CarWash/CarWashReports"));
 const CarWashServiceReport  = lazy(() => import("./pages/CarWash/CarWashServiceReport"));
 const CarWashStaffReport    = lazy(() => import("./pages/CarWash/CarWashStaffReport"));
-const CarWashCommissions    = lazy(() => import("./pages/CarWash/CarWashCommissions"));
-const CarWashLoyalty        = lazy(() => import("./pages/CarWash/CarWashLoyalty"));
+const CarWashCommissions         = lazy(() => import("./pages/CarWash/CarWashCommissions"));
+const CarWashCommissionPayouts   = lazy(() => import("./pages/CarWash/CarWashCommissionPayouts"));
+const CarWashCommissionRules     = lazy(() => import("./pages/CarWash/CarWashCommissionRules"));
+const CarWashStaffSavings        = lazy(() => import("./pages/CarWash/CarWashStaffSavings"));
+const CarWashLoyalty             = lazy(() => import("./pages/CarWash/CarWashLoyalty"));
 const CarWashFinancials     = lazy(() => import("./pages/CarWash/CarWashFinancials"));
 const CarWashBranches       = lazy(() => import("./pages/CarWash/CarWashBranches"));
 const CarWashSettings       = lazy(() => import("./pages/CarWash/CarWashSettings"));
@@ -584,6 +587,9 @@ function App() {
             <Route path="/carwash/reports/services"       element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashServiceReport /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/reports/staff"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashStaffReport /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/commissions"            element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissions /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/commissions/payouts"    element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissionPayouts /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/commissions/rules"      element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissionRules /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/commissions/savings"    element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashStaffSavings /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/loyalty"           element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-loyalty" moduleKey="carwash"><CarWashLoyalty /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/branches"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-branches" moduleKey="carwash"><CarWashBranches /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/settings"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-settings" moduleKey="carwash"><CarWashSettings /></PermissionRoute></CompanyModuleRoute>} />

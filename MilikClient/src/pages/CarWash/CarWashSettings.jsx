@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { FaCheckCircle, FaCog, FaMoneyBillWave, FaRedoAlt } from "react-icons/fa";
+import { FaCheckCircle, FaCog, FaMoneyBillWave, FaPiggyBank, FaRedoAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
@@ -20,11 +20,12 @@ const METHODS = ["cash", "mpesa", "bank", "card", "other"];
 const emptyDefaults = METHODS.reduce((acc, m) => { acc[m] = ""; return acc; }, {});
 
 export default function CarWashSettings() {
-  const [cashbooks, setCashbooks]   = useState([]);
-  const [defaults, setDefaults]     = useState(emptyDefaults);
-  const [loading, setLoading]       = useState(false);
-  const [saving, setSaving]         = useState(false);
-  const [dirty, setDirty]           = useState(false);
+  const [cashbooks, setCashbooks]         = useState([]);
+  const [defaults, setDefaults]           = useState(emptyDefaults);
+  const [savingsAmount, setSavingsAmount] = useState(100);
+  const [loading, setLoading]             = useState(false);
+  const [saving, setSaving]               = useState(false);
+  const [dirty, setDirty]                 = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -39,6 +40,7 @@ export default function CarWashSettings() {
         acc[m] = saved[m]?._id || saved[m] || "";
         return acc;
       }, {}));
+      setSavingsAmount(Number(settingsRes?.savingsDeductionPerJob ?? 100));
       setDirty(false);
     } catch {
       toast.error("Failed to load settings");
@@ -57,8 +59,11 @@ export default function CarWashSettings() {
   const save = async () => {
     setSaving(true);
     try {
-      await carWashApi.updateCarWashSettings({ defaultCashbooks: defaults });
-      toast.success("Financial defaults saved");
+      await carWashApi.updateCarWashSettings({
+        defaultCashbooks: defaults,
+        savingsDeductionPerJob: Number(savingsAmount),
+      });
+      toast.success("Settings saved");
       setDirty(false);
     } catch (e) {
       toast.error(e?.response?.data?.message || "Failed to save settings");
@@ -126,14 +131,32 @@ export default function CarWashSettings() {
           </div>
         </div>
 
-        {/* Future settings panels can go here */}
+        {/* Staff Savings Scheme */}
         <div className="border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center gap-2 border-b border-slate-200 bg-[#EDF5F1] px-4 py-2.5">
-            <FaCog className="text-[#0B3B2E] text-[13px]" />
-            <span className="text-xs font-black uppercase tracking-wide text-[#0B3B2E]">More Settings</span>
+            <FaPiggyBank className="text-[#0B3B2E] text-[13px]" />
+            <span className="text-xs font-black uppercase tracking-wide text-[#0B3B2E]">Staff Savings Scheme</span>
           </div>
-          <div className="p-4 text-xs text-slate-400 italic">
-            Additional operational settings will appear here as the module grows.
+          <div className="p-4">
+            <p className="mb-4 text-xs text-slate-500 leading-5">
+              A fixed amount is automatically held from each staff member's commission payout
+              for each job they complete. The accumulated savings are disbursed annually
+              or on request from the Commissions page.
+            </p>
+            <div className="max-w-xs">
+              <label className={labelClass}>Deduction per job (Ksh)</label>
+              <input
+                type="number"
+                min="0"
+                step="10"
+                className={inputClass}
+                value={savingsAmount}
+                onChange={(e) => { setSavingsAmount(e.target.value); setDirty(true); }}
+              />
+              <p className="mt-1 text-[10px] text-slate-400">
+                Set to 0 to disable the savings scheme.
+              </p>
+            </div>
           </div>
         </div>
 

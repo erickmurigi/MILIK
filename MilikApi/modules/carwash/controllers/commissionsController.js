@@ -7,8 +7,11 @@ import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, escapeRegex, parseBoolean, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { generatePayoutNumber } from "../services/commissionService.js";
-import { postCarWashCommissionPayout, resolvePayoutCashbook } from "../services/carwashAccountingService.js";
+import { postCarWashCommissionPayout, postCarWashCommissionPayoutWithSavings, resolvePayoutCashbook } from "../services/carwashAccountingService.js";
+import { holdSavingsForPayout, getStaffSavingsBalance, disburseSavings, processDailySavings } from "../services/savingsService.js";
+import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
 
+const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 const ruleTypes = new Set(["fixed", "percentage"]);
 const payoutMethods = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const toObjectId = (value) => new mongoose.Types.ObjectId(String(value));
@@ -154,8 +157,8 @@ export const createCommissionPayout = async (req, res, next) => {
     if (!commissions.length) return next(createError(400, "No payable commissions were found for this staff member"));
     if (commissions.length !== ids.length) return next(createError(400, "Some selected commissions are not payable for this staff member"));
 
-    const amount = commissions.reduce((sum, item) => sum + Number(item.commissionAmount || 0), 0);
-    if (amount <= 0) return next(createError(400, "Selected commissions have no payable amount"));
+    const commissionAmount = round2(commissions.reduce((sum, item) => sum + Number(item.commissionAmount || 0), 0));
+    if (commissionAmount <= 0) return next(createError(400, "Selected commissions have no payable amount"));
 
     const method = String(req.body.method || "cash").trim().toLowerCase();
     if (!payoutMethods.has(method)) return next(createError(400, "Invalid payout method"));
@@ -168,7 +171,7 @@ export const createCommissionPayout = async (req, res, next) => {
       business,
       branch: branchId || null,
       staff,
-      amount,
+      amount: commissionAmount,
       method,
       cashbookAccount: cashbookAccount._id,
       reference: String(req.body.reference || "").trim(),
@@ -190,7 +193,20 @@ export const createCommissionPayout = async (req, res, next) => {
       }
     }
 
-    await postCarWashCommissionPayout({ req, payout, cashbookAccount });
+    // Hold pending savings deductions from this commission payout
+    const savingsHeld = await holdSavingsForPayout({
+      businessId: business,
+      staffId: staff,
+      commissionPayoutId: payout._id,
+      commissionAmount,
+    });
+    const netCash = round2(commissionAmount - savingsHeld);
+
+    if (savingsHeld > 0) {
+      await postCarWashCommissionPayoutWithSavings({ req, payout, cashbookAccount, commissionAmount, netCash, savingsHeld });
+    } else {
+      await postCarWashCommissionPayout({ req, payout, cashbookAccount });
+    }
 
     await CarWashStaffCommission.updateMany(
       { _id: { $in: commissions.map((item) => item._id) }, business },
@@ -205,7 +221,16 @@ export const createCommissionPayout = async (req, res, next) => {
       }
     );
 
-    res.status(201).json({ success: true, data: payout, payout, message: "Commission payout recorded" });
+    res.status(201).json({
+      success: true,
+      data: { ...payout.toObject(), savingsHeld, netCash },
+      payout,
+      savingsHeld,
+      netCash,
+      message: savingsHeld > 0
+        ? `Commission payout recorded — Ksh ${savingsHeld.toLocaleString()} held to savings`
+        : "Commission payout recorded",
+    });
   } catch (error) {
     next(error);
   }
@@ -230,6 +255,143 @@ export const listCommissionPayouts = async (req, res, next) => {
       .limit(Math.min(Math.max(Number(req.query.limit || 50), 1), 200))
       .lean();
     res.status(200).json({ success: true, data: { payouts }, payouts });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── Staff wallet ─────────────────────────────────────────────────────────────
+export const getStaffWallet = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const staffId = req.params.staffId;
+    if (!mongoose.Types.ObjectId.isValid(String(staffId))) return next(createError(400, "Invalid staff ID"));
+    const staff = await CarWashStaff.findOne({ _id: staffId, business }).lean();
+    if (!staff) return next(createError(404, "Staff member not found"));
+
+    const businessOid = new mongoose.Types.ObjectId(String(business));
+    const staffOid    = new mongoose.Types.ObjectId(String(staffId));
+
+    const [commissionSummary, savings, recentSavings, recentPayouts] = await Promise.all([
+      CarWashStaffCommission.aggregate([
+        { $match: { business: businessOid, staff: staffOid } },
+        { $group: {
+            _id: "$status",
+            amount: { $sum: "$commissionAmount" },
+            count:  { $sum: 1 },
+        }},
+      ]),
+      getStaffSavingsBalance(business, staffId),
+      CarWashStaffSaving.find({ business: businessOid, staff: staffOid })
+        .sort({ date: -1 })
+        .limit(30)
+        .lean(),
+      CarWashCommissionPayout.find({ business: businessOid, staff: staffOid })
+        .sort({ payoutDate: -1 })
+        .limit(20)
+        .lean(),
+    ]);
+
+    const commissions = commissionSummary.reduce((acc, row) => {
+      acc[row._id] = { amount: round2(row.amount), count: row.count };
+      acc.total.amount = round2(acc.total.amount + row.amount);
+      acc.total.count  += row.count;
+      return acc;
+    }, { total: { amount: 0, count: 0 } });
+
+    res.json({
+      success: true,
+      data: {
+        staff,
+        commissions,
+        savings,
+        recentSavings,
+        recentPayouts,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── Savings payout (annual or on-demand) ────────────────────────────────────
+export const createSavingsPayout = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const staffId  = req.body.staff;
+    if (!mongoose.Types.ObjectId.isValid(String(staffId || ""))) return next(createError(400, "Select a staff member"));
+    const staff = await CarWashStaff.findOne({ _id: staffId, business }).lean();
+    if (!staff) return next(createError(404, "Staff member not found"));
+
+    const amount = req.body.amount != null ? Number(req.body.amount) : undefined;
+    const record = await disburseSavings({
+      req,
+      businessId:       business,
+      staffId,
+      cashbookAccountId: req.body.cashbookAccount,
+      amount,
+      notes:             String(req.body.notes || "").trim(),
+    });
+
+    res.status(201).json({
+      success: true,
+      data:    record,
+      record,
+      message: `Savings payout of Ksh ${record.amount.toLocaleString()} recorded for ${staff.name}`,
+    });
+  } catch (error) {
+    next(createError(400, error?.message || "Savings payout failed"));
+  }
+};
+
+// ─── Manual daily savings trigger (backfill or test) ─────────────────────────
+export const processDailySavingsManual = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    // Accept a date param for backfilling; defaults to today
+    const targetDate = req.body.date ? new Date(req.body.date) : new Date();
+    if (Number.isNaN(targetDate.getTime())) return next(createError(400, "Invalid date"));
+
+    const { posted, skipped, errors } = await processDailySavings(business, targetDate);
+    res.json({
+      success: true,
+      date: targetDate.toISOString().slice(0, 10),
+      posted,
+      skipped,
+      errors,
+      message: `Daily savings processed: ${posted} posted, ${skipped} already done.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── Savings transaction history ──────────────────────────────────────────────
+export const listSavings = async (req, res, next) => {
+  try {
+    const business  = resolveActiveBusinessId(req);
+    const branchId  = resolveActiveBranchId(req);
+    const filter    = { business: new mongoose.Types.ObjectId(String(business)) };
+    if (branchId) filter.branch = new mongoose.Types.ObjectId(String(branchId));
+    if (req.query.staff && mongoose.Types.ObjectId.isValid(String(req.query.staff))) {
+      filter.staff = new mongoose.Types.ObjectId(String(req.query.staff));
+    }
+    if (req.query.type) filter.type = String(req.query.type).trim();
+
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
+    const page  = Math.max(Number(req.query.page || 1), 1);
+
+    const [records, total] = await Promise.all([
+      CarWashStaffSaving.find(filter)
+        .populate("staff", "name phone role")
+        .sort({ date: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      CarWashStaffSaving.countDocuments(filter),
+    ]);
+
+    res.json({ success: true, data: { records, total, page, pages: Math.ceil(total / limit) }, records, total });
   } catch (error) {
     next(error);
   }

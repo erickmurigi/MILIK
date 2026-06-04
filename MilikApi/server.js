@@ -700,6 +700,26 @@ async function startServer() {
       console.error("Index maintenance warning:", indexError);
     }
 
+    // ── Daily staff savings cron ────────────────────────────────────────────
+    // Runs every day at 23:59 EAT (UTC+3 = 20:59 UTC).
+    // Posts Ksh X standing-order savings for every active Car Wash staff member.
+    try {
+      const cron = await import("node-cron");
+      const { runDailySavingsCron } = await import("./modules/carwash/services/savingsService.js");
+      // "59 20 * * *" = 23:59 EAT daily
+      cron.default.schedule("59 20 * * *", async () => {
+        console.log("[CW Savings Cron] Running daily savings for", new Date().toISOString().slice(0, 10));
+        try {
+          await runDailySavingsCron(new Date());
+        } catch (err) {
+          console.error("[CW Savings Cron] Error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      console.log("[CW Savings Cron] Scheduled — daily at 23:59 EAT");
+    } catch (cronErr) {
+      console.error("[CW Savings Cron] Failed to schedule:", cronErr?.message || cronErr);
+    }
+
     server.listen(PORT, () => {
       console.log(`Backend server is running on port ${PORT}`);
       console.log(`Trust proxy setting: ${JSON.stringify(app.get("trust proxy"))}`);

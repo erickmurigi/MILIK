@@ -19,7 +19,6 @@ export const getCarWashSettings = async (req, res, next) => {
 
     const raw = company?.carwashSettings?.defaultCashbooks || {};
 
-    // Populate cashbook names so the frontend can display them without an extra call
     const ids = METHODS.map((m) => raw[m]).filter(Boolean);
     const accounts = ids.length
       ? await ChartOfAccount.find({ _id: { $in: ids }, business }).select("_id code name subGroup").lean()
@@ -32,7 +31,9 @@ export const getCarWashSettings = async (req, res, next) => {
       return acc;
     }, {});
 
-    res.json({ success: true, data: { defaultCashbooks } });
+    const savingsDeductionPerJob = Number(company?.carwashSettings?.savingsDeductionPerJob ?? 100);
+
+    res.json({ success: true, data: { defaultCashbooks, savingsDeductionPerJob } });
   } catch (err) {
     next(err);
   }
@@ -41,13 +42,13 @@ export const getCarWashSettings = async (req, res, next) => {
 export const updateCarWashSettings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { defaultCashbooks = {} } = req.body;
+    const { defaultCashbooks = {}, savingsDeductionPerJob } = req.body;
 
     const update = {};
+
     for (const method of METHODS) {
       const val = toOidOrNull(defaultCashbooks[method]);
       if (val) {
-        // Validate the account belongs to this business and is a posting cashbook
         const account = await ChartOfAccount.findOne({
           _id: val,
           business,
@@ -62,9 +63,16 @@ export const updateCarWashSettings = async (req, res, next) => {
       update[`carwashSettings.defaultCashbooks.${method}`] = val;
     }
 
-    await Company.updateOne({ _id: business }, { $set: update });
+    if (savingsDeductionPerJob !== undefined) {
+      const amt = Number(savingsDeductionPerJob);
+      if (!Number.isFinite(amt) || amt < 0) {
+        return next({ status: 400, message: "Savings deduction per job must be zero or more" });
+      }
+      update["carwashSettings.savingsDeductionPerJob"] = Math.round(amt * 100) / 100;
+    }
 
-    res.json({ success: true, message: "Car Wash financial defaults saved" });
+    await Company.updateOne({ _id: business }, { $set: update });
+    res.json({ success: true, message: "Car Wash settings saved" });
   } catch (err) {
     next(err);
   }
