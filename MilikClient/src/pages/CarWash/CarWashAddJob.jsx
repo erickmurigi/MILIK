@@ -8,6 +8,7 @@ import {
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, photoUrl } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import CarpetCameraModal from "../../components/common/CarpetCameraModal";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -168,23 +169,19 @@ const Lightbox = ({ src, onClose }) => (
 
 // ─── Carpet photo panel ───────────────────────────────────────────────────────
 const CarpetPhotoPanel = ({ jobId, existingPhotos = [], onPhotosChange }) => {
-  const fileRef = useRef(null);
   const [pending, setPending]       = useState([]); // { file, previewUrl }
   const [uploading, setUploading]   = useState(false);
   const [lightbox, setLightbox]     = useState(null);
   const [deleting, setDeleting]     = useState(null);
+  const [showCamera, setShowCamera] = useState(false);
 
   const total = existingPhotos.length + pending.length;
   const canAdd = total < 5;
 
-  const pickFiles = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    const allowed = existingPhotos.length + pending.length + files.length;
-    if (allowed > 5) { toast.error("Maximum 5 photos per job"); return; }
-    const newPending = files.map((f) => ({ file: f, previewUrl: URL.createObjectURL(f) }));
-    setPending((prev) => [...prev, ...newPending]);
-    e.target.value = "";
+  const handleCapture = (file) => {
+    if (existingPhotos.length + pending.length >= 5) { toast.error("Maximum 5 photos per job"); return; }
+    const previewUrl = URL.createObjectURL(file);
+    setPending((prev) => [...prev, { file, previewUrl }]);
   };
 
   const removePending = (idx) => {
@@ -235,21 +232,12 @@ const CarpetPhotoPanel = ({ jobId, existingPhotos = [], onPhotosChange }) => {
         {canAdd && (
           <button
             type="button"
-            onClick={() => fileRef.current?.click()}
+            onClick={() => setShowCamera(true)}
             className="inline-flex items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
           >
-            <FaCamera size={9} /> Add Photo
+            <FaCamera size={9} /> Take Photo
           </button>
         )}
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          multiple
-          className="hidden"
-          onChange={pickFiles}
-        />
       </div>
 
       <div className="p-4">
@@ -341,6 +329,12 @@ const CarpetPhotoPanel = ({ jobId, existingPhotos = [], onPhotosChange }) => {
       </div>
 
       {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
+      {showCamera && (
+        <CarpetCameraModal
+          onCapture={handleCapture}
+          onClose={() => setShowCamera(false)}
+        />
+      )}
     </div>
   );
 };

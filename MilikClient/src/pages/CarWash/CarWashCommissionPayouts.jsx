@@ -42,6 +42,7 @@ const CarWashCommissionPayouts = () => {
   const [payableComms, setPayableComms] = useState([]);
   const [loading, setLoading]           = useState(false);
   const [showModal, setShowModal]       = useState(false);
+  const [pendingSavings, setPendingSavings] = useState(0); // savings to be held from this payout
   const [form, setForm] = useState({ staff: "", commissionIds: [], method: "cash", cashbookAccount: "", payoutDate: todayISO(), reference: "", notes: "" });
 
   const selectedStaffPayable = useMemo(
@@ -101,12 +102,24 @@ const CarWashCommissionPayouts = () => {
       reference: "",
       notes: "",
     });
+    setPendingSavings(0);
+    if (firstStaff) {
+      carWashApi.getStaffWallet(firstStaff)
+        .then((w) => setPendingSavings(Number(w?.savings?.pendingToHold || 0)))
+        .catch(() => {});
+    }
     setShowModal(true);
   };
 
-  const setPayoutStaff = (staffId) => {
+  const setPayoutStaff = async (staffId) => {
     const rows = payableComms.filter((c) => String(c.staff?._id || c.staff) === String(staffId));
     setForm((p) => ({ ...p, staff: staffId, commissionIds: rows.map((c) => c._id) }));
+    setPendingSavings(0);
+    if (!staffId) return;
+    try {
+      const wallet = await carWashApi.getStaffWallet(staffId);
+      setPendingSavings(Number(wallet?.savings?.pendingToHold || 0));
+    } catch { /* best-effort */ }
   };
 
   const toggleComm = (id) => setForm((p) => ({
@@ -239,6 +252,32 @@ const CarWashCommissionPayouts = () => {
               <label className={labelClass}>Notes</label>
               <input className={inputClass} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional" />
             </div>
+            {/* Savings deduction preview */}
+            {selectedTotal > 0 && (
+              <div className="sm:col-span-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs space-y-1">
+                <p className="font-black uppercase tracking-wide text-amber-800">Payout Breakdown</p>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Commission total</span>
+                  <span className="font-bold">{formatMoney(selectedTotal)}</span>
+                </div>
+                {pendingSavings > 0 && (
+                  <div className="flex justify-between text-amber-700">
+                    <span>Savings held ({Math.min(pendingSavings, selectedTotal) === pendingSavings ? "full" : "capped"} deduction)</span>
+                    <span className="font-bold">− {formatMoney(Math.min(pendingSavings, selectedTotal))}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-amber-200 pt-1">
+                  <span className="font-extrabold text-slate-800">Net cash to staff</span>
+                  <span className="font-extrabold text-emerald-700">
+                    {formatMoney(Math.max(0, selectedTotal - Math.min(pendingSavings, selectedTotal)))}
+                  </span>
+                </div>
+                {pendingSavings === 0 && (
+                  <p className="text-[10px] text-slate-400 italic">No pending savings deductions for this staff member.</p>
+                )}
+              </div>
+            )}
+
             <div className="sm:col-span-2">
               <label className={labelClass}>Payable Commissions</label>
               <div className="max-h-56 overflow-auto rounded border border-slate-200">

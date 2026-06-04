@@ -5,6 +5,7 @@ import { selectCurrentCompany } from "../../redux/selectors";
 import { FaCamera, FaChevronDown, FaChevronRight, FaEdit, FaExpand, FaMobileAlt, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTimesCircle, FaTrashAlt, FaUndoAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, photoUrl, todayISO } from "../../services/carWashApi";
+import CarpetCameraModal from "../../components/common/CarpetCameraModal";
 import CarWashShell from "./CarWashShell";
 import { useConfirm } from "../../context/ConfirmContext";
 import CwSmsModal from "./CwSmsModal";
@@ -148,8 +149,8 @@ const CarWashJobs = () => {
   const [smsBody, setSmsBody] = useState("");
   const [smsSending, setSmsSending] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState(null);
-  // Per-job photo state for inline uploads from the list: { [jobId]: string[] }
-  const [jobPhotos, setJobPhotos] = useState({});
+  const [jobPhotos, setJobPhotos]     = useState({});    // { [jobId]: string[] }
+  const [cameraJobId, setCameraJobId] = useState(null);  // jobId that has camera open
   const [stkPushing, setStkPushing] = useState(false);
   // job-level payments: { [jobId]: { loading: bool, list: [] } }
   const [jobPayments, setJobPayments] = useState({});
@@ -765,17 +766,13 @@ const CarWashJobs = () => {
                             {/* Carpet photo gallery */}
                             {job.jobType === "carpet" && (() => {
                               const photos = jobPhotos[job._id] ?? (Array.isArray(job.photos) ? job.photos : []);
-                              const fileRef = React.createRef();
-                              const handleAdd = async (e) => {
-                                const files = Array.from(e.target.files || []);
-                                if (!files.length) return;
-                                if (photos.length + files.length > 5) { toast.error("Max 5 photos per job"); return; }
+                              const handleCapture = async (file) => {
+                                if (photos.length >= 5) { toast.error("Max 5 photos per job"); return; }
                                 try {
-                                  const result = await carWashApi.uploadJobPhotos(job._id, files);
+                                  const result = await carWashApi.uploadJobPhotos(job._id, [file]);
                                   setJobPhotos((prev) => ({ ...prev, [job._id]: result?.photos || photos }));
-                                  toast.success("Photo(s) added");
+                                  toast.success("Photo added");
                                 } catch { toast.error("Upload failed"); }
-                                e.target.value = "";
                               };
                               const handleDelete = async (url) => {
                                 try {
@@ -788,14 +785,19 @@ const CarWashJobs = () => {
                                   <div className="mb-1.5 flex items-center gap-2">
                                     <span className="font-extrabold uppercase text-slate-500">Carpet Photos:</span>
                                     {photos.length < 5 && (
-                                      <button type="button" onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1 rounded border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                                        <FaCamera size={8} /> Add
+                                      <button type="button" onClick={() => setCameraJobId(job._id)} className="inline-flex items-center gap-1 rounded border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                                        <FaCamera size={8} /> Take Photo
                                       </button>
                                     )}
-                                    <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleAdd} />
+                                    {cameraJobId === job._id && (
+                                      <CarpetCameraModal
+                                        onCapture={handleCapture}
+                                        onClose={() => setCameraJobId(null)}
+                                      />
+                                    )}
                                   </div>
                                   {photos.length === 0 ? (
-                                    <span className="italic text-slate-400">No photos — click Add to take one</span>
+                                    <span className="italic text-slate-400">No photos — click "Take Photo" to add one</span>
                                   ) : (
                                     <div className="flex flex-wrap gap-2">
                                       {photos.map((url) => (

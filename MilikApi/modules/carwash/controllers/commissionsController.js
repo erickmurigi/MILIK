@@ -202,9 +202,15 @@ export const createCommissionPayout = async (req, res, next) => {
     });
     const netCash = round2(commissionAmount - savingsHeld);
 
+    // Persist savings breakdown on the payout record
     if (savingsHeld > 0) {
+      payout.savingsHeld = savingsHeld;
+      payout.netCash     = netCash;
+      await payout.save();
       await postCarWashCommissionPayoutWithSavings({ req, payout, cashbookAccount, commissionAmount, netCash, savingsHeld });
     } else {
+      payout.netCash = commissionAmount; // no savings = full amount is cash
+      await payout.save();
       await postCarWashCommissionPayout({ req, payout, cashbookAccount });
     }
 

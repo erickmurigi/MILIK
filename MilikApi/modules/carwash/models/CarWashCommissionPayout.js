@@ -14,6 +14,8 @@ const carWashCommissionPayoutSchema = new mongoose.Schema(
     reference: { type: String, trim: true, default: "" },
     payoutDate: { type: Date, default: Date.now, index: true },
     commissions: [{ type: mongoose.Schema.Types.ObjectId, ref: "CarWashStaffCommission" }],
+    savingsHeld: { type: Number, default: 0 },   // savings deducted from this payout
+    netCash:     { type: Number, default: null }, // actual cash paid to staff (amount - savingsHeld)
     ledgerEntries: [{ type: mongoose.Schema.Types.ObjectId, ref: "FinancialLedgerEntry" }],
     notes: { type: String, trim: true, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
