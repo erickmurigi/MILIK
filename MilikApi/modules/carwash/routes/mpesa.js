@@ -1,5 +1,5 @@
 import express from "express";
-import { confirmCarWashCallback, validateCarWashCallback, listMpesaNotifications, reassignMpesaNotification } from "../controllers/mpesaCallbackController.js";
+import { confirmCarWashCallback, validateCarWashCallback, listMpesaNotifications, reassignMpesaNotification, registerCarWashPaybillUrls } from "../controllers/mpesaCallbackController.js";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
 
 const router = express.Router();
@@ -20,6 +20,15 @@ router.patch(
   requireCompanyModule("carwash"),
   requireCompanyPermission("carwash-payments", "edit", "carwash"),
   reassignMpesaNotification
+);
+
+// Authenticated — register validation/confirmation URLs with Safaricom
+router.post(
+  "/register-urls",
+  verifyUser,
+  requireCompanyModule("carwash"),
+  requireCompanyPermission("carwash-settings", "manage", "carwash"),
+  registerCarWashPaybillUrls
 );
 
 // No auth — Safaricom calls these directly

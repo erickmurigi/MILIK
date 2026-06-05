@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import axios from "axios";
 import Company from "../../../models/Company.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashJob from "../models/CarWashJob.js";
@@ -419,5 +420,92 @@ export const reassignMpesaNotification = async (req, res, next) => {
     res.json({ success: true, data: { notification: populated } });
   } catch (error) {
     next(error);
+  }
+};
+
+// ─── Register C2B validation/confirmation URLs with Safaricom ─────────────────
+export const registerCarWashPaybillUrls = async (req, res, next) => {
+  try {
+    const { resolveActiveBusinessId } = await import("../services/businessScope.js");
+    const business = resolveActiveBusinessId(req);
+    const company  = await Company.findById(business).lean();
+
+    const shortCode = normalizeText(req.body?.shortCode);
+    if (!shortCode) return res.status(400).json({ success: false, message: "shortCode is required" });
+
+    const configs = getRawMpesaPaybillConfigs(company?.paymentIntegration || {});
+    const config  =
+      configs.find((c) => normalizeText(c?.shortCode) === shortCode) ||
+      getPrimaryMpesaPaybillConfig(configs);
+
+    if (!config) {
+      return res.status(404).json({ success: false, message: `No Paybill configuration found for shortCode ${shortCode}` });
+    }
+
+    const consumerKey    = normalizeText(config.consumerKey);
+    const consumerSecret = normalizeText(config.consumerSecret);
+    const responseType   = config.responseType === "Cancelled" ? "Cancelled" : "Completed";
+
+    if (!consumerKey || !consumerSecret) {
+      return res.status(422).json({
+        success: false,
+        message: "Save the Consumer Key and Consumer Secret before registering URLs with Safaricom.",
+      });
+    }
+
+    // Build public-facing callback base URL
+    const envBase  = normalizeText(process.env.MPESA_CALLBACK_BASE_URL || "");
+    const reqBase  = `${req.protocol}://${req.get("host")}`;
+    const apiBase  = (envBase || reqBase).replace(/\/$/, "");
+
+    const validationURL   = `${apiBase}/api/carwash/mpesa/validation/${shortCode}`;
+    const confirmationURL = `${apiBase}/api/carwash/mpesa/confirmation/${shortCode}`;
+
+    const safaricomBase = normalizeText(process.env.MPESA_ENVIRONMENT || "production") === "sandbox"
+      ? "https://sandbox.safaricom.co.ke"
+      : "https://api.safaricom.co.ke";
+
+    // Get access token using the company's own credentials
+    let accessToken;
+    try {
+      const auth     = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
+      const tokenRes = await axios.get(`${safaricomBase}/oauth/v1/generate?grant_type=client_credentials`, {
+        headers: { Authorization: `Basic ${auth}` },
+        timeout: 15000,
+      });
+      accessToken = tokenRes.data?.access_token;
+    } catch (tokenErr) {
+      const detail = tokenErr.response?.data?.errorMessage || tokenErr.message;
+      return res.status(502).json({
+        success: false,
+        message: `Failed to authenticate with Safaricom. Verify your Consumer Key and Secret. (${detail})`,
+      });
+    }
+
+    if (!accessToken) {
+      return res.status(502).json({ success: false, message: "No access token returned by Safaricom. Check your credentials." });
+    }
+
+    // Register validation and confirmation URLs
+    let safaricomResponse;
+    try {
+      const regRes = await axios.post(
+        `${safaricomBase}/mpesa/c2b/v1/registerurl`,
+        { ShortCode: shortCode, ResponseType: responseType, ConfirmationURL: confirmationURL, ValidationURL: validationURL },
+        { headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, timeout: 15000 }
+      );
+      safaricomResponse = regRes.data;
+    } catch (regErr) {
+      const detail = regErr.response?.data?.errorMessage || regErr.response?.data?.ResultDesc || regErr.message;
+      return res.status(502).json({ success: false, message: `Safaricom rejected the URL registration: ${detail}` });
+    }
+
+    res.json({
+      success: true,
+      message: "Callback URLs registered with Safaricom successfully. Payments will now flow through.",
+      data: { validationURL, confirmationURL, safaricomResponse },
+    });
+  } catch (err) {
+    next(err);
   }
 };

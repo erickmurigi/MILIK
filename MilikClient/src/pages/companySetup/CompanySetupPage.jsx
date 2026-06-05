@@ -36,6 +36,7 @@ import {
 } from "react-icons/fa";
 import { getChartOfAccounts, getCompany, getSmsLogs, updateCompany } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
+import { carWashApi } from "../../services/carWashApi";
 import { COMPANY_OPERATING_MODES, MODULE_LABELS, hasCompanyModule, normalizeCompanyModules, normalizeCompanyOperatingMode } from "../../utils/companyModules";
 import { useConfirm } from "../../context/ConfirmContext";
 
@@ -906,6 +907,7 @@ export default function CompanySetupPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [savingDetails, setSavingDetails] = useState(false);
   const [savingPayments, setSavingPayments] = useState(false);
+  const [registeringUrls, setRegisteringUrls] = useState(false);
   const [savingEmails, setSavingEmails] = useState(false);
   const [savingSmsProfiles, setSavingSmsProfiles] = useState(false);
   const [savingSmsTemplates, setSavingSmsTemplates] = useState(false);
@@ -1417,6 +1419,20 @@ export default function CompanySetupPage() {
         }
       },
     });
+  };
+
+  const handleRegisterUrls = async () => {
+    const shortCode = paymentForm.shortCode.trim();
+    if (!shortCode) { toast.error("Save the Paybill configuration first, then register the URLs."); return; }
+    setRegisteringUrls(true);
+    try {
+      const result = await carWashApi.registerMpesaUrls(shortCode);
+      toast.success(result?.message || "URLs registered with Safaricom. Payments will now flow through.");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || "URL registration failed. Check your Consumer Key and Secret.");
+    } finally {
+      setRegisteringUrls(false);
+    }
   };
 
   const handleDeletePaymentConfig = async (config) => {
@@ -2778,6 +2794,17 @@ export default function CompanySetupPage() {
                 New Config
               </button>
             ) : null}
+            {selectedPaymentConfigId !== PAYMENT_DRAFT_ID && paymentForm.shortCode && (
+              <button
+                disabled={registeringUrls || savingPayments}
+                onClick={handleRegisterUrls}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                title="Tell Safaricom where to send payment callbacks. Must be done once after saving credentials."
+              >
+                <FaSyncAlt className={registeringUrls ? "animate-spin" : ""} />
+                {registeringUrls ? "Registering..." : "Register with Safaricom"}
+              </button>
+            )}
             <button disabled={savingPayments} onClick={handleSavePaymentConfig} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
               <FaSave /> {savingPayments ? "Saving..." : selectedPaymentConfigId === PAYMENT_DRAFT_ID ? "Save New Config" : "Update Config"}
             </button>

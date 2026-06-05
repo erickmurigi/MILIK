@@ -57,6 +57,7 @@ export const carWashApi = {
   initiateStkPush: async (payload) => unwrap(await adminRequests.post("/carwash/payments/stk-push", payload)),
   listMpesaNotifications: async (params = {}) => unwrap(await adminRequests.get("/carwash/mpesa/notifications", { params: bp(params) })),
   reassignMpesaNotification: async (id, jobId) => unwrap(await adminRequests.patch(`/carwash/mpesa/notifications/${id}/reassign`, { jobId })),
+  registerMpesaUrls: async (shortCode) => unwrap(await adminRequests.post("/carwash/mpesa/register-urls", { shortCode })),
   updatePaymentReconciliation: async (id, payload) => unwrap(await adminRequests.patch(`/carwash/payments/${id}/reconciliation`, payload)),
   listDeposits: async (params = {}) => unwrap(await adminRequests.get("/carwash/deposits", { params: bp(params) })),
   createDeposit: async (payload) => unwrap(await adminRequests.post("/carwash/deposits", bb(payload))),

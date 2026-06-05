@@ -24,7 +24,8 @@
       "Bash(grep -n \"const html = \\\\`\" \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\services\\\\statementPdfService.js\")",
       "Bash(git diff *)",
       "Bash(xargs grep -l \"carwash-dashboard\\\\|carwash-jobs\")",
-      "Bash(grep -v \"//\\\\|import\")"
+      "Bash(grep -v \"//\\\\|import\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\" -Directory)"
     ]
   }
 }
