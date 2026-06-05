@@ -209,7 +209,7 @@ function Login() {
               />
               <h1 className="text-4xl font-extrabold tracking-wide text-white">Milik</h1>
             </div>
-            <p className="text-[#DDEFE1] text-sm font-semibold">Property Management System</p>
+            <p className="text-[#DDEFE1] text-sm font-semibold">MILIK System</p>
           </div>
 
           <div className="p-8">
