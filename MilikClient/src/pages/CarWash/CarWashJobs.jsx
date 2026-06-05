@@ -10,6 +10,7 @@ import CarpetCameraModal from "../../components/common/CarpetCameraModal";
 import CarWashShell from "./CarWashShell";
 import { useConfirm } from "../../context/ConfirmContext";
 import CwSmsModal from "./CwSmsModal";
+import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 
 const Lightbox = ({ src, onClose }) => (
   <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4" onClick={onClose}>
@@ -291,13 +292,25 @@ const CarWashJobs = () => {
   }, [jobs]);
 
   const closePaymentModal = () => {
+    clearDraft("cw-payment-form");
     setShowPaymentModal(false);
     setPaymentForm(emptyPaymentForm);
     setModalUnpaidJobs([]);
     setPaymentJobPaidSoFar(0);
   };
 
+  // Auto-save payment form draft (non-computed fields only)
+  useEffect(() => {
+    if (!showPaymentModal) return;
+    const { job, method, cashbookAccount, discountAmount, reference, receivedFromPhone, paymentDate } = paymentForm;
+    const t = setTimeout(() => writeDraft("cw-payment-form", { job, method, cashbookAccount, discountAmount, reference, receivedFromPhone, paymentDate }), 400);
+    return () => clearTimeout(t);
+  }, [paymentForm.job, paymentForm.method, paymentForm.cashbookAccount, paymentForm.discountAmount, paymentForm.reference, paymentForm.receivedFromPhone, paymentForm.paymentDate, showPaymentModal]);
+
   const openPaymentModal = async (job = null) => {
+    const draft = readDraft("cw-payment-form");
+    const useDraft = draft?.job === job?._id;
+
     // Compute paid-so-far from cache if available, otherwise start at 0 and refine async
     const cachedList = job?._id ? jobPayments[job._id]?.list : null;
     const cachedPaid = cachedList
@@ -310,8 +323,12 @@ const CarWashJobs = () => {
       ...emptyPaymentForm,
       job: job?._id || "",
       amount: job ? String(initialOutstanding) : "",
-      cashbookAccount: preferredCashbookForMethod(cashbooks, emptyPaymentForm.method, cashbookDefaults),
-      receivedFromPhone: String(job?.phone || "").trim(),
+      method:            useDraft ? draft.method            : emptyPaymentForm.method,
+      cashbookAccount:   useDraft ? draft.cashbookAccount   : preferredCashbookForMethod(cashbooks, emptyPaymentForm.method, cashbookDefaults),
+      discountAmount:    useDraft ? draft.discountAmount     : "",
+      reference:         useDraft ? draft.reference          : "",
+      receivedFromPhone: useDraft ? draft.receivedFromPhone  : String(job?.phone || "").trim(),
+      paymentDate:       useDraft ? draft.paymentDate        : todayISO(),
     });
     setShowPaymentModal(true);
 

@@ -7,6 +7,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, photoUrl, VEHICLE_TYPES } from "../../services/carWashApi";
+import { useFormDraft } from "../../hooks/useFormDraft";
 import CarWashShell from "./CarWashShell";
 import CarpetCameraModal from "../../components/common/CarpetCameraModal";
 
@@ -370,6 +371,33 @@ const CarWashAddJob = () => {
   const [saving, setSaving]         = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
 
+  const { read: readDraft, write: writeDraft, clear: clearDraft } = useFormDraft("cw-new-job");
+
+  // Restore draft on mount (new job only)
+  useEffect(() => {
+    if (isEditMode) return;
+    const draft = readDraft();
+    if (!draft) return;
+    if (draft.jobType)          setJobType(draft.jobType);
+    if (draft.plateNumber)      setPlateNumber(draft.plateNumber);
+    if (draft.customerName)     setCustomerName(draft.customerName);
+    if (draft.phone)            setPhone(draft.phone);
+    if (draft.itemDescription)  setItemDescription(draft.itemDescription);
+    if (draft.expectedReadyAt)  setExpectedReadyAt(draft.expectedReadyAt);
+    if (draft.serviceLines?.length) setServiceLines(draft.serviceLines);
+    if (draft.discountAmount)   setDiscountAmount(draft.discountAmount);
+    if (draft.notes)            setNotes(draft.notes);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-save draft on change (new job only)
+  useEffect(() => {
+    if (isEditMode) return;
+    const t = setTimeout(() => {
+      writeDraft({ jobType, plateNumber, customerName, phone, itemDescription, expectedReadyAt, serviceLines, discountAmount, notes });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [isEditMode, jobType, plateNumber, customerName, phone, itemDescription, expectedReadyAt, serviceLines, discountAmount, notes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const totalPrice = useMemo(
     () => serviceLines.reduce((sum, l) => sum + (Number(l.price) || 0), 0),
     [serviceLines]
@@ -597,6 +625,7 @@ const CarWashAddJob = () => {
           }
         }
 
+        clearDraft();
         toast.success(applyReward ? "Job created and loyalty reward applied!" : creditAccount ? "Job created and charged to credit account" : "Car Wash job created");
         // Carpet jobs: redirect to edit so attendant can immediately add photos
         if (jobType === "carpet" && newId) {
@@ -626,7 +655,7 @@ const CarWashAddJob = () => {
       action={
         <button
           type="button"
-          onClick={() => navigate("/carwash/jobs")}
+          onClick={() => { clearDraft(); navigate("/carwash/jobs"); }}
           className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
         >
           <FaArrowLeft /> Back to Jobs

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { FaChevronDown, FaChevronRight, FaEdit, FaMinus, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, VEHICLE_TYPES } from "../../services/carWashApi";
@@ -76,15 +77,32 @@ const CarWashServices = () => {
   useEffect(() => { load().catch(() => toast.error("Failed to load services")); }, [appliedFilters, page]); // eslint-disable-line
   useEffect(() => { loadCategories(); }, []);
 
-  const closeModal = () => { setShowModal(false); setEditingId(""); setForm(emptyForm); setCategoryMode("select"); };
+  // Auto-save service form draft while modal is open
+  useEffect(() => {
+    if (!showModal || !form.name) return;
+    const key = editingId ? `cw-service-edit-${editingId}` : "cw-service-create";
+    const t = setTimeout(() => writeDraft(key, { form, categoryMode }), 400);
+    return () => clearTimeout(t);
+  }, [form, categoryMode, showModal, editingId]);
 
-  const openCreate = () => { setEditingId(""); setForm(emptyForm); setCategoryMode("select"); setShowModal(true); };
+  const closeModal = () => {
+    const key = editingId ? `cw-service-edit-${editingId}` : "cw-service-create";
+    clearDraft(key);
+    setShowModal(false); setEditingId(""); setForm(emptyForm); setCategoryMode("select");
+  };
+
+  const openCreate = () => {
+    const draft = readDraft("cw-service-create");
+    setEditingId("");
+    setForm(draft?.form ?? emptyForm);
+    setCategoryMode(draft?.categoryMode ?? "select");
+    setShowModal(true);
+  };
 
   const openEdit = (row) => {
+    const draft = readDraft(`cw-service-edit-${row._id}`);
     setEditingId(row._id);
-    const catExists = categories.includes(row.category || "");
-    setCategoryMode(row.category && !catExists ? "new" : "select");
-    setForm({
+    const fromRow = {
       name:         row.name || "",
       category:     row.category || "",
       jobType:      row.jobType || "both",
@@ -94,7 +112,10 @@ const CarWashServices = () => {
         ? row.pricingTiers.map((t) => ({ vehicleType: t.vehicleType, price: String(t.price) }))
         : [],
       active: row.active !== false,
-    });
+    };
+    const catExists = categories.includes((draft?.form ?? fromRow).category || "");
+    setForm(draft?.form ?? fromRow);
+    setCategoryMode(draft?.categoryMode ?? ((row.category && !catExists) ? "new" : "select"));
     setShowModal(true);
   };
 

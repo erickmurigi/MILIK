@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import {
   FaChevronDown, FaChevronRight, FaEdit, FaPiggyBank, FaPlus,
   FaRedoAlt, FaSearch, FaTimes, FaWallet,
@@ -277,9 +278,29 @@ const CarWashStaff = () => {
 
   useEffect(() => { load().catch(() => toast.error("Failed to load staff")); }, [appliedFilters, page]);
 
-  const closeModal = () => { setShowModal(false); setEditingId(""); setForm(emptyForm); };
-  const openCreate = () => { setEditingId(""); setForm(emptyForm); setShowModal(true); };
-  const openEdit   = (row) => { setEditingId(row._id); setForm({ name: row.name || "", phone: row.phone || "", role: row.role || "", active: row.active !== false }); setShowModal(true); };
+  // Auto-save staff form draft while modal is open
+  useEffect(() => {
+    if (!showModal || !form.name) return;
+    const key = editingId ? `cw-staff-edit-${editingId}` : "cw-staff-create";
+    const t = setTimeout(() => writeDraft(key, form), 400);
+    return () => clearTimeout(t);
+  }, [form, showModal, editingId]);
+
+  const closeModal = () => {
+    const key = editingId ? `cw-staff-edit-${editingId}` : "cw-staff-create";
+    clearDraft(key);
+    setShowModal(false); setEditingId(""); setForm(emptyForm);
+  };
+  const openCreate = () => {
+    const draft = readDraft("cw-staff-create");
+    setEditingId(""); setForm(draft ?? emptyForm); setShowModal(true);
+  };
+  const openEdit = (row) => {
+    const draft = readDraft(`cw-staff-edit-${row._id}`);
+    setEditingId(row._id);
+    setForm(draft ?? { name: row.name || "", phone: row.phone || "", role: row.role || "", active: row.active !== false });
+    setShowModal(true);
+  };
 
   const submit = async (e) => {
     e.preventDefault();

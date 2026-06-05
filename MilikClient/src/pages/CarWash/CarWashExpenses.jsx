@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
@@ -71,7 +72,7 @@ const CarWashExpenses = () => {
   const [cashbooks, setCashbooks] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(() => readDraft("cw-expenses-form") || emptyForm);
   const [expandedIds, setExpandedIds] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [page, setPage] = useState(1);
@@ -118,6 +119,14 @@ const CarWashExpenses = () => {
     loadCashbooks();
   }, [loadCashbooks]);
 
+  // Auto-save expense form draft
+  useEffect(() => {
+    const dirty = form.amount || form.payee || form.description || form.reference || form.notes;
+    if (!dirty) { clearDraft("cw-expenses-form"); return; }
+    const t = setTimeout(() => writeDraft("cw-expenses-form", form), 400);
+    return () => clearTimeout(t);
+  }, [form]);
+
   const pageTotal = useMemo(() => rows.reduce((sum, row) => sum + Number(row.amount || 0), 0), [rows]);
 
   const applyFilters = (event) => {
@@ -133,6 +142,7 @@ const CarWashExpenses = () => {
   };
 
   const closeModal = () => {
+    clearDraft("cw-expenses-form");
     setShowModal(false);
     setForm({ ...emptyForm, cashbookAccount: preferredCashbookForMethod(cashbooks, emptyForm.method) });
   };
