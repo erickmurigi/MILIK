@@ -29,7 +29,11 @@
       "WebSearch",
       "WebFetch(domain:developer.safaricom.co.ke)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(npx react-scripts *)",
+      "Bash(node_modules/.bin/eslint src/hooks/useFormDraft.js src/pages/CarWash/CarWashExpenses.jsx src/pages/CarWash/CarWashDeposits.jsx src/pages/CarWash/CarWashServices.jsx src/pages/CarWash/CarWashStaff.jsx src/pages/CarWash/CarWashJobs.jsx --max-warnings=0)",
+      "Bash(node_modules/.bin/eslint src/hooks/useFormDraft.js src/pages/CarWash/CarWashExpenses.jsx src/pages/CarWash/CarWashDeposits.jsx src/pages/CarWash/CarWashServices.jsx src/pages/CarWash/CarWashStaff.jsx src/pages/CarWash/CarWashJobs.jsx --rule '{\"no-unused-vars\": \"off\"}')",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

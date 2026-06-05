@@ -330,10 +330,12 @@ const CarWashJobs = () => {
       receivedFromPhone: useDraft ? draft.receivedFromPhone  : String(job?.phone || "").trim(),
       paymentDate:       useDraft ? draft.paymentDate        : todayISO(),
     });
+    // Seed job dropdown immediately from current page's data so it's usable before the API call returns
+    setModalUnpaidJobs(jobs.filter((j) => j.paymentStatus !== "paid"));
     setShowPaymentModal(true);
 
     try {
-      // Fetch the full jobs list for the dropdown and (if needed) this job's payments
+      // Refresh with full list (current page may be filtered/paginated)
       const needsPayments = job?._id && !cachedList;
       const [jobsPayload, pmtsPayload] = await Promise.all([
         carWashApi.listJobs({ limit: 100 }),

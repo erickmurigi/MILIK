@@ -42,9 +42,7 @@ const generateStatementNumber = async (business, periodStart) => {
 
 // ─── Balance computation ──────────────────────────────────────────────────────
 
-// Finds all non-cancelled jobs for an account — by explicit creditAccount link
-// OR by plate number (covers jobs created before the account existed, or where
-// the PM forgot to select the account at job creation).
+// Single-account variant — used when refreshing one account after a topup/payment.
 const computeAccountBalance = async (business, accountId) => {
   const account = await CarWashCreditAccount.findById(accountId).select("plates").lean();
   const plates = Array.isArray(account?.plates) ? account.plates.filter(Boolean) : [];
@@ -60,7 +58,6 @@ const computeAccountBalance = async (business, accountId) => {
 
   if (!jobs.length) return 0;
 
-  // Deduplicate by _id (a job linked by both plate AND creditAccount must not be counted twice)
   const uniqueJobs = [...new Map(jobs.map((j) => [String(j._id), j])).values()];
   const jobIds = uniqueJobs.map((j) => j._id);
 
@@ -71,8 +68,69 @@ const computeAccountBalance = async (business, accountId) => {
   ]);
 
   const totalInvoiced = uniqueJobs.reduce((sum, j) => sum + Number(j.price || 0), 0);
-  const totalPaid = Number(totals[0]?.paid || 0);
-  return round2(totalInvoiced - totalPaid);
+  return round2(totalInvoiced - Number(totals[0]?.paid || 0));
+};
+
+// Batch variant — computes balances for all accounts in 2 queries instead of 3N.
+const computeAllBalances = async (business, accounts) => {
+  if (!accounts.length) return {};
+  const businessOid = new mongoose.Types.ObjectId(String(business));
+  const allAccountIds = accounts.map((a) => a._id);
+  const allPlates = [...new Set(accounts.flatMap((a) => (a.plates || []).filter(Boolean)))];
+
+  const jobOrConditions = [{ creditAccount: { $in: allAccountIds } }];
+  if (allPlates.length) jobOrConditions.push({ plateNumber: { $in: allPlates } });
+
+  const allJobs = await CarWashJob.find({
+    business: businessOid,
+    status: { $nin: ["cancelled"] },
+    $or: jobOrConditions,
+  }).select("_id price creditAccount plateNumber").lean();
+
+  if (!allJobs.length) return {};
+
+  const allJobIds = allJobs.map((j) => j._id);
+  const paymentRows = await CarWashPayment.aggregate([
+    { $match: { business: businessOid, job: { $in: allJobIds } } },
+    { $group: { _id: "$job", paid: { $sum: "$amount" } } },
+  ]);
+  const paidByJob = new Map(paymentRows.map((r) => [String(r._id), Number(r.paid)]));
+  const jobById   = new Map(allJobs.map((j) => [String(j._id), j]));
+
+  // plate -> set of accountIds that own that plate
+  const plateToAccounts = new Map();
+  accounts.forEach((acc) => {
+    (acc.plates || []).filter(Boolean).forEach((plate) => {
+      if (!plateToAccounts.has(plate)) plateToAccounts.set(plate, new Set());
+      plateToAccounts.get(plate).add(String(acc._id));
+    });
+  });
+
+  // account -> set of unique job IDs it owns
+  const accountJobIds = new Map(accounts.map((a) => [String(a._id), new Set()]));
+  for (const job of allJobs) {
+    const jobIdStr = String(job._id);
+    if (job.creditAccount) {
+      const key = String(job.creditAccount);
+      accountJobIds.get(key)?.add(jobIdStr);
+    }
+    if (job.plateNumber && plateToAccounts.has(job.plateNumber)) {
+      for (const accIdStr of plateToAccounts.get(job.plateNumber)) {
+        accountJobIds.get(accIdStr)?.add(jobIdStr);
+      }
+    }
+  }
+
+  const result = {};
+  for (const [accIdStr, jobIdSet] of accountJobIds) {
+    let invoiced = 0, paid = 0;
+    for (const jid of jobIdSet) {
+      invoiced += Number(jobById.get(jid)?.price || 0);
+      paid     += paidByJob.get(jid) || 0;
+    }
+    result[accIdStr] = round2(invoiced - paid);
+  }
+  return result;
 };
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
@@ -86,9 +144,7 @@ export const listAccounts = async (req, res, next) => {
     if (req.query.accountType) filter.accountType = req.query.accountType;
     if (req.query.search) {
       const term = escapeRegex(String(req.query.search).trim());
-      filter.$or = [
-        { accountNumber: { $regex: term, $options: "i" } },
-      ];
+      filter.$or = [{ accountNumber: { $regex: term, $options: "i" } }];
     }
 
     const accounts = await CarWashCreditAccount.find(filter)
@@ -96,13 +152,8 @@ export const listAccounts = async (req, res, next) => {
       .sort({ status: 1, createdAt: -1 })
       .lean();
 
-    // Attach live balance to each account
-    const enriched = await Promise.all(
-      accounts.map(async (acc) => {
-        const balance = await computeAccountBalance(business, acc._id);
-        return { ...acc, currentBalance: balance };
-      })
-    );
+    const balances = await computeAllBalances(business, accounts);
+    const enriched = accounts.map((acc) => ({ ...acc, currentBalance: balances[String(acc._id)] ?? 0 }));
 
     res.json({ success: true, data: enriched });
   } catch (err) {
