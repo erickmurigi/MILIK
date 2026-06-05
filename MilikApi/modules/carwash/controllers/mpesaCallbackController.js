@@ -1,5 +1,9 @@
 import mongoose from "mongoose";
 import axios from "axios";
+import crypto from "crypto";
+import { readFileSync, existsSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import Company from "../../../models/Company.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashJob from "../models/CarWashJob.js";
@@ -150,11 +154,27 @@ const getMpesaAccessToken = async (consumerKey, consumerSecret) => {
   return data.access_token;
 };
 
+const _dir = dirname(fileURLToPath(import.meta.url));
+const SAFARICOM_PROD_CERT_PATH = join(_dir, "../certs/safaricom_prod.cer");
+
+const generateSecurityCredential = (password) => {
+  const certPath = process.env.SAFARICOM_PROD_CERT_PATH || SAFARICOM_PROD_CERT_PATH;
+  if (!existsSync(certPath)) {
+    throw new Error(`Safaricom production certificate not found at ${certPath}. Download it from Daraja portal and place it there.`);
+  }
+  const cert = readFileSync(certPath);
+  return crypto.publicEncrypt(
+    { key: cert, padding: crypto.constants.RSA_PKCS1_PADDING },
+    Buffer.from(password)
+  ).toString("base64");
+};
+
 const triggerTransactionStatusQuery = async ({ config, transId, businessId, notifId }) => {
   try {
-    const { consumerKey, consumerSecret, shortCode, initiatorName, securityCredential } = config;
-    if (!initiatorName || !securityCredential || !consumerKey || !consumerSecret) return;
+    const { consumerKey, consumerSecret, shortCode, initiatorName, initiatorPassword } = config;
+    if (!initiatorName || !initiatorPassword || !consumerKey || !consumerSecret) return;
 
+    const securityCredential = generateSecurityCredential(initiatorPassword);
     const token = await getMpesaAccessToken(consumerKey, consumerSecret);
     const apiBase = normalizeText(process.env.MPESA_CALLBACK_BASE_URL || "").replace(/\/$/, "");
     if (!apiBase) { console.warn("[TxnStatus] MPESA_CALLBACK_BASE_URL not set — skipping query"); return; }
@@ -409,7 +429,7 @@ export const confirmCarWashCallback = async (req, res) => {
     const savedNotif = await saveNotif({ matchedJob: job._id, matchedPayment: payment._id, status: "matched", resultCode: 0, resultDesc: "Payment matched and recorded" });
 
     // If MSISDN was hashed, fire Transaction Status Query to retrieve actual payer phone async
-    if (!normalizedMsisdn && transactionCode && config?.initiatorName && config?.securityCredential) {
+    if (!normalizedMsisdn && transactionCode && config?.initiatorName && config?.initiatorPassword) {
       triggerTransactionStatusQuery({ config, transId: transactionCode, businessId, notifId: savedNotif?._id }).catch(() => {});
     }
 

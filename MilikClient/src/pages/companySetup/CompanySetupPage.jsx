@@ -361,9 +361,9 @@ const createBlankPaymentForm = (sequence = 1) => ({
   consumerSecretMasked: "",
   passkeyMasked: "",
   initiatorName: "",
-  securityCredential: "",
-  hasSecurityCredential: false,
-  securityCredentialMasked: "",
+  initiatorPassword: "",
+  hasInitiatorPassword: false,
+  initiatorPasswordMasked: "",
   lastConfiguredAt: null,
   status: "not_configured",
   statusLabel: "Not configured",
@@ -393,9 +393,9 @@ const normalizePaymentEditor = (config = {}) => {
     consumerSecretMasked: config.consumerSecretMasked || "",
     passkeyMasked: config.passkeyMasked || "",
     initiatorName: config.initiatorName || "",
-    securityCredential: "",
-    hasSecurityCredential: Boolean(config.hasSecurityCredential),
-    securityCredentialMasked: config.securityCredentialMasked || "",
+    initiatorPassword: "",
+    hasInitiatorPassword: Boolean(config.hasInitiatorPassword),
+    initiatorPasswordMasked: config.initiatorPasswordMasked || "",
     lastConfiguredAt: config.lastConfiguredAt || null,
     status: status.code,
     statusLabel: status.label,
@@ -1405,7 +1405,7 @@ export default function CompanySetupPage() {
     if (paymentForm.consumerSecret.trim()) payload.consumerSecret = paymentForm.consumerSecret.trim();
     if (paymentForm.passkey.trim()) payload.passkey = paymentForm.passkey.trim();
     payload.initiatorName = paymentForm.initiatorName.trim();
-    if (paymentForm.securityCredential.trim()) payload.securityCredential = paymentForm.securityCredential.trim();
+    if (paymentForm.initiatorPassword.trim()) payload.initiatorPassword = paymentForm.initiatorPassword.trim();
 
     const isCreate = selectedPaymentConfigId === PAYMENT_DRAFT_ID;
     await mutatePaymentConfig({
@@ -2738,15 +2738,15 @@ export default function CompanySetupPage() {
                   <div className="mt-1 text-xs text-slate-500">Found under your app's API Operators in developer.safaricom.co.ke</div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-700">Security Credential</label>
+                  <label className="text-xs font-bold text-slate-700">Initiator Password</label>
                   <Input
                     type="password"
-                    value={paymentForm.securityCredential}
-                    onChange={(e) => setPaymentForm((prev) => ({ ...prev, securityCredential: e.target.value }))}
-                    placeholder={paymentForm.hasSecurityCredential ? "Leave blank to keep saved credential" : "Base64 encrypted initiator password"}
+                    value={paymentForm.initiatorPassword}
+                    onChange={(e) => setPaymentForm((prev) => ({ ...prev, initiatorPassword: e.target.value }))}
+                    placeholder={paymentForm.hasInitiatorPassword ? "Leave blank to keep saved password" : "Password set at org.ke.m-pesa.com for this operator"}
                   />
                   <div className="mt-1 text-xs text-slate-500">
-                    {paymentForm.hasSecurityCredential ? `Saved: ${paymentForm.securityCredentialMasked || "Yes"}` : "Generate this at Daraja portal → Utilities → Security Credential Generator (use Production, enter your initiator password)."}
+                    {paymentForm.hasInitiatorPassword ? `Saved: ${paymentForm.initiatorPasswordMasked || "Yes"}` : "The system encrypts this automatically — no manual Security Credential generation needed."}
                   </div>
                 </div>
               </div>
