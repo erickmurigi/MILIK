@@ -458,8 +458,8 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
     const reqBase  = `${req.protocol}://${req.get("host")}`;
     const apiBase  = (envBase || reqBase).replace(/\/$/, "");
 
-    const validationURL   = `${apiBase}/api/carwash/mpesa/validation/${shortCode}`;
-    const confirmationURL = `${apiBase}/api/carwash/mpesa/confirmation/${shortCode}`;
+    const validationURL   = `${apiBase}/api/carwash/pay/validation/${shortCode}`;
+    const confirmationURL = `${apiBase}/api/carwash/pay/confirmation/${shortCode}`;
 
     const safaricomBase = normalizeText(process.env.MPESA_ENVIRONMENT || "production") === "sandbox"
       ? "https://sandbox.safaricom.co.ke"
