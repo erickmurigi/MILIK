@@ -203,20 +203,27 @@ const CarWashJobs = () => {
 
   const loadReferenceData = async () => {
     try {
-      const [servicePayload, staffPayload, cashbookPayload, settingsPayload] = await Promise.all([
+      const [servicePayload, staffPayload, cashbookPayload, settingsPayload, branchData] = await Promise.all([
         carWashApi.listServices({ active: true }),
         carWashApi.listStaff({ active: true }),
         currentCompany?._id
           ? carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" })
           : Promise.resolve([]),
         carWashApi.getCarWashSettings().catch(() => null),
+        carWashApi.getActiveBranch().catch(() => null),
       ]);
       setServices(normalizeListPayload(servicePayload, "services"));
       setStaff(normalizeListPayload(staffPayload, "staff"));
       setCashbooks(Array.isArray(cashbookPayload) ? cashbookPayload : []);
-      const saved = settingsPayload?.defaultCashbooks || {};
+      // Branch cashbooks take priority over company-wide defaults
+      const companyDefaults = settingsPayload?.defaultCashbooks || {};
+      const branchDefaults  = branchData?.defaultCashbooks || {};
       const defs = {};
-      ["cash","mpesa","bank","card","other"].forEach((m) => { defs[m] = saved[m]?._id || saved[m] || ""; });
+      ["cash","mpesa","bank","card","other"].forEach((m) => {
+        const branch  = branchDefaults[m]?._id  || branchDefaults[m]  || "";
+        const company = companyDefaults[m]?._id || companyDefaults[m] || "";
+        defs[m] = branch || company;
+      });
       setCashbookDefaults(defs);
     } catch {
       toast.error("Failed to load reference data");

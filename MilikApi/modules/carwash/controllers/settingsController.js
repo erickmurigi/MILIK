@@ -2,12 +2,28 @@ import mongoose from "mongoose";
 import Company from "../../../models/Company.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
+import { CW_SMS_TEMPLATE_DEFAULTS } from "../services/carwashSmsService.js";
 
 const METHODS = ["cash", "mpesa", "bank", "card", "other"];
 
 const toOidOrNull = (value) => {
   const s = String(value || "").trim();
   return s && mongoose.Types.ObjectId.isValid(s) ? new mongoose.Types.ObjectId(s) : null;
+};
+
+// Merge saved templates with defaults so the UI always gets a full list even for
+// newly added template types that an older company document doesn't have yet.
+const mergeSmsTemplates = (saved = []) => {
+  const savedMap = new Map((saved || []).map((t) => [t.key, t]));
+  return CW_SMS_TEMPLATE_DEFAULTS.map((def) => {
+    const override = savedMap.get(def.key);
+    if (!override) return { ...def };
+    return {
+      ...def,                           // keep placeholders/description from defaults
+      enabled:     override.enabled ?? def.enabled,
+      messageBody: override.messageBody ?? def.messageBody,
+    };
+  });
 };
 
 export const getCarWashSettings = async (req, res, next) => {
@@ -32,8 +48,9 @@ export const getCarWashSettings = async (req, res, next) => {
     }, {});
 
     const savingsDeductionPerJob = Number(company?.carwashSettings?.savingsDeductionPerJob ?? 100);
+    const smsTemplates = mergeSmsTemplates(company?.carwashSettings?.smsTemplates);
 
-    res.json({ success: true, data: { defaultCashbooks, savingsDeductionPerJob } });
+    res.json({ success: true, data: { defaultCashbooks, savingsDeductionPerJob, smsTemplates } });
   } catch (err) {
     next(err);
   }
@@ -42,7 +59,7 @@ export const getCarWashSettings = async (req, res, next) => {
 export const updateCarWashSettings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { defaultCashbooks = {}, savingsDeductionPerJob } = req.body;
+    const { defaultCashbooks = {}, savingsDeductionPerJob, smsTemplates } = req.body;
 
     const update = {};
 
@@ -69,6 +86,18 @@ export const updateCarWashSettings = async (req, res, next) => {
         return next({ status: 400, message: "Savings deduction per job must be zero or more" });
       }
       update["carwashSettings.savingsDeductionPerJob"] = Math.round(amt * 100) / 100;
+    }
+
+    if (Array.isArray(smsTemplates)) {
+      const validKeys = new Set(CW_SMS_TEMPLATE_DEFAULTS.map((t) => t.key));
+      const cleaned = smsTemplates
+        .filter((t) => t?.key && validKeys.has(t.key))
+        .map((t) => ({
+          key:         String(t.key),
+          enabled:     Boolean(t.enabled),
+          messageBody: String(t.messageBody ?? "").trim(),
+        }));
+      update["carwashSettings.smsTemplates"] = cleaned;
     }
 
     await Company.updateOne({ _id: business }, { $set: update });

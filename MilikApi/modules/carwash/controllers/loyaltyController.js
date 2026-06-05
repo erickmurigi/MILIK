@@ -8,11 +8,14 @@ import CarWashCreditAccount from '../models/CarWashCreditAccount.js';
 import { createError } from '../../../utils/error.js';
 import { currentUserId, escapeRegex, resolveActiveBusinessId } from '../services/businessScope.js';
 import { sendAdHocSms } from '../../../services/communicationService.js';
+import { resolveCarWashSmsBody } from '../services/carwashSmsService.js';
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
-const sendLoyaltySms = (business, phone, body, templateKey) =>
+const sendLoyaltySms = async (business, phone, body, templateKey) => {
+  if (!phone || !body) return;
   sendAdHocSms({ businessId: business, phone, body, templateKey }).catch(() => {});
+};
 
 // ─── Loyalty program ──────────────────────────────────────────────────────────
 
@@ -433,10 +436,20 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null })
         : program.rewardType === 'discount_percent'
           ? `${program.rewardValue}% off your next wash`
           : `KES ${program.rewardValue} off your next wash`;
-      sendLoyaltySms(business, smsPhone, `Hi ${customerName}! 🎉 You've earned ${rewardDesc} for ${plate}. Redeem on your next visit. Thank you!`, 'carwash_reward_ready');
+      const rewardBody = await resolveCarWashSmsBody(business, 'carwash_reward_ready', {
+        customerName, plate, rewardDesc,
+      });
+      await sendLoyaltySms(business, smsPhone, rewardBody, 'carwash_reward_ready');
     } else {
       const remaining = program.stampsRequired - card.currentStamps;
-      sendLoyaltySms(business, smsPhone, `Hi ${customerName}! Stamp ${card.currentStamps}/${program.stampsRequired} earned for ${plate}. ${remaining} more wash${remaining !== 1 ? 'es' : ''} to your reward! 🚗`, 'carwash_stamp_earned');
+      const stampBody = await resolveCarWashSmsBody(business, 'carwash_stamp_earned', {
+        customerName, plate,
+        currentStamps:  card.currentStamps,
+        stampsRequired: program.stampsRequired,
+        remaining,
+        washesWord: remaining !== 1 ? 'washes' : 'wash',
+      });
+      await sendLoyaltySms(business, smsPhone, stampBody, 'carwash_stamp_earned');
     }
   }
 
@@ -544,8 +557,11 @@ export const redeemReward = async (req, res, next) => {
 
     const program = await CarWashLoyaltyProgram.findById(card.program).lean();
     if (program?.smsOnReward && customer?.phone) {
-      const body = `Hi ${customer.name || 'Valued Customer'}! Your loyalty reward has been redeemed for ${plate}. Thank you for your continued support! 🚗✨`;
-      await sendLoyaltySms(business, customer.phone, body, 'carwash_reward_redeemed');
+      const redeemBody = await resolveCarWashSmsBody(business, 'carwash_reward_redeemed', {
+        customerName: customer.name || 'Valued Customer',
+        plate,
+      });
+      await sendLoyaltySms(business, customer.phone, redeemBody, 'carwash_reward_redeemed');
     }
 
     res.json({ success: true, data: card, message: 'Reward redeemed successfully' });
@@ -568,12 +584,18 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, overri
     if (!phone) return;
 
     const customerName = job.customerName || 'Valued Customer';
-    const outstanding = Math.max(0, Number(job.price || 0) - Number(amount || 0));
-    const body = outstanding > 0.01
-      ? `Hi ${customerName}! KES ${Number(amount || 0).toLocaleString()} received for ${plate}. Balance: KES ${outstanding.toLocaleString()}. Thank you!`
-      : `Hi ${customerName}! KES ${Number(amount || 0).toLocaleString()} received for ${plate}. Fully paid. Thank you!`;
+    const outstanding = round2(Math.max(0, Number(job.price || 0) - Number(amount || 0)));
+    const balanceLine = outstanding > 0.01
+      ? `Balance: KES ${outstanding.toLocaleString()}.`
+      : 'Fully paid.';
 
-    sendLoyaltySms(business, phone, body, 'carwash_payment_confirmed');
+    const body = await resolveCarWashSmsBody(business, 'carwash_payment_confirmed', {
+      customerName,
+      plate,
+      amount:      Number(amount || 0).toLocaleString(),
+      balanceLine,
+    });
+    await sendLoyaltySms(business, phone, body, 'carwash_payment_confirmed');
   } catch (_err) {
     // Never break the main flow
   }

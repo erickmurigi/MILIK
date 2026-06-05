@@ -156,7 +156,8 @@ const CarWashStaffSavings        = lazy(() => import("./pages/CarWash/CarWashSta
 const CarWashLoyalty             = lazy(() => import("./pages/CarWash/CarWashLoyalty"));
 const CarWashFinancials     = lazy(() => import("./pages/CarWash/CarWashFinancials"));
 const CarWashBranches       = lazy(() => import("./pages/CarWash/CarWashBranches"));
-const CarWashSettings       = lazy(() => import("./pages/CarWash/CarWashSettings"));
+const CarWashSettings            = lazy(() => import("./pages/CarWash/CarWashSettings"));
+const CarWashMpesaNotifications  = lazy(() => import("./pages/CarWash/CarWashMpesaNotifications"));
 
 // Inventory & POS module
 const InventoryDashboard    = lazy(() => import("./pages/Inventory/InventoryDashboard"));
@@ -593,6 +594,7 @@ function App() {
             <Route path="/carwash/loyalty"           element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-loyalty" moduleKey="carwash"><CarWashLoyalty /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/branches"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-branches" moduleKey="carwash"><CarWashBranches /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/settings"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-settings" moduleKey="carwash"><CarWashSettings /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/mpesa-notifications" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-payments" moduleKey="carwash"><CarWashMpesaNotifications /></PermissionRoute></CompanyModuleRoute>} />
 
             {/* ── Inventory & POS module ────────────────────────────────── */}
             <Route path="/inventory/dashboard"       element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-dashboard"       moduleKey="inventory"><InventoryDashboard /></PermissionRoute></CompanyModuleRoute>} />

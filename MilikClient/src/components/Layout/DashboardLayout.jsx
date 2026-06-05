@@ -526,6 +526,7 @@ const TopToolbar = ({
         "carwash-jobs": "/carwash/jobs",
         "carwash-services": "/carwash/services",
         "carwash-payments": "/carwash/payments",
+        "carwash-mpesa-notifications": "/carwash/mpesa-notifications",
         "carwash-deposits": "/carwash/deposits",
         "carwash-expenses": "/carwash/expenses",
         "carwash-staff": "/carwash/staff",
@@ -1016,6 +1017,7 @@ const TopToolbar = ({
           icon: FaMoneyBillWave,
           submenu: [
             { id: "carwash-payments", label: "Payments", icon: FaMoneyBillWave },
+            { id: "carwash-mpesa-notifications", label: "M-Pesa Notifications", icon: FaPhone },
             { id: "carwash-deposits", label: "Deposits", icon: FaCoins },
             { id: "carwash-expenses", label: "Expenses", icon: FaFileInvoice },
           ],

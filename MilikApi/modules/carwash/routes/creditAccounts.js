@@ -9,9 +9,11 @@ import {
   getStatement,
   listAccounts,
   listStatements,
+  listAccountTopups,
   lookupAccountByPlate,
   processDueBilling,
   recordAccountPayment,
+  recordAccountTopup,
   sendStatementSms,
   updateAccount,
 } from "../controllers/creditAccountsController.js";
@@ -25,6 +27,8 @@ router.get("/lookup/plate/:plate",                lookupAccountByPlate);
 router.get("/:id",                                getAccount);
 router.put("/:id",                                updateAccount);
 router.post("/:id/pay",                           recordAccountPayment);
+router.post("/:id/topup",                         recordAccountTopup);
+router.get("/:id/topups",                         listAccountTopups);
 router.post("/:id/statements",                    generateStatement);
 router.get("/:id/statements",                     listStatements);
 router.get("/:id/statements/:statementId",        getStatement);

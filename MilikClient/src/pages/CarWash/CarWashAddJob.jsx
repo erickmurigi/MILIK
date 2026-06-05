@@ -3,10 +3,10 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
   FaArrowLeft, FaCar, FaCamera, FaExclamationTriangle, FaGift, FaMinus, FaPlus, FaSave,
-  FaTimesCircle, FaUser, FaExpand,
+  FaTimesCircle, FaUser, FaExpand, FaUserCheck,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { carWashApi, formatMoney, normalizeListPayload, photoUrl } from "../../services/carWashApi";
+import { carWashApi, formatMoney, normalizeListPayload, photoUrl, VEHICLE_TYPES } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import CarpetCameraModal from "../../components/common/CarpetCameraModal";
 
@@ -143,7 +143,7 @@ const CreditAccountBanner = ({ plate, onAccountDetected }) => {
   );
 };
 
-const emptyLine = () => ({ service: "", serviceName: "", vehicleType: "", price: "" });
+const emptyLine = () => ({ service: "", serviceName: "", vehicleType: "", price: "", lineStaff: [], measurements: { shape: "rect", length: "", width: "", diameter: "" } });
 
 // ─── Lightbox ─────────────────────────────────────────────────────────────────
 const Lightbox = ({ src, onClose }) => (
@@ -352,7 +352,6 @@ const CarWashAddJob = () => {
   const [itemDescription, setItemDescription] = useState("");
   const [expectedReadyAt, setExpectedReadyAt] = useState("");
   const [serviceLines, setServiceLines] = useState([emptyLine()]);
-  const [assignedStaff, setAssignedStaff] = useState([]);
   const [creditAccount, setCreditAccount] = useState(null);
   const [notes, setNotes] = useState("");
   const [jobNumber, setJobNumber] = useState("");
@@ -360,9 +359,10 @@ const CarWashAddJob = () => {
   // When redirected from new-carpet-job save, open photos immediately
   const openPhotosOnLoad = Boolean(location.state?.openPhotos);
 
-  const [services, setServices] = useState([]);
-  const [staff, setStaff] = useState([]);
-  const [saving, setSaving] = useState(false);
+  const [services, setServices]     = useState([]);
+  const [staff, setStaff]           = useState([]);
+  const [branchType, setBranchType] = useState("both");
+  const [saving, setSaving]         = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
 
   const totalPrice = useMemo(
@@ -370,22 +370,28 @@ const CarWashAddJob = () => {
     [serviceLines]
   );
 
-  // Load reference data (services + staff)
+  // Load reference data (services, staff) + active branch type
   useEffect(() => {
     const load = async () => {
       try {
-        const [svcPayload, staffPayload] = await Promise.all([
+        const [svcPayload, staffPayload, branchData] = await Promise.all([
           carWashApi.listServices({ active: true }),
           carWashApi.listStaff({ active: true }),
+          carWashApi.getActiveBranch().catch(() => null),
         ]);
         setServices(normalizeListPayload(svcPayload, "services"));
         setStaff(normalizeListPayload(staffPayload, "staff"));
+
+        const bt = branchData?.branchType || "both";
+        setBranchType(bt);
+        // In create mode, auto-set job type to match branch capability
+        if (!isEditMode && bt !== "both") setJobType(bt);
       } catch {
         toast.error("Failed to load reference data");
       }
     };
     load();
-  }, []);
+  }, []); // eslint-disable-line
 
   // In edit mode — load the existing job and pre-fill the form
   useEffect(() => {
@@ -416,6 +422,10 @@ const CarWashAddJob = () => {
                 serviceName: l.serviceName || "",
                 vehicleType: l.vehicleType || "",
                 price: String(l.price ?? ""),
+                lineStaff: Array.isArray(l.lineStaff)
+                  ? l.lineStaff.map(s => String(s?._id || s)).filter(Boolean)
+                  : (l.lineStaff ? [String(l.lineStaff?._id || l.lineStaff)] : []),
+                measurements: { shape: "rect", length: "", width: "", diameter: "" },
               }))
             : [
                 {
@@ -427,12 +437,6 @@ const CarWashAddJob = () => {
               ];
         setServiceLines(lines);
 
-        const staffIds = Array.isArray(job.assignedStaff)
-          ? job.assignedStaff.map((s) => String(s?._id || s)).filter(Boolean)
-          : job.assignedStaff
-          ? [String(job.assignedStaff?._id || job.assignedStaff)]
-          : [];
-        setAssignedStaff(staffIds);
       })
       .catch(() => toast.error("Failed to load job for editing"))
       .finally(() => setLoadingJob(false));
@@ -440,16 +444,57 @@ const CarWashAddJob = () => {
 
   const handleLineServiceChange = (index, serviceId) => {
     const svc = services.find((s) => s._id === serviceId);
+    const hasTiers   = svc?.pricingTiers?.length > 0;
+    const isPerSqft  = svc?.pricingType === "per_sqft";
     setServiceLines((prev) =>
       prev.map((line, i) =>
         i !== index
           ? line
           : {
               ...line,
-              service: serviceId,
-              serviceName: svc ? svc.name : line.serviceName,
-              vehicleType: svc ? (svc.vehicleType || line.vehicleType) : line.vehicleType,
-              price: svc ? (svc.defaultPrice || line.price) : line.price,
+              service:      serviceId,
+              serviceName:  svc ? svc.name : line.serviceName,
+              vehicleType:  hasTiers ? "" : line.vehicleType,
+              price:        (hasTiers || isPerSqft) ? "" : String(svc ? (svc.defaultPrice ?? line.price) : line.price),
+              measurements: isPerSqft
+                ? { shape: "rect", length: "", width: "", diameter: "" }
+                : line.measurements,
+            }
+      )
+    );
+  };
+
+  const updateMeasurement = (index, field, value) => {
+    setServiceLines((prev) => prev.map((line, i) => {
+      if (i !== index) return line;
+      const svc  = services.find((s) => s._id === line.service);
+      const rate = Number(svc?.defaultPrice || 30);
+      const m    = { ...line.measurements, [field]: value };
+      let area   = 0;
+      if (m.shape === "rect") {
+        const l = parseFloat(m.length  || 0);
+        const w = parseFloat(m.width   || 0);
+        area = l * w;
+      } else {
+        const d = parseFloat(m.diameter || 0);
+        area = Math.PI * Math.pow(d / 2, 2);
+      }
+      const price = area > 0 ? String(Math.round(area * rate)) : "";
+      return { ...line, measurements: m, price };
+    }));
+  };
+
+  const handleLineVehicleTypeChange = (index, vehicleType) => {
+    const svc = services.find((s) => s._id === serviceLines[index]?.service);
+    const tier = svc?.pricingTiers?.find((t) => t.vehicleType === vehicleType);
+    setServiceLines((prev) =>
+      prev.map((line, i) =>
+        i !== index
+          ? line
+          : {
+              ...line,
+              vehicleType,
+              price: tier != null ? String(tier.price) : (svc ? String(svc.defaultPrice ?? "") : line.price),
             }
       )
     );
@@ -463,10 +508,26 @@ const CarWashAddJob = () => {
   const removeLine = (index) =>
     setServiceLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
 
-  const toggleStaff = (staffId) =>
-    setAssignedStaff((prev) =>
-      prev.includes(staffId) ? prev.filter((id) => id !== staffId) : [...prev, staffId]
-    );
+  const toggleLineStaff = (lineIndex, staffId) =>
+    setServiceLines((prev) => prev.map((line, i) => {
+      if (i !== lineIndex) return line;
+      const cur = Array.isArray(line.lineStaff) ? line.lineStaff : [];
+      return { ...line, lineStaff: cur.includes(staffId) ? cur.filter(id => id !== staffId) : [...cur, staffId] };
+    }));
+
+  const staffSummary = useMemo(() => {
+    const map = new Map();
+    serviceLines.forEach(line => {
+      if (!line.serviceName?.trim() || !Array.isArray(line.lineStaff)) return;
+      line.lineStaff.forEach(id => {
+        const member = staff.find(s => s._id === id);
+        if (!member) return;
+        if (!map.has(id)) map.set(id, { name: member.name, role: member.role, services: [] });
+        map.get(id).services.push(line.serviceName || "—");
+      });
+    });
+    return [...map.values()];
+  }, [serviceLines, staff]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -493,8 +554,8 @@ const CarWashAddJob = () => {
           serviceName: l.serviceName,
           vehicleType: l.vehicleType,
           price: Number(l.price) || 0,
+          lineStaff: Array.isArray(l.lineStaff) ? l.lineStaff : [],
         })),
-      assignedStaff,
       creditAccount: creditAccount?._id || null,
       notes,
     };
@@ -548,26 +609,37 @@ const CarWashAddJob = () => {
           {/* ── Left column ─────────────────────────────────────────────────── */}
           <div className="space-y-4">
 
-            {/* Job type toggle — read-only in edit mode */}
-            <div className="border border-slate-200 bg-white p-4 shadow-sm">
-              <p className={labelClass}>Job Type</p>
-              <div className="flex overflow-hidden border border-slate-300">
-                <button
-                  type="button"
-                  onClick={() => !isEditMode && setJobType("vehicle")}
-                  className={`flex-1 py-2 text-xs font-bold ${jobType === "vehicle" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"} ${isEditMode ? "cursor-default" : ""}`}
-                >
-                  Vehicle Wash
-                </button>
-                <button
-                  type="button"
-                  onClick={() => !isEditMode && setJobType("carpet")}
-                  className={`flex-1 border-l border-slate-300 py-2 text-xs font-bold ${jobType === "carpet" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"} ${isEditMode ? "cursor-default" : ""}`}
-                >
-                  Carpet / Textile
-                </button>
+            {/* Job type toggle — hidden when branch is locked to one type */}
+            {(isEditMode || branchType === "both") && (
+              <div className="border border-slate-200 bg-white p-4 shadow-sm">
+                <p className={labelClass}>Job Type</p>
+                {isEditMode ? (
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 capitalize">
+                      {jobType === "vehicle" ? "Vehicle Wash" : "Carpet / Textile"}
+                    </span>
+                    <span className="text-[10px] text-slate-400">Job type cannot be changed after creation</span>
+                  </div>
+                ) : (
+                  <div className="flex overflow-hidden border border-slate-300">
+                    <button
+                      type="button"
+                      onClick={() => setJobType("vehicle")}
+                      className={`flex-1 py-2 text-xs font-bold ${jobType === "vehicle" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+                    >
+                      Vehicle Wash
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setJobType("carpet")}
+                      className={`flex-1 border-l border-slate-300 py-2 text-xs font-bold ${jobType === "carpet" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+                    >
+                      Carpet / Textile
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
             {/* Vehicle / item details */}
             <div className="border border-slate-200 bg-white p-4 shadow-sm">
@@ -650,19 +722,23 @@ const CarWashAddJob = () => {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-xs">
+                <table className="w-full min-w-[700px] text-xs">
                   <thead className="border-b border-slate-200 bg-slate-50">
                     <tr>
                       <th className="px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Service</th>
                       <th className="px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Name *</th>
                       {jobType === "vehicle" && <th className="px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Vehicle Type</th>}
                       <th className="px-3 py-2 text-right font-bold uppercase tracking-wide text-slate-500">Price (KES) *</th>
+                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">
+                        Attendants <span className="normal-case font-normal text-slate-400">(select who handles this)</span>
+                      </th>
                       <th className="w-8 px-2 py-2" />
                     </tr>
                   </thead>
                   <tbody>
                     {serviceLines.map((line, index) => (
-                      <tr key={index} className="border-b border-slate-100">
+                      <React.Fragment key={index}>
+                      <tr className="border-b border-slate-100">
                         <td className="px-3 py-1.5">
                           <select
                             className="h-8 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
@@ -686,12 +762,36 @@ const CarWashAddJob = () => {
                         </td>
                         {jobType === "vehicle" && (
                           <td className="px-3 py-1.5">
-                            <input
-                              className="h-8 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
-                              value={line.vehicleType}
-                              onChange={(e) => updateLine(index, "vehicleType", e.target.value)}
-                              placeholder="e.g. Sedan"
-                            />
+                            {(() => {
+                              const svc = services.find((s) => s._id === line.service);
+                              const hasTiers = svc?.pricingTiers?.length > 0;
+                              return hasTiers ? (
+                                <select
+                                  className={`h-8 w-full border px-2 text-xs focus:outline-none ${!line.vehicleType ? "border-amber-400 bg-amber-50 text-amber-700" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`}
+                                  value={line.vehicleType}
+                                  onChange={(e) => handleLineVehicleTypeChange(index, e.target.value)}
+                                  required
+                                >
+                                  <option value="">— Select vehicle type —</option>
+                                  {svc.pricingTiers.map((t) => (
+                                    <option key={t.vehicleType} value={t.vehicleType}>
+                                      {t.vehicleType}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <select
+                                  className="h-8 w-full border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                                  value={line.vehicleType}
+                                  onChange={(e) => updateLine(index, "vehicleType", e.target.value)}
+                                >
+                                  <option value="">— Vehicle type (optional) —</option>
+                                  {VEHICLE_TYPES.map((vt) => (
+                                    <option key={vt} value={vt}>{vt}</option>
+                                  ))}
+                                </select>
+                              );
+                            })()}
                           </td>
                         )}
                         <td className="px-3 py-1.5">
@@ -705,6 +805,32 @@ const CarWashAddJob = () => {
                             required
                           />
                         </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap gap-1">
+                            {staff.map((s) => {
+                              const selected = Array.isArray(line.lineStaff) && line.lineStaff.includes(s._id);
+                              return (
+                                <button
+                                  key={s._id}
+                                  type="button"
+                                  onClick={() => toggleLineStaff(index, s._id)}
+                                  title={s.role || s.name}
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold border transition-all ${
+                                    selected
+                                      ? "bg-[#0B3B2E] text-white border-[#0B3B2E] shadow-sm"
+                                      : "bg-white text-slate-500 border-slate-200 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+                                  }`}
+                                >
+                                  {selected && <span className="text-[8px]">✓</span>}
+                                  {s.name.split(" ")[0]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {(!Array.isArray(line.lineStaff) || line.lineStaff.length === 0) && (
+                            <p className="mt-1 text-[10px] text-amber-600 font-semibold">No attendant — no commission</p>
+                          )}
+                        </td>
                         <td className="px-2 py-1.5 text-center">
                           <button
                             type="button"
@@ -717,6 +843,80 @@ const CarWashAddJob = () => {
                           </button>
                         </td>
                       </tr>
+
+                      {/* Measurement calculator — shown for per_sqft services */}
+                      {(() => {
+                        const svc = services.find((s) => s._id === line.service);
+                        if (svc?.pricingType !== "per_sqft") return null;
+                        const m    = line.measurements || { shape: "rect", length: "", width: "", diameter: "" };
+                        const rate = Number(svc.defaultPrice || 30);
+                        let area   = 0;
+                        if (m.shape === "rect") {
+                          const l = parseFloat(m.length   || 0);
+                          const w = parseFloat(m.width    || 0);
+                          area = l * w;
+                        } else {
+                          const d = parseFloat(m.diameter || 0);
+                          area = Math.PI * Math.pow(d / 2, 2);
+                        }
+                        const calcPrice = area > 0 ? Math.round(area * rate) : null;
+                        const colSpan   = jobType === "vehicle" ? 6 : 5;
+                        return (
+                          <tr className="border-b border-slate-100 bg-violet-50">
+                            <td colSpan={colSpan} className="px-4 py-2.5">
+                              <div className="flex flex-wrap items-center gap-3">
+                                {/* Shape toggle */}
+                                <div className="flex overflow-hidden border border-slate-300">
+                                  <button type="button" onClick={() => updateMeasurement(index, "shape", "rect")}
+                                    className={`px-3 py-1 text-[11px] font-bold ${m.shape === "rect" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                                    Rectangle
+                                  </button>
+                                  <button type="button" onClick={() => updateMeasurement(index, "shape", "circle")}
+                                    className={`border-l border-slate-300 px-3 py-1 text-[11px] font-bold ${m.shape === "circle" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                                    Circle
+                                  </button>
+                                </div>
+
+                                {/* Dimension inputs */}
+                                {m.shape === "rect" ? (
+                                  <div className="flex items-center gap-1.5 text-xs">
+                                    <input type="number" min="0" step="0.1" value={m.length} onChange={(e) => updateMeasurement(index, "length", e.target.value)}
+                                      placeholder="Length" className="h-7 w-20 border border-slate-300 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+                                    <span className="font-bold text-slate-500">×</span>
+                                    <input type="number" min="0" step="0.1" value={m.width} onChange={(e) => updateMeasurement(index, "width", e.target.value)}
+                                      placeholder="Width" className="h-7 w-20 border border-slate-300 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+                                    <span className="text-slate-500">ft</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 text-xs">
+                                    <span className="text-slate-500">Diameter:</span>
+                                    <input type="number" min="0" step="0.1" value={m.diameter} onChange={(e) => updateMeasurement(index, "diameter", e.target.value)}
+                                      placeholder="Diameter" className="h-7 w-24 border border-slate-300 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+                                    <span className="text-slate-500">ft</span>
+                                  </div>
+                                )}
+
+                                {/* Result */}
+                                {area > 0 && (
+                                  <div className="flex items-center gap-1.5 text-[11px]">
+                                    <span className="text-slate-500">=</span>
+                                    <span className="font-bold text-slate-700">{area.toFixed(2)} sqft</span>
+                                    <span className="text-slate-400">×</span>
+                                    <span className="font-bold text-slate-700">KES {rate}/sqft</span>
+                                    <span className="text-slate-400">=</span>
+                                    <span className="font-black text-[#0B3B2E]">KES {calcPrice?.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {area === 0 && (
+                                  <span className="text-[10px] text-slate-400">Enter dimensions to calculate price automatically</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })()}
+
+                      </React.Fragment>
                     ))}
                   </tbody>
                   <tfoot className="border-t-2 border-slate-200 bg-[#EDF5F1]">
@@ -727,7 +927,7 @@ const CarWashAddJob = () => {
                       <td className="px-3 py-2 text-right text-sm font-black text-[#0B3B2E]">
                         {formatMoney(totalPrice)}
                       </td>
-                      <td />
+                      <td colSpan={2} />
                     </tr>
                   </tfoot>
                 </table>
@@ -749,45 +949,40 @@ const CarWashAddJob = () => {
           {/* ── Right column ────────────────────────────────────────────────── */}
           <div className="space-y-4">
 
-            {/* Staff assignment */}
-            <div className="border border-slate-200 bg-white p-4 shadow-sm">
-              <p className={`${labelClass} mb-2`}>
-                Assigned Staff
-                {assignedStaff.length > 1 && (
-                  <span className="ml-2 normal-case font-semibold text-emerald-700">
-                    Commission split {assignedStaff.length} ways
-                  </span>
-                )}
-              </p>
-              {staff.length === 0 ? (
-                <p className="text-[11px] text-slate-400 italic">No staff loaded</p>
-              ) : (
-                <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                  {staff.map((member) => {
-                    const checked = assignedStaff.includes(member._id);
-                    return (
-                      <label
-                        key={member._id}
-                        className={`flex cursor-pointer items-center gap-2.5 border px-3 py-2 text-xs transition-colors ${checked ? "border-emerald-300 bg-emerald-50 font-bold text-emerald-800" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleStaff(member._id)}
-                          className="accent-[#0B3B2E]"
-                        />
-                        <div>
-                          <div className="font-bold">{member.name}</div>
-                          {member.role && <div className="text-[10px] text-slate-500 normal-case font-normal">{member.role}</div>}
+            {/* Attendants summary — live derived from service lines */}
+            <div className="border border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-2 border-b border-slate-200 bg-[#EDF5F1] px-4 py-2.5">
+                <FaUserCheck className="text-[#0B3B2E] text-[13px]" />
+                <span className="text-xs font-black uppercase tracking-wide text-[#0B3B2E]">Attendants</span>
+              </div>
+              <div className="p-3">
+                {staffSummary.length === 0 ? (
+                  <p className="text-[11px] text-amber-600 font-semibold">
+                    No attendants assigned — select staff in the service lines above.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {staffSummary.map(({ name, role, services }) => (
+                      <div key={name} className="flex items-start gap-2.5 rounded border border-emerald-200 bg-emerald-50 px-3 py-2">
+                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0B3B2E] text-[9px] font-black text-white">
+                          {name.charAt(0)}
                         </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-              {assignedStaff.length === 0 && (
-                <p className="mt-2 text-[10px] text-slate-400">No staff assigned — commission will not be accrued.</p>
-              )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-bold text-slate-900">{name}</p>
+                          {role && <p className="text-[10px] text-slate-500">{role}</p>}
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {services.map((svc, i) => (
+                              <span key={i} className="rounded-sm bg-[#0B3B2E]/10 px-1.5 py-0.5 text-[9px] font-bold text-[#0B3B2E]">
+                                {svc}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Job summary */}
@@ -810,7 +1005,7 @@ const CarWashAddJob = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="font-semibold text-slate-500 uppercase tracking-wide">Staff</span>
-                  <span className="font-bold">{assignedStaff.length || "None"}</span>
+                  <span className="font-bold">{staffSummary.length || "None"}</span>
                 </div>
                 {creditAccount && (
                   <div className="flex justify-between">

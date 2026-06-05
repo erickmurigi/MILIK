@@ -49,7 +49,10 @@ const resolveServiceLines = async (business, rawLines) => {
     if (!serviceName) throw createError(400, "Each service line must have a service name");
     if (!Number.isFinite(price) || price < 0) throw createError(400, "Each service line must have a valid price");
 
-    lines.push({ service: serviceId, serviceName, vehicleType, price });
+    const lineStaff = Array.isArray(raw.lineStaff)
+      ? raw.lineStaff.map(s => String(s)).filter(id => mongoose.Types.ObjectId.isValid(id))
+      : (raw.lineStaff && mongoose.Types.ObjectId.isValid(String(raw.lineStaff)) ? [String(raw.lineStaff)] : []);
+    lines.push({ service: serviceId, serviceName, vehicleType, price, lineStaff });
   }
   return lines;
 };
@@ -247,8 +250,13 @@ export const createJob = async (req, res, next) => {
       return next(createError(400, "Total job price must be greater than zero"));
     }
 
-    // Multi-staff assignment
-    const assignedStaff = await assertStaffArrayBelongsToBusiness(business, req.body.assignedStaff);
+    // Derive assignedStaff from service lines' per-line staff. Falls back to
+    // req.body.assignedStaff for backward-compatibility with old clients.
+    const derivedStaffIds = [...new Set(
+      serviceLines.flatMap(l => Array.isArray(l.lineStaff) ? l.lineStaff : []).filter(Boolean)
+    )];
+    const staffSource = derivedStaffIds.length ? derivedStaffIds : (req.body.assignedStaff || []);
+    const assignedStaff = await assertStaffArrayBelongsToBusiness(business, staffSource);
 
     const userId = currentUserId(req);
     const branchId = resolveActiveBranchId(req);
@@ -326,6 +334,37 @@ export const createJob = async (req, res, next) => {
       }
     }
 
+    // Auto-apply prepaid credit — deduct from accountCredit if the account is prepaid and has balance
+    if (resolvedCreditAccount && totalPrice > 0) {
+      try {
+        const prepaidAcc = await CarWashCreditAccount.findOne({ _id: resolvedCreditAccount, business, accountType: "prepaid" });
+        if (prepaidAcc && prepaidAcc.accountCredit > 0.009) {
+          const r2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
+          const autoApply = r2(Math.min(prepaidAcc.accountCredit, totalPrice));
+          await CarWashPayment.create({
+            business,
+            branch: branchId || null,
+            job: job._id,
+            amount: autoApply,
+            method: "prepaid",
+            reference: "Auto-deducted from prepaid balance",
+            paymentDate: new Date(),
+            createdBy: userId,
+            updatedBy: userId,
+          });
+          prepaidAcc.accountCredit = r2(prepaidAcc.accountCredit - autoApply);
+          await prepaidAcc.save();
+          const newPaymentStatus = autoApply >= totalPrice - 0.009 ? "paid" : "partial";
+          const newStatus = newPaymentStatus === "paid" && job.status !== "cancelled" ? "paid" : job.status;
+          await CarWashJob.updateOne({ _id: job._id }, { paymentStatus: newPaymentStatus, status: newStatus });
+          job.paymentStatus = newPaymentStatus;
+          job.status = newStatus;
+        }
+      } catch (err) {
+        console.error("[CW Job] Prepaid auto-deduct failed:", err?.message);
+      }
+    }
+
     res.status(201).json({
       success: true,
       data: job,
@@ -372,8 +411,12 @@ export const updateJob = async (req, res, next) => {
       rootVehicleType = snapshot.vehicleType;
     }
 
-    // Multi-staff
-    const rawStaff = req.body.assignedStaff !== undefined ? req.body.assignedStaff : existing.assignedStaff;
+    // Derive assignedStaff from service lines; fall back to existing/body for compat
+    const derivedStaffIds = [...new Set(
+      serviceLines.flatMap(l => Array.isArray(l.lineStaff) ? l.lineStaff : []).filter(Boolean)
+    )];
+    const rawStaff = derivedStaffIds.length ? derivedStaffIds
+      : (req.body.assignedStaff !== undefined ? req.body.assignedStaff : existing.assignedStaff);
     const assignedStaff = await assertStaffArrayBelongsToBusiness(business, rawStaff);
 
     const status = String(req.body.status || existing.status).toLowerCase();

@@ -79,26 +79,65 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
   if (!job || !["done", "paid"].includes(String(job.status || "").toLowerCase())) return null;
 
   const rawStaff = Array.isArray(job.assignedStaff) ? job.assignedStaff : (job.assignedStaff ? [job.assignedStaff] : []);
-  const staffIds = rawStaff
+  const jobStaffIds = rawStaff
     .map((s) => String(s?._id || s))
     .filter((id) => mongoose.Types.ObjectId.isValid(id));
-  if (!staffIds.length) return null;
 
   const lines = Array.isArray(job.serviceLines) && job.serviceLines.length
     ? job.serviceLines
-    : [{ service: job.service || null, serviceName: job.serviceName || "", vehicleType: job.vehicleType || "", price: Number(job.price || 0) }];
+    : [{ service: job.service || null, serviceName: job.serviceName || "", vehicleType: job.vehicleType || "", price: Number(job.price || 0), lineStaff: null }];
 
-  const staffCount = staffIds.length;
   const actorUserId = req ? await resolveAuditActorUserId({ req, businessId: job.business }) : null;
 
-  // Cancel commissions for staff no longer assigned to this job
-  const staffIdsSet = new Set(staffIds);
+  // Build per-staff commission breakdown respecting per-line staff assignment.
+  // Rule: if a service line has lineStaff set → only that staff earns commission for that line (no split).
+  //       if lineStaff is null → all job-level staff share the commission equally.
+  const staffMap = new Map(); // staffId → { lineBreakdown[], totalAmount }
+
+  for (const line of lines) {
+    if (paidLineSet !== null && !paidLineSet.has(line.serviceName)) continue;
+
+    // lineStaff is an array of staff assigned to this specific line.
+    // If populated → only those staff earn commission (split among them).
+    // If empty → fall back to job-level staff (backward compat).
+    const lineStaffIds = Array.isArray(line.lineStaff) && line.lineStaff.length
+      ? line.lineStaff.map(s => String(s?._id || s)).filter(id => mongoose.Types.ObjectId.isValid(id))
+      : [];
+    const recipients = lineStaffIds.length ? lineStaffIds : jobStaffIds;
+    const splitCount = recipients.length;
+    if (!splitCount) continue;
+
+    for (const staffId of recipients) {
+      const rule = await resolveCommissionRuleForLine(job.business, line.service || null, staffId);
+      if (!rule || Number(rule.rate || 0) <= 0) continue;
+
+      const totalLineCommission = calculateAmount({ type: rule.commissionType, rate: rule.rate, baseAmount: Number(line.price || 0) });
+      const perStaffAmount = round2(totalLineCommission / splitCount);
+      if (perStaffAmount <= 0) continue;
+
+      if (!staffMap.has(staffId)) staffMap.set(staffId, { lineBreakdown: [], totalAmount: 0 });
+      const entry = staffMap.get(staffId);
+      entry.lineBreakdown.push({
+        service: line.service || null,
+        serviceName: line.serviceName || "",
+        linePrice: Number(line.price || 0),
+        commissionType: rule.commissionType,
+        commissionRate: Number(rule.rate || 0),
+        lineCommissionAmount: perStaffAmount,
+        rule: rule._id,
+      });
+      entry.totalAmount = round2(entry.totalAmount + perStaffAmount);
+    }
+  }
+
+  // Cancel commissions for staff no longer receiving anything from this job
+  const allRelevantIds = new Set([...jobStaffIds, ...staffMap.keys()]);
   const activeComms = await CarWashStaffCommission.find({
     business: job.business,
     job: job._id,
     status: { $in: ["earned", "payable"] },
   });
-  const removedStaffComms = activeComms.filter((c) => !staffIdsSet.has(String(c.staff)));
+  const removedStaffComms = activeComms.filter((c) => !allRelevantIds.has(String(c.staff)));
   if (removedStaffComms.length) {
     await cancelCarWashCommissionList({
       req,
@@ -108,41 +147,10 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
     });
   }
 
+  if (!staffMap.size) return null;
   const results = [];
 
-  for (const staffId of staffIds) {
-    const lineBreakdown = [];
-    let totalAmount = 0;
-
-    for (const line of lines) {
-      // Skip commission for service lines not fully covered by payment allocation.
-      // paidLineSet is null when the job is fully paid (all lines earnable) or
-      // when called from a status update without payment context.
-      if (paidLineSet !== null && !paidLineSet.has(line.serviceName)) continue;
-
-      const rule = await resolveCommissionRuleForLine(job.business, line.service || null, staffId);
-      if (!rule || Number(rule.rate || 0) <= 0) continue;
-
-      const totalLineCommission = calculateAmount({
-        type: rule.commissionType,
-        rate: rule.rate,
-        baseAmount: Number(line.price || 0),
-      });
-      const perStaffAmount = round2(totalLineCommission / staffCount);
-      if (perStaffAmount <= 0) continue;
-
-      lineBreakdown.push({
-        service: line.service || null,
-        serviceName: line.serviceName || "",
-        linePrice: Number(line.price || 0),
-        commissionType: rule.commissionType,
-        commissionRate: Number(rule.rate || 0),
-        lineCommissionAmount: perStaffAmount,
-        rule: rule._id,
-      });
-      totalAmount = round2(totalAmount + perStaffAmount);
-    }
-
+  for (const [staffId, { lineBreakdown, totalAmount }] of staffMap) {
     if (!lineBreakdown.length || totalAmount <= 0) continue;
 
     const firstLine = lineBreakdown[0];

@@ -6,10 +6,14 @@ const JOB_TYPES = ["vehicle", "carpet"];
 
 const serviceLineSchema = new mongoose.Schema(
   {
-    service: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashService", default: null },
-    serviceName: { type: String, trim: true, default: "" },
-    vehicleType: { type: String, trim: true, default: "" },
-    price: { type: Number, min: 0, default: 0 },
+    service:    { type: mongoose.Schema.Types.ObjectId, ref: "CarWashService", default: null },
+    serviceName:{ type: String, trim: true, default: "" },
+    vehicleType:{ type: String, trim: true, default: "" },
+    price:      { type: Number, min: 0, default: 0 },
+    // Optional: specific staff assigned to this line only.
+    // If set, only this staff earns commission for the line (no splitting).
+    // If null, all job-level assignedStaff share the commission equally.
+    lineStaff:  [{ type: mongoose.Schema.Types.ObjectId, ref: "CarWashStaff" }],
   },
   { _id: false }
 );

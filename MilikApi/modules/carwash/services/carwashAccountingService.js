@@ -64,6 +64,65 @@ export const resolveCarWashAccount = async (businessId, code) => {
   );
 };
 
+// ─── Prepaid top-up ledger: Dr Cashbook / Cr Revenue (4400) ─────────────────
+/**
+ * Posts the double-entry when a prepaid wallet is topped up.
+ * Revenue is recognised at the point of cash receipt (simplified model).
+ * topup = CarWashAccountTopup document.
+ */
+export const postCarWashTopupLedger = async ({ businessId, topup, cashbookAccountId, userId }) => {
+  if (!cashbookAccountId) return;
+  const amount = round2(Number(topup.amount || 0));
+  if (amount <= 0) return;
+
+  try {
+    const existingCount = await FinancialLedgerEntry.countDocuments({
+      business: new mongoose.Types.ObjectId(String(businessId)),
+      sourceTransactionType: "carwash_prepaid_topup",
+      sourceTransactionId: String(topup._id),
+      status: { $ne: "reversed" },
+    });
+    if (existingCount > 0) return;
+
+    const revenueAccount = await resolveCarWashAccount(businessId, "4400");
+    const actorId = userId && mongoose.Types.ObjectId.isValid(String(userId))
+      ? userId
+      : await resolveAuditActorUserId({ req: null, businessId });
+    const { start, end } = dayRange(topup.paymentDate || new Date());
+    const base = {
+      business: businessId,
+      sourceTransactionType: "carwash_prepaid_topup",
+      sourceTransactionId: String(topup._id),
+      transactionDate: topup.paymentDate || new Date(),
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "CARWASH_PAYMENT",
+      amount,
+      payer: "customer",
+      receiver: "n/a",
+      createdBy: actorId,
+      approvedBy: actorId,
+      allowUnscoped: true,
+    };
+
+    await postEntry({
+      ...base,
+      accountId: cashbookAccountId,
+      direction: "debit",
+      notes: `CW prepaid top-up received (${topup.method || ""})`,
+    });
+    await postEntry({
+      ...base,
+      accountId: revenueAccount._id,
+      direction: "credit",
+      notes: `CW prepaid service income`,
+    });
+    await aggregateChartOfAccountBalances(businessId, [String(cashbookAccountId), String(revenueAccount._id)]);
+  } catch (err) {
+    console.error("[CW Accounting] Prepaid top-up ledger error topup=%s: %s", topup._id, err?.message || err);
+  }
+};
+
 // ─── Payment ledger: Dr Cashbook / Cr Revenue (4400) ─────────────────────────
 /**
  * Posts the double-entry for a manually-recorded or M-Pesa car wash payment.

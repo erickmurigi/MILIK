@@ -4,12 +4,19 @@ import CarWashService from "../models/CarWashService.js";
 import { currentUserId, escapeRegex, parseBoolean, resolveActiveBusinessId } from "../services/businessScope.js";
 
 const sanitizeServicePayload = (body = {}) => ({
-  name: String(body.name || "").trim(),
-  category: String(body.category || "").trim(),
-  vehicleType: String(body.vehicleType || "").trim(),
+  name:         String(body.name || "").trim(),
+  category:     String(body.category || "").trim(),
+  pricingType:  body.pricingType === "per_sqft" ? "per_sqft" : "flat",
   defaultPrice: Number(body.defaultPrice || 0),
-  active: parseBoolean(body.active, true),
+  active:       parseBoolean(body.active, true),
 });
+
+const sanitizePricingTiers = (tiers) => {
+  if (!Array.isArray(tiers)) return [];
+  return tiers
+    .filter((t) => t?.vehicleType && String(t.vehicleType).trim() && Number.isFinite(Number(t.price)) && Number(t.price) >= 0)
+    .map((t) => ({ vehicleType: String(t.vehicleType).trim(), price: Number(t.price) }));
+};
 
 export const listServices = async (req, res, next) => {
   try {
@@ -61,7 +68,8 @@ export const createService = async (req, res, next) => {
       return next(createError(400, "Default price must be a valid amount"));
     }
 
-    const service = await CarWashService.create({ ...payload, business, createdBy: userId, updatedBy: userId });
+    const pricingTiers = payload.pricingType === "per_sqft" ? [] : sanitizePricingTiers(req.body.pricingTiers);
+    const service = await CarWashService.create({ ...payload, pricingTiers, business, createdBy: userId, updatedBy: userId });
     res.status(201).json({ success: true, data: service, service, message: "Car Wash service created" });
   } catch (error) {
     next(error);
@@ -77,9 +85,10 @@ export const updateService = async (req, res, next) => {
       return next(createError(400, "Default price must be a valid amount"));
     }
 
+    const pricingTiers = payload.pricingType === "per_sqft" ? [] : sanitizePricingTiers(req.body.pricingTiers);
     const service = await CarWashService.findOneAndUpdate(
       { _id: req.params.id, business },
-      { ...payload, updatedBy: currentUserId(req) },
+      { ...payload, pricingTiers, updatedBy: currentUserId(req) },
       { new: true, runValidators: true }
     );
     if (!service) return next(createError(404, "Car Wash service not found"));

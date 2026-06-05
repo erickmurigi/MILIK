@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
 import CarWashAccountStatement from "../models/CarWashAccountStatement.js";
+import CarWashAccountTopup from "../models/CarWashAccountTopup.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashCustomer from "../models/CarWashCustomer.js";
@@ -8,6 +9,8 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { createError } from "../../../utils/error.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
+import { postCarWashTopupLedger } from "../services/carwashAccountingService.js";
+import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
@@ -114,8 +117,8 @@ export const createAccount = async (req, res, next) => {
 
     const { customerId, accountType, creditLimit, billingCycle, billingDay, notes, plates } = req.body;
     if (!customerId) return next(createError(400, "Customer is required"));
-    if (!accountType || !["credit", "monthly"].includes(accountType)) {
-      return next(createError(400, "accountType must be 'credit' or 'monthly'"));
+    if (!accountType || !["credit", "monthly", "prepaid"].includes(accountType)) {
+      return next(createError(400, "accountType must be 'credit', 'monthly', or 'prepaid'"));
     }
 
     const customer = await CarWashCustomer.findOne({ _id: customerId, business }).lean();
@@ -497,7 +500,13 @@ export const sendStatementSms = async (req, res, next) => {
     if (!phone) return next(createError(400, "No phone number available"));
 
     const period = new Date(statement.periodStart).toLocaleString("en-KE", { month: "long", year: "numeric" });
-    const body = req.body.body || `Hi ${customer?.name || "Customer"}, your car wash statement for ${period} is KES ${Number(statement.totalOutstanding || 0).toLocaleString()} for ${statement.totalJobs} wash(es). Ref: ${statement.statementNumber}. Thank you!`;
+    const body = req.body.body || await resolveCarWashSmsBody(business, "carwash_statement", {
+      customerName:    customer?.name || "Customer",
+      period,
+      outstanding:     Number(statement.totalOutstanding || 0).toLocaleString(),
+      totalJobs:       statement.totalJobs,
+      statementNumber: statement.statementNumber,
+    }) || `Hi ${customer?.name || "Customer"}, your car wash statement for ${period} is KES ${Number(statement.totalOutstanding || 0).toLocaleString()} for ${statement.totalJobs} wash(es). Ref: ${statement.statementNumber}. Thank you!`;
 
     await sendAdHocSms({ businessId: business, phone, body, templateKey: "carwash_statement" });
 
@@ -593,7 +602,13 @@ export const processDueBilling = async (business) => {
     const customer = await CarWashCustomer.findById(account.customer).lean();
     if (customer?.phone && totalOutstanding > 0) {
       const period = today.toLocaleString("en-KE", { month: "long", year: "numeric" });
-      const body = `Hi ${customer.name}, your car wash bill for ${period} is KES ${totalOutstanding.toLocaleString()} for ${jobs.length} wash(es). Ref: ${statementNumber}. Thank you!`;
+      const body = await resolveCarWashSmsBody(account.business, "carwash_statement", {
+        customerName:    customer.name,
+        period,
+        outstanding:     totalOutstanding.toLocaleString(),
+        totalJobs:       jobs.length,
+        statementNumber,
+      }) || `Hi ${customer.name}, your car wash bill for ${period} is KES ${totalOutstanding.toLocaleString()} for ${jobs.length} wash(es). Ref: ${statementNumber}. Thank you!`;
       await sendAdHocSms({ businessId: account.business, phone: customer.phone, body, templateKey: "carwash_statement" }).catch(() => {});
       await CarWashAccountStatement.updateOne({ _id: stmt._id }, { status: "sent", sentAt: new Date() });
     }
@@ -602,4 +617,68 @@ export const processDueBilling = async (business) => {
   }
 
   return results;
+};
+
+// ─── Prepaid top-up ───────────────────────────────────────────────────────────
+
+export const recordAccountTopup = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+    const account = await CarWashCreditAccount.findOne({ _id: req.params.id, business });
+    if (!account) return next(createError(404, "Credit account not found"));
+    if (account.status === "closed") return next(createError(400, "Cannot top up a closed account"));
+
+    const amount = round2(Number(req.body.amount || 0));
+    if (!amount || amount <= 0) return next(createError(400, "Top-up amount must be greater than zero"));
+
+    const method    = String(req.body.method    || "cash").trim().toLowerCase();
+    const reference = String(req.body.reference || "").trim();
+    const notes     = String(req.body.notes     || "").trim();
+    const paymentDate = req.body.paymentDate ? new Date(req.body.paymentDate) : new Date();
+
+    let cashbookAccount = null;
+    if (req.body.cashbookAccount && mongoose.Types.ObjectId.isValid(String(req.body.cashbookAccount))) {
+      const cb = await ChartOfAccount.findOne({ _id: req.body.cashbookAccount, business, type: "asset", isPosting: true }).lean();
+      if (!cb) return next(createError(400, "Selected cashbook account not found"));
+      cashbookAccount = cb._id;
+    }
+
+    // Record the top-up
+    const topup = await CarWashAccountTopup.create({
+      business, account: account._id, amount, method, reference, cashbookAccount, paymentDate, notes, createdBy: userId,
+    });
+
+    // Credit the account balance
+    account.accountCredit = round2((account.accountCredit || 0) + amount);
+    account.updatedBy = userId;
+    await account.save();
+
+    // Post Dr Cashbook / Cr Revenue — revenue recognised at point of cash receipt
+    await postCarWashTopupLedger({ businessId: business, topup, cashbookAccountId: cashbookAccount, userId });
+
+    res.status(201).json({
+      success: true,
+      message: `Prepaid top-up of KES ${amount.toLocaleString()} recorded`,
+      data: { topup, accountCredit: account.accountCredit },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const listAccountTopups = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const account  = await CarWashCreditAccount.findOne({ _id: req.params.id, business }).lean();
+    if (!account) return next(createError(404, "Credit account not found"));
+
+    const topups = await CarWashAccountTopup.find({ business, account: account._id })
+      .sort({ paymentDate: -1 })
+      .lean();
+
+    res.json({ success: true, data: topups });
+  } catch (err) {
+    next(err);
+  }
 };

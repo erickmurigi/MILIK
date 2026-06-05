@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const PAYMENT_METHODS = ["cash", "mpesa", "bank", "card", "other"];
+const PAYMENT_METHODS = ["cash", "mpesa", "bank", "card", "prepaid", "other"];
 const RECONCILIATION_STATUSES = ["pending", "reconciled", "flagged"];
 
 const carWashPaymentSchema = new mongoose.Schema(

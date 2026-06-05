@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const ACCOUNT_TYPES   = ["credit", "monthly"];
+const ACCOUNT_TYPES   = ["credit", "monthly", "prepaid"];
 const BILLING_CYCLES  = ["monthly", "weekly"];
 const ACCOUNT_STATUSES = ["active", "suspended", "closed"];
 
