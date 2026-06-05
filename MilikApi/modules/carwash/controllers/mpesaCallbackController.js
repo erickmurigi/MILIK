@@ -171,10 +171,15 @@ const generateSecurityCredential = (password) => {
 
 const triggerTransactionStatusQuery = async ({ config, transId, businessId, notifId }) => {
   try {
-    const { consumerKey, consumerSecret, shortCode, initiatorName, initiatorPassword } = config;
-    if (!initiatorName || !initiatorPassword || !consumerKey || !consumerSecret) return;
+    const { consumerKey, consumerSecret, shortCode, initiatorName, initiatorPassword, securityCredential: storedCred } = config;
+    if (!initiatorName || !consumerKey || !consumerSecret) return;
+    if (!storedCred && !initiatorPassword) return;
 
-    const securityCredential = generateSecurityCredential(initiatorPassword);
+    // Prefer pre-generated credential; fall back to dynamic generation from password + cert
+    let securityCredential = storedCred;
+    if (!securityCredential) {
+      securityCredential = generateSecurityCredential(initiatorPassword);
+    }
     const token = await getMpesaAccessToken(consumerKey, consumerSecret);
     const apiBase = normalizeText(process.env.MPESA_CALLBACK_BASE_URL || "").replace(/\/$/, "");
     if (!apiBase) { console.warn("[TxnStatus] MPESA_CALLBACK_BASE_URL not set — skipping query"); return; }
@@ -429,7 +434,7 @@ export const confirmCarWashCallback = async (req, res) => {
     const savedNotif = await saveNotif({ matchedJob: job._id, matchedPayment: payment._id, status: "matched", resultCode: 0, resultDesc: "Payment matched and recorded" });
 
     // If MSISDN was hashed, fire Transaction Status Query to retrieve actual payer phone async
-    if (!normalizedMsisdn && transactionCode && config?.initiatorName && config?.initiatorPassword) {
+    if (!normalizedMsisdn && transactionCode && config?.initiatorName && (config?.securityCredential || config?.initiatorPassword)) {
       triggerTransactionStatusQuery({ config, transId: transactionCode, businessId, notifId: savedNotif?._id }).catch(() => {});
     }
 

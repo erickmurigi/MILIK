@@ -1030,6 +1030,8 @@ export const sanitizePaymentIntegrationForClient = (paymentIntegration = {}) => 
       initiatorName: normalizeText(config.initiatorName),
       hasInitiatorPassword: Boolean(normalizeText(config.initiatorPassword)),
       initiatorPasswordMasked: maskSecret(config.initiatorPassword),
+      hasSecurityCredential: Boolean(normalizeText(config.securityCredential)),
+      securityCredentialMasked: maskSecret(config.securityCredential),
       lastConfiguredAt: config.lastConfiguredAt || null,
       status: status.code,
       statusLabel: status.label,

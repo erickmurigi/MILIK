@@ -364,6 +364,9 @@ const createBlankPaymentForm = (sequence = 1) => ({
   initiatorPassword: "",
   hasInitiatorPassword: false,
   initiatorPasswordMasked: "",
+  securityCredential: "",
+  hasSecurityCredential: false,
+  securityCredentialMasked: "",
   lastConfiguredAt: null,
   status: "not_configured",
   statusLabel: "Not configured",
@@ -396,6 +399,9 @@ const normalizePaymentEditor = (config = {}) => {
     initiatorPassword: "",
     hasInitiatorPassword: Boolean(config.hasInitiatorPassword),
     initiatorPasswordMasked: config.initiatorPasswordMasked || "",
+    securityCredential: "",
+    hasSecurityCredential: Boolean(config.hasSecurityCredential),
+    securityCredentialMasked: config.securityCredentialMasked || "",
     lastConfiguredAt: config.lastConfiguredAt || null,
     status: status.code,
     statusLabel: status.label,
@@ -1406,6 +1412,7 @@ export default function CompanySetupPage() {
     if (paymentForm.passkey.trim()) payload.passkey = paymentForm.passkey.trim();
     payload.initiatorName = paymentForm.initiatorName.trim();
     if (paymentForm.initiatorPassword.trim()) payload.initiatorPassword = paymentForm.initiatorPassword.trim();
+    if (paymentForm.securityCredential.trim()) payload.securityCredential = paymentForm.securityCredential.trim();
 
     const isCreate = selectedPaymentConfigId === PAYMENT_DRAFT_ID;
     await mutatePaymentConfig({
@@ -2746,7 +2753,19 @@ export default function CompanySetupPage() {
                     placeholder={paymentForm.hasInitiatorPassword ? "Leave blank to keep saved password" : "Password set at org.ke.m-pesa.com for this operator"}
                   />
                   <div className="mt-1 text-xs text-slate-500">
-                    {paymentForm.hasInitiatorPassword ? `Saved: ${paymentForm.initiatorPasswordMasked || "Yes"}` : "The system encrypts this automatically — no manual Security Credential generation needed."}
+                    {paymentForm.hasInitiatorPassword ? `Saved: ${paymentForm.initiatorPasswordMasked || "Yes"}` : "Password for the API operator — the system encrypts it automatically if cert file is present."}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700">Security Credential <span className="font-normal text-slate-400">(alternative — paste pre-generated value)</span></label>
+                  <Input
+                    type="password"
+                    value={paymentForm.securityCredential}
+                    onChange={(e) => setPaymentForm((prev) => ({ ...prev, securityCredential: e.target.value }))}
+                    placeholder={paymentForm.hasSecurityCredential ? "Leave blank to keep saved credential" : "Base64 RSA-encrypted initiator password"}
+                  />
+                  <div className="mt-1 text-xs text-slate-500">
+                    {paymentForm.hasSecurityCredential ? `Saved: ${paymentForm.securityCredentialMasked || "Yes"}` : "Use this if you have already generated the Security Credential externally. Takes priority over Initiator Password."}
                   </div>
                 </div>
               </div>

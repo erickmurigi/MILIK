@@ -871,8 +871,9 @@ const buildMpesaConfigRecord = async ({
     responseType: existingConfig?.responseType === "Cancelled" ? "Cancelled" : "Completed",
     accountReferenceSource: "tenant_code",
     tenantAccountReferenceLabel: "Tenant Code",
-    initiatorName:     normalizeText(existingConfig?.initiatorName),
-    initiatorPassword: normalizeText(existingConfig?.initiatorPassword),
+    initiatorName:      normalizeText(existingConfig?.initiatorName),
+    initiatorPassword:  normalizeText(existingConfig?.initiatorPassword),
+    securityCredential: normalizeText(existingConfig?.securityCredential),
     lastConfiguredAt: existingConfig?.lastConfiguredAt || null,
     lastConfiguredBy: normalizeText(existingConfig?.lastConfiguredBy),
   };
@@ -924,7 +925,7 @@ const buildMpesaConfigRecord = async ({
     }
   }
 
-  ["consumerKey", "consumerSecret", "passkey", "initiatorPassword"].forEach((field) => {
+  ["consumerKey", "consumerSecret", "passkey", "initiatorPassword", "securityCredential"].forEach((field) => {
     if (payload[field] === undefined) return;
     const secretValue = normalizeText(payload[field]);
     if (!secretValue) return;
