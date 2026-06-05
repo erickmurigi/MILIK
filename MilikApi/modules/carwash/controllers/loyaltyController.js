@@ -5,6 +5,7 @@ import CarWashLoyaltyCard from '../models/CarWashLoyaltyCard.js';
 import CarWashJob from '../models/CarWashJob.js';
 import CarWashPayment from '../models/CarWashPayment.js';
 import CarWashCreditAccount from '../models/CarWashCreditAccount.js';
+import { accrueCommissionForJob, markJobCommissionsPayable } from '../services/commissionService.js';
 import { createError } from '../../../utils/error.js';
 import { currentUserId, escapeRegex, netJobPrice, resolveActiveBusinessId } from '../services/businessScope.js';
 import { sendAdHocSms } from '../../../services/communicationService.js';
@@ -560,11 +561,21 @@ export const redeemReward = async (req, res, next) => {
     job.discountAmount = round2(discountAmount);
 
     // If net payable is zero, mark the job as paid
-    if (netJobPrice(job) <= 0 && job.status !== 'cancelled') {
+    const fullyFree = netJobPrice(job) <= 0;
+    if (fullyFree && job.status !== 'cancelled') {
       job.paymentStatus = 'paid';
       job.status = 'paid';
     }
     await job.save();
+
+    // Award commission on gross price — the attendant did the work regardless of who covered the cost.
+    // For a full discount (free wash), no payment record will ever trigger commission accrual, so we
+    // must do it here. paidLineSet: null tells the service all lines are recognised.
+    if (fullyFree) {
+      accrueCommissionForJob({ req, job, paidLineSet: null })
+        .then(() => markJobCommissionsPayable({ business, jobId: job._id }))
+        .catch((err) => console.error('[CW Loyalty] Commission accrual after reward failed job=%s: %s', job.jobNumber, err?.message || err));
+    }
 
     // Record redemption on card
     card.pendingRewards -= 1;

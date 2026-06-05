@@ -167,6 +167,8 @@ export const recordPayment = async (req, res, next) => {
 
     // Build allocation: highest-price line paid first for commission recognition.
     // When job is fully paid, paidLineSet is null (all lines recognised).
+    // Job-level discounts (e.g. loyalty rewards) count toward line coverage so attendants
+    // are not penalised when part of the price is covered by a reward rather than cash.
     const totalEffectivePaid = round2(
       (await CarWashPayment.aggregate([
         { $match: { business: job.business, job: job._id } },
@@ -176,9 +178,10 @@ export const recordPayment = async (req, res, next) => {
     const serviceLines = Array.isArray(updatedJob.serviceLines) && updatedJob.serviceLines.length
       ? updatedJob.serviceLines
       : [{ serviceName: updatedJob.serviceName || "", price: Number(updatedJob.price || 0) }];
+    const totalCovered = round2(totalEffectivePaid + Number(updatedJob.discountAmount || 0));
     const paidLineSet = updatedJob.paymentStatus === "paid"
       ? null
-      : buildPaidLineSet(serviceLines, totalEffectivePaid);
+      : buildPaidLineSet(serviceLines, totalCovered);
 
     await accrueCommissionForJob({ req, job: updatedJob, paidLineSet });
 
