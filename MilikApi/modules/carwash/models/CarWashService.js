@@ -10,6 +10,7 @@ const carWashServiceSchema = new mongoose.Schema(
     },
     name: { type: String, required: true, trim: true },
     category: { type: String, trim: true, default: "" },
+    jobType: { type: String, enum: ["both", "vehicle", "carpet"], default: "both" },
     pricingType: { type: String, enum: ["flat", "per_sqft"], default: "flat" },
     defaultPrice: { type: Number, required: true, min: 0, default: 0 },
     pricingTiers: [{

@@ -809,9 +809,11 @@ const CarWashAddJob = () => {
                             onChange={(e) => handleLineServiceChange(index, e.target.value)}
                           >
                             <option value="">Select or type below</option>
-                            {services.map((svc) => (
-                              <option key={svc._id} value={svc._id}>{svc.name}</option>
-                            ))}
+                            {services
+                              .filter((svc) => !svc.jobType || svc.jobType === "both" || svc.jobType === jobType)
+                              .map((svc) => (
+                                <option key={svc._id} value={svc._id}>{svc.name}</option>
+                              ))}
                           </select>
                         </td>
                         <td className="px-3 py-1.5">

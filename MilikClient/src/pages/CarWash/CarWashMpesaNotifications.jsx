@@ -312,14 +312,15 @@ export default function CarWashMpesaNotifications() {
           <span>Page <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
         </div>
 
-        <table className="w-full min-w-[900px] text-xs">
+        <table className="w-full min-w-[1000px] text-xs">
           <thead className="bg-[#0B3B2E] text-white">
             <tr>
               <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Time</th>
               <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
               <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Plate (reference)</th>
               <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Amount</th>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">From (phone)</th>
+              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Sender Name</th>
+              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Phone</th>
               <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Transaction Code</th>
               <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Matched Job</th>
               <th className="px-2 py-1.5 text-center font-bold uppercase tracking-wide">Action</th>
@@ -328,7 +329,7 @@ export default function CarWashMpesaNotifications() {
           <tbody>
             {!loading && notifications.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-12 text-center text-xs font-semibold text-slate-400">
+                <td colSpan={9} className="px-3 py-12 text-center text-xs font-semibold text-slate-400">
                   No notifications found for the selected filters.
                 </td>
               </tr>
@@ -349,14 +350,16 @@ export default function CarWashMpesaNotifications() {
                     <td className={`px-3 py-2 text-right font-extrabold ${n.status === "matched" ? "text-emerald-700" : "text-slate-700"}`}>
                       {n.amount > 0 ? formatMoney(n.amount) : "—"}
                     </td>
+                    <td className="px-3 py-2 font-semibold text-slate-700">
+                      {n.senderName || <span className="text-slate-400 italic font-normal">—</span>}
+                    </td>
                     <td className="px-3 py-2 text-slate-600">
-                      <span className="inline-flex items-center gap-1">
-                        <FaMobileAlt size={9} className="text-slate-400" />
-                        {n.msisdn || "—"}
-                      </span>
-                      {n.senderName && (
-                        <div className="text-[10px] font-semibold text-slate-500 mt-0.5">{n.senderName}</div>
-                      )}
+                      {n.msisdn ? (
+                        <span className="inline-flex items-center gap-1 font-mono">
+                          <FaMobileAlt size={9} className="text-slate-400" />
+                          {n.msisdn.slice(0, 4)}{"***"}{n.msisdn.slice(-3)}
+                        </span>
+                      ) : "—"}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-700">{n.transactionCode || "—"}</td>
                     <td className="px-3 py-2">
@@ -394,7 +397,7 @@ export default function CarWashMpesaNotifications() {
                   </tr>
                   {expanded === n._id && (
                     <tr className="border-b border-slate-100 bg-slate-50">
-                      <td colSpan={8} className="px-4 py-3">
+                      <td colSpan={9} className="px-4 py-3">
                         <div className="mb-1.5 flex items-center gap-2">
                           <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Raw Safaricom Payload</span>
                           {n.notes && (

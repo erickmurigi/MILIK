@@ -5,7 +5,7 @@ import { carWashApi, formatMoney, normalizeListPayload, VEHICLE_TYPES } from "..
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 
-const emptyForm = { name: "", category: "", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true };
+const emptyForm = { name: "", category: "", jobType: "both", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true };
 const inputClass  = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const selectClass = "h-9 w-full border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -87,6 +87,7 @@ const CarWashServices = () => {
     setForm({
       name:         row.name || "",
       category:     row.category || "",
+      jobType:      row.jobType || "both",
       pricingType:  row.pricingType || "flat",
       defaultPrice: row.defaultPrice ?? "",
       pricingTiers: Array.isArray(row.pricingTiers)
@@ -340,6 +341,19 @@ const CarWashServices = () => {
                     <option value={NEW_CATEGORY_SENTINEL}>+ Add new category…</option>
                   </select>
                 )}
+              </div>
+
+              <div>
+                <label className={labelClass}>Applies To</label>
+                <select
+                  className={inputClass}
+                  value={form.jobType}
+                  onChange={(e) => setForm((p) => ({ ...p, jobType: e.target.value }))}
+                >
+                  <option value="both">Both (Vehicle &amp; Carpet)</option>
+                  <option value="vehicle">Vehicle Wash only</option>
+                  <option value="carpet">Carpet / Textile only</option>
+                </select>
               </div>
 
               {/* Pricing type toggle */}
