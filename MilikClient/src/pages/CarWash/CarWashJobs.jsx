@@ -351,9 +351,7 @@ const CarWashJobs = () => {
         // Only update amount if user hasn't started typing yet
         setPaymentForm((prev) => prev.job === job._id ? { ...prev, amount: String(precise) } : prev);
       }
-    } catch {
-      setModalUnpaidJobs(jobs.filter((j) => j.paymentStatus !== "paid"));
-    }
+    } catch { /* modal already seeded from page jobs above */ }
   };
 
   const recordPayment = async (event) => {
