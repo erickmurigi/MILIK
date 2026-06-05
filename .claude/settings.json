@@ -25,7 +25,11 @@
       "Bash(git diff *)",
       "Bash(xargs grep -l \"carwash-dashboard\\\\|carwash-jobs\")",
       "Bash(grep -v \"//\\\\|import\")",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\" -Directory)"
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\" -Directory)",
+      "WebSearch",
+      "WebFetch(domain:developer.safaricom.co.ke)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
