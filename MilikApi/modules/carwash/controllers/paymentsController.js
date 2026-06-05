@@ -55,7 +55,9 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
   if (job.paymentStatus === "paid" && job.status !== "cancelled") {
     job.status = "paid";
-  } else if (job.status === "paid") {
+  } else if (job.paymentStatus === "partial" && !["cancelled", "paid", "done"].includes(job.status)) {
+    job.status = "done";
+  } else if (job.status === "paid" && job.paymentStatus !== "paid") {
     job.status = "done";
   }
   await job.save();
@@ -187,6 +189,8 @@ export const recordPayment = async (req, res, next) => {
 
     if (updatedJob.paymentStatus === "paid") {
       await markJobCommissionsPayable({ business, jobId: updatedJob._id });
+    }
+    if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
       awardLoyaltyStamp({ business, job: updatedJob, overridePhone: receivedFromPhone || null })
         .catch((err) => console.error("[CW Loyalty] Stamp (payment) failed job=%s: %s", updatedJob.jobNumber, err?.message || err));
     }

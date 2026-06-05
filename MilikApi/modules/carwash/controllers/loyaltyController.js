@@ -606,7 +606,7 @@ export const redeemReward = async (req, res, next) => {
 
 // ─── Payment confirmation SMS (called from payments flow) ─────────────────────
 
-export const sendPaymentConfirmationSms = async ({ business, job, amount, overridePhone = null }) => {
+export const sendPaymentConfirmationSms = async ({ business, job, amount, remaining = null, overridePhone = null }) => {
   if (!job?.plateNumber) return;
   try {
     const plate = String(job.plateNumber).trim().toUpperCase();
@@ -618,7 +618,10 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, overri
     if (!phone) return;
 
     const customerName = job.customerName || 'Valued Customer';
-    const outstanding = round2(Math.max(0, netJobPrice(job) - Number(amount || 0)));
+    // Use caller-supplied remaining balance when available (accurate for multi-payment jobs)
+    const outstanding = remaining !== null
+      ? remaining
+      : round2(Math.max(0, netJobPrice(job) - Number(amount || 0)));
     const balanceLine = (job.paymentStatus === 'paid' || outstanding <= 0.01)
       ? 'Fully paid.'
       : `Balance: KES ${outstanding.toLocaleString()}.`;

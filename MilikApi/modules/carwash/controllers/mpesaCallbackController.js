@@ -116,8 +116,13 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   const paidAmount = Number(totals?.[0]?.amount || 0);
   const price = netJobPrice(job);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
-  if (job.paymentStatus === "paid" && job.status !== "cancelled") job.status = "paid";
-  else if (job.status === "paid") job.status = "done";
+  if (job.paymentStatus === "paid" && job.status !== "cancelled") {
+    job.status = "paid";
+  } else if (job.paymentStatus === "partial" && !["cancelled", "paid", "done"].includes(job.status)) {
+    job.status = "done";
+  } else if (job.status === "paid" && job.paymentStatus !== "paid") {
+    job.status = "done";
+  }
   await job.save();
   return job;
 };
@@ -200,8 +205,9 @@ export const confirmCarWashCallback = async (req, res) => {
     const plate = normalizePlate(billRefNumber);
     const _digits = msisdn.replace(/\D/g, "");
     let _local = "";
-    if (_digits.startsWith("254") && _digits.length === 12) _local = "0" + _digits.slice(3);
-    else if (_digits.startsWith("0") && _digits.length === 10) _local = _digits;
+    if      (_digits.startsWith("254") && _digits.length === 12) _local = "0" + _digits.slice(3);
+    else if (_digits.startsWith("0")   && _digits.length === 10) _local = _digits;
+    else if (_digits.length === 9      && /^[17]/.test(_digits)) _local = "0" + _digits;
     const normalizedMsisdn = _local || null;
     const transDate = parseMpesaDate(transTimeRaw);
 
@@ -293,9 +299,12 @@ export const confirmCarWashCallback = async (req, res) => {
     await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null });
     if (updatedJob) {
       await accrueCommissionForJob({ req: null, job: updatedJob });
-      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, overridePhone: normalizedMsisdn });
+      const remainingBalance = round2(Math.max(0, outstanding - paidAmount));
+      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, remaining: remainingBalance, overridePhone: normalizedMsisdn });
       if (updatedJob.paymentStatus === "paid") {
         await markJobCommissionsPayable({ business: businessId, jobId: updatedJob._id });
+      }
+      if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
         await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: normalizedMsisdn });
       }
     }
@@ -424,12 +433,25 @@ export const reassignMpesaNotification = async (req, res, next) => {
 
     const updatedJob = await refreshJobPaymentStatus(business, job._id);
     await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null });
+
+    // Update job + customer phone with payer's verified M-Pesa number
+    if (normalizedMsisdn) {
+      CarWashJob.updateOne({ _id: job._id, business }, { $set: { phone: normalizedMsisdn } }).catch(() => {});
+      CarWashCustomer.updateOne(
+        { business, plates: normalizePlate(job.plateNumber) },
+        { $set: { phone: normalizedMsisdn } }
+      ).catch(() => {});
+    }
+
     if (updatedJob) {
       await accrueCommissionForJob({ req, job: updatedJob });
+      const reassignRemaining = round2(Math.max(0, outstanding - paidAmount));
+      await sendPaymentConfirmationSms({ business, job: updatedJob, amount: paidAmount, remaining: reassignRemaining, overridePhone: normalizedMsisdn });
       if (updatedJob.paymentStatus === "paid") {
         await markJobCommissionsPayable({ business, jobId: updatedJob._id });
+      }
+      if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
         await awardLoyaltyStamp({ business, job: updatedJob, overridePhone: normalizedMsisdn });
-        await sendPaymentConfirmationSms({ business, job: updatedJob, amount: paidAmount, overridePhone: normalizedMsisdn });
       }
     }
 
