@@ -199,7 +199,10 @@ const CarWashJobs = () => {
   }, [modalUnpaidJobs, jobs]);
   const selectedPaymentJob = useMemo(() => allPaymentJobs.find((job) => job._id === paymentForm.job), [allPaymentJobs, paymentForm.job]);
   const selectedCashbook = useMemo(() => cashbooks.find((item) => item._id === paymentForm.cashbookAccount), [cashbooks, paymentForm.cashbookAccount]);
-  const outstandingForModal = useMemo(() => Math.max(0, Number(selectedPaymentJob?.price || 0) - paymentJobPaidSoFar), [selectedPaymentJob, paymentJobPaidSoFar]);
+  const outstandingForModal = useMemo(() => {
+    const net = Math.max(0, Number(selectedPaymentJob?.price || 0) - Number(selectedPaymentJob?.discountAmount || 0));
+    return Math.max(0, net - paymentJobPaidSoFar);
+  }, [selectedPaymentJob, paymentJobPaidSoFar]);
 
   const loadReferenceData = async () => {
     try {
@@ -295,7 +298,7 @@ const CarWashJobs = () => {
     const cachedPaid = cachedList
       ? cachedList.reduce((s, p) => s + Number(p.amount || 0) + Number(p.discountAmount || 0), 0)
       : 0;
-    const initialOutstanding = Math.max(0, Number(job?.price || 0) - cachedPaid);
+    const initialOutstanding = Math.max(0, Number(job?.price || 0) - Number(job?.discountAmount || 0) - cachedPaid);
 
     setPaymentJobPaidSoFar(cachedPaid);
     setPaymentForm({
@@ -319,7 +322,7 @@ const CarWashJobs = () => {
       if (pmtsPayload && job) {
         const list = normalizeListPayload(pmtsPayload, "payments");
         const paid = list.reduce((s, p) => s + Number(p.amount || 0) + Number(p.discountAmount || 0), 0);
-        const precise = Math.max(0, Number(job.price || 0) - paid);
+        const precise = Math.max(0, Number(job.price || 0) - Number(job.discountAmount || 0) - paid);
         setPaymentJobPaidSoFar(paid);
         // Only update amount if user hasn't started typing yet
         setPaymentForm((prev) => prev.job === job._id ? { ...prev, amount: String(precise) } : prev);
@@ -742,7 +745,14 @@ const CarWashJobs = () => {
                           {job.paymentStatus || "unpaid"}
                         </span>
                       </td>
-                      <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(job.price)}</td>
+                      <td className="px-2 py-1 text-right font-extrabold text-slate-900">
+                        {Number(job.discountAmount) > 0 ? (
+                          <span className="flex flex-col items-end gap-0.5">
+                            <span className="text-[10px] text-slate-400 line-through">{formatMoney(job.price)}</span>
+                            <span>{formatMoney(Math.max(0, job.price - job.discountAmount))}</span>
+                          </span>
+                        ) : formatMoney(job.price)}
+                      </td>
                       <td className="px-2 py-1 text-right">
                         <div className="inline-flex items-center gap-1">
                           <button
@@ -985,7 +995,14 @@ const CarWashJobs = () => {
             <div className="mb-3 grid grid-cols-3 divide-x divide-slate-200 rounded border border-slate-200 bg-slate-50 text-center text-[11px]">
               <div className="px-3 py-2">
                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Job Total</p>
-                <p className="mt-0.5 font-black text-slate-700 tabular-nums">{formatMoney(selectedPaymentJob.price)}</p>
+                {Number(selectedPaymentJob.discountAmount) > 0 ? (
+                  <p className="mt-0.5 tabular-nums">
+                    <span className="text-[9px] text-slate-400 line-through block">{formatMoney(selectedPaymentJob.price)}</span>
+                    <span className="font-black text-slate-700">{formatMoney(Math.max(0, selectedPaymentJob.price - selectedPaymentJob.discountAmount))}</span>
+                  </p>
+                ) : (
+                  <p className="mt-0.5 font-black text-slate-700 tabular-nums">{formatMoney(selectedPaymentJob.price)}</p>
+                )}
               </div>
               <div className="px-3 py-2">
                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Already Paid</p>

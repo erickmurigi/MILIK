@@ -6,7 +6,7 @@ import CarWashJob from '../models/CarWashJob.js';
 import CarWashPayment from '../models/CarWashPayment.js';
 import CarWashCreditAccount from '../models/CarWashCreditAccount.js';
 import { createError } from '../../../utils/error.js';
-import { currentUserId, escapeRegex, resolveActiveBusinessId } from '../services/businessScope.js';
+import { currentUserId, escapeRegex, netJobPrice, resolveActiveBusinessId } from '../services/businessScope.js';
 import { sendAdHocSms } from '../../../services/communicationService.js';
 import { resolveCarWashSmsBody } from '../services/carwashSmsService.js';
 
@@ -530,8 +530,9 @@ export const autoEnrollPlate = async ({ business, plate, customerName, phone }) 
 export const redeemReward = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const job = await CarWashJob.findOne({ _id: req.params.jobId, business }).lean();
+    const job = await CarWashJob.findOne({ _id: req.params.jobId, business });
     if (!job) return next(createError(404, 'Car Wash job not found'));
+    if (job.status === 'cancelled') return next(createError(400, 'Cannot redeem a reward on a cancelled job'));
 
     const plate = String(job.plateNumber || '').trim().toUpperCase();
     if (!plate) return next(createError(400, 'Job has no plate number'));
@@ -543,6 +544,29 @@ export const redeemReward = async (req, res, next) => {
     if (!card) return next(createError(404, 'No loyalty card found for this customer'));
     if (card.pendingRewards <= 0) return next(createError(400, 'No pending rewards to redeem'));
 
+    const program = await CarWashLoyaltyProgram.findById(card.program).lean();
+
+    // Compute and apply the discount to the job based on reward type
+    let discountAmount = 0;
+    if (program) {
+      if (program.rewardType === 'free_wash') {
+        discountAmount = Number(job.price || 0);
+      } else if (program.rewardType === 'discount_percent') {
+        discountAmount = round2(Number(job.price || 0) * Number(program.rewardValue || 0) / 100);
+      } else if (program.rewardType === 'discount_fixed') {
+        discountAmount = Math.min(Number(program.rewardValue || 0), Number(job.price || 0));
+      }
+    }
+    job.discountAmount = round2(discountAmount);
+
+    // If net payable is zero, mark the job as paid
+    if (netJobPrice(job) <= 0 && job.status !== 'cancelled') {
+      job.paymentStatus = 'paid';
+      job.status = 'paid';
+    }
+    await job.save();
+
+    // Record redemption on card
     card.pendingRewards -= 1;
     card.totalRewardsRedeemed += 1;
     card.lastRedemptionAt = new Date();
@@ -555,7 +579,6 @@ export const redeemReward = async (req, res, next) => {
     });
     await card.save();
 
-    const program = await CarWashLoyaltyProgram.findById(card.program).lean();
     if (program?.smsOnReward && customer?.phone) {
       const redeemBody = await resolveCarWashSmsBody(business, 'carwash_reward_redeemed', {
         customerName: customer.name || 'Valued Customer',
@@ -564,7 +587,7 @@ export const redeemReward = async (req, res, next) => {
       await sendLoyaltySms(business, customer.phone, redeemBody, 'carwash_reward_redeemed');
     }
 
-    res.json({ success: true, data: card, message: 'Reward redeemed successfully' });
+    res.json({ success: true, data: { card, job }, job, message: 'Reward redeemed successfully' });
   } catch (err) {
     next(err);
   }
@@ -584,7 +607,7 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, overri
     if (!phone) return;
 
     const customerName = job.customerName || 'Valued Customer';
-    const outstanding = round2(Math.max(0, Number(job.price || 0) - Number(amount || 0)));
+    const outstanding = round2(Math.max(0, netJobPrice(job) - Number(amount || 0)));
     const balanceLine = outstanding > 0.01
       ? `Balance: KES ${outstanding.toLocaleString()}.`
       : 'Fully paid.';

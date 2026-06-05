@@ -14,25 +14,27 @@ const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-8
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 // ─── Plate lookup ─────────────────────────────────────────────────────────────
-const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, readOnly }) => {
+const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onRewardData, readOnly }) => {
   const [lookupResult, setLookupResult] = useState(null);
   const [looking, setLooking] = useState(false);
   const timerRef = useRef(null);
 
   const lookup = useCallback(async (value) => {
     const p = value.trim().toUpperCase();
-    if (p.length < 3) { setLookupResult(null); return; }
+    if (p.length < 3) { setLookupResult(null); onRewardData?.(null); return; }
     setLooking(true);
     try {
       const result = await carWashApi.lookupPlate(p);
       setLookupResult(result);
       if (result?.customer) onCustomerFound({ name: result.customer.name, phone: result.customer.phone });
+      onRewardData?.(result?.loyaltyCard || null);
     } catch (_) {
       setLookupResult(null);
+      onRewardData?.(null);
     } finally {
       setLooking(false);
     }
-  }, [onCustomerFound]);
+  }, [onCustomerFound, onRewardData]);
 
   const handleChange = (e) => {
     if (readOnly) return;
@@ -353,6 +355,9 @@ const CarWashAddJob = () => {
   const [expectedReadyAt, setExpectedReadyAt] = useState("");
   const [serviceLines, setServiceLines] = useState([emptyLine()]);
   const [creditAccount, setCreditAccount] = useState(null);
+  const [loyaltyCard, setLoyaltyCard] = useState(null);
+  const [applyReward, setApplyReward] = useState(false);
+  const [discountAmount, setDiscountAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [jobNumber, setJobNumber] = useState("");
   const [photos, setPhotos] = useState([]);
@@ -369,6 +374,19 @@ const CarWashAddJob = () => {
     () => serviceLines.reduce((sum, l) => sum + (Number(l.price) || 0), 0),
     [serviceLines]
   );
+  const discountNum = Math.max(0, Number(discountAmount) || 0);
+
+  // Preview discount amount for the loyalty reward (computed from program, not state)
+  const rewardProgram = loyaltyCard?.program;
+  const rewardPreviewDiscount = useMemo(() => {
+    if (!applyReward || !rewardProgram || totalPrice <= 0) return 0;
+    if (rewardProgram.rewardType === "free_wash") return totalPrice;
+    if (rewardProgram.rewardType === "discount_percent")
+      return Math.round(totalPrice * Number(rewardProgram.rewardValue || 0) / 100);
+    if (rewardProgram.rewardType === "discount_fixed")
+      return Math.min(Number(rewardProgram.rewardValue || 0), totalPrice);
+    return 0;
+  }, [applyReward, rewardProgram, totalPrice]);
 
   // Load reference data (services, staff) + active branch type
   useEffect(() => {
@@ -413,6 +431,7 @@ const CarWashAddJob = () => {
         setPhone(job.phone || "");
         setNotes(job.notes || "");
         setJobNumber(job.jobNumber || "");
+        setDiscountAmount(job.discountAmount > 0 ? String(job.discountAmount) : "");
         setPhotos(Array.isArray(job.photos) ? job.photos : []);
 
         const lines =
@@ -556,6 +575,7 @@ const CarWashAddJob = () => {
           price: Number(l.price) || 0,
           lineStaff: Array.isArray(l.lineStaff) ? l.lineStaff : [],
         })),
+      discountAmount: discountNum,
       creditAccount: creditAccount?._id || null,
       notes,
     };
@@ -567,7 +587,17 @@ const CarWashAddJob = () => {
       } else {
         const result = await carWashApi.createJob(payload);
         const newId = result?._id || result?.job?._id;
-        toast.success(creditAccount ? "Job created and charged to credit account" : "Car Wash job created");
+
+        // Apply loyalty reward after job creation — server computes and applies the discount
+        if (applyReward && newId && loyaltyCard?.pendingRewards > 0) {
+          try {
+            await carWashApi.redeemLoyaltyReward(newId);
+          } catch (_) {
+            toast.warn("Job created but reward could not be applied — check loyalty card.");
+          }
+        }
+
+        toast.success(applyReward ? "Job created and loyalty reward applied!" : creditAccount ? "Job created and charged to credit account" : "Car Wash job created");
         // Carpet jobs: redirect to edit so attendant can immediately add photos
         if (jobType === "carpet" && newId) {
           navigate(`/carwash/jobs/${newId}/edit`, { state: { openPhotos: true } });
@@ -657,12 +687,45 @@ const CarWashAddJob = () => {
                         setPhone((prev) => prev || ph);
                       }
                     }}
+                    onRewardData={(card) => {
+                      setLoyaltyCard(card);
+                      setApplyReward(false);
+                    }}
                     readOnly={isEditMode}
                   />
                   <CreditAccountBanner
                     plate={plateNumber}
                     onAccountDetected={(acc) => setCreditAccount(acc || null)}
                   />
+                  {!isEditMode && loyaltyCard?.pendingRewards > 0 && loyaltyCard?.program && (
+                    <div className={`mt-1.5 border px-3 py-2.5 text-xs ${applyReward ? "border-amber-400 bg-amber-50" : "border-amber-200 bg-amber-50"}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <FaGift className="shrink-0 text-amber-600" />
+                          <div>
+                            <div className="font-black text-amber-800">
+                              {loyaltyCard.pendingRewards} loyalty reward{loyaltyCard.pendingRewards !== 1 ? "s" : ""} available
+                            </div>
+                            <div className="mt-0.5 text-amber-700">
+                              {loyaltyCard.program.rewardType === "free_wash" && "Free wash"}
+                              {loyaltyCard.program.rewardType === "discount_percent" && `${loyaltyCard.program.rewardValue}% off`}
+                              {loyaltyCard.program.rewardType === "discount_fixed" && `KES ${loyaltyCard.program.rewardValue} off`}
+                              {totalPrice > 0 && applyReward && (
+                                <span className="ml-1.5 font-black text-emerald-700">→ saves {formatMoney(rewardPreviewDiscount)}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setApplyReward((v) => !v)}
+                          className={`shrink-0 rounded px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition-colors ${applyReward ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-white border border-amber-400 text-amber-700 hover:bg-amber-100"}`}
+                        >
+                          {applyReward ? "✓ Applying" : "Apply Reward"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -1015,8 +1078,43 @@ const CarWashAddJob = () => {
                 )}
                 <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-sm">
                   <span className="font-extrabold uppercase tracking-wide text-slate-700">Total</span>
-                  <span className="text-lg font-black text-[#0B3B2E]">{formatMoney(totalPrice)}</span>
+                  <span className={`font-black ${(discountNum > 0 || applyReward) ? "text-sm text-slate-400 line-through" : "text-lg text-[#0B3B2E]"}`}>
+                    {formatMoney(totalPrice)}
+                  </span>
                 </div>
+                {applyReward && rewardPreviewDiscount > 0 ? (
+                  <div className="flex items-center justify-between rounded bg-amber-50 px-2 py-1.5 text-xs">
+                    <span className="flex items-center gap-1 font-bold text-amber-700"><FaGift size={9} /> Loyalty reward</span>
+                    <span className="font-black text-emerald-700">− {formatMoney(rewardPreviewDiscount)}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wide text-rose-600 whitespace-nowrap">Discount (KES)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={totalPrice}
+                      step="1"
+                      value={discountAmount}
+                      onChange={(e) => setDiscountAmount(e.target.value)}
+                      placeholder="0"
+                      className="w-full border border-slate-200 px-2 py-1 text-right text-xs font-bold focus:border-rose-400 focus:outline-none"
+                    />
+                  </div>
+                )}
+                {(applyReward ? rewardPreviewDiscount > 0 : discountNum > 0) && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-extrabold uppercase tracking-wide text-[#0B3B2E]">Net Payable</span>
+                    <span className={`text-lg font-black ${applyReward && rewardPreviewDiscount >= totalPrice ? "text-emerald-600" : "text-[#0B3B2E]"}`}>
+                      {applyReward
+                        ? formatMoney(Math.max(0, totalPrice - rewardPreviewDiscount))
+                        : formatMoney(Math.max(0, totalPrice - discountNum))}
+                    </span>
+                  </div>
+                )}
+                {applyReward && rewardPreviewDiscount >= totalPrice && (
+                  <p className="text-center text-[10px] font-black uppercase tracking-wide text-emerald-600">FREE — fully covered by reward</p>
+                )}
               </div>
             </div>
 
@@ -1027,7 +1125,7 @@ const CarWashAddJob = () => {
               className="flex w-full items-center justify-center gap-2 bg-[#0B3B2E] py-3 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <FaSave />
-              {saving ? "Saving…" : isEditMode ? "Save Changes" : jobType === "carpet" ? "Save & Add Photos →" : "Save Job"}
+              {saving ? "Saving…" : isEditMode ? "Save Changes" : applyReward ? "Save Job + Apply Reward" : jobType === "carpet" ? "Save & Add Photos →" : "Save Job"}
             </button>
 
             {/* Carpet photos panel — edit mode only */}

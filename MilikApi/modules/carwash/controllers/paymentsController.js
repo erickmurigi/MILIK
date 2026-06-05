@@ -4,7 +4,7 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashCustomer from "../models/CarWashCustomer.js";
-import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
+import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, buildPaidLineSet, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
 import { awardLoyaltyStamp, revokeStampForJob, sendPaymentConfirmationSms } from "./loyaltyController.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
@@ -51,7 +51,7 @@ const refreshJobPaymentStatus = async (business, jobId) => {
     ...effectivePaidAggregation,
   ]);
   const paidAmount = Number(totals?.[0]?.paid || 0);
-  const price = Number(job.price || 0);
+  const price = netJobPrice(job);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
   if (job.paymentStatus === "paid" && job.status !== "cancelled") {
     job.status = "paid";
@@ -119,7 +119,7 @@ export const recordPayment = async (req, res, next) => {
       ...effectivePaidAggregation,
     ]);
     const alreadyPaid = Number(paidRows?.[0]?.paid || 0);
-    const outstanding = Math.max(Number(job.price || 0) - alreadyPaid, 0);
+    const outstanding = Math.max(netJobPrice(job) - alreadyPaid, 0);
     if (outstanding <= 0) return next(createError(400, "Car Wash job is already fully paid"));
     if (effectiveAmount > outstanding + 0.01) return next(createError(400, "Payment + discount exceeds the outstanding Car Wash job balance"));
 

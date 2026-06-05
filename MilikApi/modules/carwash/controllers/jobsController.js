@@ -5,7 +5,7 @@ import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
-import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
+import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
 import { carpetUpload, fileUrlFromName, deletePhotoFile } from "../middleware/carpetUpload.js";
 import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
@@ -113,7 +113,7 @@ const getPaidAmount = async (business, jobId) => {
 };
 
 const applyPaymentStatus = (job, paidAmount) => {
-  const price = Number(job.price || 0);
+  const price = netJobPrice(job);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
   if (job.paymentStatus === "paid" && job.status !== "cancelled") {
     job.status = "paid";
@@ -250,6 +250,11 @@ export const createJob = async (req, res, next) => {
       return next(createError(400, "Total job price must be greater than zero"));
     }
 
+    const discountAmount = round2(Math.max(0, Number(req.body.discountAmount || 0)));
+    if (discountAmount > totalPrice) {
+      return next(createError(400, "Discount cannot exceed the total job price"));
+    }
+
     // Derive assignedStaff from service lines' per-line staff. Falls back to
     // req.body.assignedStaff for backward-compatibility with old clients.
     const derivedStaffIds = [...new Set(
@@ -288,6 +293,7 @@ export const createJob = async (req, res, next) => {
       // Multi-line
       serviceLines,
       price: totalPrice,
+      discountAmount,
       status: JOB_STATUSES.has(String(req.body.status || "").toLowerCase()) ? String(req.body.status).toLowerCase() : "waiting",
       assignedStaff,
       creditAccount: resolvedCreditAccount,
@@ -335,12 +341,12 @@ export const createJob = async (req, res, next) => {
     }
 
     // Auto-apply prepaid credit — deduct from accountCredit if the account is prepaid and has balance
-    if (resolvedCreditAccount && totalPrice > 0) {
+    const netPrice = round2(Math.max(0, totalPrice - discountAmount));
+    if (resolvedCreditAccount && netPrice > 0) {
       try {
         const prepaidAcc = await CarWashCreditAccount.findOne({ _id: resolvedCreditAccount, business, accountType: "prepaid" });
         if (prepaidAcc && prepaidAcc.accountCredit > 0.009) {
-          const r2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
-          const autoApply = r2(Math.min(prepaidAcc.accountCredit, totalPrice));
+          const autoApply = round2(Math.min(prepaidAcc.accountCredit, netPrice));
           await CarWashPayment.create({
             business,
             branch: branchId || null,
@@ -352,9 +358,9 @@ export const createJob = async (req, res, next) => {
             createdBy: userId,
             updatedBy: userId,
           });
-          prepaidAcc.accountCredit = r2(prepaidAcc.accountCredit - autoApply);
+          prepaidAcc.accountCredit = round2(prepaidAcc.accountCredit - autoApply);
           await prepaidAcc.save();
-          const newPaymentStatus = autoApply >= totalPrice - 0.009 ? "paid" : "partial";
+          const newPaymentStatus = autoApply >= netPrice - 0.009 ? "paid" : "partial";
           const newStatus = newPaymentStatus === "paid" && job.status !== "cancelled" ? "paid" : job.status;
           await CarWashJob.updateOne({ _id: job._id }, { paymentStatus: newPaymentStatus, status: newStatus });
           job.paymentStatus = newPaymentStatus;
@@ -441,21 +447,28 @@ export const updateJob = async (req, res, next) => {
       }
     }
 
+    const updatedDiscount = round2(Math.max(0, Number(req.body.discountAmount ?? existing.discountAmount ?? 0)));
+    if (updatedDiscount > totalPrice) {
+      return next(createError(400, "Discount cannot exceed the total job price"));
+    }
+
     existing.service = rootService;
     existing.serviceName = rootServiceName;
     existing.vehicleType = rootVehicleType;
     existing.serviceLines = serviceLines;
     existing.price = totalPrice;
+    existing.discountAmount = updatedDiscount;
     existing.status = status;
     existing.assignedStaff = assignedStaff;
     existing.notes = String(req.body.notes ?? existing.notes).trim();
     existing.updatedBy = currentUserId(req);
 
     const paidAmount = await getPaidAmount(business, existing._id);
+    const netPriceAfterDiscount = round2(Math.max(0, totalPrice - updatedDiscount));
     if (status === "cancelled" && paidAmount > 0) {
       return next(createError(400, "Cannot cancel a Car Wash job that already has payments"));
     }
-    if (paidAmount > Number(existing.price || 0)) {
+    if (paidAmount > netPriceAfterDiscount) {
       return next(createError(400, "Job price cannot be lower than payments already recorded"));
     }
     applyPaymentStatus(existing, paidAmount);

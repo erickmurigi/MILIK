@@ -13,6 +13,7 @@ import { autoEnrollPlate, awardLoyaltyStamp, sendPaymentConfirmationSms } from "
 const normalizeText = (v = "") => String(v || "").trim();
 const normalizeUpper = (v = "") => normalizeText(v).toUpperCase();
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
+const netJobPrice = (job) => Math.max(0, Number(job?.price || 0) - Number(job?.discountAmount || 0));
 
 // Strip everything except letters and digits, then uppercase.
 // Handles: "kca123a", "KCA 123A", "kca-123a", "KCA.123A", "k c a 1 2 3 a", etc.
@@ -104,7 +105,7 @@ const refreshJobPaymentStatus = async (business, jobId) => {
     { $group: { _id: "$job", amount: { $sum: "$amount" } } },
   ]);
   const paidAmount = Number(totals?.[0]?.amount || 0);
-  const price = Number(job.price || 0);
+  const price = netJobPrice(job);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
   if (job.paymentStatus === "paid" && job.status !== "cancelled") job.status = "paid";
   else if (job.status === "paid") job.status = "done";
@@ -237,7 +238,7 @@ export const confirmCarWashCallback = async (req, res) => {
       { $group: { _id: "$job", amount: { $sum: "$amount" } } },
     ]);
     const alreadyPaid = round2(totals?.[0]?.amount || 0);
-    const outstanding = round2(Math.max(round2(Number(job.price || 0)) - alreadyPaid, 0));
+    const outstanding = round2(Math.max(round2(netJobPrice(job)) - alreadyPaid, 0));
     if (outstanding <= 0) {
       await saveNotif({ matchedJob: job._id, status: "duplicate", resultCode: 0, resultDesc: "Job already fully paid" });
       return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – job already fully paid" });
@@ -370,7 +371,7 @@ export const reassignMpesaNotification = async (req, res, next) => {
       { $group: { _id: "$job", amount: { $sum: "$amount" } } },
     ]);
     const alreadyPaid = round2(totals?.[0]?.amount || 0);
-    const outstanding = round2(Math.max(round2(Number(job.price || 0)) - alreadyPaid, 0));
+    const outstanding = round2(Math.max(round2(netJobPrice(job)) - alreadyPaid, 0));
     if (outstanding <= 0) {
       return res.status(409).json({ success: false, message: "This job is already fully paid" });
     }

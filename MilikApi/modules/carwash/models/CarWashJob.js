@@ -43,7 +43,8 @@ const carWashJobSchema = new mongoose.Schema(
     // Multi-service lines (new)
     serviceLines: { type: [serviceLineSchema], default: [] },
 
-    price: { type: Number, required: true, min: 0, default: 0 },
+    price:          { type: Number, required: true, min: 0, default: 0 },
+    discountAmount: { type: Number, min: 0, default: 0 },
     status: { type: String, enum: JOB_STATUSES, default: "waiting", index: true },
 
     // Multi-staff support (array; old jobs may have a scalar coerced to [id])

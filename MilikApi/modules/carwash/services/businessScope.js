@@ -43,6 +43,8 @@ export const parseDateRange = (dateValue = null) => {
 
 export const escapeRegex = (value = "") => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+export const netJobPrice = (job) => Math.max(0, Number(job?.price || 0) - Number(job?.discountAmount || 0));
+
 export const resolveActiveBranchId = (req) => {
   const activeCompanyId = String(
     req.headers?.["x-active-company-id"] ||
