@@ -281,6 +281,114 @@ export const handleTransactionStatusResult = async (req, res) => {
   }
 };
 
+// ─── STK Push callback ───────────────────────────────────────────────────────
+export const handleStkCallback = async (req, res) => {
+  res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+  try {
+    const businessId = normalizeText(req.params.businessId || "");
+    const stkCallback = req.body?.Body?.stkCallback;
+    if (!stkCallback || !businessId) return;
+
+    const checkoutRequestId = normalizeText(stkCallback.CheckoutRequestID || "");
+    const resultCode = Number(stkCallback.ResultCode);
+    if (!checkoutRequestId) return;
+
+    const notif = await CarWashMpesaNotification.findOne({ business: businessId, transactionCode: checkoutRequestId, status: "stk_pending" });
+    if (!notif) { console.warn(`[STK] No pending notif for CheckoutRequestID=${checkoutRequestId}`); return; }
+
+    if (resultCode !== 0) {
+      await CarWashMpesaNotification.updateOne(
+        { _id: notif._id },
+        { $set: { status: "error", resultCode, resultDesc: normalizeText(stkCallback.ResultDesc || "Payment cancelled or failed"), rawPayload: req.body } }
+      );
+      return;
+    }
+
+    const items = Array.isArray(stkCallback.CallbackMetadata?.Item) ? stkCallback.CallbackMetadata.Item : [];
+    const getMeta = (key) => items.find((i) => normalizeText(i?.Name) === key)?.Value;
+    const receiptNumber = normalizeText(String(getMeta("MpesaReceiptNumber") || ""));
+    const paidAmount   = round2(Number(getMeta("Amount") || 0));
+    const phoneRaw     = String(getMeta("PhoneNumber") || "");
+    const transDate    = parseMpesaDate(String(getMeta("TransactionDate") || ""));
+    const phone        = normalizeMsisdn(phoneRaw);
+
+    if (!receiptNumber || paidAmount <= 0) return;
+
+    // Duplicate check on the actual receipt
+    const dup = await CarWashMpesaNotification.findOne({ transactionCode: receiptNumber, status: "matched" }).lean();
+    if (dup) {
+      await CarWashMpesaNotification.updateOne({ _id: notif._id }, { $set: { status: "duplicate", transactionCode: receiptNumber, resultDesc: "Duplicate receipt" } });
+      return;
+    }
+
+    const job = await CarWashJob.findOne({ _id: notif.matchedJob, business: businessId });
+    if (!job) return;
+
+    const company = await Company.findById(businessId).select("paymentIntegration").lean();
+    const config = getPrimaryMpesaPaybillConfig(getRawMpesaPaybillConfigs(company?.paymentIntegration));
+    const cashbookId = config?.defaultCashbookAccountId;
+    if (!cashbookId || !mongoose.Types.ObjectId.isValid(String(cashbookId))) {
+      await CarWashMpesaNotification.updateOne({ _id: notif._id }, { $set: { status: "error", resultDesc: "Cashbook not configured" } });
+      return;
+    }
+    const cashbook = await ChartOfAccount.findOne({ _id: cashbookId, business: businessId, type: "asset", isPosting: true }).lean();
+    if (!cashbook) {
+      await CarWashMpesaNotification.updateOne({ _id: notif._id }, { $set: { status: "error", resultDesc: "Cashbook not found" } });
+      return;
+    }
+
+    const totals = await CarWashPayment.aggregate([
+      { $match: { business: job.business, job: job._id } },
+      { $group: { _id: null, amount: { $sum: "$amount" } } },
+    ]);
+    const alreadyPaid  = round2(totals?.[0]?.amount || 0);
+    const outstanding  = round2(Math.max(round2(netJobPrice(job)) - alreadyPaid, 0));
+    if (outstanding <= 0) {
+      await CarWashMpesaNotification.updateOne({ _id: notif._id }, { $set: { status: "duplicate", transactionCode: receiptNumber, resultDesc: "Job already fully paid" } });
+      return;
+    }
+
+    const payAmount = round2(Math.min(paidAmount, outstanding));
+    const payment = await CarWashPayment.create({
+      business: businessId,
+      job: job._id,
+      amount: payAmount,
+      method: "mpesa",
+      cashbookAccount: cashbook._id,
+      reference: receiptNumber,
+      receivedFromPhone: phone,
+      paymentDate: transDate,
+    });
+
+    await CarWashMpesaNotification.updateOne(
+      { _id: notif._id },
+      { $set: { status: "matched", transactionCode: receiptNumber, msisdn: phone || notif.msisdn, matchedPayment: payment._id, resultCode: 0, resultDesc: "STK payment recorded", rawPayload: req.body } }
+    );
+
+    if (phone) {
+      await CarWashJob.updateOne({ _id: job._id, business: businessId }, { $set: { phone } });
+      CarWashCustomer.updateOne({ business: businessId, plates: normalizePlate(job.plateNumber) }, { $set: { phone } }).catch(() => {});
+    }
+
+    const updatedJob = await refreshJobPaymentStatus(businessId, job._id);
+    await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null });
+    if (updatedJob) {
+      await accrueCommissionForJob({ req: null, job: updatedJob });
+      const remaining = round2(Math.max(0, outstanding - payAmount));
+      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: payAmount, remaining, overridePhone: phone });
+      if (updatedJob.paymentStatus === "paid") {
+        await markJobCommissionsPayable({ business: businessId, jobId: updatedJob._id });
+      }
+      if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
+        await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: phone });
+      }
+    }
+    console.log(`[STK] Recorded receipt=${receiptNumber} job=${job.jobNumber} amount=${payAmount}`);
+  } catch (err) {
+    console.error("[STK] Callback error:", err?.message || err);
+  }
+};
+
 export const validateCarWashCallback = async (req, res) => {
   try {
     const shortCode = normalizeText(req.params.shortCode || req.body?.BusinessShortCode || "");

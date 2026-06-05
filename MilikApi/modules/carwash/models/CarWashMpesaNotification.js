@@ -18,7 +18,7 @@ const carWashMpesaNotificationSchema = new mongoose.Schema(
     // Processing result
     status: {
       type: String,
-      enum: ["matched", "unmatched", "duplicate", "rejected", "error"],
+      enum: ["matched", "unmatched", "duplicate", "rejected", "error", "stk_pending"],
       default: "unmatched",
       index: true,
     },

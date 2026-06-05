@@ -7,8 +7,11 @@ import CarWashCustomer from "../models/CarWashCustomer.js";
 import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, buildPaidLineSet, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
 import { awardLoyaltyStamp, revokeStampForJob, sendPaymentConfirmationSms } from "./loyaltyController.js";
+import axios from "axios";
+import Company from "../../../models/Company.js";
+import CarWashMpesaNotification from "../models/CarWashMpesaNotification.js";
+import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../../utils/companyModules.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
-import mpesaService from "../../../services/mpesaService.js";
 import { postCarWashPaymentLedger, reverseCarWashPaymentLedger } from "../services/carwashAccountingService.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -290,26 +293,69 @@ export const sendPaymentSms = async (req, res, next) => {
 // ─── M-Pesa STK Push ──────────────────────────────────────────────────────────
 export const initiateStkPush = async (req, res, next) => {
   try {
-    if (!mpesaService.isConfigured()) {
-      return next(createError(400, "M-Pesa STK Push is not configured on this server. Ensure MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE, and MPESA_PASSKEY are set."));
-    }
-
-    const { phone, amount, jobId, accountRef } = req.body;
+    const { phone, amount, jobId } = req.body;
     const normalised = String(phone || "").replace(/^\+/, "").replace(/^0/, "254");
     if (!/^254[0-9]{9}$/.test(normalised)) {
       return next(createError(400, "Invalid phone number. Use format 07XXXXXXXX or 2547XXXXXXXX"));
     }
     if (!amount || Number(amount) <= 0) return next(createError(400, "Amount must be greater than zero"));
+    if (!jobId) return next(createError(400, "jobId is required for STK push"));
 
     const business = resolveActiveBusinessId(req);
-    const callbackUrl = `${process.env.APP_URL || "https://api.milik.co.ke"}/api/carwash/mpesa/confirmation/${business}`;
+    const job = await CarWashJob.findOne({ _id: jobId, business }).lean();
+    if (!job) return next(createError(404, "Job not found"));
 
-    const result = await mpesaService.stkPush({
-      phone: normalised,
-      amount: Number(amount),
-      accountRef: accountRef || (jobId ? `JOB-${jobId.slice(-6)}` : "CarWash"),
-      description: "Car Wash Payment",
-      callbackUrl,
+    const company = await Company.findById(business).select("paymentIntegration").lean();
+    const config = getPrimaryMpesaPaybillConfig(getRawMpesaPaybillConfigs(company?.paymentIntegration));
+    if (!config?.consumerKey || !config?.consumerSecret || !config?.shortCode || !config?.passkey) {
+      return next(createError(400, "M-Pesa credentials not configured for this business. Set them up in Setup → M-Pesa."));
+    }
+
+    const baseURL = process.env.MPESA_ENVIRONMENT === "production"
+      ? "https://api.safaricom.co.ke"
+      : "https://sandbox.safaricom.co.ke";
+    const callbackBase = String(process.env.MPESA_CALLBACK_BASE_URL || "").replace(/\/$/, "");
+    if (!callbackBase) return next(createError(500, "MPESA_CALLBACK_BASE_URL is not set on the server"));
+
+    const auth = Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString("base64");
+    const { data: tokenData } = await axios.get(
+      `${baseURL}/oauth/v1/generate?grant_type=client_credentials`,
+      { headers: { Authorization: `Basic ${auth}` }, timeout: 10000 }
+    );
+
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
+    const password = Buffer.from(`${config.shortCode}${config.passkey}${timestamp}`).toString("base64");
+
+    const { data: result } = await axios.post(
+      `${baseURL}/mpesa/stkpush/v1/processrequest`,
+      {
+        BusinessShortCode: config.shortCode,
+        Password: password,
+        Timestamp: timestamp,
+        TransactionType: "CustomerPayBillOnline",
+        Amount: Math.ceil(Number(amount)),
+        PartyA: normalised,
+        PartyB: config.shortCode,
+        PhoneNumber: normalised,
+        CallBackURL: `${callbackBase}/api/carwash/pay/stk-callback/${business}`,
+        AccountReference: String(job.plateNumber || "CarWash").slice(0, 12),
+        TransactionDesc: "Car Wash",
+      },
+      { headers: { Authorization: `Bearer ${tokenData.access_token}`, "Content-Type": "application/json" }, timeout: 15000 }
+    );
+
+    // Store pending record so callback can match it by CheckoutRequestID
+    await CarWashMpesaNotification.create({
+      business,
+      shortCode: String(config.shortCode),
+      transactionCode: result.CheckoutRequestID || "",
+      plate: String(job.plateNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
+      amount: Math.ceil(Number(amount)),
+      msisdn: "0" + normalised.slice(3),
+      matchedJob: job._id,
+      status: "stk_pending",
+      resultDesc: "STK push initiated",
+      rawPayload: result,
     });
 
     res.json({
@@ -318,7 +364,6 @@ export const initiateStkPush = async (req, res, next) => {
       message: `M-Pesa payment request sent to ${phone}. Ask the customer to check their phone and enter their PIN.`,
     });
   } catch (err) {
-    // Daraja errors have helpful messages in err.response.data
     const darajaMsg = err?.response?.data?.errorMessage || err?.response?.data?.ResultDesc;
     if (darajaMsg) return next(createError(400, `M-Pesa: ${darajaMsg}`));
     next(err);

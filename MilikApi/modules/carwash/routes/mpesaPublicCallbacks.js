@@ -1,5 +1,5 @@
 import express from "express";
-import { confirmCarWashCallback, validateCarWashCallback, handleTransactionStatusResult } from "../controllers/mpesaCallbackController.js";
+import { confirmCarWashCallback, validateCarWashCallback, handleTransactionStatusResult, handleStkCallback } from "../controllers/mpesaCallbackController.js";
 
 const router = express.Router();
 
@@ -8,5 +8,6 @@ const router = express.Router();
 router.post("/validation/:shortCode", validateCarWashCallback);
 router.post("/confirmation/:shortCode", confirmCarWashCallback);
 router.post("/txn-result", handleTransactionStatusResult);
+router.post("/stk-callback/:businessId", handleStkCallback);
 
 export default router;
