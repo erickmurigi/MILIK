@@ -871,6 +871,8 @@ const buildMpesaConfigRecord = async ({
     responseType: existingConfig?.responseType === "Cancelled" ? "Cancelled" : "Completed",
     accountReferenceSource: "tenant_code",
     tenantAccountReferenceLabel: "Tenant Code",
+    initiatorName:      normalizeText(existingConfig?.initiatorName),
+    securityCredential: normalizeText(existingConfig?.securityCredential),
     lastConfiguredAt: existingConfig?.lastConfiguredAt || null,
     lastConfiguredBy: normalizeText(existingConfig?.lastConfiguredBy),
   };
@@ -922,7 +924,7 @@ const buildMpesaConfigRecord = async ({
     }
   }
 
-  ["consumerKey", "consumerSecret", "passkey"].forEach((field) => {
+  ["consumerKey", "consumerSecret", "passkey", "securityCredential"].forEach((field) => {
     if (payload[field] === undefined) return;
     const secretValue = normalizeText(payload[field]);
     if (!secretValue) return;
@@ -931,6 +933,11 @@ const buildMpesaConfigRecord = async ({
       hasChanges = true;
     }
   });
+
+  if (payload.initiatorName !== undefined) {
+    const v = normalizeText(payload.initiatorName);
+    if (nextConfig.initiatorName !== v) { nextConfig.initiatorName = v; hasChanges = true; }
+  }
 
   applyEnum("unmatchedPaymentMode", ["manual_review", "hold_unallocated"], "manual_review");
   applyEnum("postingMode", ["manual_review", "auto_post_matched"], "manual_review");

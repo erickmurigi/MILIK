@@ -72,6 +72,8 @@ const normalizeMpesaPaybillConfigItem = (item = {}, index = 0) => {
     responseType: item?.responseType === 'Cancelled' ? 'Cancelled' : 'Completed',
     accountReferenceSource: 'tenant_code',
     tenantAccountReferenceLabel: optionalString(item?.tenantAccountReferenceLabel) || 'Tenant Code',
+    initiatorName:      optionalString(item?.initiatorName),
+    securityCredential: optionalString(item?.securityCredential),
     lastConfiguredAt: item?.lastConfiguredAt || null,
     lastConfiguredBy: optionalString(item?.lastConfiguredBy),
   };
@@ -322,6 +324,8 @@ const mpesaPaybillConfigSchema = new mongoose.Schema(
       default: 'tenant_code',
     },
     tenantAccountReferenceLabel: { type: String, trim: true, default: 'Tenant Code' },
+    initiatorName:      { type: String, trim: true, default: '' },
+    securityCredential: { type: String, trim: true, default: '' },
     lastConfiguredAt: { type: Date, default: null },
     lastConfiguredBy: { type: String, trim: true, default: '' },
   },

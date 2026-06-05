@@ -360,6 +360,10 @@ const createBlankPaymentForm = (sequence = 1) => ({
   consumerKeyMasked: "",
   consumerSecretMasked: "",
   passkeyMasked: "",
+  initiatorName: "",
+  securityCredential: "",
+  hasSecurityCredential: false,
+  securityCredentialMasked: "",
   lastConfiguredAt: null,
   status: "not_configured",
   statusLabel: "Not configured",
@@ -388,6 +392,10 @@ const normalizePaymentEditor = (config = {}) => {
     consumerKeyMasked: config.consumerKeyMasked || "",
     consumerSecretMasked: config.consumerSecretMasked || "",
     passkeyMasked: config.passkeyMasked || "",
+    initiatorName: config.initiatorName || "",
+    securityCredential: "",
+    hasSecurityCredential: Boolean(config.hasSecurityCredential),
+    securityCredentialMasked: config.securityCredentialMasked || "",
     lastConfiguredAt: config.lastConfiguredAt || null,
     status: status.code,
     statusLabel: status.label,
@@ -1396,6 +1404,8 @@ export default function CompanySetupPage() {
     if (paymentForm.consumerKey.trim()) payload.consumerKey = paymentForm.consumerKey.trim();
     if (paymentForm.consumerSecret.trim()) payload.consumerSecret = paymentForm.consumerSecret.trim();
     if (paymentForm.passkey.trim()) payload.passkey = paymentForm.passkey.trim();
+    payload.initiatorName = paymentForm.initiatorName.trim();
+    if (paymentForm.securityCredential.trim()) payload.securityCredential = paymentForm.securityCredential.trim();
 
     const isCreate = selectedPaymentConfigId === PAYMENT_DRAFT_ID;
     await mutatePaymentConfig({
@@ -2711,6 +2721,35 @@ export default function CompanySetupPage() {
                 placeholder={paymentForm.hasPasskey ? "Leave blank to keep saved passkey" : "Enter passkey"}
               />
               <div className="mt-1 text-xs text-slate-500">{paymentForm.hasPasskey ? `Saved: ${paymentForm.passkeyMasked || "Yes"}` : "No saved passkey yet."}</div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-200">
+              <div className="mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">Transaction Status Query (for payer phone retrieval)</div>
+              <div className="text-xs text-slate-500 mb-3">Safaricom hashes the payer phone in C2B callbacks. These credentials let the system query Safaricom after each payment to retrieve the actual phone number and send SMS.</div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700">Initiator Name</label>
+                  <Input
+                    type="text"
+                    value={paymentForm.initiatorName}
+                    onChange={(e) => setPaymentForm((prev) => ({ ...prev, initiatorName: e.target.value }))}
+                    placeholder="API operator username from Daraja portal"
+                  />
+                  <div className="mt-1 text-xs text-slate-500">Found under your app's API Operators in developer.safaricom.co.ke</div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700">Security Credential</label>
+                  <Input
+                    type="password"
+                    value={paymentForm.securityCredential}
+                    onChange={(e) => setPaymentForm((prev) => ({ ...prev, securityCredential: e.target.value }))}
+                    placeholder={paymentForm.hasSecurityCredential ? "Leave blank to keep saved credential" : "Base64 encrypted initiator password"}
+                  />
+                  <div className="mt-1 text-xs text-slate-500">
+                    {paymentForm.hasSecurityCredential ? `Saved: ${paymentForm.securityCredentialMasked || "Yes"}` : "Generate this at Daraja portal → Utilities → Security Credential Generator (use Production, enter your initiator password)."}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div>

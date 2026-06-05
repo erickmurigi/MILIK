@@ -127,6 +127,135 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   return job;
 };
 
+// ─── Safaricom MSISDN normalisation (shared) ──────────────────────────────────
+const normalizeMsisdn = (raw = "") => {
+  const _digits = String(raw || "").replace(/\D/g, "");
+  if (_digits.startsWith("254") && _digits.length === 12) return "0" + _digits.slice(3);
+  if (_digits.startsWith("0")   && _digits.length === 10) return _digits;
+  if (_digits.length === 9      && /^[17]/.test(_digits)) return "0" + _digits;
+  return null;
+};
+
+// ─── Transaction Status Query — fetches actual payer phone from Safaricom ─────
+const MPESA_BASE_URL = process.env.MPESA_ENVIRONMENT === "production"
+  ? "https://api.safaricom.co.ke"
+  : "https://sandbox.safaricom.co.ke";
+
+const getMpesaAccessToken = async (consumerKey, consumerSecret) => {
+  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
+  const { data } = await axios.get(`${MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`, {
+    headers: { Authorization: `Basic ${auth}` },
+    timeout: 10000,
+  });
+  return data.access_token;
+};
+
+const triggerTransactionStatusQuery = async ({ config, transId, businessId, notifId }) => {
+  try {
+    const { consumerKey, consumerSecret, shortCode, initiatorName, securityCredential } = config;
+    if (!initiatorName || !securityCredential || !consumerKey || !consumerSecret) return;
+
+    const token = await getMpesaAccessToken(consumerKey, consumerSecret);
+    const apiBase = normalizeText(process.env.MPESA_CALLBACK_BASE_URL || "").replace(/\/$/, "");
+    if (!apiBase) { console.warn("[TxnStatus] MPESA_CALLBACK_BASE_URL not set — skipping query"); return; }
+
+    await axios.post(
+      `${MPESA_BASE_URL}/mpesa/transactionstatus/v1/queryresult`,
+      {
+        Initiator:          initiatorName,
+        SecurityCredential: securityCredential,
+        CommandID:          "TransactionStatusQuery",
+        TransactionID:      transId,
+        PartyA:             shortCode,
+        IdentifierType:     "4",
+        ResultURL:          `${apiBase}/api/carwash/pay/txn-result`,
+        QueueTimeOutURL:    `${apiBase}/api/carwash/pay/txn-result`,
+        Remarks:            "Payment verification",
+        Occasion:           "",
+      },
+      { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, timeout: 15000 }
+    );
+    console.log(`[TxnStatus] Query fired for TransID=${transId} notif=${notifId}`);
+  } catch (err) {
+    console.error("[TxnStatus] Query failed:", err?.response?.data || err?.message || err);
+  }
+};
+
+export const handleTransactionStatusResult = async (req, res) => {
+  // Acknowledge immediately — processing is async
+  res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+  try {
+    const result = req.body?.Result;
+    if (!result || Number(result.ResultCode) !== 0) return;
+
+    const transId = normalizeText(result.TransactionID || "");
+    if (!transId) return;
+
+    // Extract DebitPartyName — format "254712345678 - JOHN DOE"
+    const params = Array.isArray(result.ResultParameters?.ResultParameter)
+      ? result.ResultParameters.ResultParameter
+      : [];
+    const get = (key) => params.find((p) => normalizeText(p?.Key) === key)?.Value || "";
+    const debitPartyName = normalizeText(String(get("DebitPartyName")));
+    if (!debitPartyName) return;
+
+    const phoneRaw = debitPartyName.split(" - ")[0].trim();
+    const phone = normalizeMsisdn(phoneRaw);
+    if (!phone) return;
+
+    // Find the notification for this transaction
+    const notif = await CarWashMpesaNotification.findOne({ transactionCode: transId });
+    if (!notif) return;
+
+    const hadPhone = Boolean(notif.msisdn);
+
+    // Update notification with real phone
+    if (!hadPhone) {
+      await CarWashMpesaNotification.updateOne({ _id: notif._id }, { $set: { msisdn: phone } });
+    }
+
+    if (!notif.matchedJob) return;
+
+    const job = await CarWashJob.findOne({ _id: notif.matchedJob, business: notif.business });
+    if (!job) return;
+
+    // Update job phone
+    await CarWashJob.updateOne({ _id: job._id, business: notif.business }, { $set: { phone } });
+
+    // Update customer phone
+    CarWashCustomer.updateOne(
+      { business: notif.business, plates: normalizePlate(job.plateNumber) },
+      { $set: { phone } }
+    ).catch(() => {});
+
+    // Send SMS only if the confirmation callback had no valid phone (to avoid double-SMS)
+    if (!hadPhone) {
+      const payment = notif.matchedPayment
+        ? await CarWashPayment.findById(notif.matchedPayment).lean()
+        : null;
+      if (payment) {
+        const totals = await CarWashPayment.aggregate([
+          { $match: { business: notif.business, job: job._id } },
+          { $group: { _id: null, amount: { $sum: "$amount" } } },
+        ]);
+        const totalPaid = Number(totals?.[0]?.amount || 0);
+        const remaining = round2(Math.max(0, netJobPrice(job) - totalPaid));
+        await sendPaymentConfirmationSms({
+          business: notif.business,
+          job: { ...job.toObject(), phone },
+          amount: payment.amount,
+          remaining,
+          overridePhone: phone,
+        });
+      }
+    }
+
+    console.log(`[TxnStatus] Phone ${phone} applied for TransID=${transId} job=${job.jobNumber}`);
+  } catch (err) {
+    console.error("[TxnStatus] Result handler error:", err?.message || err);
+  }
+};
+
 export const validateCarWashCallback = async (req, res) => {
   try {
     const shortCode = normalizeText(req.params.shortCode || req.body?.BusinessShortCode || "");
@@ -277,7 +406,12 @@ export const confirmCarWashCallback = async (req, res) => {
     });
 
     // Save matched notification immediately so it appears in the UI
-    await saveNotif({ matchedJob: job._id, matchedPayment: payment._id, status: "matched", resultCode: 0, resultDesc: "Payment matched and recorded" });
+    const savedNotif = await saveNotif({ matchedJob: job._id, matchedPayment: payment._id, status: "matched", resultCode: 0, resultDesc: "Payment matched and recorded" });
+
+    // If MSISDN was hashed, fire Transaction Status Query to retrieve actual payer phone async
+    if (!normalizedMsisdn && transactionCode && config?.initiatorName && config?.securityCredential) {
+      triggerTransactionStatusQuery({ config, transId: transactionCode, businessId, notifId: savedNotif?._id }).catch(() => {});
+    }
 
     const jobUpdates = { ...(branchId && !job.branch ? { branch: branchId } : {}) };
     // M-Pesa number is Safaricom-verified — always overwrite job & customer phone

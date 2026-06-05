@@ -1,5 +1,5 @@
 import express from "express";
-import { confirmCarWashCallback, validateCarWashCallback } from "../controllers/mpesaCallbackController.js";
+import { confirmCarWashCallback, validateCarWashCallback, handleTransactionStatusResult } from "../controllers/mpesaCallbackController.js";
 
 const router = express.Router();
 
@@ -7,5 +7,6 @@ const router = express.Router();
 // Mounted at /api/carwash/pay to avoid Safaricom's banned keyword "mpesa" in URLs.
 router.post("/validation/:shortCode", validateCarWashCallback);
 router.post("/confirmation/:shortCode", confirmCarWashCallback);
+router.post("/txn-result", handleTransactionStatusResult);
 
 export default router;
