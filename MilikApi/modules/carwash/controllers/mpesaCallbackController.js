@@ -272,10 +272,10 @@ export const confirmCarWashCallback = async (req, res) => {
     await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null });
     if (updatedJob) {
       await accrueCommissionForJob({ req: null, job: updatedJob });
+      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, overridePhone: normalizedMsisdn });
       if (updatedJob.paymentStatus === "paid") {
         await markJobCommissionsPayable({ business: businessId, jobId: updatedJob._id });
         await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: normalizedMsisdn });
-        await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, overridePhone: normalizedMsisdn });
       }
     }
 

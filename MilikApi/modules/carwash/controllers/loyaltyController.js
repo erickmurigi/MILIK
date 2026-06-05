@@ -619,9 +619,9 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, overri
 
     const customerName = job.customerName || 'Valued Customer';
     const outstanding = round2(Math.max(0, netJobPrice(job) - Number(amount || 0)));
-    const balanceLine = outstanding > 0.01
-      ? `Balance: KES ${outstanding.toLocaleString()}.`
-      : 'Fully paid.';
+    const balanceLine = (job.paymentStatus === 'paid' || outstanding <= 0.01)
+      ? 'Fully paid.'
+      : `Balance: KES ${outstanding.toLocaleString()}.`;
 
     const body = await resolveCarWashSmsBody(business, 'carwash_payment_confirmed', {
       customerName,
