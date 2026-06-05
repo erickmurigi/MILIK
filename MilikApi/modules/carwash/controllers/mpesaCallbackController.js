@@ -57,6 +57,12 @@ const extractCallbackFields = (payload = {}) => {
   const metadataItems = Array.isArray(body?.CallbackMetadata?.Item) ? body.CallbackMetadata.Item : [];
   const meta = new Map(metadataItems.map((item) => [String(item?.Name || ""), item?.Value]));
 
+  const senderName = [
+    normalizeText(payload.FirstName  || body.FirstName  || ""),
+    normalizeText(payload.MiddleName || body.MiddleName || ""),
+    normalizeText(payload.LastName   || body.LastName   || ""),
+  ].filter(Boolean).join(" ");
+
   return {
     transactionCode: normalizeText(
       payload.TransID || payload.TransId || meta.get("MpesaReceiptNumber") || body?.CheckoutRequestID || ""
@@ -67,6 +73,7 @@ const extractCallbackFields = (payload = {}) => {
     ),
     amount: round2(Number(payload.TransAmount || payload.Amount || meta.get("Amount") || 0)),
     msisdn: normalizeText(payload.MSISDN || payload.Msisdn || meta.get("MSISDN") || ""),
+    senderName,
     transTimeRaw: normalizeText(payload.TransTime || payload.TransactionTime || meta.get("TransactionDate") || ""),
   };
 };
@@ -188,12 +195,16 @@ export const confirmCarWashCallback = async (req, res) => {
     const branchId = branch?._id || null;
     notifBase = { ...notifBase, business: businessId, branch: branchId };
 
-    const { billRefNumber, amount, msisdn, transTimeRaw, transactionCode } = extractCallbackFields(rawPayload);
+    const { billRefNumber, amount, msisdn, senderName, transTimeRaw, transactionCode } = extractCallbackFields(rawPayload);
     const plate = normalizePlate(billRefNumber);
-    const normalizedMsisdn = msisdn ? msisdn.replace(/\D/g, "").replace(/^254/, "0") || null : null;
+    const _digits = msisdn.replace(/\D/g, "");
+    let _local = "";
+    if (_digits.startsWith("254") && _digits.length === 12) _local = "0" + _digits.slice(3);
+    else if (_digits.startsWith("0") && _digits.length === 10) _local = _digits;
+    const normalizedMsisdn = _local || null;
     const transDate = parseMpesaDate(transTimeRaw);
 
-    notifBase = { ...notifBase, transactionCode, billRefNumber, plate, amount, msisdn: normalizedMsisdn || "", transactionDate: transDate };
+    notifBase = { ...notifBase, transactionCode, billRefNumber, plate, amount, msisdn: normalizedMsisdn || "", senderName, transactionDate: transDate };
 
     if (!plate || amount <= 0) {
       await saveNotif({ status: "error", resultCode: 0, resultDesc: "Accepted – insufficient data" });

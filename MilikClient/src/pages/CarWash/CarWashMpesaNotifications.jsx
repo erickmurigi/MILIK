@@ -354,6 +354,9 @@ export default function CarWashMpesaNotifications() {
                         <FaMobileAlt size={9} className="text-slate-400" />
                         {n.msisdn || "—"}
                       </span>
+                      {n.senderName && (
+                        <div className="text-[10px] font-semibold text-slate-500 mt-0.5">{n.senderName}</div>
+                      )}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-700">{n.transactionCode || "—"}</td>
                     <td className="px-3 py-2">

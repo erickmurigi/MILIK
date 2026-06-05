@@ -12,6 +12,7 @@ const carWashMpesaNotificationSchema = new mongoose.Schema(
     plate:           { type: String, trim: true, default: "" }, // normalized plate
     amount:          { type: Number, default: 0 },
     msisdn:          { type: String, trim: true, default: "" }, // normalised 07xx
+    senderName:      { type: String, trim: true, default: "" }, // FirstName + MiddleName + LastName from Safaricom
     transactionDate: { type: Date, default: null },
 
     // Processing result
