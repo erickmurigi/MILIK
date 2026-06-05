@@ -3,6 +3,7 @@ import { FaEdit, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const METHODS = ["cash", "mpesa", "bank", "card", "other"];
 const METHOD_LABELS = { cash: "Cash", mpesa: "M-Pesa", bank: "Bank Transfer", card: "Card / POS", other: "Other" };
@@ -44,6 +45,7 @@ const CarWashBranches = () => {
   const [editingId, setEditingId] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading]   = useState(false);
+  const canManage = useCarWashPermission("carwash-branches", "manage");
 
   const load = async () => {
     setLoading(true);
@@ -122,9 +124,11 @@ const CarWashBranches = () => {
           <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]">
-            <FaPlus /> New Branch
-          </button>
+          {canManage && (
+            <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]">
+              <FaPlus /> New Branch
+            </button>
+          )}
         </>
       }
     >
@@ -170,13 +174,17 @@ const CarWashBranches = () => {
                   </td>
                   <td className="px-2 py-1.5 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                        <FaEdit /> Edit
-                      </button>
-                      {!row.isDefault && (
-                        <button type="button" onClick={() => handleDelete(row)} className="inline-flex items-center gap-1 border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50">
-                          Delete
-                        </button>
+                      {canManage && (
+                        <>
+                          <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                            <FaEdit /> Edit
+                          </button>
+                          {!row.isDefault && (
+                            <button type="button" onClick={() => handleDelete(row)} className="inline-flex items-center gap-1 border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50">
+                              Delete
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -200,7 +208,7 @@ const CarWashBranches = () => {
           footer={
             <>
               <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="submit" form="branch-form" className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">Save Branch</button>
+              {canManage && <button type="submit" form="branch-form" className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">Save Branch</button>}
             </>
           }
         >

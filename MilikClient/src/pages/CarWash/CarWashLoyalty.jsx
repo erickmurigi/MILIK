@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { carWashApi } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -60,6 +61,7 @@ const ProgramPanel = ({ program, onSaved }) => {
   });
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const canManage = useCarWashPermission("carwash-loyalty", "manage");
 
   useEffect(() => {
     if (program) {
@@ -178,13 +180,15 @@ const ProgramPanel = ({ program, onSaved }) => {
             Migrate Cards
           </button>
         </div>
-        <button
-          onClick={save}
-          disabled={saving || !dirty}
-          className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Save Program"}
-        </button>
+        {canManage && (
+          <button
+            onClick={save}
+            disabled={saving || !dirty}
+            className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save Program"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -218,6 +222,7 @@ const CarWashLoyalty = () => {
   const [customerForm, setCustomerForm] = useState(emptyCustomer);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("customers");
+  const canManageLoyalty = useCarWashPermission("carwash-loyalty", "manage");
   const [expandedId, setExpandedId] = useState(null);
   const [cardData, setCardData] = useState({});
   const [smsTarget, setSmsTarget] = useState(null);
@@ -378,7 +383,7 @@ const CarWashLoyalty = () => {
               </button>
             ))}
           </div>
-          {tab === "customers" && (
+          {tab === "customers" && canManageLoyalty && (
             <button
               onClick={openAdd}
               className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127]"
@@ -535,13 +540,15 @@ const CarWashLoyalty = () => {
                                 <FaSms />
                               </button>
                             )}
-                            <button
-                              onClick={() => openEdit(c)}
-                              className="p-1 text-slate-400 hover:text-emerald-700"
-                              title="Edit customer"
-                            >
-                              <FaEdit />
-                            </button>
+                            {canManageLoyalty && (
+                              <button
+                                onClick={() => openEdit(c)}
+                                className="p-1 text-slate-400 hover:text-emerald-700"
+                                title="Edit customer"
+                              >
+                                <FaEdit />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -633,9 +640,11 @@ const CarWashLoyalty = () => {
           footer={
             <>
               <button onClick={() => setShowCustomerModal(false)} className="border border-slate-300 px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={saveCustomer} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-50">
-                {saving ? "Saving…" : editingCustomer ? "Update" : "Register"}
-              </button>
+              {canManageLoyalty && (
+                <button onClick={saveCustomer} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-50">
+                  {saving ? "Saving…" : editingCustomer ? "Update" : "Register"}
+                </button>
+              )}
             </>
           }
         >

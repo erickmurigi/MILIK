@@ -3,6 +3,7 @@ import { FaCheckCircle, FaCog, FaMoneyBillWave, FaPiggyBank, FaRedoAlt, FaSms, F
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const inputClass = "h-9 w-full border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -28,6 +29,7 @@ export default function CarWashSettings() {
   const [loading, setLoading]             = useState(false);
   const [saving, setSaving]               = useState(false);
   const [dirty, setDirty]                 = useState(false);
+  const canManage = useCarWashPermission("carwash-settings", "manage");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -101,13 +103,15 @@ export default function CarWashSettings() {
           <button onClick={loadData} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
             <FaRedoAlt size={10} /> Refresh
           </button>
-          <button
-            onClick={save}
-            disabled={saving || !dirty}
-            className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-50"
-          >
-            <FaCheckCircle size={10} /> {saving ? "Saving…" : "Save Changes"}
-          </button>
+          {canManage && (
+            <button
+              onClick={save}
+              disabled={saving || !dirty}
+              className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-50"
+            >
+              <FaCheckCircle size={10} /> {saving ? "Saving…" : "Save Changes"}
+            </button>
+          )}
         </div>
       }
     >

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { FaChevronDown, FaChevronRight, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
@@ -77,6 +78,7 @@ const CarWashExpenses = () => {
   const [pagination, setPagination] = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
   const [summary, setSummary] = useState({ draft: {}, approved: {}, paid: {}, cancelled: {}, totalAmount: 0, totalCount: 0 });
   const [loading, setLoading] = useState(false);
+  const canCreate = useCarWashPermission("carwash-expenses", "create");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -194,10 +196,12 @@ const CarWashExpenses = () => {
             <FaRedoAlt className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
-          <button type="button" onClick={openModal} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]">
-            <FaPlus />
-            New Expense
-          </button>
+          {canCreate && (
+            <button type="button" onClick={openModal} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]">
+              <FaPlus />
+              New Expense
+            </button>
+          )}
         </>
       }
     >
@@ -309,7 +313,7 @@ const CarWashExpenses = () => {
           footer={
             <>
               <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="submit" form="carwash-expense-form" className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">Save Expense</button>
+              {canCreate && <button type="submit" form="carwash-expense-form" className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">Save Expense</button>}
             </>
           }
         >

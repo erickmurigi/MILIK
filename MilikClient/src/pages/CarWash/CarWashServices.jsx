@@ -3,6 +3,7 @@ import { FaChevronDown, FaChevronRight, FaEdit, FaMinus, FaPlus, FaRedoAlt, FaSe
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, VEHICLE_TYPES } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const emptyForm = { name: "", category: "", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true };
 const inputClass  = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -37,6 +38,7 @@ const CarWashServices = () => {
   const [loading, setLoading]         = useState(false);
   const [categories, setCategories]   = useState([]);
   const [categoryMode, setCategoryMode] = useState("select");
+  const canManage = useCarWashPermission("carwash-services", "manage");
 
   const rowStats = useMemo(() => {
     let active = 0, inactive = 0;
@@ -146,9 +148,11 @@ const CarWashServices = () => {
           <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]">
-            <FaPlus /> New Service
-          </button>
+          {canManage && (
+            <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]">
+              <FaPlus /> New Service
+            </button>
+          )}
         </>
       }
     >
@@ -232,9 +236,11 @@ const CarWashServices = () => {
                         </span>
                       </td>
                       <td className="px-2 py-1 text-right">
-                        <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                          <FaEdit /> Edit
-                        </button>
+                        {canManage && (
+                          <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                            <FaEdit /> Edit
+                          </button>
+                        )}
                       </td>
                     </tr>
                     {expanded && (
@@ -301,7 +307,7 @@ const CarWashServices = () => {
           footer={
             <>
               <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="submit" form="carwash-service-form" className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">Save Service</button>
+              {canManage && <button type="submit" form="carwash-service-form" className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">Save Service</button>}
             </>
           }
         >

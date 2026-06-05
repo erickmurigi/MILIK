@@ -5,6 +5,7 @@ import { FaMoneyBillWave, FaPiggyBank, FaRedoAlt, FaTimes } from "react-icons/fa
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -44,6 +45,7 @@ const CarWashCommissionPayouts = () => {
   const [showModal, setShowModal]       = useState(false);
   const [pendingSavings, setPendingSavings] = useState(0); // savings to be held from this payout
   const [form, setForm] = useState({ staff: "", commissionIds: [], method: "cash", cashbookAccount: "", payoutDate: todayISO(), reference: "", notes: "" });
+  const canPay = useCarWashPermission("carwash-commissions", "pay");
 
   const selectedStaffPayable = useMemo(
     () => payableComms.filter((c) => !form.staff || String(c.staff?._id || c.staff) === String(form.staff)),
@@ -149,9 +151,11 @@ const CarWashCommissionPayouts = () => {
           <button onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button onClick={openPayout} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-            <FaMoneyBillWave /> New Payout
-          </button>
+          {canPay && (
+            <button onClick={openPayout} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
+              <FaMoneyBillWave /> New Payout
+            </button>
+          )}
         </>
       }
     >
@@ -213,9 +217,11 @@ const CarWashCommissionPayouts = () => {
           footer={
             <>
               <button type="button" onClick={() => setShowModal(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Cancel</button>
-              <button type="submit" form="cw-payout-form" disabled={!selectedTotal} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
-                <FaMoneyBillWave /> Pay {formatMoney(selectedTotal)}
-              </button>
+              {canPay && (
+                <button type="submit" form="cw-payout-form" disabled={!selectedTotal} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+                  <FaMoneyBillWave /> Pay {formatMoney(selectedTotal)}
+                </button>
+              )}
             </>
           }
         >

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { FaCamera, FaChevronDown, FaChevronRight, FaEdit, FaExpand, FaMobileAlt, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTimesCircle, FaTrashAlt, FaUndoAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, photoUrl, todayISO } from "../../services/carWashApi";
@@ -178,6 +179,10 @@ const CarWashJobs = () => {
   const [stkPushing, setStkPushing] = useState(false);
   // job-level payments: { [jobId]: { loading: bool, list: [] } }
   const [jobPayments, setJobPayments] = useState({});
+
+  const canCreateJob     = useCarWashPermission("carwash-jobs", "create");
+  const canUpdateJob     = useCarWashPermission("carwash-jobs", "update");
+  const canRecordPayment = useCarWashPermission("carwash-payments", "record");
 
   const unpaidJobs = useMemo(() => jobs.filter((job) => job.paymentStatus !== "paid"), [jobs]);
   const jobStats = useMemo(() => {
@@ -516,32 +521,38 @@ const CarWashJobs = () => {
             <FaRedoAlt className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
-          <button
-            type="button"
-            onClick={() => openPaymentModal()}
-            className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaMoneyBillWave />
-            Record Payment
-          </button>
-          <button
-            type="button"
-            onClick={deleteSelectedJobs}
-            disabled={!selectedIds.length}
-            className="inline-flex h-8 items-center gap-1.5 border border-red-200 bg-white px-3 text-xs font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-45"
-            title="Deletes unpaid jobs only. Paid or payment-linked jobs are locked."
-          >
-            <FaTrashAlt />
-            Delete Selected
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("/carwash/jobs/new")}
-            className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]"
-          >
-            <FaPlus />
-            New Job
-          </button>
+          {canRecordPayment && (
+            <button
+              type="button"
+              onClick={() => openPaymentModal()}
+              className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+            >
+              <FaMoneyBillWave />
+              Record Payment
+            </button>
+          )}
+          {canUpdateJob && (
+            <button
+              type="button"
+              onClick={deleteSelectedJobs}
+              disabled={!selectedIds.length}
+              className="inline-flex h-8 items-center gap-1.5 border border-red-200 bg-white px-3 text-xs font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-45"
+              title="Deletes unpaid jobs only. Paid or payment-linked jobs are locked."
+            >
+              <FaTrashAlt />
+              Delete Selected
+            </button>
+          )}
+          {canCreateJob && (
+            <button
+              type="button"
+              onClick={() => navigate("/carwash/jobs/new")}
+              className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]"
+            >
+              <FaPlus />
+              New Job
+            </button>
+          )}
         </>
       }
     >
@@ -755,23 +766,27 @@ const CarWashJobs = () => {
                       </td>
                       <td className="px-2 py-1 text-right">
                         <div className="inline-flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/carwash/jobs/${job._id}/edit`)}
-                            disabled={job.status === "cancelled"}
-                            className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-40"
-                            title="Edit job"
-                          >
-                            <FaEdit className="text-[9px]" /> Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openPaymentModal(job)}
-                            disabled={job.paymentStatus === "paid"}
-                            className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Pay
-                          </button>
+                          {canUpdateJob && (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/carwash/jobs/${job._id}/edit`)}
+                              disabled={job.status === "cancelled"}
+                              className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-40"
+                              title="Edit job"
+                            >
+                              <FaEdit className="text-[9px]" /> Edit
+                            </button>
+                          )}
+                          {canRecordPayment && (
+                            <button
+                              type="button"
+                              onClick={() => openPaymentModal(job)}
+                              disabled={job.paymentStatus === "paid"}
+                              className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Pay
+                            </button>
+                          )}
                           {job.phone && job.status === "done" && job.paymentStatus !== "paid" && (
                             <button
                               type="button"
@@ -984,9 +999,11 @@ const CarWashJobs = () => {
               <button type="button" onClick={closePaymentModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">
                 Cancel
               </button>
-              <button type="submit" form="carwash-payment-form" className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">
-                Record Payment
-              </button>
+              {canRecordPayment && (
+                <button type="submit" form="carwash-payment-form" className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">
+                  Record Payment
+                </button>
+              )}
             </>
           }
         >

@@ -30,6 +30,9 @@ const DEFINITIONS = [
   { resource: 'carwash-staff', moduleKey: 'carwash', actions: ['view', 'manage'] },
   { resource: 'carwash-reports', moduleKey: 'carwash', actions: ['view'] },
   { resource: 'carwash-commissions', moduleKey: 'carwash', actions: ['view', 'manage', 'pay'] },
+  { resource: 'carwash-loyalty',     moduleKey: 'carwash', actions: ['view', 'manage'] },
+  { resource: 'carwash-branches',    moduleKey: 'carwash', actions: ['view', 'manage'] },
+  { resource: 'carwash-settings',    moduleKey: 'carwash', actions: ['view', 'manage'] },
 ];
 
 const LEGACY_ALIASES = {
@@ -121,6 +124,18 @@ const LEGACY_ALIASES = {
     view: ['carwash.commissions.view', 'carwash.commissions.manage', 'carwash.commissions.pay'],
     manage: ['carwash.commissions.manage'],
     pay: ['carwash.commissions.pay'],
+  },
+  'carwash-loyalty': {
+    view: ['carwash.loyalty.view', 'carwash.loyalty.manage'],
+    manage: ['carwash.loyalty.manage'],
+  },
+  'carwash-branches': {
+    view: ['carwash.branches.view', 'carwash.branches.manage'],
+    manage: ['carwash.branches.manage'],
+  },
+  'carwash-settings': {
+    view: ['carwash.settings.view', 'carwash.settings.manage'],
+    manage: ['carwash.settings.manage'],
   },
 };
 
