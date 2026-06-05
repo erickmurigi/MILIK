@@ -6,6 +6,7 @@ import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashBranch from "../models/CarWashBranch.js";
 import CarWashMpesaNotification from "../models/CarWashMpesaNotification.js";
+import CarWashCustomer from "../models/CarWashCustomer.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../../utils/companyModules.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
 import { postCarWashPaymentLedger } from "../services/carwashAccountingService.js";
@@ -272,8 +273,17 @@ export const confirmCarWashCallback = async (req, res) => {
     // Save matched notification immediately so it appears in the UI
     await saveNotif({ matchedJob: job._id, matchedPayment: payment._id, status: "matched", resultCode: 0, resultDesc: "Payment matched and recorded" });
 
-    if (branchId && !job.branch) {
-      await CarWashJob.updateOne({ _id: job._id, business: businessId }, { branch: branchId });
+    const jobUpdates = { ...(branchId && !job.branch ? { branch: branchId } : {}) };
+    // M-Pesa number is Safaricom-verified — always overwrite job & customer phone
+    if (normalizedMsisdn) jobUpdates.phone = normalizedMsisdn;
+    if (Object.keys(jobUpdates).length) {
+      await CarWashJob.updateOne({ _id: job._id, business: businessId }, { $set: jobUpdates });
+    }
+    if (normalizedMsisdn) {
+      CarWashCustomer.updateOne(
+        { business: businessId, plates: normalizePlate(job.plateNumber) },
+        { $set: { phone: normalizedMsisdn } }
+      ).catch(() => {});
     }
 
     await autoEnrollPlate({ business: businessId, plate: job.plateNumber, customerName: job.customerName, phone: normalizedMsisdn })
