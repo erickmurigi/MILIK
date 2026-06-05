@@ -542,11 +542,6 @@ export const confirmCarWashCallback = async (req, res) => {
     const savedNotif = await saveNotif({ matchedJob: job._id, matchedPayment: payment._id, status: "matched", resultCode: 0, resultDesc: "Payment matched and recorded" });
 
     // If MSISDN was hashed, fire Transaction Status Query to retrieve actual payer phone async
-    console.log("[TxnStatus Check] msisdn=%s txnCode=%s initiatorName=%s hasCred=%s hasCallbackBase=%s",
-      normalizedMsisdn, transactionCode, config?.initiatorName,
-      !!(config?.securityCredential || config?.initiatorPassword),
-      !!normalizeText(process.env.MPESA_CALLBACK_BASE_URL || "")
-    );
     if (!normalizedMsisdn && transactionCode && config?.initiatorName && (config?.securityCredential || config?.initiatorPassword)) {
       triggerTransactionStatusQuery({ config, transId: transactionCode, businessId, notifId: savedNotif?._id }).catch(() => {});
     }
