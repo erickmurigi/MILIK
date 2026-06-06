@@ -264,6 +264,82 @@ export default function CarWashCustomers() {
 
         {/* ── Table ── */}
         <div className="min-h-0 flex-1 overflow-auto">
+          {/* Mobile card list */}
+          <div className="sm:hidden divide-y divide-slate-200">
+            {loading && !customers.length ? (
+              <p className="py-16 text-center text-sm text-slate-400">Loading customers...</p>
+            ) : !displayed.length ? (
+              <div className="py-16 text-center">
+                <FaUser className="mx-auto mb-2 text-slate-300" size={24} />
+                <p className="text-sm font-semibold text-slate-500">{search ? "No customers match your search" : "No customers yet"}</p>
+                <p className="text-xs text-slate-400 mt-1">Customers are auto-created when jobs are opened</p>
+              </div>
+            ) : displayed.map((c) => {
+              const isExpanded = expandedId === String(c._id);
+              const hasOutstanding = c.outstanding > 0.01;
+              const card = c.loyaltyCard;
+              const acc = c.creditAccount;
+              return (
+                <div key={String(c._id)} className={`p-3 space-y-2${hasOutstanding ? " border-l-2 border-red-400" : ""}`}>
+                  <div
+                    className="flex items-start justify-between gap-2 cursor-pointer"
+                    onClick={() => setExpandedId(isExpanded ? null : String(c._id))}
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{c.name || "—"}</p>
+                      <p className="text-xs text-slate-400">{c.phone || "—"}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {hasOutstanding && <span className="font-semibold text-red-600 text-xs">{fmt(c.outstanding)}</span>}
+                      <span className="text-slate-400 text-[10px]">{isExpanded ? "▾" : "▸"}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {(c.plates || []).map((p) => (
+                      <span key={p} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-mono font-bold text-slate-700">{p}</span>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500">
+                    <span className="flex items-center gap-1"><FaCarSide size={9} className="text-slate-400" />{c.totalJobs || 0} visits</span>
+                    <span className="flex items-center gap-1"><FaClock size={9} />{fmtDate(c.lastVisit)}</span>
+                    {card && <StampBar card={card} />}
+                    {acc && (
+                      <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                        <FaIdCard size={8} />{acc.accountType}
+                      </span>
+                    )}
+                  </div>
+                  {isExpanded && (
+                    <div className="rounded border border-slate-200 bg-slate-50 p-3 space-y-3 text-xs">
+                      <div>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Financials</p>
+                        <div className="space-y-1">
+                          {[
+                            { label: "Total Invoiced", val: fmt(c.totalInvoiced), cls: "text-slate-700" },
+                            { label: "Total Paid", val: fmt(c.totalPaid), cls: "text-emerald-700" },
+                            { label: "Outstanding", val: fmt(c.outstanding), cls: c.outstanding > 0 ? "text-red-600 font-semibold" : "text-slate-400" },
+                          ].map(({ label, val, cls }) => (
+                            <div key={label} className="flex items-center justify-between">
+                              <span className="text-[10px] text-slate-500">{label}</span>
+                              <span className={`tabular-nums ${cls}`}>{val}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {card && (
+                        <div>
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Loyalty</p>
+                          <StampBar card={card} />
+                          <p className="mt-1 text-[10px] text-slate-500">{card.totalStampsEarned || 0} stamps · {card.totalRewardsEarned || 0} rewards</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="hidden sm:block">
           <table className="min-w-max w-full whitespace-nowrap text-xs">
             <thead className="sticky top-0 z-10">
               <tr className="bg-[#0B3B2E]">
@@ -386,6 +462,7 @@ export default function CarWashCustomers() {
               )}
             </tbody>
           </table>
+          </div>{/* end desktop table */}
         </div>
 
         {/* ── Pagination ── */}

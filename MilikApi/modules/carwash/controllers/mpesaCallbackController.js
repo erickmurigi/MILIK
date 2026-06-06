@@ -526,17 +526,27 @@ export const confirmCarWashCallback = async (req, res) => {
     }
 
     const paidAmount = round2(Math.min(amount, outstanding));
-    const payment = await CarWashPayment.create({
-      business: businessId,
-      branch: branchId,
-      job: job._id,
-      amount: paidAmount,
-      method: "mpesa",
-      cashbookAccount: cashbook._id,
-      reference: transactionCode || "",
-      receivedFromPhone: normalizedMsisdn,
-      paymentDate: transDate,
-    });
+    let payment;
+    try {
+      payment = await CarWashPayment.create({
+        business: businessId,
+        branch: branchId,
+        job: job._id,
+        amount: paidAmount,
+        method: "mpesa",
+        cashbookAccount: cashbook._id,
+        reference: transactionCode || "",
+        receivedFromPhone: normalizedMsisdn,
+        paymentDate: transDate,
+      });
+    } catch (payErr) {
+      // E11000 = unique-index violation: same M-Pesa receipt already created a payment
+      if (payErr.code === 11000) {
+        await saveNotif({ matchedJob: job._id, status: "duplicate", resultCode: 0, resultDesc: "Duplicate receipt — payment already recorded" });
+        return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – duplicate receipt" });
+      }
+      throw payErr;
+    }
 
     // Save matched notification immediately so it appears in the UI
     const savedNotif = await saveNotif({ matchedJob: job._id, matchedPayment: payment._id, status: "matched", resultCode: 0, resultDesc: "Payment matched and recorded" });
@@ -679,18 +689,26 @@ export const reassignMpesaNotification = async (req, res, next) => {
     const branch = job.branch || notif.branch || null;
     const normalizedMsisdn = notif.msisdn || null;
 
-    const payment = await CarWashPayment.create({
-      business,
-      branch,
-      job: job._id,
-      amount: paidAmount,
-      method: "mpesa",
-      cashbookAccount: cashbook._id,
-      reference: notif.transactionCode || "",
-      receivedFromPhone: normalizedMsisdn,
-      paymentDate: notif.transactionDate || notif.createdAt,
-      notes: `Manually assigned from M-Pesa notification (original ref: ${notif.billRefNumber})`,
-    });
+    let payment;
+    try {
+      payment = await CarWashPayment.create({
+        business,
+        branch,
+        job: job._id,
+        amount: paidAmount,
+        method: "mpesa",
+        cashbookAccount: cashbook._id,
+        reference: notif.transactionCode || "",
+        receivedFromPhone: normalizedMsisdn,
+        paymentDate: notif.transactionDate || notif.createdAt,
+        notes: `Manually assigned from M-Pesa notification (original ref: ${notif.billRefNumber})`,
+      });
+    } catch (payErr) {
+      if (payErr.code === 11000) {
+        return res.status(409).json({ success: false, message: "This M-Pesa receipt is already linked to a payment" });
+      }
+      throw payErr;
+    }
 
     notif.status = "matched";
     notif.matchedJob = job._id;

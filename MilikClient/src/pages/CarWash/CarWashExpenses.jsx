@@ -51,16 +51,16 @@ const statusOptionsFor = (status = "draft") => {
 };
 
 const Modal = ({ title, children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className="w-full max-w-3xl border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-3xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+      <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
         <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
         <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white" title="Close">
           <FaTimes />
         </button>
       </div>
-      <div className="p-4">{children}</div>
-      <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>
+      <div className="flex-1 overflow-y-auto p-4">{children}</div>
+      <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>
     </div>
   </div>
 );
@@ -238,8 +238,8 @@ const CarWashExpenses = () => {
         <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt />Reset</button>
       </form>
 
-      <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
-        <div className="flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+      <div className="flex flex-col h-[calc(100vh-14rem)] border border-slate-200 bg-white shadow-sm">
+        <div className="flex-shrink-0 flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{rows.length}</strong> / {pagination.total}</span>
           <span>Page Total: <strong className="text-[#0B3B2E]">{formatMoney(pageTotal)}</strong></span>
           <span>Total: <strong className="text-[#0B3B2E]">{formatMoney(summary?.totalAmount)}</strong></span>
@@ -248,8 +248,56 @@ const CarWashExpenses = () => {
           <span>Approved: <strong className="text-cyan-700">{summary?.approved?.count || 0}</strong></span>
           <span>Cancelled: <strong className="text-red-700">{summary?.cancelled?.count || 0}</strong></span>
         </div>
+        {/* Mobile card list */}
+        <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-slate-200">
+          {rows.length ? rows.map((row) => {
+            const expanded = expandedIds.includes(row._id);
+            return (
+              <React.Fragment key={row._id}>
+                <div className="p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-extrabold text-slate-900">{row.expenseNumber || "-"}</span>
+                        <span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${statusBadgeClass[row.status || "draft"] || statusBadgeClass.draft}`}>{row.status || "draft"}</span>
+                      </div>
+                      <div className="mt-0.5 font-semibold text-slate-800">{row.payee || "-"}</div>
+                      <div className="text-xs text-slate-500">{row.category} · {row.method?.toUpperCase()}</div>
+                      {row.expenseDate && <div className="text-[10px] text-slate-400">{new Date(row.expenseDate).toLocaleDateString("en-GB")}</div>}
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <div className="font-extrabold text-slate-900">{formatMoney(row.amount)}</div>
+                      {!["paid","cancelled"].includes(row.status) && (
+                        <select className={`mt-1 h-6 border px-1.5 text-[10px] font-bold uppercase ${statusBadgeClass[row.status || "draft"] || statusBadgeClass.draft}`} value={row.status || "draft"} onChange={(e) => updateStatus(row, e.target.value)}>
+                          {statusOptionsFor(row.status || "draft").map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => toggleExpanded(row._id)} className="mt-2 inline-flex items-center gap-1 border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                    {expanded ? <FaChevronDown className="text-[9px]" /> : <FaChevronRight className="text-[9px]" />} Details
+                  </button>
+                  {expanded && (
+                    <div className="mt-2 space-y-1 rounded border border-slate-200 bg-[#F8FBF9] p-2 text-[11px] text-slate-600">
+                      <div><span className="font-extrabold uppercase text-slate-500">Reference:</span> {row.reference || "-"}</div>
+                      <div><span className="font-extrabold uppercase text-slate-500">Description:</span> {row.description || "-"}</div>
+                      <div><span className="font-extrabold uppercase text-slate-500">Cashbook:</span> {row.cashbookAccount ? `${row.cashbookAccount.code || ""} ${row.cashbookAccount.name || ""}`.trim() : "-"}</div>
+                      {row.notes && <div><span className="font-extrabold uppercase text-slate-500">Notes:</span> {row.notes}</div>}
+                    </div>
+                  )}
+                </div>
+              </React.Fragment>
+            );
+          }) : (
+            <div className="py-10 text-center text-xs font-semibold text-slate-500">No Car Wash expenses found for the selected filters.</div>
+          )}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden sm:flex sm:flex-col sm:flex-1 sm:min-h-0 sm:overflow-hidden">
+        <div className="flex-1 overflow-y-auto overflow-x-auto">
         <table className="w-full min-w-[1120px] text-xs">
-          <thead className="bg-[#0B3B2E] text-white">
+          <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
             <tr>
               <th className="w-8 px-2 py-1.5 text-left" />
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Date</th>
@@ -306,7 +354,9 @@ const CarWashExpenses = () => {
             )}
           </tbody>
         </table>
-        <div className="flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+        </div>{/* end scroll */}
+        </div>{/* end desktop table wrapper */}
+        <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Rows per page: {PAGE_SIZE}</span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setPage((prev) => Math.max(prev - 1, 1))} disabled={page <= 1 || loading} className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45">Previous</button>

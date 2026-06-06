@@ -36,6 +36,15 @@ const carWashMpesaNotificationSchema = new mongoose.Schema(
 
 carWashMpesaNotificationSchema.index({ business: 1, createdAt: -1 });
 carWashMpesaNotificationSchema.index({ business: 1, plate: 1 });
-carWashMpesaNotificationSchema.index({ transactionCode: 1 }, { sparse: true });
+carWashMpesaNotificationSchema.index({ business: 1, status: 1, createdAt: -1 });
+// Compound for duplicate check: business + transactionCode query in confirmCarWashCallback
+carWashMpesaNotificationSchema.index({ business: 1, transactionCode: 1 });
+// Global uniqueness on transactionCode prevents two concurrent callbacks from both
+// passing the duplicate check before either saves a "matched" notification.
+// partialFilterExpression excludes empty-string codes (STK pending before receipt arrives).
+carWashMpesaNotificationSchema.index(
+  { transactionCode: 1 },
+  { unique: true, partialFilterExpression: { transactionCode: { $gt: "" }, status: "matched" } }
+);
 
 export default mongoose.model("CarWashMpesaNotification", carWashMpesaNotificationSchema);

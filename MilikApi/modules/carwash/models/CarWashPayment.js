@@ -43,5 +43,13 @@ carWashPaymentSchema.index({ business: 1, method: 1 });
 carWashPaymentSchema.index({ business: 1, cashbookAccount: 1 });
 carWashPaymentSchema.index({ business: 1, reconciliationStatus: 1 });
 carWashPaymentSchema.index({ business: 1, reference: 1 });
+// Covering indexes for payments list filters
+carWashPaymentSchema.index({ business: 1, method: 1, paymentDate: -1 });
+carWashPaymentSchema.index({ business: 1, reconciliationStatus: 1, paymentDate: -1 });
+// Unique M-Pesa receipt: prevents duplicate payments from concurrent callbacks
+carWashPaymentSchema.index(
+  { business: 1, reference: 1 },
+  { unique: true, partialFilterExpression: { method: "mpesa", reference: { $gt: "" } } }
+);
 
 export default mongoose.model("CarWashPayment", carWashPaymentSchema);

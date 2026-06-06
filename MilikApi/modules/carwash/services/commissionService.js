@@ -29,23 +29,24 @@ const calculateAmount = ({ type, rate, baseAmount }) => {
   return round2(numericRate);
 };
 
-// Resolve the best matching commission rule for a specific service line + staff member
-const resolveCommissionRuleForLine = async (business, serviceId, staffId) => {
-  const rules = await CarWashCommissionRule.find({
-    business,
-    active: true,
-    $and: [
-      { $or: [{ service: serviceId || null }, { service: null }] },
-      { $or: [{ staff: staffId }, { staff: null }] },
-    ],
-  }).lean();
-
+// Resolve the best matching rule from a pre-loaded rule set (in-memory, no DB call).
+// Priority scoring: specific-staff > specific-service > catch-all, then tiebreak by priority field.
+const resolveRuleFromCache = (rules, serviceId, staffId) => {
+  const svc  = serviceId ? String(serviceId) : null;
+  const stf  = String(staffId);
   return rules
-    .map((rule) => ({
-      ...rule,
-      score: (rule.staff ? 4 : 0) + (rule.service ? 2 : 0) + Number(rule.priority || 0) / 1000,
-    }))
+    .filter((r) =>
+      (r.staff  === null || String(r.staff)  === stf) &&
+      (r.service === null || String(r.service) === svc)
+    )
+    .map((r) => ({ ...r, score: (r.staff ? 4 : 0) + (r.service ? 2 : 0) + Number(r.priority || 0) / 1000 }))
     .sort((a, b) => b.score - a.score)[0] || null;
+};
+
+// Async wrapper kept for backward-compat callers that pass a single (business, service, staff) tuple.
+const resolveCommissionRuleForLine = async (business, serviceId, staffId) => {
+  const rules = await CarWashCommissionRule.find({ business, active: true }).lean();
+  return resolveRuleFromCache(rules, serviceId, staffId);
 };
 
 // Exported for backward compat — used by commissions list controller
@@ -87,7 +88,10 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
     ? job.serviceLines
     : [{ service: job.service || null, serviceName: job.serviceName || "", vehicleType: job.vehicleType || "", price: Number(job.price || 0), lineStaff: null }];
 
-  const actorUserId = req ? await resolveAuditActorUserId({ req, businessId: job.business }) : null;
+  const [actorUserId, allRules] = await Promise.all([
+    req ? resolveAuditActorUserId({ req, businessId: job.business }) : Promise.resolve(null),
+    CarWashCommissionRule.find({ business: job.business, active: true }).lean(),
+  ]);
 
   // Build per-staff commission breakdown respecting per-line staff assignment.
   // Rule: if a service line has lineStaff set → only that staff earns commission for that line (no split).
@@ -108,7 +112,7 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
     if (!splitCount) continue;
 
     for (const staffId of recipients) {
-      const rule = await resolveCommissionRuleForLine(job.business, line.service || null, staffId);
+      const rule = resolveRuleFromCache(allRules, line.service || null, staffId);
       if (!rule || Number(rule.rate || 0) <= 0) continue;
 
       const totalLineCommission = calculateAmount({ type: rule.commissionType, rate: rule.rate, baseAmount: Number(line.price || 0) });

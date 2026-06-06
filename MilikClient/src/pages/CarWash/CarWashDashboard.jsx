@@ -291,7 +291,28 @@ const CarWashDashboard = () => {
             </button>
           }
         >
-          <div className="overflow-x-auto">
+          {/* Mobile job cards */}
+          <div className="sm:hidden divide-y divide-slate-200">
+            {jobs.length ? jobs.slice(0, 8).map((job) => (
+              <div key={job._id} className="flex items-center justify-between gap-2 px-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-extrabold text-slate-900">{job.jobNumber || "-"}</span>
+                    <span className="font-extrabold uppercase text-slate-700 text-[11px]">{job.plateNumber || "-"}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500">{job.serviceName || "-"} · {formatTime(job.createdAt)}</div>
+                </div>
+                <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                  <span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${job.paymentStatus === "paid" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>{job.paymentStatus || "unpaid"}</span>
+                  <span className="font-bold text-slate-900 text-xs">{formatMoney(job.price)}</span>
+                </div>
+              </div>
+            )) : (
+              <div className="px-3 py-8 text-center text-xs font-semibold text-slate-500">No Car Wash jobs recorded for this date.</div>
+            )}
+          </div>
+          {/* Desktop table */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full min-w-[920px] text-xs">
               <thead className="bg-[#0B3B2E] text-white">
                 <tr>

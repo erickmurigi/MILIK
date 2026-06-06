@@ -108,9 +108,9 @@ const preferredCashbookForMethod = (cashbooks = [], method = "cash", defaults = 
 };
 
 const Modal = ({ title, subtitle, children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className="w-full max-w-3xl border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-3xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+      <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
         <div>
           <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
           {subtitle && <p className="mt-0.5 text-xs font-semibold text-emerald-50">{subtitle}</p>}
@@ -119,8 +119,8 @@ const Modal = ({ title, subtitle, children, footer, onClose }) => (
           <FaTimes />
         </button>
       </div>
-      <div className="p-4">{children}</div>
-      {footer && <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
+      <div className="flex-1 overflow-y-auto p-4">{children}</div>
+      {footer && <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
     </div>
   </div>
 );
@@ -573,57 +573,51 @@ const CarWashJobs = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_0.9fr_0.9fr_0.8fr_0.8fr_0.65fr_0.85fr_auto_auto]">
+      <form onSubmit={applyFilters} className="mb-2 flex items-center gap-1.5 overflow-x-auto border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
         <input
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          className="h-8 w-[105px] shrink-0 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Job # / plate"
           value={filters.search}
           onChange={(event) => setFilterValue("search", event.target.value)}
         />
         <input
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          className="h-8 w-[120px] shrink-0 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Customer / phone"
           value={filters.customer}
           onChange={(event) => setFilterValue("customer", event.target.value)}
         />
         <select
-          className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+          className="h-8 w-[110px] shrink-0 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
           value={filters.service}
           onChange={(event) => setFilterValue("service", event.target.value)}
         >
           <option value="">Service</option>
           {services.map((service) => (
-            <option key={service._id} value={service._id}>
-              {service.name}
-            </option>
+            <option key={service._id} value={service._id}>{service.name}</option>
           ))}
         </select>
         <select
-          className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+          className="h-8 w-[100px] shrink-0 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
           value={filters.staff}
           onChange={(event) => setFilterValue("staff", event.target.value)}
         >
           <option value="">Staff</option>
           {staff.map((item) => (
-            <option key={item._id} value={item._id}>
-              {item.name}
-            </option>
+            <option key={item._id} value={item._id}>{item.name}</option>
           ))}
         </select>
         <select
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          className="h-8 w-[100px] shrink-0 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           value={filters.status}
           onChange={(event) => setFilterValue("status", event.target.value)}
         >
           <option value="">Status</option>
           {statuses.map((status) => (
-            <option key={status} value={status}>
-              {getJobStatusLabel(status, filters.jobType)}
-            </option>
+            <option key={status} value={status}>{getJobStatusLabel(status, filters.jobType)}</option>
           ))}
         </select>
         <select
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          className="h-8 w-[82px] shrink-0 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           value={filters.paymentStatus}
           onChange={(event) => setFilterValue("paymentStatus", event.target.value)}
         >
@@ -633,7 +627,7 @@ const CarWashJobs = () => {
           <option value="paid">Paid</option>
         </select>
         <select
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          className="h-8 w-[80px] shrink-0 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           value={filters.jobType}
           onChange={(event) => setFilterValue("jobType", event.target.value)}
         >
@@ -641,49 +635,47 @@ const CarWashJobs = () => {
           <option value="vehicle">Vehicle</option>
           <option value="carpet">Carpet</option>
         </select>
-        {/* Date presets */}
-        {[
-          { label: "Today",      action: () => { const d = todayISO(); setFilters((p) => ({ ...p, dateFrom: d, dateTo: d })); } },
-          { label: "This Week",  action: () => { const { from, to } = getWeekBounds(0);  setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
-          { label: "Last Week",  action: () => { const { from, to } = getWeekBounds(-1); setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
-          { label: "This Month", action: () => { const { from, to } = getMonthBounds();  setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
-        ].map(({ label, action }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={action}
-            className="h-8 border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 whitespace-nowrap"
-          >
-            {label}
-          </button>
-        ))}
-        <input
-          type="date"
-          title="From"
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.dateFrom}
-          onChange={(e) => setFilterValue("dateFrom", e.target.value)}
-        />
-        <span className="text-xs font-bold text-slate-400">→</span>
-        <input
-          type="date"
-          title="To"
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.dateTo}
-          onChange={(e) => setFilterValue("dateTo", e.target.value)}
-        />
-        <button type="submit" className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]">
-          <FaSearch />
-          Search
+        {/* Date presets as segmented group */}
+        <div className="flex shrink-0 items-center divide-x divide-slate-200 overflow-hidden border border-slate-200">
+          {[
+            { label: "Today",     action: () => { const d = todayISO(); setFilters((p) => ({ ...p, dateFrom: d, dateTo: d })); } },
+            { label: "This Week", action: () => { const { from, to } = getWeekBounds(0);  setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
+            { label: "Last Week", action: () => { const { from, to } = getWeekBounds(-1); setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
+            { label: "Month",     action: () => { const { from, to } = getMonthBounds();  setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
+          ].map(({ label, action }) => (
+            <button key={label} type="button" onClick={action} className="h-8 bg-white px-2 text-[10px] font-bold text-slate-600 hover:bg-[#F1F6F3] hover:text-[#0B3B2E] whitespace-nowrap">
+              {label}
+            </button>
+          ))}
+        </div>
+        {/* Date range */}
+        <div className="flex shrink-0 items-center gap-1">
+          <input
+            type="date"
+            title="From"
+            className="h-8 w-[128px] border border-slate-300 px-1.5 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+            value={filters.dateFrom}
+            onChange={(e) => setFilterValue("dateFrom", e.target.value)}
+          />
+          <span className="text-[10px] font-bold text-slate-400">→</span>
+          <input
+            type="date"
+            title="To"
+            className="h-8 w-[128px] border border-slate-300 px-1.5 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+            value={filters.dateTo}
+            onChange={(e) => setFilterValue("dateTo", e.target.value)}
+          />
+        </div>
+        <button type="submit" className="inline-flex h-8 shrink-0 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white hover:bg-[#E67E00]">
+          <FaSearch /> Search
         </button>
-        <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]">
-          <FaRedoAlt />
-          Reset
+        <button type="button" onClick={resetFilters} className="inline-flex h-8 shrink-0 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
+          <FaRedoAlt /> Reset
         </button>
       </form>
 
-      <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
-        <div className="flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+      <div className="flex flex-col h-[calc(100vh-11rem)] border border-slate-200 bg-white shadow-sm">
+        <div className="flex-shrink-0 flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{jobs.length}</strong> / {pagination.total}</span>
           <span>Page: <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
           <span>Unpaid: <strong className="text-[#FF8C00]">{jobStats.unpaid}</strong></span>
@@ -691,8 +683,110 @@ const CarWashJobs = () => {
           <span>Done: <strong className="text-slate-900">{jobStats.done}</strong></span>
           <span>Selected: <strong className="text-[#0B3B2E]">{selectedIds.length}</strong></span>
         </div>
+
+        {/* ── Mobile card list ─────────────────────────────────────────── */}
+        <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-slate-200">
+          {jobs.length ? jobs.map((job) => {
+            const canDelete = job.paymentStatus === "unpaid" && job.status !== "paid";
+            const expanded  = expandedIds.includes(job._id);
+            return (
+              <React.Fragment key={job._id}>
+                <div className="p-3">
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" className="mt-1 shrink-0" checked={selectedIds.includes(job._id)} onChange={() => toggleSelected(job._id)} disabled={!canDelete} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-extrabold text-slate-900">{job.jobNumber}</span>
+                        {job.jobType === "carpet" && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-700">Carpet</span>}
+                        <span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${paymentBadgeClass[job.paymentStatus] || paymentBadgeClass.unpaid}`}>{job.paymentStatus || "unpaid"}</span>
+                      </div>
+                      <div className="mt-0.5 text-sm font-extrabold uppercase text-slate-900">
+                        {job.jobType === "carpet" ? <span className="font-semibold normal-case text-slate-700">{job.itemDescription || "-"}</span> : (job.plateNumber || "-")}
+                      </div>
+                      {job.customerName && <div className="text-xs text-slate-500">{job.customerName}</div>}
+                      <div className="text-xs text-slate-400">{getServiceDisplay(job)} · {getStaffDisplay(job)}</div>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      {Number(job.discountAmount) > 0 ? (
+                        <div>
+                          <div className="text-[10px] text-slate-400 line-through">{formatMoney(job.price)}</div>
+                          <div className="font-extrabold text-slate-900">{formatMoney(Math.max(0, job.price - job.discountAmount))}</div>
+                        </div>
+                      ) : <span className="font-extrabold text-slate-900">{formatMoney(job.price)}</span>}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <select
+                      className="h-7 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 focus:outline-none"
+                      value={job.status}
+                      onChange={(e) => updateStatus(job, e.target.value)}
+                    >
+                      {statuses.filter((s) => s !== "paid" || job.paymentStatus === "paid").map((s) => (
+                        <option key={s} value={s}>{getJobStatusLabel(s, job.jobType)}</option>
+                      ))}
+                    </select>
+                    {canUpdateJob && (
+                      <button type="button" onClick={() => navigate(`/carwash/jobs/${job._id}/edit`)} disabled={job.status === "cancelled"} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
+                        <FaEdit className="text-[9px]" /> Edit
+                      </button>
+                    )}
+                    {canRecordPayment && (
+                      <button type="button" onClick={() => openPaymentModal(job)} disabled={job.paymentStatus === "paid"} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50">
+                        Pay
+                      </button>
+                    )}
+                    {job.phone && job.status === "done" && job.paymentStatus !== "paid" && (
+                      <button type="button" onClick={() => openSmsModal(job, "ready")} className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                        <FaSms /> Ready
+                      </button>
+                    )}
+                    {job.phone && (
+                      <button type="button" onClick={() => openSmsModal(job)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                        <FaSms /> SMS
+                      </button>
+                    )}
+                    <button type="button" onClick={() => toggleExpanded(job._id)} className="ml-auto inline-flex items-center gap-1 border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                      {expanded ? <FaChevronDown className="text-[9px]" /> : <FaChevronRight className="text-[9px]" />} Details
+                    </button>
+                  </div>
+                  {expanded && (
+                    <div className="mt-2 space-y-1 rounded border border-slate-200 bg-[#F8FBF9] p-2 text-[11px] text-slate-600">
+                      <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
+                      <div><span className="font-extrabold uppercase text-slate-500">Phone:</span>{" "}{job.phone || <span className="italic text-slate-400">via M-Pesa on payment</span>}</div>
+                      {job.notes && <div><span className="font-extrabold uppercase text-slate-500">Notes:</span> {job.notes}</div>}
+                      <div>
+                        <span className="font-extrabold uppercase text-slate-500">Payments:</span>
+                        {jobPayments[job._id]?.loading && <span className="ml-1 italic text-slate-400">Loading…</span>}
+                        {!jobPayments[job._id]?.loading && !jobPayments[job._id]?.list?.length && <span className="ml-1 italic text-slate-400">None recorded</span>}
+                        {!jobPayments[job._id]?.loading && jobPayments[job._id]?.list?.length > 0 && (
+                          <div className="mt-1 space-y-1">
+                            {jobPayments[job._id].list.map((pmt) => (
+                              <div key={pmt._id} className="flex items-center justify-between rounded bg-white px-2 py-1">
+                                <span>{pmt.method?.toUpperCase()} · {pmt.paymentDate ? new Date(pmt.paymentDate).toLocaleDateString("en-KE") : "—"}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold">{formatMoney(pmt.amount)}</span>
+                                  <button type="button" onClick={() => reversePayment(pmt._id, job._id)} className="text-red-500 hover:text-red-700" title="Reverse"><FaUndoAlt className="text-[9px]" /></button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </React.Fragment>
+            );
+          }) : (
+            <div className="py-10 text-center text-xs font-semibold text-slate-500">No Car Wash jobs recorded for this date.</div>
+          )}
+        </div>
+
+        {/* ── Desktop table ─────────────────────────────────────────────── */}
+        <div className="hidden sm:flex sm:flex-col sm:flex-1 sm:min-h-0 sm:overflow-hidden">
+        <div className="flex-1 overflow-y-auto overflow-x-auto">
         <table className="w-full min-w-[1120px] text-xs">
-          <thead className="bg-[#0B3B2E] text-white">
+          <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
             <tr>
               <th className="w-8 px-2 py-1.5 text-left">
                 <input
@@ -973,7 +1067,9 @@ const CarWashJobs = () => {
             )}
           </tbody>
         </table>
-        <div className="flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+        </div>{/* end scroll */}
+        </div>{/* end desktop table wrapper */}
+        <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-slate-500 normal-case">Per page:</span>
             <select

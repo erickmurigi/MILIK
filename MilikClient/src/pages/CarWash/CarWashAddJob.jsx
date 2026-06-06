@@ -800,7 +800,7 @@ const CarWashAddJob = () => {
               </div>
             </div>
 
-            {/* Service lines table */}
+            {/* Service lines */}
             <div className="border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-slate-200 bg-[#EDF5F1] px-4 py-2">
                 <p className="text-[11px] font-extrabold uppercase tracking-wide text-[#0B3B2E]">Service Lines</p>
@@ -813,7 +813,104 @@ const CarWashAddJob = () => {
                 </button>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* Mobile stacked layout */}
+              <div className="sm:hidden divide-y divide-slate-200">
+                {serviceLines.map((line, index) => {
+                  const svc = services.find((s) => s._id === line.service);
+                  const hasTiers = svc?.pricingTiers?.length > 0;
+                  const isPerSqft = svc?.pricingType === "per_sqft";
+                  return (
+                    <div key={index} className="p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Line {index + 1}</span>
+                        <button type="button" onClick={() => removeLine(index)} disabled={serviceLines.length === 1} className="p-1 text-red-400 hover:text-red-600 disabled:opacity-30"><FaMinus className="text-[10px]" /></button>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Service</label>
+                        <select className="h-9 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none" value={line.service} onChange={(e) => handleLineServiceChange(index, e.target.value)}>
+                          <option value="">Select or type below</option>
+                          {services.filter((s2) => !s2.jobType || s2.jobType === "both" || s2.jobType === jobType).map((s2) => (
+                            <option key={s2._id} value={s2._id}>{s2.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Name *</label>
+                        <input className="h-9 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none" value={line.serviceName} onChange={(e) => updateLine(index, "serviceName", e.target.value)} placeholder="Service name" required />
+                      </div>
+                      {jobType === "vehicle" && (
+                        <div>
+                          <label className={labelClass}>Vehicle Type</label>
+                          {hasTiers ? (
+                            <select className={`h-9 w-full border px-2 text-xs focus:outline-none ${!line.vehicleType ? "border-amber-400 bg-amber-50 text-amber-700" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`} value={line.vehicleType} onChange={(e) => handleLineVehicleTypeChange(index, e.target.value)} required>
+                              <option value="">— Select vehicle type —</option>
+                              {svc.pricingTiers.map((t) => <option key={t.vehicleType} value={t.vehicleType}>{t.vehicleType}</option>)}
+                            </select>
+                          ) : (
+                            <select className="h-9 w-full border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none" value={line.vehicleType} onChange={(e) => updateLine(index, "vehicleType", e.target.value)}>
+                              <option value="">— Vehicle type (optional) —</option>
+                              {VEHICLE_TYPES.map((vt) => <option key={vt} value={vt}>{vt}</option>)}
+                            </select>
+                          )}
+                        </div>
+                      )}
+                      <div>
+                        <label className={labelClass}>Price (KES) *</label>
+                        <input className="h-9 w-full border border-slate-300 px-2 text-right text-xs font-bold text-slate-900 focus:border-[#0B3B2E] focus:outline-none" type="number" min="0" step="1" value={line.price} onChange={(e) => updateLine(index, "price", e.target.value)} required />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Attendants</label>
+                        <div className="flex flex-wrap gap-1">
+                          {staff.map((s) => {
+                            const selected = Array.isArray(line.lineStaff) && line.lineStaff.includes(s._id);
+                            return (
+                              <button key={s._id} type="button" onClick={() => toggleLineStaff(index, s._id)} className={`inline-flex items-center gap-1 border px-2.5 py-1.5 text-xs font-bold transition-all ${selected ? "bg-[#0B3B2E] text-white border-[#0B3B2E]" : "bg-white text-slate-500 border-slate-200"}`}>
+                                {selected && <span className="text-[8px]">✓</span>}
+                                {s.name.split(" ")[0]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {(!Array.isArray(line.lineStaff) || line.lineStaff.length === 0) && (
+                          <p className="mt-1 text-[10px] text-amber-600 font-semibold">No attendant — no commission</p>
+                        )}
+                      </div>
+                      {isPerSqft && (() => {
+                        const m = line.measurements || { shape: "rect", length: "", width: "", diameter: "" };
+                        const rate = Number(svc.defaultPrice || 30);
+                        let area = 0;
+                        if (m.shape === "rect") { const l = parseFloat(m.length || 0); const w = parseFloat(m.width || 0); area = l * w; }
+                        else { const d = parseFloat(m.diameter || 0); area = Math.PI * Math.pow(d / 2, 2); }
+                        const calcPrice = area > 0 ? Math.round(area * rate) : null;
+                        return (
+                          <div className="rounded border border-violet-200 bg-violet-50 p-2 space-y-2">
+                            <div className="flex overflow-hidden border border-slate-300">
+                              <button type="button" onClick={() => updateMeasurement(index, "shape", "rect")} className={`flex-1 py-1.5 text-[11px] font-bold ${m.shape === "rect" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-600"}`}>Rectangle</button>
+                              <button type="button" onClick={() => updateMeasurement(index, "shape", "circle")} className={`flex-1 border-l border-slate-300 py-1.5 text-[11px] font-bold ${m.shape === "circle" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-600"}`}>Circle</button>
+                            </div>
+                            {m.shape === "rect" ? (
+                              <div className="grid grid-cols-2 gap-2">
+                                <input type="number" min="0" step="0.1" value={m.length} onChange={(e) => updateMeasurement(index, "length", e.target.value)} placeholder="Length (ft)" className="h-9 w-full border border-slate-300 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+                                <input type="number" min="0" step="0.1" value={m.width} onChange={(e) => updateMeasurement(index, "width", e.target.value)} placeholder="Width (ft)" className="h-9 w-full border border-slate-300 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+                              </div>
+                            ) : (
+                              <input type="number" min="0" step="0.1" value={m.diameter} onChange={(e) => updateMeasurement(index, "diameter", e.target.value)} placeholder="Diameter (ft)" className="h-9 w-full border border-slate-300 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+                            )}
+                            {area > 0 && <p className="text-[11px] font-semibold text-[#0B3B2E]">{area.toFixed(2)} sqft × KES {rate}/sqft = <strong>KES {calcPrice?.toLocaleString()}</strong></p>}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })}
+                <div className="border-t-2 border-slate-200 bg-[#EDF5F1] px-4 py-2 flex items-center justify-between">
+                  <span className="text-xs font-extrabold uppercase tracking-wide text-slate-600">Total</span>
+                  <span className="text-sm font-black text-[#0B3B2E]">{formatMoney(totalPrice)}</span>
+                </div>
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full min-w-[700px] text-xs">
                   <thead className="border-b border-slate-200 bg-slate-50">
                     <tr>
