@@ -12,7 +12,7 @@ import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
 
 const JOB_STATUSES = new Set(["waiting", "washing", "done", "paid", "cancelled"]);
-const JOB_TYPES = new Set(["vehicle", "carpet"]);
+const JOB_TYPES = new Set(["vehicle", "carpet", "balance_bf"]);
 
 const generateJobNumber = async (business) => {
   const now = new Date();
@@ -222,6 +222,7 @@ export const createJob = async (req, res, next) => {
     const itemDescription = String(req.body.itemDescription || "").trim();
     if (jobType === "vehicle" && !plateNumber) return next(createError(400, "Plate number is required for vehicle jobs"));
     if (jobType === "carpet" && !itemDescription) return next(createError(400, "Item description is required for carpet jobs"));
+    // balance_bf: plate optional (debt may be known only by customer name)
 
     // Resolve service lines — new multi-line format takes priority
     let serviceLines = null;
@@ -283,7 +284,7 @@ export const createJob = async (req, res, next) => {
       jobType,
       customerName: String(req.body.customerName || "").trim(),
       phone: String(req.body.phone || "").trim(),
-      plateNumber: jobType === "vehicle" ? plateNumber : "",
+      plateNumber: (jobType === "vehicle" || jobType === "balance_bf") ? plateNumber : "",
       itemDescription: jobType === "carpet" ? itemDescription : "",
       expectedReadyAt: jobType === "carpet" && expectedReadyAt && !Number.isNaN(expectedReadyAt.getTime()) ? expectedReadyAt : null,
       // Root fields (backward compat)
@@ -315,7 +316,7 @@ export const createJob = async (req, res, next) => {
       }
     }
 
-    if (job.jobType === "vehicle" && job.plateNumber) {
+    if ((job.jobType === "vehicle" || job.jobType === "balance_bf") && job.plateNumber) {
       // Awaited — guarantees customer + loyalty card exist before response is sent.
       try {
         await autoEnrollPlate({ business, plate: job.plateNumber, customerName: job.customerName, phone: job.phone });
@@ -323,8 +324,8 @@ export const createJob = async (req, res, next) => {
         console.error("[CW Job] autoEnroll failed job=%s plate=%s: %s", job.jobNumber, job.plateNumber, err?.message || err);
       }
 
-      // If job is created already completed (e.g. manual entry), award the stamp immediately.
-      if (["done", "paid"].includes(job.status)) {
+      // Award stamp for completed vehicle jobs only — balance_bf is historical debt, not a new wash.
+      if (job.jobType === "vehicle" && ["done", "paid"].includes(job.status)) {
         try {
           await awardLoyaltyStamp({ business, job });
         } catch (err) {

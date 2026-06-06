@@ -8,7 +8,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 
-const PAGE_SIZE = 30;
+const DEFAULT_PAGE_SIZE = 25;
 const destinations = ["bank", "mpesa", "safe", "other"];
 const statuses = ["pending", "confirmed", "cancelled"];
 const defaultFilters = { date: todayISO(), status: "", destination: "", cashbookAccount: "", reference: "" };
@@ -48,7 +48,8 @@ const CarWashDeposits = () => {
   const [expandedIds, setExpandedIds] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 });
   const [summary, setSummary] = useState({ pending: {}, confirmed: {}, cancelled: {}, totalAmount: 0, totalCount: 0 });
   const [loading, setLoading] = useState(false);
   const canCreate = useCarWashPermission("carwash-deposits", "create");
@@ -56,10 +57,10 @@ const CarWashDeposits = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const payload = await carWashApi.listDeposits({ ...appliedFilters, limit: PAGE_SIZE, page });
+      const payload = await carWashApi.listDeposits({ ...appliedFilters, limit: pageSize, page });
       const deposits = normalizeListPayload(payload, "deposits");
       setRows(deposits);
-      setPagination(payload?.pagination || { page, limit: PAGE_SIZE, total: deposits.length, pages: 1 });
+      setPagination(payload?.pagination || { page, limit: pageSize, total: deposits.length, pages: 1 });
       setSummary(payload?.summary || { pending: {}, confirmed: {}, cancelled: {}, totalAmount: 0, totalCount: 0 });
       setExpandedIds([]);
     } catch {
@@ -71,7 +72,7 @@ const CarWashDeposits = () => {
 
   useEffect(() => {
     load();
-  }, [appliedFilters, page]);
+  }, [appliedFilters, page, pageSize]);
 
   const loadCashbooks = async () => {
     if (!currentCompany?._id) return;
@@ -173,7 +174,7 @@ const CarWashDeposits = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[160px_160px_190px_220px_1fr_auto_auto]">
+      <form onSubmit={applyFilters} className="mb-2 flex-shrink-0 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[160px_160px_190px_220px_1fr_auto_auto]">
         <input type="date" className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" value={filters.date} onChange={(event) => setFilters((prev) => ({ ...prev, date: event.target.value }))} />
         <select className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}>
           <option value="">All status</option>
@@ -192,7 +193,7 @@ const CarWashDeposits = () => {
         <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt />Reset</button>
       </form>
 
-      <div className="flex flex-col h-[calc(100vh-14rem)] border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
         <div className="flex-shrink-0 flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{rows.length}</strong> / {pagination.total}</span>
           <span>Page Total: <strong className="text-[#0B3B2E]">{formatMoney(pageTotal)}</strong></span>
@@ -303,7 +304,16 @@ const CarWashDeposits = () => {
         </div>{/* end scroll */}
         </div>{/* end desktop table wrapper */}
         <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span>Rows per page: {PAGE_SIZE}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-slate-500 normal-case">Per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+              className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition normal-case"
+            >
+              {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setPage((prev) => Math.max(prev - 1, 1))} disabled={page <= 1 || loading} className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45">Previous</button>
             <span>Page {pagination.page} of {pagination.pages}</span>

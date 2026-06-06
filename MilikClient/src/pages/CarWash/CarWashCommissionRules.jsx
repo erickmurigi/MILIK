@@ -88,11 +88,11 @@ const CarWashCommissionRules = () => {
       title="Commission Rules"
       action={
         <>
-          <button onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
+          <button onClick={load} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button onClick={openNew} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-            <FaPlus /> New Rule
+          <button onClick={openNew} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
+            <FaPlus size={9} /> New Rule
           </button>
         </>
       }
@@ -173,7 +173,19 @@ const CarWashCommissionRules = () => {
             </div>
             <div>
               <label className={labelClass}>Rate ({form.commissionType === "percentage" ? "%" : "Ksh"}) *</label>
-              <input type="number" min="0" step="0.01" className={inputClass} value={form.rate} onChange={(e) => setForm((p) => ({ ...p, rate: e.target.value }))} required />
+              <input
+                type="number"
+                min="0"
+                max={form.commissionType === "percentage" ? 100 : undefined}
+                step="0.01"
+                className={inputClass}
+                value={form.rate}
+                onChange={(e) => setForm((p) => ({ ...p, rate: e.target.value }))}
+                required
+              />
+              {form.commissionType === "percentage" && Number(form.rate) > 100 && (
+                <p className="mt-0.5 text-[10px] font-bold text-red-500">Percentage cannot exceed 100%</p>
+              )}
             </div>
             <div>
               <label className={labelClass}>Applies to Service</label>

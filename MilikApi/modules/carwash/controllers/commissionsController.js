@@ -67,6 +67,7 @@ export const upsertCommissionRule = async (req, res, next) => {
     if (!ruleTypes.has(commissionType)) return next(createError(400, "Commission type must be fixed or percentage"));
     const rate = Number(req.body.rate || 0);
     if (!Number.isFinite(rate) || rate < 0) return next(createError(400, "Commission rate must be zero or more"));
+    if (commissionType === "percentage" && rate > 100) return next(createError(400, "Percentage rate cannot exceed 100%"));
 
     const payload = {
       business,
@@ -105,6 +106,10 @@ export const listCommissions = async (req, res, next) => {
     if (req.query.date) {
       const { start, end } = parseDateRange(req.query.date);
       filter.earnedAt = { $gte: start, $lt: end };
+    } else if (req.query.dateFrom || req.query.dateTo) {
+      filter.earnedAt = {};
+      if (req.query.dateFrom) { const d = new Date(req.query.dateFrom); d.setUTCHours(0,0,0,0); filter.earnedAt.$gte = d; }
+      if (req.query.dateTo)   { const d = new Date(req.query.dateTo);   d.setUTCHours(23,59,59,999); filter.earnedAt.$lte = d; }
     }
     const summaryFilter = { ...filter };
     delete summaryFilter.status;
@@ -252,15 +257,29 @@ export const listCommissionPayouts = async (req, res, next) => {
     if (req.query.date) {
       const { start, end } = parseDateRange(req.query.date);
       filter.payoutDate = { $gte: start, $lt: end };
+    } else if (req.query.dateFrom || req.query.dateTo) {
+      filter.payoutDate = {};
+      if (req.query.dateFrom) { const d = new Date(req.query.dateFrom); d.setUTCHours(0,0,0,0);       filter.payoutDate.$gte = d; }
+      if (req.query.dateTo)   { const d = new Date(req.query.dateTo);   d.setUTCHours(23,59,59,999);  filter.payoutDate.$lte = d; }
     }
-    const payouts = await CarWashCommissionPayout.find(filter)
-      .populate("staff", "name phone role")
-      .populate("cashbookAccount", "code name")
-      .populate("branch", "name")
-      .sort({ payoutDate: -1, createdAt: -1 })
-      .limit(Math.min(Math.max(Number(req.query.limit || 50), 1), 200))
-      .lean();
-    res.status(200).json({ success: true, data: { payouts }, payouts });
+
+    const limit = Math.min(Math.max(Number(req.query.limit || 30), 1), 200);
+    const page  = Math.max(Number(req.query.page || 1), 1);
+    const skip  = (page - 1) * limit;
+
+    const [payouts, total] = await Promise.all([
+      CarWashCommissionPayout.find(filter)
+        .populate("staff", "name phone role")
+        .populate("cashbookAccount", "code name")
+        .populate("branch", "name")
+        .sort({ payoutDate: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      CarWashCommissionPayout.countDocuments(filter),
+    ]);
+    const pagination = { page, limit, total, pages: Math.max(Math.ceil(total / limit), 1) };
+    res.status(200).json({ success: true, data: { payouts, pagination }, payouts, pagination });
   } catch (error) {
     next(error);
   }
@@ -383,6 +402,11 @@ export const listSavings = async (req, res, next) => {
       filter.staff = new mongoose.Types.ObjectId(String(req.query.staff));
     }
     if (req.query.type) filter.type = String(req.query.type).trim();
+    if (req.query.dateFrom || req.query.dateTo) {
+      filter.date = {};
+      if (req.query.dateFrom) { const d = new Date(req.query.dateFrom); d.setUTCHours(0,0,0,0);      filter.date.$gte = d; }
+      if (req.query.dateTo)   { const d = new Date(req.query.dateTo);   d.setUTCHours(23,59,59,999); filter.date.$lte = d; }
+    }
 
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const page  = Math.max(Number(req.query.page || 1), 1);
@@ -397,7 +421,9 @@ export const listSavings = async (req, res, next) => {
       CarWashStaffSaving.countDocuments(filter),
     ]);
 
-    res.json({ success: true, data: { records, total, page, pages: Math.ceil(total / limit) }, records, total });
+    const pages = Math.max(Math.ceil(total / limit), 1);
+    const pagination = { page, limit, total, pages };
+    res.json({ success: true, data: { records, pagination }, records, total, pagination });
   } catch (error) {
     next(error);
   }

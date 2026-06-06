@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
-import { FaMoneyBillWave, FaPiggyBank, FaRedoAlt, FaTimes } from "react-icons/fa";
+import { FaMoneyBillWave, FaPiggyBank, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
@@ -9,7 +9,20 @@ import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
+const ic         = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const methods    = ["cash", "mpesa", "bank", "card", "other"];
+const PAGE_SIZE  = 30;
+
+const getMonthBounds = () => {
+  const now   = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  return { from: first.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
+};
+
+const emptyFilters = () => {
+  const { from, to } = getMonthBounds();
+  return { staff: "", dateFrom: from, dateTo: to };
+};
 
 const preferredCashbook = (cashbooks = [], method = "cash") => {
   const h = (cb) => `${cb?.name || ""} ${cb?.code || ""}`.toLowerCase();
@@ -42,8 +55,12 @@ const CarWashCommissionPayouts = () => {
   const [cashbooks, setCashbooks]       = useState([]);
   const [payableComms, setPayableComms] = useState([]);
   const [loading, setLoading]           = useState(false);
+  const [page, setPage]                 = useState(1);
+  const [pagination, setPagination]     = useState({ page: 1, total: 0, pages: 1 });
+  const [filters, setFilters]           = useState(emptyFilters);
+  const [applied, setApplied]           = useState(emptyFilters);
   const [showModal, setShowModal]       = useState(false);
-  const [pendingSavings, setPendingSavings] = useState(0); // savings to be held from this payout
+  const [pendingSavings, setPendingSavings] = useState(0);
   const [form, setForm] = useState({ staff: "", commissionIds: [], method: "cash", cashbookAccount: "", payoutDate: todayISO(), reference: "", notes: "" });
   const canPay = useCarWashPermission("carwash-commissions", "pay");
 
@@ -57,32 +74,50 @@ const CarWashCommissionPayouts = () => {
     [commIdSet, selectedStaffPayable]
   );
 
-  const load = async () => {
-    setLoading(true);
+  // Static data — load once
+  const loadStatic = useCallback(async () => {
+    if (staff.length) return;
     try {
-      const [payoutPayload, staffPayload, cbPayload] = await Promise.all([
-        carWashApi.listCommissionPayouts({ limit: 100 }),
+      const [staffPayload, cbPayload] = await Promise.all([
         carWashApi.listStaff({ active: true }),
         currentCompany?._id
           ? carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" })
           : Promise.resolve([]),
       ]);
-      setPayouts(normalizeListPayload(payoutPayload, "payouts"));
       setStaff(normalizeListPayload(staffPayload, "staff"));
       setCashbooks(Array.isArray(cbPayload) ? cbPayload : []);
+    } catch { /* non-critical */ }
+  }, [currentCompany?._id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadPayouts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const payload = await carWashApi.listCommissionPayouts({
+        staff:    applied.staff    || undefined,
+        dateFrom: applied.dateFrom || undefined,
+        dateTo:   applied.dateTo   || undefined,
+        page,
+        limit: PAGE_SIZE,
+      });
+      setPayouts(normalizeListPayload(payload, "payouts"));
+      setPagination(payload?.pagination || { page, total: payload?.payouts?.length || 0, pages: 1 });
     } catch {
       toast.error("Failed to load payouts");
     } finally {
       setLoading(false);
     }
-  };
+  }, [applied, page]);
 
-  useEffect(() => { load(); }, [currentCompany?._id]);
+  useEffect(() => { loadStatic(); }, [loadStatic]);
+  useEffect(() => { loadPayouts(); }, [loadPayouts]);
 
   useEffect(() => {
     if (!cashbooks.length || form.cashbookAccount) return;
     setForm((p) => ({ ...p, cashbookAccount: preferredCashbook(cashbooks, p.method) }));
-  }, [cashbooks]);
+  }, [cashbooks]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applyFilters = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
+  const resetFilters = () => { const d = emptyFilters(); setFilters(d); setPage(1); setApplied(d); };
 
   const openPayout = async () => {
     let rows = [];
@@ -95,6 +130,7 @@ const CarWashCommissionPayouts = () => {
     }
     const firstStaff = rows[0]?.staff?._id || "";
     setPayableComms(rows);
+    setPendingSavings(0);
     setForm({
       staff: firstStaff,
       commissionIds: rows.filter((c) => String(c.staff?._id || c.staff) === String(firstStaff)).map((c) => c._id),
@@ -104,7 +140,6 @@ const CarWashCommissionPayouts = () => {
       reference: "",
       notes: "",
     });
-    setPendingSavings(0);
     if (firstStaff) {
       carWashApi.getStaffWallet(firstStaff)
         .then((w) => setPendingSavings(Number(w?.savings?.pendingToHold || 0)))
@@ -116,7 +151,7 @@ const CarWashCommissionPayouts = () => {
   const setPayoutStaff = async (staffId) => {
     const rows = payableComms.filter((c) => String(c.staff?._id || c.staff) === String(staffId));
     setForm((p) => ({ ...p, staff: staffId, commissionIds: rows.map((c) => c._id) }));
-    setPendingSavings(0);
+    setPendingSavings(0); // reset before fetch so stale value never shows
     if (!staffId) return;
     try {
       const wallet = await carWashApi.getStaffWallet(staffId);
@@ -134,85 +169,147 @@ const CarWashCommissionPayouts = () => {
     try {
       await carWashApi.createCommissionPayout(form);
       setShowModal(false);
-      await load();
+      loadPayouts();
       toast.success("Commission payout recorded");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to record payout");
     }
   };
 
-  const totalPaid = useMemo(() => payouts.reduce((s, p) => s + Number(p.amount || 0), 0), [payouts]);
+  const pageTotal = useMemo(() => payouts.reduce((s, p) => s + Number(p.amount || 0), 0), [payouts]);
 
   return (
     <CarWashShell
       title="Commission Payouts"
       action={
-        <>
-          <button onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={loadPayouts}
+            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           {canPay && (
-            <button onClick={openPayout} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-              <FaMoneyBillWave /> New Payout
+            <button
+              type="button"
+              onClick={openPayout}
+              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
+            >
+              <FaMoneyBillWave size={9} /> New Payout
             </button>
           )}
-        </>
+        </div>
       }
     >
-      {/* Summary strip */}
-      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {[
-          { label: "Total Payouts", value: payouts.length, color: "slate" },
-          { label: "Total Paid Out", value: formatMoney(totalPaid), color: "green" },
-        ].map(({ label, value, color }) => (
-          <div key={label} className={`border px-4 py-3 bg-white shadow-sm text-xs ${color === "green" ? "border-emerald-200" : "border-slate-200"}`}>
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-            <p className={`mt-0.5 text-base font-black ${color === "green" ? "text-emerald-700" : "text-slate-800"}`}>{value}</p>
-          </div>
-        ))}
-      </div>
+      {/* Filter bar */}
+      <form onSubmit={applyFilters} className="mt-1 flex flex-wrap items-end gap-1.5 border border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Staff</label>
+          <select className={`${ic} min-w-[130px]`} value={filters.staff} onChange={(e) => setFilters((p) => ({ ...p, staff: e.target.value }))}>
+            <option value="">All staff</option>
+            {staff.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+          </select>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">From</label>
+          <input type="date" className={ic} value={filters.dateFrom} onChange={(e) => setFilters((p) => ({ ...p, dateFrom: e.target.value }))} />
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">To</label>
+          <input type="date" className={ic} value={filters.dateTo} onChange={(e) => setFilters((p) => ({ ...p, dateTo: e.target.value }))} />
+        </div>
+        <button type="submit" className="inline-flex h-7 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white hover:bg-[#E67E00]">
+          <FaSearch size={9} /> Search
+        </button>
+        <button type="button" onClick={resetFilters} className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
+          <FaRedoAlt size={9} /> Reset
+        </button>
+      </form>
 
-      <div className="min-h-[calc(100vh-18rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[820px] text-xs">
-          <thead className="bg-[#0B3B2E] text-white">
-            <tr>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Payout No.</th>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Staff</th>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Method</th>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Cashbook</th>
-              <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Commission</th>
-              <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Savings Held</th>
-              <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Net Cash</th>
-              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payouts.length ? payouts.map((row) => (
-              <tr key={row._id} className="border-b border-slate-200 hover:bg-slate-50">
-                <td className="px-3 py-2 font-extrabold text-slate-900">{row.payoutNumber}</td>
-                <td className="px-3 py-2">{row.staff?.name || "—"}</td>
-                <td className="px-3 py-2 uppercase">{row.method}</td>
-                <td className="px-3 py-2 text-slate-600">{row.cashbookAccount?.code} {row.cashbookAccount?.name}</td>
-                <td className="px-3 py-2 text-right font-bold">{formatMoney(row.amount)}</td>
-                <td className="px-3 py-2 text-right text-amber-700">
-                  {row.savingsHeld > 0 ? <span className="inline-flex items-center gap-1"><FaPiggyBank size={9} />{formatMoney(row.savingsHeld)}</span> : "—"}
-                </td>
-                <td className="px-3 py-2 text-right font-extrabold text-emerald-700">
-                  {formatMoney(row.netCash ?? row.amount)}
-                </td>
-                <td className="px-3 py-2 text-slate-600">{row.payoutDate ? new Date(row.payoutDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
+      {/* Table */}
+      <div className="mt-1 flex flex-1 min-h-0 flex-col border border-slate-200 bg-white shadow-sm">
+        <div className="flex-shrink-0 flex flex-wrap items-center gap-x-4 gap-y-0.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <span>Showing <strong className="text-[#0B3B2E]">{payouts.length}</strong>/{pagination.total}</span>
+          <span>Page <strong className="text-[#0B3B2E]">{pagination.page}</strong>/{pagination.pages}</span>
+          <span>Page Total <strong className="text-[#0B3B2E]">{formatMoney(pageTotal)}</strong></span>
+          {loading && <span className="text-slate-400">Loading…</span>}
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-x-auto">
+          <table className="w-full min-w-[820px] text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Payout No.</th>
+                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Staff</th>
+                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Method</th>
+                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Cashbook</th>
+                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Commission</th>
+                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Savings Held</th>
+                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Net Cash</th>
+                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Date</th>
               </tr>
-            )) : (
-              <tr><td colSpan={8} className="px-3 py-12 text-center text-xs font-semibold text-slate-500">No commission payouts recorded yet.</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {payouts.length ? payouts.map((row) => (
+                <tr key={row._id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-3 py-2 font-extrabold font-mono text-[11px] text-[#0B3B2E]">{row.payoutNumber}</td>
+                  <td className="px-3 py-2 font-extrabold text-slate-900">{row.staff?.name || "—"}</td>
+                  <td className="px-3 py-2 uppercase text-slate-600">{row.method}</td>
+                  <td className="px-3 py-2 text-slate-500">{row.cashbookAccount?.code} {row.cashbookAccount?.name}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-bold">{formatMoney(row.amount)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-amber-700">
+                    {row.savingsHeld > 0
+                      ? <span className="inline-flex items-center gap-1"><FaPiggyBank size={9} />{formatMoney(row.savingsHeld)}</span>
+                      : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums font-extrabold text-emerald-700">
+                    {formatMoney(row.netCash ?? row.amount)}
+                  </td>
+                  <td className="px-3 py-2 text-slate-500">
+                    {row.payoutDate ? new Date(row.payoutDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={8} className="px-3 py-12 text-center text-xs font-semibold text-slate-400">
+                    No commission payouts found for the selected filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+          <span className="font-semibold normal-case text-slate-500">Per page: {PAGE_SIZE}</span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(p - 1, 1))}
+              disabled={page <= 1 || loading}
+              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              Previous
+            </button>
+            <span>Page {pagination.page} of {pagination.pages}</span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(p + 1, pagination.pages))}
+              disabled={page >= pagination.pages || loading}
+              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
 
       {showModal && (
         <Modal
           title="Pay Staff Commission"
-          subtitle="Select the staff member and the commissions to pay out."
+          subtitle="Select the staff member and commissions to pay out."
           onClose={() => setShowModal(false)}
           footer={
             <>
@@ -258,9 +355,10 @@ const CarWashCommissionPayouts = () => {
               <label className={labelClass}>Notes</label>
               <input className={inputClass} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional" />
             </div>
-            {/* Savings deduction preview */}
+
+            {/* Payout breakdown preview */}
             {selectedTotal > 0 && (
-              <div className="sm:col-span-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs space-y-1">
+              <div className="sm:col-span-2 space-y-1 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
                 <p className="font-black uppercase tracking-wide text-amber-800">Payout Breakdown</p>
                 <div className="flex justify-between">
                   <span className="text-slate-600">Commission total</span>
@@ -268,7 +366,7 @@ const CarWashCommissionPayouts = () => {
                 </div>
                 {pendingSavings > 0 && (
                   <div className="flex justify-between text-amber-700">
-                    <span>Savings held ({Math.min(pendingSavings, selectedTotal) === pendingSavings ? "full" : "capped"} deduction)</span>
+                    <span className="flex items-center gap-1"><FaPiggyBank size={9} /> Savings deduction{Math.min(pendingSavings, selectedTotal) < pendingSavings ? " (capped)" : ""}</span>
                     <span className="font-bold">− {formatMoney(Math.min(pendingSavings, selectedTotal))}</span>
                   </div>
                 )}
@@ -279,7 +377,7 @@ const CarWashCommissionPayouts = () => {
                   </span>
                 </div>
                 {pendingSavings === 0 && (
-                  <p className="text-[10px] text-slate-400 italic">No pending savings deductions for this staff member.</p>
+                  <p className="text-[10px] italic text-slate-400">No pending savings deductions for this staff member.</p>
                 )}
               </div>
             )}
@@ -296,11 +394,11 @@ const CarWashCommissionPayouts = () => {
                     <span className="font-extrabold text-slate-900">{formatMoney(c.commissionAmount)}</span>
                   </label>
                 )) : (
-                  <p className="px-3 py-8 text-center text-xs font-semibold text-slate-500">No payable commissions for this staff member.</p>
+                  <p className="px-3 py-8 text-center text-xs font-semibold text-slate-400">No payable commissions for this staff member.</p>
                 )}
               </div>
               {selectedTotal > 0 && (
-                <div className="mt-2 flex items-center justify-between rounded border border-[#B7C9C0] bg-[#EDF5F1] px-3 py-2 text-xs">
+                <div className="mt-1.5 flex items-center justify-between rounded border border-[#B7C9C0] bg-[#EDF5F1] px-3 py-1.5 text-xs">
                   <span className="font-bold text-slate-600">Selected total</span>
                   <span className="font-black text-[#0B3B2E]">{formatMoney(selectedTotal)}</span>
                 </div>

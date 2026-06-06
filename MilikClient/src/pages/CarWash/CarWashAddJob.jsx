@@ -616,7 +616,6 @@ const CarWashAddJob = () => {
         const result = await carWashApi.createJob(payload);
         const newId = result?._id || result?.job?._id;
 
-        // Apply loyalty reward after job creation — server computes and applies the discount
         if (applyReward && newId && loyaltyCard?.pendingRewards > 0) {
           try {
             await carWashApi.redeemLoyaltyReward(newId);
@@ -627,7 +626,6 @@ const CarWashAddJob = () => {
 
         clearDraft();
         toast.success(applyReward ? "Job created and loyalty reward applied!" : creditAccount ? "Job created and charged to credit account" : "Car Wash job created");
-        // Carpet jobs: redirect to edit so attendant can immediately add photos
         if (jobType === "carpet" && newId) {
           navigate(`/carwash/jobs/${newId}/edit`, { state: { openPhotos: true } });
         } else {
@@ -662,15 +660,15 @@ const CarWashAddJob = () => {
         </button>
       }
     >
-      <form onSubmit={handleSubmit}>
-        <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+      <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto">
+        <div className="grid gap-3 p-3 lg:grid-cols-[1fr_320px]">
 
           {/* ── Left column ─────────────────────────────────────────────────── */}
-          <div className="space-y-4">
+          <div className="space-y-3">
 
             {/* Job type toggle — hidden when branch is locked to one type */}
             {(isEditMode || branchType === "both") && (
-              <div className="border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="border border-slate-200 bg-white p-3 shadow-sm">
                 <p className={labelClass}>Job Type</p>
                 {isEditMode ? (
                   <div className="flex items-center gap-2">
@@ -1138,9 +1136,9 @@ const CarWashAddJob = () => {
           </div>
 
           {/* ── Right column ────────────────────────────────────────────────── */}
-          <div className="space-y-4">
+          <div className="space-y-3">
 
-            {/* Attendants summary — live derived from service lines */}
+            {/* Attendants summary */}
             <div className="border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-2 border-b border-slate-200 bg-[#EDF5F1] px-4 py-2.5">
                 <FaUserCheck className="text-[#0B3B2E] text-[13px]" />
@@ -1250,10 +1248,14 @@ const CarWashAddJob = () => {
             <button
               type="submit"
               disabled={saving}
-              className="flex w-full items-center justify-center gap-2 bg-[#0B3B2E] py-3 text-sm font-extrabold uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 py-3 text-sm font-extrabold uppercase tracking-wide text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <FaSave />
-              {saving ? "Saving…" : isEditMode ? "Save Changes" : applyReward ? "Save Job + Apply Reward" : jobType === "carpet" ? "Save & Add Photos →" : "Save Job"}
+              {saving ? "Saving…"
+                : isEditMode ? "Save Changes"
+                : applyReward ? "Save Job + Apply Reward"
+                : jobType === "carpet" ? "Save & Add Photos →"
+                : "Save Job"}
             </button>
 
             {/* Carpet photos panel — edit mode only */}

@@ -10,7 +10,7 @@ const emptyForm = { name: "", category: "", jobType: "both", pricingType: "flat"
 const inputClass  = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const selectClass = "h-9 w-full border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const PAGE_SIZE   = 30;
+const DEFAULT_PAGE_SIZE = 25;
 const NEW_CATEGORY_SENTINEL = "__new__";
 
 const Modal = ({ title, children, footer, onClose }) => (
@@ -34,7 +34,8 @@ const CarWashServices = () => {
   const [appliedFilters, setApplied]  = useState({ search: "", status: "" });
   const [expandedIds, setExpandedIds] = useState([]);
   const [page, setPage]               = useState(1);
-  const [pagination, setPagination]   = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
+  const [pageSize, setPageSize]       = useState(DEFAULT_PAGE_SIZE);
+  const [pagination, setPagination]   = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 });
   const [showModal, setShowModal]     = useState(false);
   const [loading, setLoading]         = useState(false);
   const [categories, setCategories]   = useState([]);
@@ -63,18 +64,18 @@ const CarWashServices = () => {
     setLoading(true);
     try {
       const payload = await carWashApi.listServices({
-        limit: PAGE_SIZE, page,
+        limit: pageSize, page,
         search: appliedFilters.search || undefined,
         active: appliedFilters.status === "active" ? true : appliedFilters.status === "inactive" ? false : undefined,
       });
       const services = normalizeListPayload(payload, "services");
       setRows(services);
-      setPagination(payload?.pagination || { page, limit: PAGE_SIZE, total: services.length, pages: 1 });
+      setPagination(payload?.pagination || { page, limit: pageSize, total: services.length, pages: 1 });
       setExpandedIds([]);
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { load().catch(() => toast.error("Failed to load services")); }, [appliedFilters, page]); // eslint-disable-line
+  useEffect(() => { load().catch(() => toast.error("Failed to load services")); }, [appliedFilters, page, pageSize]); // eslint-disable-line
   useEffect(() => { loadCategories(); }, []);
 
   // Auto-save service form draft while modal is open
@@ -178,7 +179,7 @@ const CarWashServices = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 md:grid-cols-[1fr_220px_auto_auto]">
+      <form onSubmit={applyFilters} className="mb-2 flex-shrink-0 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 md:grid-cols-[1fr_220px_auto_auto]">
         <input
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Search service / category"
@@ -202,7 +203,7 @@ const CarWashServices = () => {
         </button>
       </form>
 
-      <div className="flex flex-col h-[calc(100vh-14rem)] border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
         <div className="flex-shrink-0 flex flex-wrap min-h-8 items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{rows.length}</strong> / {pagination.total}</span>
           <span>Page: <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
@@ -374,7 +375,16 @@ const CarWashServices = () => {
         </div>{/* end scroll */}
         </div>{/* end desktop table */}
         <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span>Rows per page: {PAGE_SIZE}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-slate-500 normal-case">Per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+              className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition normal-case"
+            >
+              {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page <= 1 || loading} className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45">Previous</button>
             <span>Page {pagination.page} of {pagination.pages}</span>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
@@ -151,6 +151,7 @@ const getStaffDisplay = (job) => {
 
 const CarWashJobs = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const confirm = useConfirm();
   const currentCompany = useSelector(selectCurrentCompany);
   const isConsolidated = !getActiveBranchId();
@@ -160,8 +161,16 @@ const CarWashJobs = () => {
   const [cashbooks, setCashbooks] = useState([]);
   const [cashbookDefaults, setCashbookDefaults] = useState({});
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
-  const [filters, setFilters] = useState(defaultFilters);
-  const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
+  const [filters, setFilters] = useState(() => {
+    const p = new URLSearchParams(location.search);
+    const plate = p.get("plate");
+    return plate ? { ...defaultFilters, search: plate, dateFrom: "", dateTo: "" } : defaultFilters;
+  });
+  const [appliedFilters, setAppliedFilters] = useState(() => {
+    const p = new URLSearchParams(location.search);
+    const plate = p.get("plate");
+    return plate ? { ...defaultFilters, search: plate, dateFrom: "", dateTo: "" } : defaultFilters;
+  });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentJobPaidSoFar, setPaymentJobPaidSoFar] = useState(0);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -356,6 +365,10 @@ const CarWashJobs = () => {
 
   const recordPayment = async (event) => {
     event.preventDefault();
+    if (paymentForm.method === "mpesa" && !paymentForm.reference?.trim()) {
+      toast.error("M-Pesa transaction code is required");
+      return;
+    }
     try {
       await carWashApi.recordPayment({
         ...paymentForm,
@@ -573,115 +586,104 @@ const CarWashJobs = () => {
         </>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 flex items-center gap-1.5 overflow-x-auto border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
+      <form onSubmit={applyFilters} className="mb-1 flex-shrink-0 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm">
+        {/* Text search */}
         <input
-          className="h-8 w-[105px] shrink-0 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          className="h-7 w-[120px] grow border border-slate-300 px-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Job # / plate"
           value={filters.search}
-          onChange={(event) => setFilterValue("search", event.target.value)}
+          onChange={(e) => setFilterValue("search", e.target.value)}
         />
         <input
-          className="h-8 w-[120px] shrink-0 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          className="h-7 w-[130px] grow border border-slate-300 px-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Customer / phone"
           value={filters.customer}
-          onChange={(event) => setFilterValue("customer", event.target.value)}
+          onChange={(e) => setFilterValue("customer", e.target.value)}
         />
-        <select
-          className="h-8 w-[110px] shrink-0 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.service}
-          onChange={(event) => setFilterValue("service", event.target.value)}
-        >
-          <option value="">Service</option>
-          {services.map((service) => (
-            <option key={service._id} value={service._id}>{service.name}</option>
-          ))}
+        {/* Category dropdowns */}
+        <select className="h-7 w-[110px] grow border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+          value={filters.service} onChange={(e) => setFilterValue("service", e.target.value)}>
+          <option value="">All Services</option>
+          {services.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
         </select>
-        <select
-          className="h-8 w-[100px] shrink-0 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.staff}
-          onChange={(event) => setFilterValue("staff", event.target.value)}
-        >
-          <option value="">Staff</option>
-          {staff.map((item) => (
-            <option key={item._id} value={item._id}>{item.name}</option>
-          ))}
+        <select className="h-7 w-[100px] grow border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+          value={filters.staff} onChange={(e) => setFilterValue("staff", e.target.value)}>
+          <option value="">All Staff</option>
+          {staff.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
         </select>
-        <select
-          className="h-8 w-[100px] shrink-0 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.status}
-          onChange={(event) => setFilterValue("status", event.target.value)}
-        >
-          <option value="">Status</option>
-          {statuses.map((status) => (
-            <option key={status} value={status}>{getJobStatusLabel(status, filters.jobType)}</option>
-          ))}
+        <select className="h-7 w-[100px] grow border border-slate-300 bg-white px-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          value={filters.status} onChange={(e) => setFilterValue("status", e.target.value)}>
+          <option value="">All Statuses</option>
+          {statuses.map((s) => <option key={s} value={s}>{getJobStatusLabel(s, filters.jobType)}</option>)}
         </select>
-        <select
-          className="h-8 w-[82px] shrink-0 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.paymentStatus}
-          onChange={(event) => setFilterValue("paymentStatus", event.target.value)}
-        >
-          <option value="">Payment</option>
+        <select className="h-7 w-[100px] grow border border-slate-300 bg-white px-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          value={filters.paymentStatus} onChange={(e) => setFilterValue("paymentStatus", e.target.value)}>
+          <option value="">All Payments</option>
           <option value="unpaid">Unpaid</option>
           <option value="partial">Partial</option>
           <option value="paid">Paid</option>
         </select>
-        <select
-          className="h-8 w-[80px] shrink-0 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.jobType}
-          onChange={(event) => setFilterValue("jobType", event.target.value)}
-        >
+        <select className="h-7 w-[88px] grow border border-slate-300 bg-white px-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          value={filters.jobType} onChange={(e) => setFilterValue("jobType", e.target.value)}>
           <option value="">All Types</option>
           <option value="vehicle">Vehicle</option>
           <option value="carpet">Carpet</option>
         </select>
-        {/* Date presets as segmented group */}
-        <div className="flex shrink-0 items-center divide-x divide-slate-200 overflow-hidden border border-slate-200">
-          {[
-            { label: "Today",     action: () => { const d = todayISO(); setFilters((p) => ({ ...p, dateFrom: d, dateTo: d })); } },
-            { label: "This Week", action: () => { const { from, to } = getWeekBounds(0);  setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
-            { label: "Last Week", action: () => { const { from, to } = getWeekBounds(-1); setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
-            { label: "Month",     action: () => { const { from, to } = getMonthBounds();  setFilters((p) => ({ ...p, dateFrom: from, dateTo: to })); } },
-          ].map(({ label, action }) => (
-            <button key={label} type="button" onClick={action} className="h-8 bg-white px-2 text-[10px] font-bold text-slate-600 hover:bg-[#F1F6F3] hover:text-[#0B3B2E] whitespace-nowrap">
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* Date preset */}
+        {(() => {
+          const today = todayISO();
+          const week  = getWeekBounds(0);
+          const lweek = getWeekBounds(-1);
+          const month = getMonthBounds();
+          const active =
+            filters.dateFrom === today     && filters.dateTo === today     ? "today"
+          : filters.dateFrom === week.from  && filters.dateTo === week.to  ? "thisWeek"
+          : filters.dateFrom === lweek.from && filters.dateTo === lweek.to ? "lastWeek"
+          : filters.dateFrom === month.from && filters.dateTo === month.to ? "month"
+          : "";
+          return (
+            <select value={active}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "today")    { const d = today; setFilters((p) => ({ ...p, dateFrom: d, dateTo: d })); }
+                if (v === "thisWeek") { setFilters((p) => ({ ...p, dateFrom: week.from,  dateTo: week.to  })); }
+                if (v === "lastWeek") { setFilters((p) => ({ ...p, dateFrom: lweek.from, dateTo: lweek.to })); }
+                if (v === "month")    { setFilters((p) => ({ ...p, dateFrom: month.from, dateTo: month.to })); }
+              }}
+              className="h-7 w-[100px] shrink-0 border border-slate-200 bg-white px-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
+              <option value="">Quick pick…</option>
+              <option value="today">Today</option>
+              <option value="thisWeek">This Week</option>
+              <option value="lastWeek">Last Week</option>
+              <option value="month">This Month</option>
+            </select>
+          );
+        })()}
         {/* Date range */}
-        <div className="flex shrink-0 items-center gap-1">
-          <input
-            type="date"
-            title="From"
-            className="h-8 w-[128px] border border-slate-300 px-1.5 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-            value={filters.dateFrom}
-            onChange={(e) => setFilterValue("dateFrom", e.target.value)}
-          />
-          <span className="text-[10px] font-bold text-slate-400">→</span>
-          <input
-            type="date"
-            title="To"
-            className="h-8 w-[128px] border border-slate-300 px-1.5 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-            value={filters.dateTo}
-            onChange={(e) => setFilterValue("dateTo", e.target.value)}
-          />
-        </div>
-        <button type="submit" className="inline-flex h-8 shrink-0 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white hover:bg-[#E67E00]">
-          <FaSearch /> Search
+        <input type="date" title="From"
+          className="h-7 w-[120px] shrink-0 border border-slate-300 px-1 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          value={filters.dateFrom} onChange={(e) => setFilterValue("dateFrom", e.target.value)} />
+        <span className="shrink-0 text-[10px] text-slate-400">—</span>
+        <input type="date" title="To"
+          className="h-7 w-[120px] shrink-0 border border-slate-300 px-1 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          value={filters.dateTo} onChange={(e) => setFilterValue("dateTo", e.target.value)} />
+        {/* Actions */}
+        <button type="submit" className="inline-flex h-7 shrink-0 items-center gap-1 bg-[#FF8C00] px-3 text-xs font-bold text-white hover:bg-[#E67E00]">
+          <FaSearch size={9} /> Search
         </button>
-        <button type="button" onClick={resetFilters} className="inline-flex h-8 shrink-0 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-          <FaRedoAlt /> Reset
+        <button type="button" onClick={resetFilters} className="inline-flex h-7 shrink-0 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
+          <FaRedoAlt size={9} /> Reset
         </button>
       </form>
 
-      <div className="flex flex-col h-[calc(100vh-11rem)] border border-slate-200 bg-white shadow-sm">
-        <div className="flex-shrink-0 flex min-h-8 flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span>Showing: <strong className="text-[#0B3B2E]">{jobs.length}</strong> / {pagination.total}</span>
-          <span>Page: <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
-          <span>Unpaid: <strong className="text-[#FF8C00]">{jobStats.unpaid}</strong></span>
-          <span>Washing: <strong className="text-slate-900">{jobStats.washing}</strong></span>
-          <span>Done: <strong className="text-slate-900">{jobStats.done}</strong></span>
-          <span>Selected: <strong className="text-[#0B3B2E]">{selectedIds.length}</strong></span>
+      <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
+        <div className="flex-shrink-0 flex flex-wrap items-center gap-x-4 gap-y-0.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <span>Showing <strong className="text-[#0B3B2E]">{jobs.length}</strong>/{pagination.total}</span>
+          <span>Page <strong className="text-[#0B3B2E]">{pagination.page}</strong>/{pagination.pages}</span>
+          <span>Unpaid <strong className="text-[#FF8C00]">{jobStats.unpaid}</strong></span>
+          <span>Washing <strong className="text-slate-700">{jobStats.washing}</strong></span>
+          <span>Done <strong className="text-slate-700">{jobStats.done}</strong></span>
+          {selectedIds.length > 0 && <span>Selected <strong className="text-[#0B3B2E]">{selectedIds.length}</strong></span>}
         </div>
 
         {/* ── Mobile card list ─────────────────────────────────────────── */}
@@ -1181,21 +1183,24 @@ const CarWashJobs = () => {
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <label className={labelClass} style={{ marginBottom: 0 }}>Amount Received *</label>
-                {outstandingForModal > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setPaymentForm((prev) => ({ ...prev, amount: String(outstandingForModal) }))}
-                    className="text-[9px] font-black uppercase tracking-wide text-[#0B3B2E] underline hover:text-[#FF8C00]"
-                  >
-                    Pay in Full ({formatMoney(outstandingForModal)})
-                  </button>
-                )}
+                {outstandingForModal > 0 && (() => {
+                  const netDue = Math.max(0, outstandingForModal - Number(paymentForm.discountAmount || 0));
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentForm((prev) => ({ ...prev, amount: String(netDue) }))}
+                      className="text-[9px] font-black uppercase tracking-wide text-[#0B3B2E] underline hover:text-[#FF8C00]"
+                    >
+                      Pay in Full ({formatMoney(netDue)})
+                    </button>
+                  );
+                })()}
               </div>
               <input
                 className={inputClass}
                 type="number"
                 min="1"
-                max={outstandingForModal || undefined}
+                max={Math.max(0, outstandingForModal - Number(paymentForm.discountAmount || 0)) || undefined}
                 step="1"
                 value={paymentForm.amount}
                 onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))}
@@ -1203,10 +1208,11 @@ const CarWashJobs = () => {
               />
               {/* Live remaining preview */}
               {selectedPaymentJob && Number(paymentForm.amount) > 0 && (() => {
-                const paying    = Number(paymentForm.amount || 0) + Number(paymentForm.discountAmount || 0);
-                const remaining = Math.max(0, outstandingForModal - paying);
-                const overPay   = paying > outstandingForModal + 0.01;
-                if (overPay) return <p className="mt-0.5 text-[10px] font-bold text-red-600">Exceeds outstanding balance by {formatMoney(paying - outstandingForModal)}</p>;
+                const netDue    = Math.max(0, outstandingForModal - Number(paymentForm.discountAmount || 0));
+                const paying    = Number(paymentForm.amount || 0);
+                const remaining = Math.max(0, netDue - paying);
+                const overPay   = paying > netDue + 0.01;
+                if (overPay) return <p className="mt-0.5 text-[10px] font-bold text-red-600">Exceeds outstanding balance by {formatMoney(paying - netDue)}</p>;
                 if (remaining === 0) return <p className="mt-0.5 text-[10px] font-bold text-emerald-700">Job will be fully paid ✓</p>;
                 return <p className="mt-0.5 text-[10px] text-slate-500">Remaining after payment: <strong>{formatMoney(remaining)}</strong></p>;
               })()}
@@ -1221,7 +1227,13 @@ const CarWashJobs = () => {
                 type="number"
                 min="0"
                 value={paymentForm.discountAmount}
-                onChange={(event) => setPaymentForm((prev) => ({ ...prev, discountAmount: event.target.value }))}
+                onChange={(event) => {
+                  const disc = event.target.value;
+                  setPaymentForm((prev) => {
+                    const netDue = Math.max(0, outstandingForModal - Number(disc || 0));
+                    return { ...prev, discountAmount: disc, amount: String(netDue) };
+                  });
+                }}
                 placeholder="0"
               />
             </div>
@@ -1251,8 +1263,20 @@ const CarWashJobs = () => {
               </select>
             </div>
             <div className={paymentForm.method === "mpesa" ? "" : "md:col-span-2"}>
-              <label className={labelClass}>{paymentForm.method === "mpesa" ? "M-Pesa Transaction Code" : "Reference"}</label>
-              <input className={inputClass} value={paymentForm.reference} onChange={(event) => setPaymentForm((prev) => ({ ...prev, reference: event.target.value }))} placeholder={paymentForm.method === "mpesa" ? "e.g. QJK1234ABC" : paymentForm.method === "cash" ? "Optional cash receipt note" : "Bank ref, card ref..."} />
+              <label className={labelClass}>
+                {paymentForm.method === "mpesa" ? "M-Pesa Transaction Code" : "Reference"}
+                {paymentForm.method === "mpesa" && <span className="ml-1 font-bold text-red-500">*</span>}
+              </label>
+              <input
+                className={`${inputClass} ${paymentForm.method === "mpesa" && !paymentForm.reference?.trim() ? "border-red-300 focus:border-red-500" : ""}`}
+                value={paymentForm.reference}
+                onChange={(event) => setPaymentForm((prev) => ({ ...prev, reference: event.target.value }))}
+                placeholder={paymentForm.method === "mpesa" ? "e.g. QJK1234ABC" : paymentForm.method === "cash" ? "Optional cash receipt note" : "Bank ref, card ref..."}
+                required={paymentForm.method === "mpesa"}
+              />
+              {paymentForm.method === "mpesa" && !paymentForm.reference?.trim() && (
+                <p className="mt-0.5 text-[10px] font-bold text-red-500">Required for M-Pesa payments</p>
+              )}
             </div>
             {paymentForm.method === "mpesa" && (
               <div className="md:col-span-2">

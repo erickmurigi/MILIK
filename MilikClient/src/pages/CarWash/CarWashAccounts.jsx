@@ -440,44 +440,51 @@ const CarWashAccounts = () => {
     <CarWashShell activePage="accounts">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* ── Header ── */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3 py-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1">
+          <div className="flex flex-wrap items-center justify-between gap-1">
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Car Wash</div>
-              <h1 className="text-sm font-black text-slate-900">Credit Accounts</h1>
+              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Car Wash</div>
+              <h1 className="text-sm font-bold text-slate-900 leading-tight">Credit Accounts</h1>
             </div>
-            <div className="flex items-center gap-2">
-              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-7 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none">
+            <div className="flex items-center gap-1">
+              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-7 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]">
                 <option value="">All Statuses</option>
                 <option value="active">Active</option>
                 <option value="suspended">Suspended</option>
                 <option value="closed">Closed</option>
               </select>
-              <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-7 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none">
+              <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-7 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]">
                 <option value="">All Types</option>
                 <option value="credit">Credit</option>
                 <option value="monthly">Monthly</option>
               </select>
-              <button onClick={loadAccounts} className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt /></button>
+              <button onClick={loadAccounts} className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /></button>
               <button onClick={() => setShowCreate(true)} className="flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-                <FaPlus /> New Account
+                <FaPlus size={9} /> New Account
               </button>
             </div>
           </div>
 
           {/* KPI strip */}
-          <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-            <span className="rounded border border-slate-200 bg-white px-2 py-0.5 font-bold text-slate-600">{stats.total} accounts</span>
-            <span className="rounded border border-red-200 bg-red-50 px-2 py-0.5 font-bold text-red-700">Credit owed: {fmt(stats.totalOwed)}</span>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+            <span className="font-semibold text-slate-700">{stats.total} accounts</span>
+            <span className="text-slate-300">·</span>
+            <span className="font-bold text-red-600">Credit owed: {fmt(stats.totalOwed)}</span>
             {stats.totalPrepaidCredit > 0 && (
-              <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700">
-                <FaWallet className="mr-1 inline" />Prepaid float: {fmt(stats.totalPrepaidCredit)}
-              </span>
+              <>
+                <span className="text-slate-300">·</span>
+                <span className="font-semibold text-emerald-700">
+                  <FaWallet className="mr-1 inline" size={8} />Prepaid float: {fmt(stats.totalPrepaidCredit)}
+                </span>
+              </>
             )}
             {stats.overLimit > 0 && (
-              <span className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 font-bold text-amber-700">
-                <FaExclamationTriangle className="mr-1 inline" />{stats.overLimit} over limit
-              </span>
+              <>
+                <span className="text-slate-300">·</span>
+                <span className="font-bold text-amber-700">
+                  <FaExclamationTriangle className="mr-1 inline" size={8} />{stats.overLimit} over limit
+                </span>
+              </>
             )}
           </div>
         </div>
@@ -487,14 +494,14 @@ const CarWashAccounts = () => {
           <table className="w-full min-w-[860px] text-xs">
             <thead className="sticky top-0 z-10">
               <tr className="bg-[#0B3B2E] text-white">
-                <th className="w-6 px-3 py-2" />
-                <th className="px-3 py-2 text-left font-semibold">Account</th>
-                <th className="px-3 py-2 text-left font-semibold">Customer / Plates</th>
-                <th className="px-3 py-2 text-left font-semibold">Type</th>
-                <th className="px-3 py-2 text-right font-semibold">Balance</th>
-                <th className="px-3 py-2 text-right font-semibold">Limit</th>
-                <th className="px-3 py-2 text-left font-semibold">Status</th>
-                <th className="px-3 py-2 text-right font-semibold">Actions</th>
+                <th className="w-6 px-3 py-1.5" />
+                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Account</th>
+                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Customer / Plates</th>
+                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Type</th>
+                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Balance</th>
+                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Limit</th>
+                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
+                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
             <tbody>
