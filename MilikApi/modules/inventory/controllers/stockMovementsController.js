@@ -9,6 +9,7 @@ import {
   parseDateRange,
 } from "../services/inventoryScope.js";
 import { postStockEntry, getStockBalance as computeBalance } from "../services/stockLedger.js";
+import { postStockAdjustmentLedger } from "../services/inventoryAccountingService.js";
 
 const MANUAL_TYPES = new Set(["adjustment", "writeoff", "opening", "return"]);
 
@@ -116,6 +117,10 @@ export const createManualEntry = async (req, res, next) => {
       notes: notes ? String(notes).trim() : "",
       createdBy: userId,
     });
+
+    postStockAdjustmentLedger({ businessId: business, stockEntry: entry, userId }).catch((err) =>
+      console.error("[INV GL] postStockAdjustmentLedger failed:", err.message)
+    );
 
     const newBalance = await computeBalance(business, String(location), String(product));
 

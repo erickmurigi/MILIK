@@ -125,10 +125,14 @@ const AppSelect = ({
     return () => document.removeEventListener("mousedown", handler);
   }, [open, close]);
 
-  // Close on scroll / resize so the dropdown doesn't float away
+  // Close on scroll / resize so the dropdown doesn't float away.
+  // Ignore scroll events that originate inside the portal itself (scrolling the options list).
   useEffect(() => {
     if (!open) return;
-    const handler = () => close();
+    const handler = (e) => {
+      if (document.getElementById("app-select-portal")?.contains(e.target)) return;
+      close();
+    };
     window.addEventListener("scroll", handler, true);
     window.addEventListener("resize", handler);
     return () => {

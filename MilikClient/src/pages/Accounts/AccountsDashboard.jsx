@@ -5,12 +5,12 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
 } from "recharts";
 import {
-  FaBook, FaCalculator, FaChartBar, FaCreditCard, FaLayerGroup, FaWallet,
+  FaBook, FaCreditCard, FaLayerGroup,
   FaFileInvoice, FaCog, FaUniversity, FaCoins, FaFileContract,
   FaPlusCircle, FaSpinner, FaExclamationTriangle, FaCheckCircle, FaCircle,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { getJournalEntries, getChartOfAccounts, getIncomeStatementReport } from "../../redux/apiCalls";
+import { getJournalEntries, getChartOfAccounts, getIncomeStatementReport, getCashMonthlySummary } from "../../redux/apiCalls";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const GRN  = "#0B3B2E";
@@ -170,9 +170,10 @@ const AccountsDashboard = () => {
   const navigate = useNavigate();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
 
-  const [stats, setStats]           = useState({ accounts: null, draftJournals: null, postedJournals: null });
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [monthlyData, setMonthlyData]   = useState([]);
+  const [stats, setStats]             = useState({ accounts: null, draftJournals: null, postedJournals: null });
+  const [statsLoading, setStatsLoading]   = useState(true);
+  const [cashData, setCashData]           = useState([]);
+  const [monthlyData, setMonthlyData]     = useState([]);
   const [chartsLoading, setChartsLoading] = useState(true);
   const fetchedRef = useRef(false);
 
@@ -201,21 +202,26 @@ const AccountsDashboard = () => {
       .catch(() => {})
       .finally(() => setStatsLoading(false));
 
-    // Monthly chart data — last 6 months in parallel
+    // Chart data — both in parallel: cash summary (1 call) + income statement (6 calls)
     const months = getLast6Months();
-    Promise.all(
-      months.map((m) =>
-        getIncomeStatementReport({ business: businessId, startDate: m.startDate, endDate: m.endDate })
-          .then((data) => ({
-            month:    m.label,
-            income:   data?.summary?.totalIncome   ?? 0,
-            expenses: data?.summary?.totalExpenses ?? 0,
-            net:      data?.summary?.netProfit     ?? 0,
-          }))
-          .catch(() => ({ month: m.label, income: 0, expenses: 0, net: 0 }))
-      )
-    )
-      .then(setMonthlyData)
+    Promise.all([
+      getCashMonthlySummary({ business: businessId, months: 6 })
+        .then((d) => d?.data ?? [])
+        .catch(() => []),
+      Promise.all(
+        months.map((m) =>
+          getIncomeStatementReport({ business: businessId, startDate: m.startDate, endDate: m.endDate })
+            .then((data) => ({
+              month:    m.label,
+              income:   data?.summary?.totalIncome   ?? 0,
+              expenses: data?.summary?.totalExpenses ?? 0,
+              net:      data?.summary?.netProfit     ?? 0,
+            }))
+            .catch(() => ({ month: m.label, income: 0, expenses: 0, net: 0 }))
+        )
+      ),
+    ])
+      .then(([cash, income]) => { setCashData(cash); setMonthlyData(income); })
       .finally(() => setChartsLoading(false));
   }, [businessId]);
 
@@ -317,21 +323,21 @@ const AccountsDashboard = () => {
             {/* Charts */}
             <div className="grid grid-cols-2 gap-4">
 
-              {/* Chart 1: Income vs Expenses */}
+              {/* Chart 1: Cash In / Cash Out */}
               <ChartCard
-                title="Income vs Expenses"
-                subtitle="Revenue against costs — last 6 months"
+                title="Cash In / Cash Out"
+                subtitle="Cashbook movements — last 6 months"
                 loading={chartsLoading}
               >
                 <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={monthlyData} barCategoryGap="30%" barGap={3}>
+                  <BarChart data={cashData} barCategoryGap="30%" barGap={3}>
                     <CartesianGrid strokeDasharray="2 2" stroke="#f1f5f9" vertical={false} />
                     <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                     <YAxis tickFormatter={shortKES} tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={38} />
                     <Tooltip content={<ChartTooltip />} cursor={{ fill: "#f8fafc" }} />
                     <Legend iconType="square" iconSize={8} wrapperStyle={{ fontSize: "9px", paddingTop: "8px" }} />
-                    <Bar dataKey="income"   name="Income"   fill={GRN} radius={0} />
-                    <Bar dataKey="expenses" name="Expenses" fill={ORG} radius={0} />
+                    <Bar dataKey="cashIn"  name="Cash In"  fill={GRN} radius={0} />
+                    <Bar dataKey="cashOut" name="Cash Out" fill={ORG} radius={0} />
                   </BarChart>
                 </ResponsiveContainer>
               </ChartCard>

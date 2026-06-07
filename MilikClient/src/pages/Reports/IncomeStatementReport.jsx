@@ -224,7 +224,7 @@ const IncomeStatementReport = () => {
         @media print{body{padding:10px}@page{size:A4 portrait;margin:12mm}}
       </style></head><body>
       <h1>Income Statement</h1>
-      <p class="sub">${selectedProperty ? `${escapeHtml(selectedProperty.propertyCode)} – ${escapeHtml(selectedProperty.propertyName)} · ` : "Property manager income and operating expenses · "}${escapeHtml(filters.startDate)} to ${escapeHtml(filters.endDate)}</p>
+      <p class="sub">${selectedProperty ? `${escapeHtml(selectedProperty.propertyCode)} – ${escapeHtml(selectedProperty.propertyName)} · ` : `${escapeHtml(report.reportBasis || "All operating income and expenses")} · `}${escapeHtml(filters.startDate)} to ${escapeHtml(filters.endDate)}</p>
       <div class="meta">
         <div class="meta-box"><div class="lbl">Business</div><div class="val">${escapeHtml(businessName)}</div></div>
         <div class="meta-box"><div class="lbl">Period</div><div class="val">${escapeHtml(filters.startDate)} → ${escapeHtml(filters.endDate)}</div></div>
@@ -281,18 +281,20 @@ const IncomeStatementReport = () => {
                 />
               </div>
 
-              <select
-                value={filters.propertyId}
-                onChange={(e) => setFilters((p) => ({ ...p, propertyId: e.target.value }))}
-                className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              >
-                <option value="">All Properties</option>
-                {(properties || []).map((p) => (
-                  <option key={p._id} value={p._id}>
-                    {p.propertyCode} – {p.propertyName}
-                  </option>
-                ))}
-              </select>
+              {properties.length > 0 && (
+                <select
+                  value={filters.propertyId}
+                  onChange={(e) => setFilters((p) => ({ ...p, propertyId: e.target.value }))}
+                  className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                >
+                  <option value="">All Properties</option>
+                  {properties.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.propertyCode} – {p.propertyName}
+                    </option>
+                  ))}
+                </select>
+              )}
 
               <button
                 onClick={loadReport}
@@ -334,7 +336,7 @@ const IncomeStatementReport = () => {
                 </span>
               ) : (
                 <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                  {report.reportBasis || "Property manager income and operating expenses only"}
+                  {report.reportBasis || "All operating income and expenses for this company"}
                 </span>
               )}
             </div>

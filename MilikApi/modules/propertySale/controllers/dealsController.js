@@ -8,6 +8,7 @@ import SaleOffer from "../models/SaleOffer.js";
 import SalePayment from "../models/SalePayment.js";
 import SaleCommission from "../models/SaleCommission.js";
 import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { postPropertySaleCommissionAccrual, reversePropertySaleCommissionAccrual } from "../services/propertySaleAccountingService.js";
 
 const populateDeal = (query) =>
   query
@@ -170,6 +171,14 @@ export const closeDeal = async (req, res, next) => {
     await deal.save();
 
     await SaleListing.findByIdAndUpdate(deal.listing, { status: "sold" });
+
+    // Post GL accrual for each pending commission before approving them
+    const pendingCommissions = await SaleCommission.find({ business, deal: deal._id, status: "pending" }).lean();
+    for (const commission of pendingCommissions) {
+      postPropertySaleCommissionAccrual({ businessId: business, commission, userId }).catch((err) =>
+        console.error("[PS GL] postPropertySaleCommissionAccrual failed:", err.message)
+      );
+    }
     await SaleCommission.updateMany({ business, deal: deal._id, status: "pending" }, { status: "approved" });
 
     res.status(200).json({ ...deal.toObject(), totalPaid, balance: 0 });
@@ -192,6 +201,15 @@ export const cancelDeal = async (req, res, next) => {
     await deal.save();
 
     await SaleListing.findByIdAndUpdate(deal.listing, { status: "available" });
+
+    // Reverse GL accrual for any already-approved commissions before cancelling
+    const approvedCommissions = await SaleCommission.find({ business, deal: deal._id, status: "approved" }).lean();
+    const cancellationReason = req.body.cancellationReason ? `Deal cancelled: ${req.body.cancellationReason}` : "Deal cancelled";
+    for (const commission of approvedCommissions) {
+      reversePropertySaleCommissionAccrual({ businessId: business, commission, userId, reason: cancellationReason }).catch((err) =>
+        console.error("[PS GL] reversePropertySaleCommissionAccrual failed:", err.message)
+      );
+    }
     await SaleCommission.updateMany({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }, { status: "cancelled" });
 
     res.status(200).json(deal);

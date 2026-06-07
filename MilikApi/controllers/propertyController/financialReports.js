@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
+import Company from "../../models/Company.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import Tenant from "../../models/Tenant.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
@@ -12,7 +13,7 @@ import { computeTenantInvoiceSnapshotsBatch } from "./tenantInvoices.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import { computeAccountBalance, getNormalBalanceSide } from "../../services/accountingClassificationService.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
-import { isManagerIncomeAccount, isManagerExpenseAccount } from "../../utils/accountClassifiers.js";
+import { isOperatingIncomeAccount, isOperatingExpenseAccount } from "../../utils/accountClassifiers.js";
 
 const toObjectId = (value) => {
   const raw = typeof value === "object" && value?._id ? value._id : value;
@@ -64,7 +65,7 @@ const resolveInvoiceDueDateForReports = (invoice = {}) => {
   return fallback ? normalizeDate(fallback, true) : null;
 };
 
-// isManagerIncomeAccount and isManagerExpenseAccount imported from accountClassifiers.js
+// isOperatingIncomeAccount / isOperatingExpenseAccount imported from accountClassifiers.js
 
 const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, endDate = null, propertyId = null }) => {
   const match = {
@@ -320,14 +321,10 @@ export const getIncomeStatementReport = async (req, res, next) => {
       type: { $in: ["income", "expense"] },
     };
 
-    const [accounts, ledgerMap] = await Promise.all([
+    const [accounts, ledgerMap, company] = await Promise.all([
       ChartOfAccount.find(accountQuery).sort({ code: 1 }).lean(),
-      buildLedgerMap({
-        businessId,
-        startDate,
-        endDate,
-        propertyId: scopePropertyId,
-      }),
+      buildLedgerMap({ businessId, startDate, endDate, propertyId: scopePropertyId }),
+      Company.findById(businessId, { modules: 1 }).lean(),
     ]);
 
     const incomeRows = [];
@@ -350,11 +347,11 @@ export const getIncomeStatementReport = async (req, res, next) => {
         balanceSource: derived.source,
       };
 
-      if (account.type === "income" && isManagerIncomeAccount(account)) {
+      if (account.type === "income" && isOperatingIncomeAccount(account)) {
         incomeRows.push(row);
       }
 
-      if (account.type === "expense" && isManagerExpenseAccount(account)) {
+      if (account.type === "expense" && isOperatingExpenseAccount(account)) {
         expenseRows.push(row);
       }
     }
@@ -386,13 +383,13 @@ export const getIncomeStatementReport = async (req, res, next) => {
         netProfit,
         resultLabel: netProfit >= 0 ? "Net Profit" : "Net Loss",
       },
-      reportBasis: "Property manager income and operating expenses only",
-      exclusions: [
+      reportBasis: "All operating income and expenses for this company",
+      exclusions: company?.modules?.propertyManagement ? [
         "Rent collected on behalf of landlords",
         "Property control movements",
         "Landlord remittance payable",
         "Landlord/property deductions such as repairs and utilities",
-      ],
+      ] : [],
     });
   } catch (error) {
     next(error);
@@ -1684,11 +1681,83 @@ export const getAPAgingReport = async (req, res, next) => {
   }
 };
 
+// ─── Cash Monthly Summary ─────────────────────────────────────────────────────
+// Returns cashIn / cashOut per month for the last N months (default 6).
+// cashIn  = debits  to cashbook accounts (money received into cash/bank)
+// cashOut = credits from cashbook accounts (money paid out of cash/bank)
+export const getCashMonthlySummary = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return res.status(400).json({ message: "Missing business" });
+
+    const months = Math.max(1, Math.min(24, Number(req.query.months || 6)));
+    const from = new Date();
+    from.setMonth(from.getMonth() - (months - 1));
+    from.setDate(1);
+    from.setHours(0, 0, 0, 0);
+
+    const businessOid = new mongoose.Types.ObjectId(String(businessId));
+
+    // Cashbook account codes — same set as SHARED_CASHBOOK_CODES
+    const cashbookAccounts = await ChartOfAccount.find(
+      { business: businessId, code: { $in: ["1100", "1110", "1130"] } },
+      { _id: 1 }
+    ).lean();
+
+    if (!cashbookAccounts.length) return res.status(200).json({ success: true, data: [] });
+
+    const accountIds = cashbookAccounts.map((a) => a._id);
+
+    const rows = await FinancialLedgerEntry.aggregate([
+      {
+        $match: {
+          business: businessOid,
+          accountId: { $in: accountIds },
+          transactionDate: { $gte: from },
+          status: { $ne: "reversed" },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            y: { $year: "$transactionDate" },
+            m: { $month: "$transactionDate" },
+            dir: "$direction",
+          },
+          total: { $sum: "$amount" },
+        },
+      },
+    ]);
+
+    // Build lookup: "YYYY-M" → { cashIn, cashOut }
+    const map = {};
+    for (const row of rows) {
+      const key = `${row._id.y}-${row._id.m}`;
+      if (!map[key]) map[key] = { cashIn: 0, cashOut: 0 };
+      if (row._id.dir === "debit")  map[key].cashIn  = round2(map[key].cashIn  + row.total);
+      if (row._id.dir === "credit") map[key].cashOut = round2(map[key].cashOut + row.total);
+    }
+
+    // Return one entry per month in chronological order
+    const data = Array.from({ length: months }, (_, i) => {
+      const d = new Date(from.getFullYear(), from.getMonth() + i, 1);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+      const label = d.toLocaleDateString("en-GB", { month: "short" });
+      return { month: label, cashIn: map[key]?.cashIn ?? 0, cashOut: map[key]?.cashOut ?? 0 };
+    });
+
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   getTrialBalanceReport,
   getIncomeStatementReport,
   getBalanceSheetReport,
   getCashFlowReport,
+  getCashMonthlySummary,
   getARAgingReport,
   getAPAgingReport,
   getRentalCollectionReport,

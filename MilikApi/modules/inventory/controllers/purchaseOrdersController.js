@@ -9,6 +9,7 @@ import {
 } from "../services/inventoryScope.js";
 import { postStockEntry } from "../services/stockLedger.js";
 import { nextSequenceNumber } from "../services/sequenceService.js";
+import { postPurchaseReceiptLedger } from "../services/inventoryAccountingService.js";
 
 const populatePO = (q) =>
   q
@@ -203,7 +204,7 @@ export const receiveGoods = async (req, res, next) => {
 
       const unitCost = Number(recv.unitCost ?? line.unitCost ?? 0);
 
-      await postStockEntry({
+      const stockEntry = await postStockEntry({
         business,
         location: String(order.location),
         product: String(line.product),
@@ -215,6 +216,10 @@ export const receiveGoods = async (req, res, next) => {
         notes: `Goods received from PO ${order.poNumber}`,
         createdBy: userId,
       });
+
+      postPurchaseReceiptLedger({ businessId: business, stockEntry, poNumber: order.poNumber, userId }).catch((err) =>
+        console.error("[INV GL] postPurchaseReceiptLedger failed:", err.message)
+      );
 
       // Update product cost price to reflect latest purchase cost
       await InvProduct.updateOne(

@@ -6,8 +6,8 @@ import CarWashBranch from "../models/CarWashBranch.js";
 import CarWashExpenseCategoryConfig from "../models/CarWashExpenseCategoryConfig.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { postEntry } from "../../../services/ledgerPostingService.js";
-import { findSystemAccountByCode } from "../../../services/chartOfAccountsService.js";
 import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
+import { resolveExpenseAccountForCategory } from "../services/carwashAccountingService.js";
 
 const METHODS  = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const STATUSES = new Set(["draft", "approved", "paid", "cancelled"]);
@@ -37,7 +37,7 @@ const itemsTotal = (items) => items.reduce((sum, i) => sum + i.amount, 0);
 
 const postCwExpenseLedger = async ({ business, expense, cashbookAccountId, userId }) => {
   try {
-    const expenseAccount = await findSystemAccountByCode(business, "5310");
+    const expenseAccount = await resolveExpenseAccountForCategory(business, expense.category);
     if (!expenseAccount?._id || !cashbookAccountId) return;
     const txDate = expense.expenseDate || expense.paidAt || new Date();
     const { start, end } = cwDayRange(txDate);
@@ -65,7 +65,7 @@ const postCwExpenseLedger = async ({ business, expense, cashbookAccountId, userI
 
 const reverseCwExpenseLedger = async ({ business, expense, userId }) => {
   try {
-    const expenseAccount  = await findSystemAccountByCode(business, "5310");
+    const expenseAccount  = await resolveExpenseAccountForCategory(business, expense.category);
     const cashbookAccountId = String(expense.cashbookAccount || "");
     if (!expenseAccount?._id || !cashbookAccountId) return;
     const now = new Date();

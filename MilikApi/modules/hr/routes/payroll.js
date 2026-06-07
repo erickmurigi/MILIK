@@ -6,7 +6,7 @@ import HREmployee from '../models/HREmployee.js';
 import { resolveCompanyId, currentUserId, parsePage, parseLimit } from '../services/hrScope.js';
 import { computeStatutory, cfgFromDoc } from '../services/hrStatutory.js';
 import HRStatutoryConfig from '../models/HRStatutoryConfig.js';
-import { postPayrollGLJournals } from '../services/hrPayrollGLService.js';
+import { postPayrollGLJournals, resolvePayrollAccounts } from '../services/hrPayrollGLService.js';
 
 const router = express.Router();
 
@@ -197,34 +197,70 @@ router.patch('/periods/:id/approve', verifyUser, async (req, res) => {
     if (period.status !== 'Draft') return res.status(400).json({ message: `Period is ${period.status} — cannot approve` });
     if (period.employeeCount === 0) return res.status(400).json({ message: 'Run payroll first before approving' });
 
+    // Pre-validate GL accounts before committing the approval — fail early with a clear message
+    try {
+      await resolvePayrollAccounts(companyId);
+    } catch (accountErr) {
+      return res.status(400).json({
+        message: `Cannot approve payroll — ${accountErr.message}`,
+      });
+    }
+
     period.status     = 'Approved';
     period.approvedBy = userId;
     period.approvedAt = new Date();
     period.updatedBy  = userId;
     await period.save();
 
-    // Update all Draft payslips to Approved
     await HRPayslip.updateMany({ payrollPeriod: period._id, status: 'Draft' }, { $set: { status: 'Approved', updatedBy: userId } });
 
-    // Post GL journals — non-blocking; errors are captured on the period record
+    // Post GL — accounts are confirmed to exist so failures here are DB-level errors
     try {
-      const { journalGroupId, entryCount } = await postPayrollGLJournals(period, companyId, userId);
-      period.glPosted = true;
-      period.glJournalGroupId = journalGroupId;
-      period.glPostedAt = new Date();
-      period.glError = '';
+      const { entryCount, alreadyPosted } = await postPayrollGLJournals(period, companyId, userId);
+      period.glPosted    = true;
+      period.glPostedAt  = new Date();
+      period.glError     = '';
       await period.save();
-      return res.json({ message: `Payroll period approved and ${entryCount} GL journal(s) posted`, period });
+      const msg = alreadyPosted
+        ? `Payroll period approved (GL was already posted — ${entryCount} entries)`
+        : `Payroll period approved and ${entryCount} GL entries posted`;
+      return res.json({ message: msg, period });
     } catch (glErr) {
       period.glPosted = false;
-      period.glError = glErr.message || 'GL posting failed';
+      period.glError  = glErr.message || 'GL posting failed';
       await period.save();
-      return res.json({
-        message: 'Payroll period approved. GL posting could not be completed — configure HR accounting defaults in Company Settings.',
+      return res.status(500).json({
+        message: `Payroll approved but GL posting failed: ${glErr.message}. Use the resync endpoint to retry.`,
         glError: period.glError,
         period,
       });
     }
+  } catch (err) {
+    res.status(err.status || 500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/hr/payroll/periods/:id/resync-gl — retry GL posting for an approved period
+router.patch('/periods/:id/resync-gl', verifyUser, async (req, res) => {
+  try {
+    const companyId = resolveCompanyId(req);
+    const userId    = currentUserId(req);
+    const period = await HRPayrollPeriod.findOne({ _id: req.params.id, company: companyId });
+    if (!period) return res.status(404).json({ message: 'Payroll period not found' });
+    if (!['Approved', 'Paid', 'Closed'].includes(period.status)) {
+      return res.status(400).json({ message: 'Only approved, paid, or closed periods can resync GL' });
+    }
+
+    const { entryCount, alreadyPosted } = await postPayrollGLJournals(period, companyId, userId);
+    period.glPosted   = true;
+    period.glPostedAt = new Date();
+    period.glError    = '';
+    await period.save();
+
+    const msg = alreadyPosted
+      ? `GL already posted — ${entryCount} entries found (no duplicates created)`
+      : `GL resync complete — ${entryCount} entries posted`;
+    res.json({ message: msg, period });
   } catch (err) {
     res.status(err.status || 500).json({ message: err.message });
   }

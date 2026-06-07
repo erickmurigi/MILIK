@@ -15,10 +15,12 @@ import mongoose from "mongoose";
 
 // ─── Account templates ────────────────────────────────────────────────────────
 const CW_ACCOUNT_TEMPLATES = {
-  "4400": { name: "Car Wash Service Income",            type: "income",    group: "income",      subGroup: "Car Wash Income" },
-  "5311": { name: "Car Wash Staff Commissions",         type: "expense",   group: "expenses",    subGroup: "Car Wash Expenses" },
-  "2160": { name: "Car Wash Staff Commissions Payable", type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
-  "2161": { name: "Car Wash Staff Savings Payable",     type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
+  "4400": { name: "Car Wash Service Income",              type: "income",    group: "income",      subGroup: "Car Wash Income" },
+  "5310": { name: "Car Wash Supplies Expense",            type: "expense",   group: "expenses",    subGroup: "Car Wash Expenses" },
+  "5311": { name: "Car Wash Staff Wages",                 type: "expense",   group: "expenses",    subGroup: "Car Wash Expenses" },
+  "5312": { name: "Car Wash Water and Utilities",         type: "expense",   group: "expenses",    subGroup: "Car Wash Expenses" },
+  "2160": { name: "Car Wash Staff Commissions Payable",   type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
+  "2161": { name: "Car Wash Staff Savings Payable",       type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
 };
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -795,13 +797,15 @@ export const deduplicateCarWashLedgerEntries = async (businessId, req = null) =>
  * Returns { paymentsPosted, commissionsPosted, skipped, errors[] }.
  */
 export const backfillCarWashPaymentLedger = async (businessId, req = null) => {
-  const { default: CarWashPayment }       = await import("../models/CarWashPayment.js");
+  const { default: CarWashPayment }         = await import("../models/CarWashPayment.js");
   const { default: CarWashStaffCommission } = await import("../models/CarWashStaffCommission.js");
-  const { default: FinancialLedgerEntry } = await import("../../../models/FinancialLedgerEntry.js");
+  const { default: CarWashExpense }         = await import("../models/CarWashExpense.js");
+  const { default: FinancialLedgerEntry }   = await import("../../../models/FinancialLedgerEntry.js");
 
   const businessOid = new mongoose.Types.ObjectId(String(businessId));
 
-  const [payments, commissions, alreadyPostedPaymentIds, alreadyPostedCommIds] = await Promise.all([
+  const [payments, commissions, expenses,
+         alreadyPostedPaymentIds, alreadyPostedCommIds, alreadyPostedExpenseIds] = await Promise.all([
     CarWashPayment.find({ business: businessOid })
       .populate("job", "jobNumber customerName")
       .lean(),
@@ -811,33 +815,41 @@ export const backfillCarWashPaymentLedger = async (businessId, req = null) => {
       commissionAmount: { $gt: 0 },
       accrualLedgerEntries: { $size: 0 },
     }).lean(),
+    CarWashExpense.find({ business: businessOid, status: "paid", amount: { $gt: 0 } }).lean(),
     FinancialLedgerEntry.distinct("sourceTransactionId", {
-      business: businessOid,
-      sourceTransactionType: "carwash_payment",
+      business: businessOid, sourceTransactionType: "carwash_payment",
     }),
     FinancialLedgerEntry.distinct("sourceTransactionId", {
-      business: businessOid,
-      sourceTransactionType: "carwash_commission",
+      business: businessOid, sourceTransactionType: "carwash_commission",
+    }),
+    FinancialLedgerEntry.distinct("sourceTransactionId", {
+      business: businessOid, sourceTransactionType: "carwash_expense",
     }),
   ]);
 
   const alreadyPostedPayments = new Set(alreadyPostedPaymentIds.map(String));
   const alreadyPostedComms    = new Set(alreadyPostedCommIds.map(String));
+  const alreadyPostedExpenses = new Set(alreadyPostedExpenseIds.map(String));
 
-  const [revenueAccount, expenseAccount, payableAccount] = await Promise.all([
+  const [revenueAccount, commExpenseAccount, payableAccount, expAcct5310, expAcct5312] = await Promise.all([
     resolveCarWashAccount(businessId, "4400"),
     resolveCarWashAccount(businessId, "5311"),
     resolveCarWashAccount(businessId, "2160"),
+    resolveCarWashAccount(businessId, "5310"),
+    resolveCarWashAccount(businessId, "5312"),
   ]);
+  const expenseAccountMap = { "5310": expAcct5310, "5311": commExpenseAccount, "5312": expAcct5312 };
 
   const actorId = await resolveAuditActorUserId({ req, businessId });
 
   let paymentsPosted = 0;
   let commissionsPosted = 0;
+  let expensesPosted = 0;
   let skipped = 0;
   const errors = [];
 
   // ── payments ────────────────────────────────────────────────────────────────
+  const paymentTouchedIds = new Set([String(revenueAccount._id)]);
   for (const payment of payments) {
     const paymentIdStr = String(payment._id);
     if (alreadyPostedPayments.has(paymentIdStr)) { skipped++; continue; }
@@ -862,27 +874,17 @@ export const backfillCarWashPaymentLedger = async (businessId, req = null) => {
         approvedBy: actorId,
         allowUnscoped: true,
       };
-      await postEntry({
-        ...base,
-        accountId: payment.cashbookAccount,
-        direction: "debit",
-        notes: `CW payment received – Job #${payment.job?.jobNumber || ""} (${payment.method || ""})`,
-      });
-      await postEntry({
-        ...base,
-        accountId: revenueAccount._id,
-        direction: "credit",
-        notes: `CW service income – Job #${payment.job?.jobNumber || ""}`,
-      });
-      await aggregateChartOfAccountBalances(businessId, [
-        String(payment.cashbookAccount),
-        String(revenueAccount._id),
-      ]);
+      await postEntry({ ...base, accountId: payment.cashbookAccount, direction: "debit",
+        notes: `CW payment received – Job #${payment.job?.jobNumber || ""} (${payment.method || ""})` });
+      await postEntry({ ...base, accountId: revenueAccount._id, direction: "credit",
+        notes: `CW service income – Job #${payment.job?.jobNumber || ""}` });
+      paymentTouchedIds.add(String(payment.cashbookAccount));
       paymentsPosted++;
     } catch (err) {
       errors.push({ type: "payment", id: paymentIdStr, error: err?.message || String(err) });
     }
   }
+  if (paymentsPosted > 0) await aggregateChartOfAccountBalances(businessId, [...paymentTouchedIds]);
 
   // ── commission accruals ─────────────────────────────────────────────────────
   for (const commission of commissions) {
@@ -910,7 +912,7 @@ export const backfillCarWashPaymentLedger = async (businessId, req = null) => {
       };
       const debitLeg = await postEntry({
         ...base,
-        accountId: expenseAccount._id,
+        accountId: commExpenseAccount._id,
         direction: "debit",
         notes: `CW commission earned: ${commission.jobNumber || commIdStr}`,
         metadata: { postingRole: "carwash_commission_expense", staff: String(commission.staff), job: String(commission.job) },
@@ -927,11 +929,6 @@ export const backfillCarWashPaymentLedger = async (businessId, req = null) => {
           offsetOfEntryId: String(debitLeg._id),
         },
       });
-      await aggregateChartOfAccountBalances(businessId, [
-        String(expenseAccount._id),
-        String(payableAccount._id),
-      ]);
-      // Stamp the commission so it's not re-backfilled
       await CarWashStaffCommission.updateOne(
         { _id: commission._id },
         { $set: { accrualLedgerEntries: [debitLeg._id, creditLeg._id] } }
@@ -941,6 +938,62 @@ export const backfillCarWashPaymentLedger = async (businessId, req = null) => {
       errors.push({ type: "commission", id: commIdStr, error: err?.message || String(err) });
     }
   }
+  if (commissionsPosted > 0) await aggregateChartOfAccountBalances(businessId, [String(commExpenseAccount._id), String(payableAccount._id)]);
 
-  return { paymentsPosted, commissionsPosted, skipped, errors };
+  // ── paid expenses ────────────────────────────────────────────────────────────
+  const expenseTouchedIds = new Set();
+  for (const expense of expenses) {
+    const expIdStr = String(expense._id);
+    if (alreadyPostedExpenses.has(expIdStr)) { skipped++; continue; }
+    if (!expense.cashbookAccount) { skipped++; continue; }
+    const amount = round2(Number(expense.amount || 0));
+    if (amount <= 0) { skipped++; continue; }
+
+    const expenseAccount = expenseAccountMap[cwExpenseCategoryCode(expense.category)];
+    if (!expenseAccount?._id) { skipped++; continue; }
+
+    try {
+      const txDate = expense.expenseDate || expense.paidAt || new Date();
+      const { start, end } = dayRange(txDate);
+      const base = {
+        business: businessId,
+        sourceTransactionType: "carwash_expense",
+        sourceTransactionId: expIdStr,
+        transactionDate: new Date(txDate),
+        statementPeriodStart: start,
+        statementPeriodEnd: end,
+        category: "CARWASH_EXPENSE",
+        amount,
+        payer: "n/a",
+        receiver: "vendor",
+        createdBy: actorId,
+        approvedBy: actorId,
+        allowUnscoped: true,
+      };
+      const desc = expense.payee || expense.category || expense.expenseNumber || "";
+      await postEntry({ ...base, accountId: expenseAccount._id, direction: "debit",
+        notes: `CW expense – ${desc}` });
+      await postEntry({ ...base, accountId: expense.cashbookAccount, direction: "credit",
+        notes: `CW expense paid – ${expense.expenseNumber || ""}` });
+      expenseTouchedIds.add(String(expenseAccount._id));
+      expenseTouchedIds.add(String(expense.cashbookAccount));
+      expensesPosted++;
+    } catch (err) {
+      errors.push({ type: "expense", id: expIdStr, error: err?.message || String(err) });
+    }
+  }
+  if (expensesPosted > 0) await aggregateChartOfAccountBalances(businessId, [...expenseTouchedIds]);
+
+  return { paymentsPosted, commissionsPosted, expensesPosted, skipped, errors };
 };
+
+// ─── Resolve expense GL account from category string ─────────────────────────
+const cwExpenseCategoryCode = (category = "") => {
+  const cat = String(category || "").trim().toLowerCase();
+  if (cat.includes("wage") || cat.includes("salary") || cat.includes("staff")) return "5311";
+  if (cat.includes("water") || cat.includes("utilit")) return "5312";
+  return "5310";
+};
+
+export const resolveExpenseAccountForCategory = (businessId, category = "") =>
+  resolveCarWashAccount(businessId, cwExpenseCategoryCode(category));

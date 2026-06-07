@@ -3,6 +3,7 @@ import { createError } from "../../../utils/error.js";
 import SalePayment from "../models/SalePayment.js";
 import SaleDeal from "../models/SaleDeal.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { postPropertySalePaymentLedger, reversePropertySalePaymentLedger } from "../services/propertySaleAccountingService.js";
 
 // Deep-populate: deal includes nested listing + buyer so receipt/table fields work
 const populatePayment = (query) =>
@@ -80,6 +81,10 @@ export const createPayment = async (req, res, next) => {
       createdBy: userId,
       updatedBy: userId,
     });
+    postPropertySalePaymentLedger({ businessId: business, payment, userId }).catch((err) =>
+      console.error("[PS GL] postPropertySalePaymentLedger failed:", err.message)
+    );
+
     const populated = await populatePayment(SalePayment.findById(payment._id));
     res.status(201).json(populated);
   } catch (err) {
@@ -115,6 +120,11 @@ export const voidPayment = async (req, res, next) => {
     payment.status = "cancelled";
     payment.updatedBy = currentUserId(req);
     await payment.save();
+
+    reversePropertySalePaymentLedger({ businessId: business, payment, userId: currentUserId(req) }).catch((err) =>
+      console.error("[PS GL] reversePropertySalePaymentLedger failed:", err.message)
+    );
+
     const populated = await populatePayment(SalePayment.findById(payment._id));
     res.status(200).json(populated);
   } catch (err) {

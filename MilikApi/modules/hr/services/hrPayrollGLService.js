@@ -1,10 +1,40 @@
+/**
+ * HR Payroll GL posting service.
+ *
+ * Posts to FinancialLedgerEntry (same model as all other modules) so that
+ * payroll salary expense and liability entries appear on the income statement
+ * and trial balance. Previous versions posted to JournalEntry — historical
+ * JournalEntry records remain untouched; all new postings go here.
+ *
+ * Journal structure per payroll component:
+ *   Dr Salary Expense (5400)     — gross salary split by component
+ *   Cr PAYE Payable (2170)       — employee PAYE withheld
+ *   Cr NHIF Payable (2171)       — employee NHIF/SHA contribution
+ *   Cr NSSF Payable (2172)       — employee NSSF contribution
+ *   Cr AHL Payable (2173)        — AHL levy
+ *   Cr Other Deductions (2174)   — other payroll deductions
+ *   Cr Net Salaries Payable (2175) — net pay owed to employees
+ */
+
 import mongoose from 'mongoose';
-import JournalEntry from '../../../models/JournalEntry.js';
-import SequenceCounter from '../../../models/SequenceCounter.js';
+import FinancialLedgerEntry from '../../../models/FinancialLedgerEntry.js';
+import { postEntry } from '../../../services/ledgerPostingService.js';
 import { ensureSystemChartOfAccounts } from '../../../services/chartOfAccountsService.js';
 import { resolveConfiguredHrAccountingDefaultAccount } from '../../../services/companyAccountingDefaultsService.js';
 
-const resolvePayrollAccounts = async (businessId) => {
+const dayRange = (value = new Date()) => {
+  const d = value ? new Date(value) : new Date();
+  const safe = Number.isNaN(d.getTime()) ? new Date() : d;
+  const start = new Date(safe);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+};
+
+// ─── Account resolution ───────────────────────────────────────────────────────
+
+export const resolvePayrollAccounts = async (businessId) => {
   await ensureSystemChartOfAccounts(businessId);
 
   const [
@@ -26,116 +56,89 @@ const resolvePayrollAccounts = async (businessId) => {
   ]);
 
   const missing = [];
-  if (!salaryExpense) missing.push('Salary Expense Account (5400)');
-  if (!payePayable) missing.push('PAYE Payable Account (2170)');
-  if (!nhifPayable) missing.push('NHIF Payable Account (2171)');
-  if (!nssfPayable) missing.push('NSSF Payable Account (2172)');
-  if (!ahlPayable) missing.push('AHL Payable Account (2173)');
-  if (!otherDeductionsPayable) missing.push('Other Deductions Payable Account (2174)');
-  if (!netPayable) missing.push('Net Salaries Payable Account (2175)');
+  if (!salaryExpense)          missing.push('Salary Expense (5400)');
+  if (!payePayable)            missing.push('PAYE Payable (2170)');
+  if (!nhifPayable)            missing.push('NHIF Payable (2171)');
+  if (!nssfPayable)            missing.push('NSSF Payable (2172)');
+  if (!ahlPayable)             missing.push('AHL Payable (2173)');
+  if (!otherDeductionsPayable) missing.push('Other Deductions Payable (2174)');
+  if (!netPayable)             missing.push('Net Salaries Payable (2175)');
 
   if (missing.length > 0) {
     throw new Error(
-      `Cannot post payroll journal — GL accounts not resolved: ${missing.join(', ')}. ` +
-      `Configure HR accounting defaults in Company Settings → Accounting Defaults.`
+      `GL accounts not configured: ${missing.join(', ')}. ` +
+      `Go to Company Settings → Accounting Defaults → HR to set these up.`
     );
   }
 
   return { salaryExpense, payePayable, nhifPayable, nssfPayable, ahlPayable, otherDeductionsPayable, netPayable };
 };
 
-const nextPayrollJournalBatchBase = async (businessId) => {
-  const counter = await SequenceCounter.findOneAndUpdate(
-    { business: businessId, key: 'journal_entry' },
-    { $inc: { sequence: 1 } },
-    { upsert: true, new: true }
-  );
-  return `JRN${String(counter.sequence).padStart(4, '0')}`;
-};
+// ─── Main posting function ────────────────────────────────────────────────────
 
 /**
- * Posts aggregated payroll GL journal entries for a payroll period.
+ * Posts payroll GL double-entries to FinancialLedgerEntry for a payroll period.
+ * Idempotent — safe to call again if a previous attempt partially failed.
  *
- * Each deduction component is posted as DR Salary Expense / CR <liability> so that
- * the sum of debits across all entries equals the period gross salary.
- *
- * Entries are grouped by journalGroupId and tagged sourceModule: "hr".
- *
- * @param {Object}   period       - HRPayrollPeriod document (must be Approved)
- * @param {ObjectId} companyId
- * @param {ObjectId} postedByUserId
- * @returns {{ journalGroupId: ObjectId, entryCount: number }}
+ * @returns {{ entryCount: number, alreadyPosted: boolean }}
  */
 export const postPayrollGLJournals = async (period, companyId, postedByUserId) => {
   const businessId = new mongoose.Types.ObjectId(String(companyId));
   const postedById = postedByUserId ? new mongoose.Types.ObjectId(String(postedByUserId)) : null;
-  const periodDate = new Date(period.year, period.month - 1, 28);
+
+  // Idempotency — skip if entries already exist for this period
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId,
+    sourceTransactionType: 'payroll_period',
+    sourceTransactionId: String(period._id),
+    status: { $ne: 'reversed' },
+  });
+  if (existing > 0) return { entryCount: existing, alreadyPosted: true };
 
   const accounts = await resolvePayrollAccounts(businessId);
-  const journalGroupId = new mongoose.Types.ObjectId();
-  const baseRef = `PAYROLL-${period.label.replace(/\s+/g, '-').toUpperCase()}`;
+
+  const periodDate = new Date(period.year, period.month - 1, 28);
+  const { start, end } = dayRange(periodDate);
 
   const components = [
-    {
-      creditAccount: accounts.payePayable._id,
-      amount: Math.round(period.totalPAYE || 0),
-      narration: `PAYE tax withheld — ${period.label}`,
-    },
-    {
-      creditAccount: accounts.nhifPayable._id,
-      amount: Math.round(period.totalNHIF || 0),
-      narration: `NHIF/SHA employee contributions — ${period.label}`,
-    },
-    {
-      creditAccount: accounts.nssfPayable._id,
-      amount: Math.round(period.totalNSSF || 0),
-      narration: `NSSF employee contributions — ${period.label}`,
-    },
-    {
-      creditAccount: accounts.ahlPayable._id,
-      amount: Math.round(period.totalAHL || 0),
-      narration: `AHL levy — ${period.label}`,
-    },
-    {
-      creditAccount: accounts.otherDeductionsPayable._id,
-      amount: Math.round(period.totalOtherDeductions || 0),
-      narration: `Other payroll deductions — ${period.label}`,
-    },
-    {
-      creditAccount: accounts.netPayable._id,
-      amount: Math.round(period.totalNet || 0),
-      narration: `Net salaries payable — ${period.label}`,
-    },
+    { account: accounts.payePayable,            amount: Math.round(period.totalPAYE || 0),            label: `PAYE tax withheld — ${period.label}` },
+    { account: accounts.nhifPayable,            amount: Math.round(period.totalNHIF || 0),            label: `NHIF/SHA employee contributions — ${period.label}` },
+    { account: accounts.nssfPayable,            amount: Math.round(period.totalNSSF || 0),            label: `NSSF employee contributions — ${period.label}` },
+    { account: accounts.ahlPayable,             amount: Math.round(period.totalAHL || 0),             label: `AHL levy — ${period.label}` },
+    { account: accounts.otherDeductionsPayable, amount: Math.round(period.totalOtherDeductions || 0), label: `Other payroll deductions — ${period.label}` },
+    { account: accounts.netPayable,             amount: Math.round(period.totalNet || 0),             label: `Net salaries payable — ${period.label}` },
   ].filter((c) => c.amount > 0);
 
   if (components.length === 0) {
     throw new Error(`No payroll amounts to post for ${period.label} — all components are zero.`);
   }
 
-  const baseNo = await nextPayrollJournalBatchBase(businessId);
-  const postedAt = new Date();
+  let entryCount = 0;
 
-  const entries = components.map((component, i) => ({
-    journalNo: `${baseNo}-${String(i + 1).padStart(2, '0')}`,
-    date: periodDate,
-    journalType: 'payroll_posting',
-    sourceModule: 'hr',
-    sourceDocumentType: 'Payslip',
-    sourceDocumentId: period._id,
-    debitAccount: accounts.salaryExpense._id,
-    creditAccount: component.creditAccount,
-    amount: component.amount,
-    narration: component.narration,
-    reference: baseRef,
-    status: 'posted',
-    journalGroupId,
-    business: businessId,
-    postedBy: postedById,
-    postedAt,
-    createdBy: postedById,
-  }));
+  for (const component of components) {
+    const journalGroupId = new mongoose.Types.ObjectId();
+    const base = {
+      business: businessId,
+      sourceTransactionType: 'payroll_period',
+      sourceTransactionId: String(period._id),
+      transactionDate: periodDate,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      journalGroupId,
+      category: 'PAYROLL_JOURNAL',
+      amount: component.amount,
+      notes: component.label,
+      createdBy: postedById,
+      allowUnscoped: true,
+    };
 
-  await JournalEntry.insertMany(entries, { ordered: true });
+    await Promise.all([
+      postEntry({ ...base, accountId: accounts.salaryExpense._id, direction: 'debit' }),
+      postEntry({ ...base, accountId: component.account._id,      direction: 'credit' }),
+    ]);
 
-  return { journalGroupId, entryCount: entries.length };
+    entryCount += 2;
+  }
+
+  return { entryCount, alreadyPosted: false };
 };

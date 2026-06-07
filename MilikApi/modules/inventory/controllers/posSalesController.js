@@ -11,6 +11,7 @@ import {
 } from "../services/inventoryScope.js";
 import { postStockEntry, assertSufficientStock } from "../services/stockLedger.js";
 import { nextSequenceNumber } from "../services/sequenceService.js";
+import { postPosSaleLedger, reversePosSaleLedger } from "../services/inventoryAccountingService.js";
 
 const round2 = (n) => Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 
@@ -204,6 +205,11 @@ export const createSale = async (req, res, next) => {
       });
     }
 
+    // Post GL entries — non-blocking; GL failure never rejects the sale
+    postPosSaleLedger({ businessId: business, sale, userId }).catch((err) =>
+      console.error("[INV GL] postPosSaleLedger failed:", err.message)
+    );
+
     res.status(201).json({ success: true, data: sale });
   } catch (err) {
     next(err);
@@ -244,6 +250,11 @@ export const voidSale = async (req, res, next) => {
     sale.voidedAt = new Date();
     sale.voidReason = String(voidReason).trim();
     await sale.save();
+
+    // Reverse GL entries for the original sale
+    reversePosSaleLedger({ businessId: business, sale, userId }).catch((err) =>
+      console.error("[INV GL] reversePosSaleLedger failed:", err.message)
+    );
 
     res.json({ success: true, data: sale });
   } catch (err) {

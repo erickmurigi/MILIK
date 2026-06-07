@@ -491,13 +491,14 @@ export const repairLedger = async (req, res, next) => {
 export const backfillPaymentLedger = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { paymentsPosted, commissionsPosted, skipped, errors } = await backfillCarWashPaymentLedger(business, req);
-    const posted = paymentsPosted + commissionsPosted;
+    const { paymentsPosted, commissionsPosted, expensesPosted, skipped, errors } = await backfillCarWashPaymentLedger(business, req);
+    const posted = paymentsPosted + commissionsPosted + (expensesPosted || 0);
     res.json({
       success: true,
-      message: `Backfill complete: ${paymentsPosted} payments + ${commissionsPosted} commissions posted, ${skipped} skipped, ${errors.length} errors.`,
+      message: `Backfill complete: ${paymentsPosted} payments + ${commissionsPosted} commissions + ${expensesPosted || 0} expenses posted, ${skipped} skipped, ${errors.length} errors.`,
       paymentsPosted,
       commissionsPosted,
+      expensesPosted: expensesPosted || 0,
       posted,
       skipped,
       errors,

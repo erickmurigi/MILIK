@@ -2738,6 +2738,16 @@ export const getCashFlowReport = async (params = {}) => {
   return res.data;
 };
 
+export const getCashMonthlySummary = async (params = {}) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") search.append(key, value);
+  });
+  const query = search.toString();
+  const res = await adminRequests.get(`/financial-reports/cash-monthly-summary${query ? `?${query}` : ""}`, { timeout: 30_000 });
+  return res.data;
+};
+
 export const getARAgingReport = async (params = {}, signal) => {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
