@@ -11,7 +11,6 @@ import {
   FaEnvelope,
   FaSms,
   FaUsers,
-  FaThLarge,
   FaUserClock,
   FaHistory,
   FaImage,
@@ -19,10 +18,7 @@ import {
   FaCheckCircle,
   FaExclamationTriangle,
   FaShieldAlt,
-  FaUniversity,
   FaSyncAlt,
-  FaPhoneAlt,
-  FaLock,
   FaPlus,
   FaPen,
   FaTrashAlt,
@@ -45,7 +41,7 @@ const EMAIL_DRAFT_ID = "__new_email_profile__";
 const SMS_DRAFT_ID = "__new_sms_profile__";
 const validSmsSections = new Set(["configuration", "templates", "sent", "failed", "pending"]);
 
-const ALL_VALID_TAB_KEYS = new Set(["details", "structure", "modules", "payments", "email", "sms", "activities"]);
+const ALL_VALID_TAB_KEYS = new Set(["details", "structure", "payments", "email", "sms", "activities"]);
 
 const TEMPLATE_MODULE_MAP = {
   receipt_sms_tenant: "propertyManagement",
@@ -68,23 +64,18 @@ const TEMPLATE_MODULE_MAP = {
   carwash_payment_manual: "carwash",
 };
 
-const primaryModuleKeys = ["propertyManagement", "accounts"];
 const companyOperatingModeOptions = [
   { value: COMPANY_OPERATING_MODES.PROPERTY_MANAGER, label: "Property Manager", description: "Use property-manager wording, landlord workflows, and multi-landlord operations across the workspace." },
   { value: COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD, label: "Self-Managing Landlord", description: "Use owner-managed wording and defaults while preserving the same accounting-safe transaction engine." },
   { value: COMPANY_OPERATING_MODES.OTHER, label: "Other", description: "Use neutral company wording for businesses that do not run property-management or landlord workflows." },
 ];
-const moduleCategories = [
-  { key: "primary", title: "Primary Modules", description: "Choose the main operational modules this company will use." },
-  { key: "expansion", title: "Expansion Modules", description: "Enable only the additional modules this company truly uses. Disabled modules remain out of the workspace without deleting data." },
-];
 
 const Card = ({ title, subtitle, children, action = null }) => (
-  <div className="rounded-xl border border-slate-200 bg-white/70 backdrop-blur-xl shadow-sm">
-    <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-3 py-2">
+  <div className="border border-slate-200 bg-white shadow-sm">
+    <div className="flex items-center justify-between gap-3 bg-[#0B3B2E] px-3 py-2">
       <div>
-        <div className="text-xs font-extrabold text-slate-900">{title}</div>
-        {subtitle ? <div className="mt-0.5 text-[11px] text-slate-600">{subtitle}</div> : null}
+        <div className="text-[11px] font-bold uppercase tracking-wide text-white">{title}</div>
+        {subtitle ? <div className="mt-0.5 text-[10px] text-[#B7C9C0]">{subtitle}</div> : null}
       </div>
       {action}
     </div>
@@ -96,17 +87,17 @@ const Modal = ({ open, title, subtitle, onClose, children, footer = null }) => {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 px-4 py-6">
-      <div className="w-full max-w-3xl overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/50 px-4 py-6">
+      <div className="w-full max-w-3xl overflow-hidden border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between gap-4 bg-[#0B3B2E] px-4 py-3">
           <div>
-            <div className="text-lg font-extrabold text-slate-900">{title}</div>
-            {subtitle ? <div className="mt-1 text-sm text-slate-600">{subtitle}</div> : null}
+            <div className="text-[12px] font-bold uppercase tracking-wide text-white">{title}</div>
+            {subtitle ? <div className="mt-0.5 text-[10px] text-[#B7C9C0]">{subtitle}</div> : null}
           </div>
-          <button onClick={onClose} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">Close</button>
+          <button onClick={onClose} className="border border-[#2A5C4A] px-3 py-1 text-[11px] font-bold text-white hover:bg-[#0A3127]">Close</button>
         </div>
-        <div className="max-h-[75vh] overflow-y-auto px-6 py-5">{children}</div>
-        {footer ? <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">{footer}</div> : null}
+        <div className="max-h-[75vh] overflow-y-auto px-4 py-4">{children}</div>
+        {footer ? <div className="border-t border-slate-200 bg-[#F6FAF8] px-4 py-3">{footer}</div> : null}
       </div>
     </div>
   );
@@ -115,29 +106,29 @@ const Modal = ({ open, title, subtitle, onClose, children, footer = null }) => {
 const Input = ({ className = "", ...props }) => (
   <input
     {...props}
-    className={`w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200 ${className}`}
+    className={`w-full border border-slate-300 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 ${className}`}
   />
 );
 
 const Select = ({ className = "", ...props }) => (
   <select
     {...props}
-    className={`w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200 ${className}`}
+    className={`w-full border border-slate-300 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 ${className}`}
   />
 );
 
 const ToggleRow = ({ checked, onChange, title, description, disabled = false }) => (
   <label
     className={[
-      "flex items-start gap-3 rounded-2xl border px-4 py-3 transition",
-      checked ? "border-emerald-200 bg-emerald-50/80" : "border-slate-200 bg-white",
+      "flex items-start gap-3 border px-3 py-2.5 transition",
+      checked ? "border-[#0B3B2E]/30 bg-[#EDF5F1]" : "border-slate-200 bg-white",
       disabled ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:border-slate-300",
     ].join(" ")}
   >
-    <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+    <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} className="mt-0.5 h-3.5 w-3.5 border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]" />
     <div>
-      <div className="text-sm font-bold text-slate-900">{title}</div>
-      <div className="mt-1 text-xs leading-5 text-slate-600">{description}</div>
+      <div className="text-[12px] font-bold text-slate-900">{title}</div>
+      <div className="mt-0.5 text-[11px] leading-4 text-slate-600">{description}</div>
     </div>
   </label>
 );
@@ -935,6 +926,8 @@ export default function CompanySetupPage() {
   const [emailForm, setEmailForm] = useState(createBlankEmailForm(1, currentCompany?.companyName || ""));
   const [selectedSmsProfileId, setSelectedSmsProfileId] = useState(SMS_DRAFT_ID);
   const [smsForm, setSmsForm] = useState(createBlankSmsForm(1));
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [smsConfigModalOpen, setSmsConfigModalOpen] = useState(false);
   const [smsTemplateModalOpen, setSmsTemplateModalOpen] = useState(false);
   const [smsTemplateForm, setSmsTemplateForm] = useState(null);
@@ -1261,19 +1254,6 @@ export default function CompanySetupPage() {
     }));
   };
 
-  const handleModuleToggle = (moduleKey, checked) => {
-    setCompany((prev) => {
-      const nextModules = {
-        ...normalizeCompanyModules(prev.modules),
-        [moduleKey]: checked,
-      };
-
-      return {
-        ...prev,
-        modules: nextModules,
-      };
-    });
-  };
 
   const buildCompanySetupPayload = () => ({
     companyName: company.companyName,
@@ -1300,11 +1280,13 @@ export default function CompanySetupPage() {
   const beginCreatePaymentConfig = () => {
     setSelectedPaymentConfigId(PAYMENT_DRAFT_ID);
     setPaymentForm(createBlankPaymentForm(paymentConfigs.length + 1));
+    setPaymentModalOpen(true);
   };
 
   const beginEditPaymentConfig = (config) => {
     setSelectedPaymentConfigId(String(config._id));
     setPaymentForm(normalizePaymentEditor(config));
+    setPaymentModalOpen(true);
   };
 
   const resetPaymentEditor = () => {
@@ -1434,6 +1416,7 @@ export default function CompanySetupPage() {
           setSelectedPaymentConfigId(String(matchedConfig._id));
           setPaymentForm(normalizePaymentEditor(matchedConfig));
         }
+        setPaymentModalOpen(false);
       },
     });
   };
@@ -1551,7 +1534,6 @@ export default function CompanySetupPage() {
   const tabs = useMemo(() => [
     { key: "details",    label: "PROFILE",    icon: <FaBuilding /> },
     ...(hasPM ? [{ key: "structure", label: "STRUCTURE", icon: <FaSitemap /> }] : []),
-    { key: "modules",   label: "MODULES",    icon: <FaThLarge /> },
     { key: "payments",  label: "PAYMENTS",   icon: <FaMoneyCheckAlt /> },
     { key: "email",     label: "EMAIL",      icon: <FaEnvelope /> },
     { key: "sms",       label: "SMS",        icon: <FaSms /> },
@@ -1583,11 +1565,13 @@ export default function CompanySetupPage() {
   const beginCreateEmailProfile = () => {
     setSelectedEmailProfileId(EMAIL_DRAFT_ID);
     setEmailForm(createBlankEmailForm(emailProfiles.length + 1, currentCompany?.companyName || ""));
+    setEmailModalOpen(true);
   };
 
   const beginEditEmailProfile = (profile) => {
     setSelectedEmailProfileId(String(profile._id));
     setEmailForm(normalizeEmailEditor(profile));
+    setEmailModalOpen(true);
   };
 
   const resetEmailEditor = () => {
@@ -1697,6 +1681,7 @@ export default function CompanySetupPage() {
           setSelectedEmailProfileId(String(matchedProfile._id));
           setEmailForm(normalizeEmailEditor(matchedProfile));
         }
+        setEmailModalOpen(false);
       },
     });
   };
@@ -2080,20 +2065,44 @@ export default function CompanySetupPage() {
 
   const renderDetailsTab = () => (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-      <Card title="Company Identity" subtitle="These details are reused in reports, statements and printed documents">
-        <div className="space-y-3">
-          <div className="flex items-center gap-4">
-            <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl border border-emerald-100 bg-slate-50">
-              {company.logo ? (
-                <img src={company.logo} alt={company.companyName || "Company"} className="h-full w-full object-cover" />
-              ) : (
-                <FaImage className="text-2xl text-slate-300" />
-              )}
+      <Card title="Company Identity" subtitle="Used in reports, statements, receipts and printed documents">
+        <div className="space-y-4">
+          {/* Logo preview card */}
+          <div className="border border-slate-200 bg-[#EDF5F1] p-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden border-2 border-[#0B3B2E] bg-white">
+                {company.logo ? (
+                  <img src={company.logo} alt={company.companyName || "Company"} className="h-full w-full object-contain p-1" />
+                ) : (
+                  <FaImage className="text-2xl text-slate-300" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-extrabold text-[#0B3B2E]">{company.companyName || "Company Name"}</div>
+                {company.slogan ? <div className="mt-0.5 truncate text-xs italic text-slate-500">{company.slogan}</div> : null}
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {company.town ? <span className="border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">{company.town}</span> : null}
+                  {company.country ? <span className="border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">{company.country}</span> : null}
+                  {company.taxRegime ? <span className="border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">{company.taxRegime}</span> : null}
+                </div>
+              </div>
             </div>
-            <div className="min-w-0">
-              <div className="truncate text-lg font-extrabold text-slate-900">{company.companyName || "Company Name"}</div>
-              <div className="truncate text-sm text-slate-500">{company.slogan || "Company slogan will appear here"}</div>
-            </div>
+            {(company.registrationNo || company.taxPIN) && (
+              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-200 pt-3">
+                {company.registrationNo && (
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Reg No</div>
+                    <div className="mt-0.5 text-[11px] font-bold text-slate-800">{company.registrationNo}</div>
+                  </div>
+                )}
+                {company.taxPIN && (
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Tax PIN</div>
+                    <div className="mt-0.5 text-[11px] font-bold text-slate-800">{company.taxPIN}</div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
@@ -2210,10 +2219,10 @@ export default function CompanySetupPage() {
           </div>
 
           <div className="mt-4 flex justify-end gap-2">
-            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={() => setCompany(normalizeForm(currentCompany))}>
+            <button className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={() => setCompany(normalizeForm(currentCompany))}>
               Reset
             </button>
-            <button disabled={savingDetails} onClick={handleSaveDetails} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
+            <button disabled={savingDetails} onClick={handleSaveDetails} className="inline-flex items-center gap-2 bg-[#FF8C00] px-4 py-2 text-[11px] font-bold text-white hover:bg-[#E67E00] disabled:opacity-50">
               <FaSave /> {savingDetails ? "Saving..." : "Save Changes"}
             </button>
           </div>
@@ -2243,7 +2252,7 @@ export default function CompanySetupPage() {
                   type="button"
                   onClick={() => handleCompanyModeChange(option.value)}
                   className={[
-                    "w-full rounded-2xl border px-4 py-4 text-left transition",
+                    "w-full border px-4 py-4 text-left transition",
                     isActive
                       ? "border-emerald-300 bg-emerald-50 shadow-sm"
                       : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
@@ -2335,15 +2344,15 @@ export default function CompanySetupPage() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="mt-4 border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-800">
               Changes here should control future company behavior and workspace wording. They should not mutate posted invoices, receipts, statements, or ledger history.
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={() => setCompany(normalizeForm(currentCompany))}>
+              <button className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={() => setCompany(normalizeForm(currentCompany))}>
                 Reset
               </button>
-              <button disabled={savingDetails} onClick={handleSaveDetails} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
+              <button disabled={savingDetails} onClick={handleSaveDetails} className="inline-flex items-center gap-2 bg-[#FF8C00] px-4 py-2 text-[11px] font-bold text-white hover:bg-[#E67E00] disabled:opacity-50">
                 <FaSave /> {savingDetails ? "Saving..." : "Save Structure"}
               </button>
             </div>
@@ -2353,522 +2362,108 @@ export default function CompanySetupPage() {
     );
   };
 
-  const renderModulesTab = () => {
-    const normalizedModules = normalizeCompanyModules(company.modules);
-    const enabledKeys = Object.entries(normalizedModules)
-      .filter(([, enabled]) => Boolean(enabled))
-      .map(([key]) => key);
-
-    return (
-      <div className="space-y-3">
-        <Card
-          title="Modules Configuration"
-          subtitle="Enable only the modules this company has subscribed to or will actively use."
-          action={
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
-              {enabledKeys.length} enabled
-            </div>
-          }
-        >
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {moduleCategories.map((category) => {
-              const categoryKeys = Object.keys(MODULE_LABELS).filter((moduleKey) =>
-                category.key === "primary" ? primaryModuleKeys.includes(moduleKey) : !primaryModuleKeys.includes(moduleKey)
-              );
-
-              return (
-                <div key={category.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="mb-3">
-                    <div className="text-sm font-extrabold text-slate-900">{category.title}</div>
-                    <div className="mt-1 text-xs leading-5 text-slate-600">{category.description}</div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {categoryKeys.map((moduleKey) => {
-                      const checked = Boolean(normalizedModules[moduleKey]);
-
-                      return (
-                        <ToggleRow
-                          key={moduleKey}
-                          checked={checked}
-                          onChange={(e) => handleModuleToggle(moduleKey, e.target.checked)}
-                          title={MODULE_LABELS[moduleKey]}
-                          description="Enable this only when the company is ready to use the module in the live workspace."
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            Disabling an expansion module should only remove it from navigation and access control. It should not delete historical records that already exist.
-          </div>
-
-          <div className="mt-4 flex justify-end gap-2">
-            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={() => setCompany(normalizeForm(currentCompany))}>
-              Reset
-            </button>
-            <button disabled={savingDetails} onClick={handleSaveDetails} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
-              <FaSave /> {savingDetails ? "Saving..." : "Save Modules"}
-            </button>
-          </div>
-        </Card>
-      </div>
-    );
-  };
 
   const renderPaymentsTab = () => (
-    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.1fr_1.6fr]">
-      <div className="space-y-3">
-        <Card
-          title="Payment Config Overview"
-          subtitle="Manage one or many company Paybill setups from this page. Matching remains scoped by Paybill plus tenant code."
-          action={
-            <button onClick={beginCreatePaymentConfig} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:opacity-95">
-              <FaPlus /> Add Paybill Config
-            </button>
-          }
-        >
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total configs</div>
-              <div className="mt-0.5 text-base font-extrabold text-slate-900">{paymentSummary.total}</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Active now</div>
-              <div className="mt-0.5 text-base font-extrabold text-slate-900">{paymentSummary.active}</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Enabled</div>
-              <div className="mt-0.5 text-base font-extrabold text-slate-900">{paymentSummary.enabled}</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Fully configured</div>
-              <div className="mt-0.5 text-base font-extrabold text-slate-900">{paymentSummary.configured}</div>
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-              <FaPhoneAlt className="text-[#F97316]" /> Payment identity rule
-            </div>
-            {currentCompany?.modules?.propertyManagement && (
-              <>
-                <div className="mt-1 text-xs leading-4 text-slate-600">
-                  Property Management: incoming payments are matched by Paybill + the tenant code entered as the account number, keeping matching safely company-bound.
-                </div>
-                <div className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-                  Account number used by tenant: <span className="text-slate-900">Tenant Code (example: TT0001)</span>
-                </div>
-              </>
-            )}
-            {currentCompany?.modules?.carwash && (
-              <>
-                <div className={`${currentCompany?.modules?.propertyManagement ? "mt-3 border-t border-slate-200 pt-3" : "mt-1"} text-xs leading-4 text-slate-600`}>
-                  Car Wash: incoming payments are matched by Paybill + the vehicle plate number entered as the account number. This ties each payment to an open job and awards loyalty stamps automatically.
-                </div>
-                <div className="mt-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-slate-700">
-                  Account number used by customer: <span className="font-extrabold text-[#0B3B2E]">Vehicle Plate Number (example: KCA 123A)</span>
-                </div>
-              </>
-            )}
-            {!currentCompany?.modules?.propertyManagement && !currentCompany?.modules?.carwash && (
-              <div className="mt-1 text-xs leading-4 text-slate-600">
-                Incoming payments are identified by the company Paybill together with the account number entered by the payer. Enable a module to see its specific identity rule.
-              </div>
-            )}
-          </div>
-
-          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-              <FaLock className="text-emerald-600" /> Callback handling strategy
-            </div>
-            <div className="mt-1 text-xs leading-4 text-slate-600">
-              MILIK manages confirmation and validation endpoints from the backend. Company admins only configure the commercial and processing details here.
-            </div>
-          </div>
-        </Card>
-
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {/* toolbar */}
-          <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/95 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                <input
-                  value={paymentSearch}
-                  onChange={(e) => setPaymentSearch(e.target.value)}
-                  placeholder="Search paybills…"
-                  className="h-7 w-44 rounded border border-slate-300 bg-[#DDEFE1] pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                />
-              </div>
-              <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
-                {paymentConfigs.length} profile{paymentConfigs.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-            <button
-              onClick={beginCreatePaymentConfig}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-orange-600"
-            >
-              <FaPlus /> Add Paybill
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs">
-              <thead className="bg-[#0B3B2E] text-white">
-                <tr>
-                  <th className="px-3 py-2.5 text-left font-semibold">#</th>
-                  <th className="px-3 py-2.5 text-left font-semibold">Name</th>
-                  <th className="px-3 py-2.5 text-left font-semibold">Paybill</th>
-                  <th className="px-3 py-2.5 text-left font-semibold">Cashbook</th>
-                  <th className="px-3 py-2.5 text-center font-semibold">Active</th>
-                  <th className="px-3 py-2.5 text-center font-semibold">Status</th>
-                  <th className="px-3 py-2.5 text-center font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {paymentConfigs.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                      No paybill configuration added yet.
-                    </td>
-                  </tr>
-                ) : (
-                  paymentConfigs
-                    .filter((c) => !paymentSearch.trim() || `${c.name} ${c.shortCode}`.toLowerCase().includes(paymentSearch.trim().toLowerCase()))
-                    .map((config, idx) => {
-                      const status = buildPaymentStatus(config);
-                      const theme = statusTheme[status.code] || statusTheme.not_configured;
-                      const isSelected = String(selectedPaymentConfigId) === String(config._id);
-                      return (
-                        <tr
-                          key={config._id}
-                          onDoubleClick={() => beginEditPaymentConfig(config)}
-                          className={`cursor-pointer transition ${isSelected ? "bg-emerald-50/60" : "hover:bg-slate-50"}`}
-                        >
-                          <td className="px-3 py-2 font-semibold text-slate-500">{idx + 1}</td>
-                          <td className="px-3 py-2 font-bold text-slate-900">{config.name}</td>
-                          <td className="px-3 py-2 text-slate-700">{config.shortCode || <span className="text-slate-400">—</span>}</td>
-                          <td className="max-w-[140px] truncate px-3 py-2 text-slate-600">{config.defaultCashbookAccountName || <span className="text-slate-400">—</span>}</td>
-                          <td className="px-3 py-2 text-center">
-                            {config.isActive ? (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700">Active</span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-bold text-slate-500">Inactive</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-bold ${theme.badge}`}>
-                              {theme.icon} {status.label}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                title="Edit"
-                                onClick={() => beginEditPaymentConfig(config)}
-                                className="h-7 rounded border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"
-                              >
-                                <FaPen />
-                              </button>
-                              <button
-                                title={config.enabled ? "Disable" : "Enable"}
-                                onClick={() => handleQuickUpdate(config, { enabled: !config.enabled, isActive: config.enabled ? false : config.isActive }, config.enabled ? "Paybill disabled" : "Paybill enabled")}
-                                className="h-7 rounded border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"
-                              >
-                                <FaPowerOff className={config.enabled ? "text-emerald-600" : "text-slate-400"} />
-                              </button>
-                              <button
-                                title={config.isActive ? "Set inactive" : "Activate"}
-                                onClick={() => handleQuickUpdate(config, { enabled: true, isActive: !config.isActive }, config.isActive ? "Paybill set inactive" : "Paybill activated")}
-                                className="h-7 rounded border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"
-                              >
-                                <FaCheckCircle className={config.isActive ? "text-blue-500" : "text-slate-400"} />
-                              </button>
-                              <button
-                                title="Delete"
-                                onClick={() => handleDeletePaymentConfig(config)}
-                                className="h-7 rounded border border-rose-200 bg-rose-50 px-2 font-bold text-rose-600 transition hover:bg-rose-100"
-                              >
-                                <FaTrashAlt />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                )}
-              </tbody>
-            </table>
-          </div>
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="border border-slate-200 bg-white px-3 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total configs</div>
+          <div className="mt-0.5 text-lg font-extrabold text-slate-900">{paymentSummary.total}</div>
+        </div>
+        <div className="border border-slate-200 bg-white px-3 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Active now</div>
+          <div className="mt-0.5 text-lg font-extrabold text-slate-900">{paymentSummary.active}</div>
+        </div>
+        <div className="border border-slate-200 bg-white px-3 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Enabled</div>
+          <div className="mt-0.5 text-lg font-extrabold text-slate-900">{paymentSummary.enabled}</div>
+        </div>
+        <div className="border border-slate-200 bg-white px-3 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Fully configured</div>
+          <div className="mt-0.5 text-lg font-extrabold text-slate-900">{paymentSummary.configured}</div>
         </div>
       </div>
 
-      <div className="space-y-3">
-        <Card
-          title={selectedPaymentConfigId === PAYMENT_DRAFT_ID ? "New Paybill Configuration" : "Payment Configuration Details"}
-          subtitle="Give each Paybill a clear internal name, then save its credentials, cashbook mapping and processing rules safely."
-          action={
-            <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${paymentTheme.badge}`}>
-              {paymentTheme.icon}
-              {paymentStatus.label}
+      <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/95 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
+              <input
+                value={paymentSearch}
+                onChange={(e) => setPaymentSearch(e.target.value)}
+                placeholder="Search paybills…"
+                className="h-7 w-44 border border-slate-300 bg-[#DDEFE1] pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              />
+            </div>
+            <span className="border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
+              {paymentConfigs.length} config{paymentConfigs.length !== 1 ? "s" : ""}
             </span>
-          }
-        >
-          <div className={`rounded-2xl border p-4 ${paymentTheme.panel}`}>
-            <div className="flex items-start gap-3">
-              <div className="mt-1 text-lg">{paymentTheme.icon}</div>
-              <div>
-                <div className="text-sm font-extrabold text-slate-900">{paymentStatus.label}</div>
-                <div className="mt-1 text-xs leading-5 text-slate-700">{paymentStatus.reason}</div>
-              </div>
-            </div>
           </div>
+          <button onClick={beginCreatePaymentConfig} className="inline-flex items-center gap-1.5 bg-[#FF8C00] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#E67E00]">
+            <FaPlus /> Add Paybill
+          </button>
+        </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <label className="text-xs font-bold text-slate-700">Configuration Name</label>
-              <Input
-                value={paymentForm.name}
-                onChange={(e) => setPaymentForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="Example: Main Residential Paybill"
-              />
-              <div className="mt-1 text-xs text-slate-500">Use a clear internal name so company admins can easily identify the right Paybill setup.</div>
-            </div>
-
-            <div className="md:col-span-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <ToggleRow
-                checked={paymentForm.enabled}
-                onChange={(e) =>
-                  setPaymentForm((prev) => ({
-                    ...prev,
-                    enabled: e.target.checked,
-                    isActive: e.target.checked ? prev.isActive : false,
-                  }))
-                }
-                title="Enable this Paybill configuration"
-                description="Turn this on when this configuration should remain available for the active company."
-              />
-              <ToggleRow
-                checked={paymentForm.enabled && paymentForm.isActive}
-                disabled={!paymentForm.enabled}
-                onChange={(e) => setPaymentForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-                title="Mark this configuration active"
-                description="Only activate after the Paybill number, credentials and receiving cashbook are complete."
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700">Paybill Number</label>
-              <Input
-                value={paymentForm.shortCode}
-                onChange={(e) => setPaymentForm((prev) => ({ ...prev, shortCode: e.target.value.replace(/[^\d]/g, "") }))}
-                placeholder="Example: 522522"
-                maxLength={7}
-              />
-              <div className="mt-1 text-xs text-slate-500">Each saved Paybill number must remain unique across all registered companies.</div>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700">Default Receiving Cashbook</label>
-              <Select
-                value={paymentForm.defaultCashbookAccountId}
-                onChange={(e) => {
-                  const selected = cashbookOptions.find((item) => String(item._id) === String(e.target.value));
-                  setPaymentForm((prev) => ({
-                    ...prev,
-                    defaultCashbookAccountId: e.target.value,
-                    defaultCashbookAccountName: selected?.name || prev.defaultCashbookAccountName || "",
-                  }));
-                }}
-                disabled={loadingCashbooks}
-              >
-                <option value="">{loadingCashbooks ? "Loading cashbooks..." : "Select receiving cashbook"}</option>
-                {cashbookOptions.map((account) => (
-                  <option key={account._id} value={account._id}>
-                    {account.name} {account.code ? `(${account.code})` : ""}
-                  </option>
-                ))}
-              </Select>
-              <div className="mt-1 text-xs text-slate-500">Matched M-Pesa collections will map to this receiving cashbook during future posting flows.</div>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700">Consumer Key</label>
-              <Input
-                type="password"
-                value={paymentForm.consumerKey}
-                onChange={(e) => setPaymentForm((prev) => ({ ...prev, consumerKey: e.target.value }))}
-                placeholder={paymentForm.hasConsumerKey ? "Leave blank to keep saved key" : "Enter consumer key"}
-              />
-              <div className="mt-1 text-xs text-slate-500">{paymentForm.hasConsumerKey ? `Saved: ${paymentForm.consumerKeyMasked || "Yes"}` : "No saved consumer key yet."}</div>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700">Consumer Secret</label>
-              <Input
-                type="password"
-                value={paymentForm.consumerSecret}
-                onChange={(e) => setPaymentForm((prev) => ({ ...prev, consumerSecret: e.target.value }))}
-                placeholder={paymentForm.hasConsumerSecret ? "Leave blank to keep saved secret" : "Enter consumer secret"}
-              />
-              <div className="mt-1 text-xs text-slate-500">{paymentForm.hasConsumerSecret ? `Saved: ${paymentForm.consumerSecretMasked || "Yes"}` : "No saved consumer secret yet."}</div>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700">Passkey</label>
-              <Input
-                type="password"
-                value={paymentForm.passkey}
-                onChange={(e) => setPaymentForm((prev) => ({ ...prev, passkey: e.target.value }))}
-                placeholder={paymentForm.hasPasskey ? "Leave blank to keep saved passkey" : "Enter passkey"}
-              />
-              <div className="mt-1 text-xs text-slate-500">{paymentForm.hasPasskey ? `Saved: ${paymentForm.passkeyMasked || "Yes"}` : "No saved passkey yet."}</div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-200">
-              <div className="mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">Transaction Status Query (for payer phone retrieval)</div>
-              <div className="text-xs text-slate-500 mb-3">Safaricom hashes the payer phone in C2B callbacks. These credentials let the system query Safaricom after each payment to retrieve the actual phone number and send SMS.</div>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-700">Initiator Name</label>
-                  <Input
-                    type="text"
-                    value={paymentForm.initiatorName}
-                    onChange={(e) => setPaymentForm((prev) => ({ ...prev, initiatorName: e.target.value }))}
-                    placeholder="API operator username from Daraja portal"
-                  />
-                  <div className="mt-1 text-xs text-slate-500">Found under your app's API Operators in developer.safaricom.co.ke</div>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-700">Initiator Password</label>
-                  <Input
-                    type="password"
-                    value={paymentForm.initiatorPassword}
-                    onChange={(e) => setPaymentForm((prev) => ({ ...prev, initiatorPassword: e.target.value }))}
-                    placeholder={paymentForm.hasInitiatorPassword ? "Leave blank to keep saved password" : "Password set at org.ke.m-pesa.com for this operator"}
-                  />
-                  <div className="mt-1 text-xs text-slate-500">
-                    {paymentForm.hasInitiatorPassword ? `Saved: ${paymentForm.initiatorPasswordMasked || "Yes"}` : "Password for the API operator — the system encrypts it automatically if cert file is present."}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-700">Security Credential <span className="font-normal text-slate-400">(alternative — paste pre-generated value)</span></label>
-                  <Input
-                    type="password"
-                    value={paymentForm.securityCredential}
-                    onChange={(e) => setPaymentForm((prev) => ({ ...prev, securityCredential: e.target.value }))}
-                    placeholder={paymentForm.hasSecurityCredential ? "Leave blank to keep saved credential" : "Base64 RSA-encrypted initiator password"}
-                  />
-                  <div className="mt-1 text-xs text-slate-500">
-                    {paymentForm.hasSecurityCredential ? `Saved: ${paymentForm.securityCredentialMasked || "Yes"}` : "Use this if you have already generated the Security Credential externally. Takes priority over Initiator Password."}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700">M-Pesa Response Mode</label>
-              <Select value={paymentForm.responseType} onChange={(e) => setPaymentForm((prev) => ({ ...prev, responseType: e.target.value }))}>
-                <option value="Completed">Completed</option>
-                <option value="Cancelled">Cancelled</option>
-              </Select>
-              <div className="mt-1 text-xs text-slate-500">Recommended: Completed, so valid customer-to-business transactions are finalized by M-Pesa.</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card title="Safeguards & Processing Rules" subtitle="Choose safe defaults so unmatched or invalid payments never corrupt accounting.">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
-              <label className="text-xs font-bold text-slate-700">Unmatched Payment Handling</label>
-              <Select value={paymentForm.unmatchedPaymentMode} onChange={(e) => setPaymentForm((prev) => ({ ...prev, unmatchedPaymentMode: e.target.value }))}>
-                <option value="manual_review">Send to manual review</option>
-                <option value="hold_unallocated">Hold as unallocated payment</option>
-              </Select>
-              <div className="mt-1 text-xs text-slate-500">Recommended for now: manual review, until callback posting is fully wired end to end.</div>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700">Matched Payment Processing</label>
-              <Select value={paymentForm.postingMode} onChange={(e) => setPaymentForm((prev) => ({ ...prev, postingMode: e.target.value }))}>
-                <option value="manual_review">Manual review before posting</option>
-                <option value="auto_post_matched">Auto-post matched payments</option>
-              </Select>
-              <div className="mt-1 text-xs text-slate-500">Manual review remains the safer default for a production-safe first phase.</div>
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-                <FaShieldAlt className="text-emerald-600" /> Company isolation
-              </div>
-              <div className="mt-1 text-xs leading-4 text-slate-600">Each saved Paybill configuration remains company-bound. Matching is still designed around Paybill number plus tenant code.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-                <FaUniversity className="text-[#F97316]" /> Accounting safety
-              </div>
-              <div className="mt-1 text-xs leading-4 text-slate-600">This page stores configuration only. It does not silently create receipts, ledger entries or callback postings outside the existing accounting flow.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-                <FaLock className="text-slate-700" /> Saved credentials
-              </div>
-              <div className="mt-1 text-xs leading-4 text-slate-600">Saved credentials stay masked on screen. Enter a new value only when you want to replace the current secret.</div>
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Selected config</div>
-              <div className="mt-2 text-sm font-extrabold text-slate-900">{paymentForm.name || "New Paybill Configuration"}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Paybill number</div>
-              <div className="mt-2 text-sm font-extrabold text-slate-900">{paymentForm.shortCode || "Not set"}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Receiving cashbook</div>
-              <div className="mt-2 text-sm font-extrabold text-slate-900">{cashbookLabel}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Last updated</div>
-              <div className="mt-2 text-sm font-extrabold text-slate-900">{formatDateTime(paymentForm.lastConfiguredAt)}</div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={resetPaymentEditor}>
-              Reset
-            </button>
-            {selectedPaymentConfigId !== PAYMENT_DRAFT_ID ? (
-              <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={beginCreatePaymentConfig}>
-                New Config
-              </button>
-            ) : null}
-            {selectedPaymentConfigId !== PAYMENT_DRAFT_ID && paymentForm.shortCode && (
-              <button
-                disabled={registeringUrls || savingPayments}
-                onClick={handleRegisterUrls}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
-                title="Tell Safaricom where to send payment callbacks. Must be done once after saving credentials."
-              >
-                <FaSyncAlt className={registeringUrls ? "animate-spin" : ""} />
-                {registeringUrls ? "Registering..." : "Register with Safaricom"}
-              </button>
-            )}
-            <button disabled={savingPayments} onClick={handleSavePaymentConfig} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
-              <FaSave /> {savingPayments ? "Saving..." : selectedPaymentConfigId === PAYMENT_DRAFT_ID ? "Save New Config" : "Update Config"}
-            </button>
-          </div>
-        </Card>
-
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs">
+            <thead className="bg-[#0B3B2E] text-white">
+              <tr>
+                <th className="px-3 py-2.5 text-left font-semibold">#</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Name</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Paybill</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Cashbook</th>
+                <th className="px-3 py-2.5 text-center font-semibold">Active</th>
+                <th className="px-3 py-2.5 text-center font-semibold">Status</th>
+                <th className="px-3 py-2.5 text-center font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {paymentConfigs.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                    No paybill configuration added yet. Click "Add Paybill" to get started.
+                  </td>
+                </tr>
+              ) : (
+                paymentConfigs
+                  .filter((c) => !paymentSearch.trim() || `${c.name} ${c.shortCode}`.toLowerCase().includes(paymentSearch.trim().toLowerCase()))
+                  .map((config, idx) => {
+                    const status = buildPaymentStatus(config);
+                    const theme = statusTheme[status.code] || statusTheme.not_configured;
+                    return (
+                      <tr key={config._id} onDoubleClick={() => beginEditPaymentConfig(config)} className="cursor-pointer transition hover:bg-slate-50">
+                        <td className="px-3 py-2.5 font-semibold text-slate-500">{idx + 1}</td>
+                        <td className="px-3 py-2.5 font-bold text-slate-900">{config.name}</td>
+                        <td className="px-3 py-2.5 text-slate-700">{config.shortCode || <span className="text-slate-400">—</span>}</td>
+                        <td className="max-w-[160px] truncate px-3 py-2.5 text-slate-600">{config.defaultCashbookAccountName || <span className="text-slate-400">—</span>}</td>
+                        <td className="px-3 py-2.5 text-center">
+                          {config.isActive ? (
+                            <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700">Active</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 border border-slate-200 bg-slate-50 px-2 py-0.5 font-bold text-slate-500">Inactive</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={`inline-flex items-center gap-1 border px-2 py-0.5 font-bold ${theme.badge}`}>
+                            {theme.icon} {status.label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button title="Edit" onClick={() => beginEditPaymentConfig(config)} className="h-7 border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"><FaPen /></button>
+                            <button title={config.enabled ? "Disable" : "Enable"} onClick={() => handleQuickUpdate(config, { enabled: !config.enabled, isActive: config.enabled ? false : config.isActive }, config.enabled ? "Paybill disabled" : "Paybill enabled")} className="h-7 border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"><FaPowerOff className={config.enabled ? "text-emerald-600" : "text-slate-400"} /></button>
+                            <button title={config.isActive ? "Set inactive" : "Activate"} onClick={() => handleQuickUpdate(config, { enabled: true, isActive: !config.isActive }, config.isActive ? "Paybill set inactive" : "Paybill activated")} className="h-7 border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"><FaCheckCircle className={config.isActive ? "text-blue-500" : "text-slate-400"} /></button>
+                            <button title="Delete" onClick={() => handleDeletePaymentConfig(config)} className="h-7 border border-rose-200 bg-rose-50 px-2 font-bold text-rose-600 transition hover:bg-rose-100"><FaTrashAlt /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -2910,7 +2505,7 @@ export default function CompanySetupPage() {
     return (
       <div className="space-y-3">
         {/* Sub-tab bar */}
-        <div className="flex flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+        <div className="flex flex-wrap gap-1 border border-slate-200 bg-[#EDF5F1] p-1">
           {emailLogSubTabs.map((t) => (
             <button
               key={t.key}
@@ -2929,309 +2524,112 @@ export default function CompanySetupPage() {
 
         {/* ── Profiles sub-tab ── */}
         {emailSubTab === "profiles" && (
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.1fr_1.6fr]">
-            <div className="space-y-3">
-              <Card
-                title="Email Config Overview"
-                subtitle="Manage one or many SMTP profiles for the active company. One enabled default profile can power receipts, invoices, statements and notices safely."
-                action={
-                  <button onClick={beginCreateEmailProfile} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:opacity-95">
-                    <FaPlus /> Add Email Profile
-                  </button>
-                }
-              >
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total profiles</div>
-                    <div className="mt-0.5 text-base font-extrabold text-slate-900">{emailSummary.total}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Enabled</div>
-                    <div className="mt-0.5 text-base font-extrabold text-slate-900">{emailSummary.active}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Fully configured</div>
-                    <div className="mt-0.5 text-base font-extrabold text-slate-900">{emailSummary.configured}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Default profiles</div>
-                    <div className="mt-0.5 text-base font-extrabold text-slate-900">{emailSummary.defaults}</div>
-                  </div>
-                </div>
-                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-                    <FaPlug className="text-[#F97316]" /> Delivery safety rule
-                  </div>
-                  <div className="mt-1 text-xs leading-4 text-slate-600">
-                    Each SMTP profile remains company-bound. The backend stays the source of truth, saved passwords remain masked, and one default enabled profile can be used across operational mail flows.
-                  </div>
-                </div>
-                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-                    <FaEnvelope className="text-emerald-600" /> Internal copy handling
-                  </div>
-                  <div className="mt-1 text-xs leading-4 text-slate-600">
-                    Use an internal copy email when the company wants a business mailbox to receive copies of outgoing emails. BCC remains the safer default for tenant-facing communication.
-                  </div>
-                </div>
-              </Card>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="border border-slate-200 bg-white px-3 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total profiles</div>
+                <div className="mt-0.5 text-lg font-extrabold text-slate-900">{emailSummary.total}</div>
+              </div>
+              <div className="border border-slate-200 bg-white px-3 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Enabled</div>
+                <div className="mt-0.5 text-lg font-extrabold text-slate-900">{emailSummary.active}</div>
+              </div>
+              <div className="border border-slate-200 bg-white px-3 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Fully configured</div>
+                <div className="mt-0.5 text-lg font-extrabold text-slate-900">{emailSummary.configured}</div>
+              </div>
+              <div className="border border-slate-200 bg-white px-3 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Default profiles</div>
+                <div className="mt-0.5 text-lg font-extrabold text-slate-900">{emailSummary.defaults}</div>
+              </div>
+            </div>
 
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/95 px-4 py-2.5">
+            <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/95 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
                   <div className="relative">
-                    <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
+                    <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                     <input
                       value={emailProfileSearch}
                       onChange={(e) => setEmailProfileSearch(e.target.value)}
                       placeholder="Search email profiles…"
-                      className="h-8 w-52 rounded border border-slate-300 bg-[#DDEFE1] pl-8 pr-3 text-xs text-slate-800 shadow-sm transition hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="h-7 w-48 border border-slate-300 bg-[#DDEFE1] pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
-                  <span className="text-xs text-slate-500">{emailProfiles.length} profile{emailProfiles.length !== 1 ? "s" : ""}</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[700px] text-xs">
-                    <thead className="bg-[#0B3B2E] text-white">
-                      <tr>
-                        <th className="px-3 py-2.5 text-left font-bold">#</th>
-                        <th className="px-3 py-2.5 text-left font-bold">Name</th>
-                        <th className="px-3 py-2.5 text-left font-bold">Sender Email</th>
-                        <th className="px-3 py-2.5 text-left font-bold">SMTP Host</th>
-                        <th className="px-3 py-2.5 text-left font-bold">Test</th>
-                        <th className="px-3 py-2.5 text-left font-bold">Status</th>
-                        <th className="px-3 py-2.5 text-right font-bold">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {emailProfiles.length === 0 ? (
-                        <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-500">No email profiles configured yet. Click "Add Email Profile" to get started.</td></tr>
-                      ) : (
-                        emailProfiles
-                          .filter((p) => !emailProfileSearch || `${p.name} ${p.senderEmail} ${p.smtpHost}`.toLowerCase().includes(emailProfileSearch.toLowerCase()))
-                          .map((profile, idx) => {
-                            const status = buildEmailStatus(profile);
-                            const theme = statusTheme[status.code] || statusTheme.not_configured;
-                            const isSelected = String(selectedEmailProfileId) === String(profile._id);
-                            return (
-                              <tr
-                                key={profile._id}
-                                className={`border-b border-slate-100 cursor-pointer transition ${isSelected ? "bg-emerald-50/60" : "hover:bg-slate-50"}`}
-                                onDoubleClick={() => beginEditEmailProfile(profile)}
-                                title="Double-click to edit"
-                              >
-                                <td className="px-3 py-2.5 font-mono text-slate-400">{idx + 1}</td>
-                                <td className="px-3 py-2.5">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-extrabold text-slate-900">{profile.name}</span>
-                                    {profile.isDefault && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-blue-700">Default</span>}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2.5 text-slate-700">{profile.senderEmail || <span className="text-slate-400">Not set</span>}</td>
-                                <td className="px-3 py-2.5 font-mono text-slate-600">{profile.smtpHost || <span className="text-slate-400">Not set</span>}</td>
-                                <td className="px-3 py-2.5">
-                                  <span className={`inline-flex rounded-full border px-2 py-0.5 font-bold ${resolveEmailTestBadge(profile.lastTestStatus)}`}>
-                                    {profile.lastTestStatus || "never"}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-bold ${theme.badge}`}>
-                                    {theme.icon}{status.label}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  <div className="flex justify-end gap-1.5">
-                                    <button onClick={(e) => { e.stopPropagation(); beginEditEmailProfile(profile); }} className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-700 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white transition"><FaPen className="text-[9px]" /> Edit</button>
-                                    <button onClick={(e) => { e.stopPropagation(); handleQuickEmailUpdate(profile, { enabled: !profile.enabled, isDefault: profile.enabled ? false : profile.isDefault }, profile.enabled ? "Profile disabled" : "Profile enabled"); }} className={`inline-flex h-7 items-center gap-1 rounded border px-2 text-[11px] font-bold transition ${profile.enabled ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}><FaPowerOff className="text-[9px]" /> {profile.enabled ? "Off" : "On"}</button>
-                                    <button onClick={(e) => { e.stopPropagation(); handleQuickEmailUpdate(profile, { isDefault: true, enabled: true }, "Set as default"); }} className="inline-flex h-7 items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition"><FaCheckCircle className="text-[9px]" /> Default</button>
-                                    <button onClick={(e) => { e.stopPropagation(); handleSendTestEmail(profile); }} className="inline-flex h-7 items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 transition"><FaPaperPlane className="text-[9px]" /> Test</button>
-                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteEmailProfile(profile); }} className="inline-flex h-7 items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 text-[11px] font-bold text-rose-700 hover:bg-rose-100 transition"><FaTrashAlt className="text-[9px]" /></button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <Card
-                title={selectedEmailProfileId === EMAIL_DRAFT_ID ? "New Email Profile" : "Email Config Details"}
-                subtitle="Save the sender details, SMTP server settings, internal copy preferences and purpose tags for this company profile."
-                action={
-                  <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${emailTheme.badge}`}>
-                    {emailTheme.icon}
-                    {emailStatus.label}
+                  <span className="border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
+                    {emailProfiles.length} profile{emailProfiles.length !== 1 ? "s" : ""}
                   </span>
-                }
-              >
-                <div className={`rounded-lg border px-3 py-2 ${emailTheme.panel}`}>
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 text-base">{emailTheme.icon}</div>
-                    <div>
-                      <div className="text-xs font-extrabold text-slate-900">{emailStatus.label}</div>
-                      <div className="mt-0.5 text-xs leading-4 text-slate-700">{emailStatus.reason}</div>
-                    </div>
-                  </div>
                 </div>
-
-                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="md:col-span-2">
-                    <label className="text-xs font-bold text-slate-700">Profile Name</label>
-                    <Input value={emailForm.name} onChange={(e) => setEmailForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Example: Main Business Email" />
-                  </div>
-                  <div className="md:col-span-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
-                    <ToggleRow
-                      checked={emailForm.enabled}
-                      onChange={(e) => setEmailForm((prev) => ({ ...prev, enabled: e.target.checked, isDefault: e.target.checked ? prev.isDefault : false }))}
-                      title="Enable this email profile"
-                      description="Turn this on when this profile is ready to send operational emails for the active company."
-                    />
-                    <ToggleRow
-                      checked={emailForm.isDefault}
-                      onChange={(e) => setEmailForm((prev) => ({ ...prev, isDefault: e.target.checked, enabled: e.target.checked ? true : prev.enabled }))}
-                      title="Set as default sender"
-                      description="The default enabled profile can be used by receipts, invoices, landlord statements and future system notices."
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Sender Name</label>
-                    <Input value={emailForm.senderName} onChange={(e) => setEmailForm((prev) => ({ ...prev, senderName: e.target.value }))} placeholder="ABRI REALTORS" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Sender Email</label>
-                    <Input type="email" value={emailForm.senderEmail} onChange={(e) => setEmailForm((prev) => ({ ...prev, senderEmail: e.target.value }))} placeholder="info@company.com" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Reply-To Email</label>
-                    <Input type="email" value={emailForm.replyTo} onChange={(e) => setEmailForm((prev) => ({ ...prev, replyTo: e.target.value }))} placeholder="support@company.com" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">SMTP Host</label>
-                    <Input value={emailForm.smtpHost} onChange={(e) => setEmailForm((prev) => ({ ...prev, smtpHost: e.target.value }))} placeholder="smtp.gmail.com" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">SMTP Port</label>
-                    <Input type="number" value={emailForm.smtpPort} onChange={(e) => setEmailForm((prev) => ({ ...prev, smtpPort: e.target.value }))} placeholder="465" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Encryption</label>
-                    <Select value={emailForm.encryption} onChange={(e) => setEmailForm((prev) => ({ ...prev, encryption: e.target.value }))}>
-                      <option value="ssl">SSL</option>
-                      <option value="tls">TLS</option>
-                      <option value="none">None</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">SMTP Username</label>
-                    <Input value={emailForm.username} onChange={(e) => setEmailForm((prev) => ({ ...prev, username: e.target.value }))} placeholder="your-smtp-username" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">SMTP Password / App Password</label>
-                    <Input type="password" value={emailForm.password} onChange={(e) => setEmailForm((prev) => ({ ...prev, password: e.target.value }))} placeholder={emailForm.hasPassword ? "Leave blank to keep saved password" : "Enter SMTP password"} />
-                    <div className="mt-1 text-xs text-slate-500">{emailForm.hasPassword ? emailForm.passwordMasked || "Saved and masked" : "No saved password yet."}</div>
-                  </div>
-                </div>
-              </Card>
-
-              <Card title="Internal Copy & Usage Rules" subtitle="Choose how the company should receive copies of sent emails and where this SMTP profile will be used.">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Internal Copy Email</label>
-                    <Input type="email" value={emailForm.internalCopyEmail} onChange={(e) => setEmailForm((prev) => ({ ...prev, internalCopyEmail: e.target.value }))} placeholder="backoffice@company.com" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Internal Copy Mode</label>
-                    <Select value={emailForm.internalCopyMode} onChange={(e) => setEmailForm((prev) => ({ ...prev, internalCopyMode: e.target.value }))}>
-                      <option value="none">No internal copy</option>
-                      <option value="bcc">BCC internal copy</option>
-                      <option value="cc">CC internal copy</option>
-                    </Select>
-                    <div className="mt-1 text-xs text-slate-500">BCC is the safer default for tenant-facing emails.</div>
-                  </div>
-                </div>
-
-                <div className="mt-3">
-                  <div className="text-xs font-bold text-slate-700">Usage Tags</div>
-                  <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    {emailUsageOptions.map((option) => {
-                      const checked = emailForm.usageTags.includes(option.value);
-                      return (
-                        <label key={option.value} className={[
-                          "flex items-center gap-3 rounded-lg border px-3 py-2 text-xs transition",
-                          checked ? "border-emerald-200 bg-emerald-50/80" : "border-slate-200 bg-white hover:border-slate-300",
-                        ].join(" ")}>
-                          <input type="checkbox" checked={checked} onChange={() => toggleUsageTag(option.value)} className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                          <span className="font-semibold text-slate-800">{option.label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Selected profile</div>
-                      <div className="mt-1 text-xs font-extrabold text-slate-900">{emailForm.name || "New Email Profile"}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Sender</div>
-                      <div className="mt-1 text-xs font-extrabold text-slate-900">{emailForm.senderEmail || "Not set"}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Last test</div>
-                      <div className="mt-1 text-xs font-extrabold text-slate-900">{formatDateTime(emailForm.lastTestedAt)}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Test status</div>
-                      <div className="mt-1">
-                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${resolveEmailTestBadge(emailForm.lastTestStatus)}`}>
-                          {emailForm.lastTestStatus || "never"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  {emailForm.lastTestMessage ? (
-                    <div className="mt-2 text-xs text-slate-600">{emailForm.lastTestMessage}</div>
-                  ) : null}
-                </div>
-
-                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_auto] md:items-end">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Test Recipient Email</label>
-                    <Input type="email" value={emailForm.testRecipient} onChange={(e) => setEmailForm((prev) => ({ ...prev, testRecipient: e.target.value }))} placeholder={currentCompany?.email || "company@example.com"} />
-                    <div className="mt-1 text-xs text-slate-500">Use this to verify the saved SMTP profile before relying on it for live communication.</div>
-                  </div>
-                  <button disabled={testingEmail || selectedEmailProfileId === EMAIL_DRAFT_ID} onClick={() => handleSendTestEmail()} className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60">
-                    <FaPaperPlane /> {testingEmail ? "Sending..." : "Send Test Email"}
-                  </button>
-                </div>
-
-                <div className="mt-3 flex flex-wrap justify-end gap-2">
-                  <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={resetEmailEditor}>
-                    Reset
-                  </button>
-                  {selectedEmailProfileId !== EMAIL_DRAFT_ID ? (
-                    <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={beginCreateEmailProfile}>
-                      New Profile
-                    </button>
-                  ) : null}
-                  <button disabled={savingEmails} onClick={handleSaveEmailProfile} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
-                    <FaSave /> {savingEmails ? "Saving..." : selectedEmailProfileId === EMAIL_DRAFT_ID ? "Save New Profile" : "Update Profile"}
-                  </button>
-                </div>
-              </Card>
+                <button onClick={beginCreateEmailProfile} className="inline-flex items-center gap-1.5 bg-[#FF8C00] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#E67E00]">
+                  <FaPlus /> Add Email Profile
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[700px] text-xs">
+                  <thead className="bg-[#0B3B2E] text-white">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left font-semibold">#</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Name</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Sender Email</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">SMTP Host</th>
+                      <th className="px-3 py-2.5 text-center font-semibold">Test</th>
+                      <th className="px-3 py-2.5 text-center font-semibold">Status</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {emailProfiles.length === 0 ? (
+                      <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">No email profiles configured yet. Click "Add Email Profile" to get started.</td></tr>
+                    ) : (
+                      emailProfiles
+                        .filter((p) => !emailProfileSearch || `${p.name} ${p.senderEmail} ${p.smtpHost}`.toLowerCase().includes(emailProfileSearch.toLowerCase()))
+                        .map((profile, idx) => {
+                          const status = buildEmailStatus(profile);
+                          const theme = statusTheme[status.code] || statusTheme.not_configured;
+                          return (
+                            <tr key={profile._id} className="cursor-pointer transition hover:bg-slate-50" onDoubleClick={() => beginEditEmailProfile(profile)}>
+                              <td className="px-3 py-2.5 text-slate-400">{idx + 1}</td>
+                              <td className="px-3 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold text-slate-900">{profile.name}</span>
+                                  {profile.isDefault && <span className="border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Default</span>}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-slate-700">{profile.senderEmail || <span className="text-slate-400">Not set</span>}</td>
+                              <td className="px-3 py-2.5 font-mono text-slate-600">{profile.smtpHost || <span className="text-slate-400">Not set</span>}</td>
+                              <td className="px-3 py-2.5 text-center">
+                                <span className={`inline-flex border px-2 py-0.5 font-bold ${resolveEmailTestBadge(profile.lastTestStatus)}`}>
+                                  {profile.lastTestStatus || "never"}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5 text-center">
+                                <span className={`inline-flex items-center gap-1 border px-2 py-0.5 font-bold ${theme.badge}`}>
+                                  {theme.icon} {status.label}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <div className="flex justify-end gap-1.5">
+                                  <button onClick={(e) => { e.stopPropagation(); beginEditEmailProfile(profile); }} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50"><FaPen className="text-[9px]" /> Edit</button>
+                                  <button onClick={(e) => { e.stopPropagation(); handleQuickEmailUpdate(profile, { enabled: !profile.enabled, isDefault: profile.enabled ? false : profile.isDefault }, profile.enabled ? "Profile disabled" : "Profile enabled"); }} className={`inline-flex h-7 items-center gap-1 border px-2 text-[11px] font-bold transition ${profile.enabled ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}><FaPowerOff className="text-[9px]" /> {profile.enabled ? "Off" : "On"}</button>
+                                  <button onClick={(e) => { e.stopPropagation(); handleQuickEmailUpdate(profile, { isDefault: true, enabled: true }, "Set as default"); }} className="inline-flex h-7 items-center gap-1 border border-blue-200 bg-blue-50 px-2 text-[11px] font-bold text-blue-700 transition hover:bg-blue-100"><FaCheckCircle className="text-[9px]" /> Default</button>
+                                  <button onClick={(e) => { e.stopPropagation(); handleSendTestEmail(profile); }} className="inline-flex h-7 items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 text-[11px] font-bold text-emerald-700 transition hover:bg-emerald-100"><FaPaperPlane className="text-[9px]" /> Test</button>
+                                  <button onClick={(e) => { e.stopPropagation(); handleDeleteEmailProfile(profile); }} className="inline-flex h-7 items-center gap-1 border border-rose-200 bg-rose-50 px-2 text-[11px] font-bold text-rose-700 transition hover:bg-rose-100"><FaTrashAlt className="text-[9px]" /></button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
 
         {/* ── Logs sub-tabs (sent / failed / pending) ── */}
         {["sent", "failed", "pending"].includes(emailSubTab) && (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
             {/* sticky compact header */}
             <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-[#0B3B2E] px-3 py-2">
               <div className="flex items-center gap-2">
@@ -3338,172 +2736,106 @@ export default function CompanySetupPage() {
   };
 
   const renderSmsConfiguration = () => (
-    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.05fr_1.65fr]">
-      <div className="space-y-3">
-        <Card
-          title="SMS Configuration Overview"
-          subtitle="Manage one or many SMS provider profiles for the active company. Keep them company-bound and activate only the profiles you trust for live delivery."
-          action={
-            <button onClick={beginCreateSmsProfile} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:opacity-95">
-              <FaPlus /> Add Configuration
-            </button>
-          }
-        >
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total profiles</div>
-              <div className="mt-0.5 text-base font-extrabold text-slate-900">{smsSummary.total}</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Enabled</div>
-              <div className="mt-0.5 text-base font-extrabold text-slate-900">{smsSummary.active}</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Fully configured</div>
-              <div className="mt-0.5 text-base font-extrabold text-slate-900">{smsSummary.configured}</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Default profiles</div>
-              <div className="mt-0.5 text-base font-extrabold text-slate-900">{smsSummary.defaults}</div>
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-              <FaPlug className="text-[#F97316]" /> Delivery safety rule
-            </div>
-            <div className="mt-1 text-xs leading-4 text-slate-600">
-              SMS provider credentials stay saved per company. Templates can use the company default profile or a specific profile, and automation remains separate from configuration so users do not send messages by mistake.
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-              <FaSms className="text-emerald-600" /> Current product scope
-            </div>
-            <div className="mt-1 text-xs leading-4 text-slate-600">
-              This pass sets up SMS configurations and SMS templates safely. Live provider testing and fully wired business-event sending should follow in the next delivery pass.
-            </div>
-          </div>
-        </Card>
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="border border-slate-200 bg-white px-3 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total profiles</div>
+          <div className="mt-0.5 text-lg font-extrabold text-slate-900">{smsSummary.total}</div>
+        </div>
+        <div className="border border-slate-200 bg-white px-3 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Enabled</div>
+          <div className="mt-0.5 text-lg font-extrabold text-slate-900">{smsSummary.active}</div>
+        </div>
+        <div className="border border-slate-200 bg-white px-3 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Fully configured</div>
+          <div className="mt-0.5 text-lg font-extrabold text-slate-900">{smsSummary.configured}</div>
+        </div>
+        <div className="border border-slate-200 bg-white px-3 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Default profiles</div>
+          <div className="mt-0.5 text-lg font-extrabold text-slate-900">{smsSummary.defaults}</div>
+        </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {/* toolbar */}
-          <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/95 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                <input
-                  value={smsProfileSearch}
-                  onChange={(e) => setSmsProfileSearch(e.target.value)}
-                  placeholder="Search SMS profiles…"
-                  className="h-7 w-44 rounded border border-slate-300 bg-[#DDEFE1] pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                />
-              </div>
-              <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
-                {smsProfiles.length} profile{smsProfiles.length !== 1 ? "s" : ""}
-              </span>
+      <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/95 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
+              <input
+                value={smsProfileSearch}
+                onChange={(e) => setSmsProfileSearch(e.target.value)}
+                placeholder="Search SMS profiles…"
+                className="h-7 w-44 border border-slate-300 bg-[#DDEFE1] pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              />
             </div>
-            <button
-              onClick={beginCreateSmsProfile}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-orange-600"
-            >
-              <FaPlus /> Add Profile
-            </button>
+            <span className="border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
+              {smsProfiles.length} profile{smsProfiles.length !== 1 ? "s" : ""}
+            </span>
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs">
-              <thead className="bg-[#0B3B2E] text-white">
-                <tr>
-                  <th className="px-3 py-2.5 text-left font-semibold">#</th>
-                  <th className="px-3 py-2.5 text-left font-semibold">Name</th>
-                  <th className="px-3 py-2.5 text-left font-semibold">Provider</th>
-                  <th className="px-3 py-2.5 text-left font-semibold">Sender ID</th>
-                  <th className="px-3 py-2.5 text-center font-semibold">Country</th>
-                  <th className="px-3 py-2.5 text-center font-semibold">Status</th>
-                  <th className="px-3 py-2.5 text-center font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {smsProfiles.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                      No SMS profile added yet.
-                    </td>
-                  </tr>
-                ) : (
-                  smsProfiles
-                    .filter((p) => !smsProfileSearch.trim() || `${p.name} ${p.provider} ${p.senderId}`.toLowerCase().includes(smsProfileSearch.trim().toLowerCase()))
-                    .map((profile, idx) => {
-                      const status = buildSmsStatus(profile);
-                      const theme = statusTheme[status.code] || statusTheme.not_configured;
-                      const providerLabel = smsProviderOptions.find((o) => o.value === profile.provider)?.label || profile.provider;
-                      const isSelected = String(selectedSmsProfileId) === String(profile._id);
-                      return (
-                        <tr
-                          key={profile._id}
-                          onDoubleClick={() => beginEditSmsProfile(profile)}
-                          className={`cursor-pointer transition ${isSelected ? "bg-emerald-50/60" : "hover:bg-slate-50"}`}
-                        >
-                          <td className="px-3 py-2 font-semibold text-slate-500">{idx + 1}</td>
-                          <td className="px-3 py-2">
-                            <div className="font-bold text-slate-900">{profile.name}</div>
-                            {profile.isDefault ? (
-                              <span className="mt-0.5 inline-block rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">Default</span>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-2 text-slate-700">{providerLabel}</td>
-                          <td className="px-3 py-2 text-slate-700">{profile.senderId || <span className="text-slate-400">—</span>}</td>
-                          <td className="px-3 py-2 text-center text-slate-600">{profile.defaultCountryCode || "+254"}</td>
-                          <td className="px-3 py-2 text-center">
-                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-bold ${theme.badge}`}>
-                              {theme.icon} {status.label}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                title="Edit"
-                                onClick={() => beginEditSmsProfile(profile)}
-                                className="h-7 rounded border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"
-                              >
-                                <FaPen />
-                              </button>
-                              <button
-                                title={profile.enabled ? "Disable" : "Enable"}
-                                onClick={() => handleQuickSmsProfileUpdate(profile, { enabled: !profile.enabled, isDefault: profile.enabled ? false : profile.isDefault }, profile.enabled ? "SMS profile disabled" : "SMS profile enabled")}
-                                className="h-7 rounded border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"
-                              >
-                                <FaPowerOff className={profile.enabled ? "text-emerald-600" : "text-slate-400"} />
-                              </button>
-                              <button
-                                title="Set as Default"
-                                onClick={() => handleQuickSmsProfileUpdate(profile, { isDefault: true, enabled: true }, "SMS profile set as default")}
-                                className="h-7 rounded border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"
-                              >
-                                <FaCheckCircle className={profile.isDefault ? "text-blue-500" : "text-slate-400"} />
-                              </button>
-                              <button
-                                title="Delete"
-                                onClick={() => handleDeleteSmsProfile(profile)}
-                                className="h-7 rounded border border-rose-200 bg-rose-50 px-2 font-bold text-rose-600 transition hover:bg-rose-100"
-                              >
-                                <FaTrashAlt />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                )}
-              </tbody>
-            </table>
-          </div>
+          <button onClick={beginCreateSmsProfile} className="inline-flex items-center gap-1.5 bg-[#FF8C00] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#E67E00]">
+            <FaPlus /> Add Configuration
+          </button>
         </div>
 
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs">
+            <thead className="bg-[#0B3B2E] text-white">
+              <tr>
+                <th className="px-3 py-2.5 text-left font-semibold">#</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Name</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Provider</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Sender ID</th>
+                <th className="px-3 py-2.5 text-center font-semibold">Country</th>
+                <th className="px-3 py-2.5 text-center font-semibold">Status</th>
+                <th className="px-3 py-2.5 text-center font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {smsProfiles.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                    No SMS configuration added yet. Click "Add Configuration" to get started.
+                  </td>
+                </tr>
+              ) : (
+                smsProfiles
+                  .filter((p) => !smsProfileSearch.trim() || `${p.name} ${p.provider} ${p.senderId}`.toLowerCase().includes(smsProfileSearch.trim().toLowerCase()))
+                  .map((profile, idx) => {
+                    const status = buildSmsStatus(profile);
+                    const theme = statusTheme[status.code] || statusTheme.not_configured;
+                    const providerLabel = smsProviderOptions.find((o) => o.value === profile.provider)?.label || profile.provider;
+                    return (
+                      <tr key={profile._id} onDoubleClick={() => beginEditSmsProfile(profile)} className="cursor-pointer transition hover:bg-slate-50">
+                        <td className="px-3 py-2.5 font-semibold text-slate-500">{idx + 1}</td>
+                        <td className="px-3 py-2.5">
+                          <div className="font-bold text-slate-900">{profile.name}</div>
+                          {profile.isDefault ? (
+                            <span className="mt-0.5 inline-block border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">Default</span>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-700">{providerLabel}</td>
+                        <td className="px-3 py-2.5 text-slate-700">{profile.senderId || <span className="text-slate-400">—</span>}</td>
+                        <td className="px-3 py-2.5 text-center text-slate-600">{profile.defaultCountryCode || "+254"}</td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={`inline-flex items-center gap-1 border px-2 py-0.5 font-bold ${theme.badge}`}>
+                            {theme.icon} {status.label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button title="Edit" onClick={() => beginEditSmsProfile(profile)} className="h-7 border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"><FaPen /></button>
+                            <button title={profile.enabled ? "Disable" : "Enable"} onClick={() => handleQuickSmsProfileUpdate(profile, { enabled: !profile.enabled, isDefault: profile.enabled ? false : profile.isDefault }, profile.enabled ? "SMS profile disabled" : "SMS profile enabled")} className="h-7 border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"><FaPowerOff className={profile.enabled ? "text-emerald-600" : "text-slate-400"} /></button>
+                            <button title="Set as Default" onClick={() => handleQuickSmsProfileUpdate(profile, { isDefault: true, enabled: true }, "SMS profile set as default")} className="h-7 border border-slate-200 bg-white px-2 font-bold text-slate-600 transition hover:bg-slate-50"><FaCheckCircle className={profile.isDefault ? "text-blue-500" : "text-slate-400"} /></button>
+                            <button title="Delete" onClick={() => handleDeleteSmsProfile(profile)} className="h-7 border border-rose-200 bg-rose-50 px-2 font-bold text-rose-600 transition hover:bg-rose-100"><FaTrashAlt /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -3531,7 +2863,7 @@ export default function CompanySetupPage() {
     const autoCount = moduleVisibleTemplates.filter((t) => t.sendMode === "automatic").length;
 
     return (
-      <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex min-h-0 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
         {/* ── Toolbar ── */}
         <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-3">
@@ -3722,7 +3054,7 @@ export default function CompanySetupPage() {
     return (
       <div className="space-y-3">
         {/* Sub-tab bar */}
-        <div className="flex flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+        <div className="flex flex-wrap gap-1 border border-slate-200 bg-[#EDF5F1] p-1">
           {smsNavItems.map((item) => {
             const isActive = activeSmsSection === item.key;
             return (
@@ -3744,7 +3076,7 @@ export default function CompanySetupPage() {
 
         {/* ── Logs sub-tabs (sent / failed / pending) ── */}
         {["sent", "failed", "pending"].includes(activeSmsSection) && (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
             {/* sticky compact header */}
             <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-[#0B3B2E] px-3 py-2">
               <div className="flex items-center gap-2">
@@ -3949,7 +3281,7 @@ export default function CompanySetupPage() {
         </div>
 
         {/* ── Main table panel — fills 95% of viewport height ── */}
-        <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm" style={{ minHeight: "calc(95vh - 220px)" }}>
+        <div className="flex flex-col overflow-hidden border border-slate-200 bg-white shadow-sm" style={{ minHeight: "calc(95vh - 220px)" }}>
           {activityView === "activities" ? (
             <>
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50/95 px-3 py-2">
@@ -4062,8 +3394,6 @@ export default function CompanySetupPage() {
         return renderDetailsTab();
       case "structure":
         return renderStructureTab();
-      case "modules":
-        return renderModulesTab();
       case "payments":
         return renderPaymentsTab();
       case "email":
@@ -4084,58 +3414,60 @@ export default function CompanySetupPage() {
   return (
     <DashboardLayout>
       <div className="w-full px-4 py-3 2xl:px-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        {/* ── Page header ── */}
+        <div className="mb-2 flex items-center justify-between border border-slate-200 bg-[#0B3B2E] px-4 py-2.5 shadow-sm">
           <div>
-            <div className="text-xl font-extrabold text-slate-900">Company Setup</div>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
+            <div className="text-[13px] font-bold uppercase tracking-wide text-white">Company Setup</div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-[#B7C9C0]">
               {hasPM && (
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{companyOperatingModeOptions.find((option) => option.value === normalizeCompanyOperatingMode(company.companyMode))?.label || "Other"}</span>
+                <span className="border border-[#2A5C4A] px-2 py-0.5">{companyOperatingModeOptions.find((option) => option.value === normalizeCompanyOperatingMode(company.companyMode))?.label || "Other"}</span>
               )}
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{Object.values(normalizeCompanyModules(company.modules || {})).filter(Boolean).length} modules assigned</span>
+              <span className="border border-[#2A5C4A] px-2 py-0.5">{Object.values(normalizeCompanyModules(company.modules || {})).filter(Boolean).length} modules assigned</span>
             </div>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={handleRefreshSetup}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50"
+              className="inline-flex h-7 items-center gap-1.5 border border-[#2A5C4A] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"
             >
-              <FaSyncAlt /> Refresh
+              <FaSyncAlt size={10} /> Refresh
             </button>
             <button
               type="button"
               onClick={() => navigate('/settings')}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+              className="inline-flex h-7 items-center gap-1.5 bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#E67E00]"
             >
-              Operational Settings <FaArrowRight />
+              Operational Settings <FaArrowRight size={10} />
             </button>
           </div>
         </div>
 
-        <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-4">
-          <button onClick={() => switchTab('details')} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
-            <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Profile</div>
-            <div className="mt-0.5 text-xs font-extrabold text-slate-900">Company details</div>
+        {/* ── Quick-nav stat tiles ── */}
+        <div className="mb-2 grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+          <button onClick={() => switchTab('details')} className="border border-slate-200 bg-white px-3 py-2 text-left hover:border-[#0B3B2E]/30 hover:bg-[#EDF5F1]">
+            <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Profile</div>
+            <div className="mt-0.5 text-[11px] font-extrabold text-slate-900">Company details</div>
           </button>
-          <button onClick={() => switchTab('payments')} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
-            <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Payments</div>
-            <div className="mt-0.5 text-xs font-extrabold text-slate-900">{paymentSummary.active} active / {paymentSummary.total}</div>
+          <button onClick={() => switchTab('payments')} className="border border-slate-200 bg-white px-3 py-2 text-left hover:border-[#0B3B2E]/30 hover:bg-[#EDF5F1]">
+            <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Payments</div>
+            <div className="mt-0.5 text-[11px] font-extrabold text-slate-900">{paymentSummary.active} active / {paymentSummary.total}</div>
           </button>
-          <button onClick={() => switchTab('email')} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
-            <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Email</div>
-            <div className="mt-0.5 text-xs font-extrabold text-slate-900">{emailSummary.active} active / {emailSummary.total}</div>
+          <button onClick={() => switchTab('email')} className="border border-slate-200 bg-white px-3 py-2 text-left hover:border-[#0B3B2E]/30 hover:bg-[#EDF5F1]">
+            <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Email</div>
+            <div className="mt-0.5 text-[11px] font-extrabold text-slate-900">{emailSummary.active} active / {emailSummary.total}</div>
           </button>
-          <button onClick={() => navigate('/settings')} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left shadow-sm transition hover:border-amber-300 hover:bg-amber-100/70">
-            <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">Operational</div>
-            <div className="mt-0.5 text-xs font-extrabold text-slate-900">
+          <button onClick={() => navigate('/settings')} className="border border-amber-200 bg-amber-50 px-3 py-2 text-left hover:bg-amber-100/70">
+            <div className="text-[9px] font-black uppercase tracking-wide text-amber-700">Operational</div>
+            <div className="mt-0.5 text-[11px] font-extrabold text-slate-900">
               {hasPM ? `Tax ${taxSetupSummary.enabled ? 'enabled' : 'disabled'}` : hasHR ? 'HR & Payroll' : hasCW ? 'Car Wash' : hasSale ? 'Property Sales' : 'Settings'}
             </div>
           </button>
         </div>
 
-        <div className="mt-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
-          <div className="flex gap-2 overflow-x-auto">
+        {/* ── Tab bar ── */}
+        <div className="mb-2 border border-slate-200 bg-white">
+          <div className="flex overflow-x-auto">
             {tabs.map((tab) => {
               const isActive = tab.key === activeTab;
               return (
@@ -4143,13 +3475,13 @@ export default function CompanySetupPage() {
                   key={tab.key}
                   onClick={() => switchTab(tab.key)}
                   className={[
-                    "flex items-center gap-2 whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-extrabold transition",
+                    "flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition",
                     isActive
-                      ? "border-transparent bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white"
-                      : "border-slate-200 bg-white/70 text-slate-800 hover:bg-white",
+                      ? "border-[#FF8C00] bg-[#EDF5F1] text-[#0B3B2E]"
+                      : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700",
                   ].join(" ")}
                 >
-                  <span className="text-sm">{tab.icon}</span>
+                  <span>{tab.icon}</span>
                   {tab.label}
                 </button>
               );
@@ -4157,7 +3489,7 @@ export default function CompanySetupPage() {
           </div>
         </div>
 
-        <div className="mt-2">{renderTab()}</div>
+        <div>{renderTab()}</div>
       </div>
 
       <Modal
@@ -4167,20 +3499,20 @@ export default function CompanySetupPage() {
         subtitle=""
         footer={
           <div className="flex flex-wrap justify-end gap-2">
-            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={resetSmsEditor}>
+            <button className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={resetSmsEditor}>
               Reset
             </button>
-            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-slate-50" onClick={closeSmsConfigModal}>
+            <button className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={closeSmsConfigModal}>
               Cancel
             </button>
-            <button disabled={savingSmsProfiles} onClick={handleSaveSmsProfile} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#16A34A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60">
+            <button disabled={savingSmsProfiles} onClick={handleSaveSmsProfile} className="inline-flex items-center gap-2 bg-[#FF8C00] px-4 py-2 text-[11px] font-bold text-white hover:bg-[#E67E00] disabled:opacity-50">
               <FaSave /> {savingSmsProfiles ? "Saving..." : selectedSmsProfileId === SMS_DRAFT_ID ? "Save Configuration" : "Update Configuration"}
             </button>
           </div>
         }
       >
         {/* ── Status banner ── */}
-        <div className={`rounded-xl border p-3 ${smsTheme.panel}`}>
+        <div className={`border p-3 ${smsTheme.panel}`}>
           <div className="flex items-center gap-2.5">
             <span className="text-base">{smsTheme.icon}</span>
             <div>
@@ -4221,7 +3553,7 @@ export default function CompanySetupPage() {
                   key={opt.value}
                   type="button"
                   onClick={() => setSmsForm((prev) => ({ ...prev, provider: opt.value }))}
-                  className={`flex flex-col items-start gap-1 rounded-xl border-2 p-3 text-left transition-all ${
+                  className={`flex flex-col items-start gap-1 border-2 p-3 text-left transition-all ${
                     active
                       ? `${opt.color} shadow-sm ring-2 ring-offset-1 ring-current`
                       : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
@@ -4326,7 +3658,7 @@ export default function CompanySetupPage() {
 
               {/* Sandbox toggle — AT only */}
               {fields.sandbox && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <div className="border border-amber-200 bg-amber-50 p-3">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-xs font-bold text-amber-800">Sandbox / Test Mode</p>
@@ -4364,13 +3696,13 @@ export default function CompanySetupPage() {
         subtitle={smsTemplateForm?.description || "Adjust the message text, send mode and SMS profile for this operation."}
         footer={
           <div className="flex flex-wrap justify-end gap-2">
-            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" onClick={closeSmsTemplateModal}>
+            <button className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={closeSmsTemplateModal}>
               Cancel
             </button>
             <button
               disabled={savingSmsTemplates}
               onClick={handleSaveSmsTemplate}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0A3127] disabled:opacity-60"
+              className="inline-flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
             >
               <FaSave /> {savingSmsTemplates ? "Saving…" : "Save Template"}
             </button>
@@ -4385,7 +3717,7 @@ export default function CompanySetupPage() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
                   <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Recipient</label>
-                  <div className="mt-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800">
+                  <div className="mt-1.5 border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] font-semibold text-slate-800">
                     {smsRecipientLabels[smsTemplateForm.recipientType] || smsTemplateForm.recipientType}
                   </div>
                 </div>
@@ -4432,14 +3764,14 @@ export default function CompanySetupPage() {
                   value={smsTemplateForm.messageBody}
                   onChange={(e) => setSmsTemplateForm((prev) => ({ ...prev, messageBody: e.target.value }))}
                   rows={5}
-                  className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 font-mono text-sm text-slate-800 outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-emerald-100"
+                  className="w-full resize-none border border-slate-300 bg-white px-3 py-2.5 font-mono text-[12px] text-slate-800 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   placeholder="Write the SMS message here. Click any placeholder below to insert it at the cursor."
                 />
               </div>
 
               {/* clickable placeholders */}
               {smsTemplateForm.placeholders.length > 0 && (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="border border-slate-200 bg-slate-50 p-4">
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Available Placeholders</span>
                     <span className="text-[10px] text-slate-400">Click to insert at cursor</span>
@@ -4462,6 +3794,297 @@ export default function CompanySetupPage() {
             </div>
           );
         })() : null}
+      </Modal>
+
+      {/* ── Payment Config Modal ── */}
+      <Modal
+        open={paymentModalOpen}
+        onClose={() => setPaymentModalOpen(false)}
+        title={selectedPaymentConfigId === PAYMENT_DRAFT_ID ? "New Paybill Configuration" : "Edit Paybill Configuration"}
+        subtitle="Enter the Paybill credentials, cashbook mapping and processing rules."
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <button className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={resetPaymentEditor}>
+              Reset
+            </button>
+            {selectedPaymentConfigId !== PAYMENT_DRAFT_ID && paymentForm.shortCode && (
+              <button
+                disabled={registeringUrls || savingPayments}
+                onClick={handleRegisterUrls}
+                className="inline-flex items-center gap-2 border border-emerald-300 bg-emerald-50 px-4 py-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+              >
+                <FaSyncAlt className={registeringUrls ? "animate-spin" : ""} />
+                {registeringUrls ? "Registering..." : "Register with Safaricom"}
+              </button>
+            )}
+            <button className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={() => setPaymentModalOpen(false)}>
+              Cancel
+            </button>
+            <button disabled={savingPayments} onClick={handleSavePaymentConfig} className="inline-flex items-center gap-2 bg-[#FF8C00] px-4 py-2 text-[11px] font-bold text-white hover:bg-[#E67E00] disabled:opacity-50">
+              <FaSave /> {savingPayments ? "Saving..." : selectedPaymentConfigId === PAYMENT_DRAFT_ID ? "Save Config" : "Update Config"}
+            </button>
+          </div>
+        }
+      >
+        <div className={`border p-3 ${paymentTheme.panel}`}>
+          <div className="flex items-center gap-2.5">
+            <span className="text-base">{paymentTheme.icon}</span>
+            <div>
+              <div className="text-xs font-bold text-slate-900">{paymentStatus.label}</div>
+              <div className="text-xs leading-5 text-slate-600">{paymentStatus.reason}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <label className="text-xs font-bold text-slate-700">Configuration Name</label>
+            <Input value={paymentForm.name} onChange={(e) => setPaymentForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Example: Main Residential Paybill" />
+          </div>
+
+          <ToggleRow
+            checked={paymentForm.enabled}
+            onChange={(e) => setPaymentForm((prev) => ({ ...prev, enabled: e.target.checked, isActive: e.target.checked ? prev.isActive : false }))}
+            title="Enable this Paybill configuration"
+            description="Turn this on when this configuration should remain available for the active company."
+          />
+          <ToggleRow
+            checked={paymentForm.enabled && paymentForm.isActive}
+            disabled={!paymentForm.enabled}
+            onChange={(e) => setPaymentForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+            title="Mark this configuration active"
+            description="Only activate after the Paybill number, credentials and receiving cashbook are complete."
+          />
+
+          <div>
+            <label className="text-xs font-bold text-slate-700">Paybill Number</label>
+            <Input value={paymentForm.shortCode} onChange={(e) => setPaymentForm((prev) => ({ ...prev, shortCode: e.target.value.replace(/[^\d]/g, "") }))} placeholder="Example: 522522" maxLength={7} />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-700">Default Receiving Cashbook</label>
+            <Select
+              value={paymentForm.defaultCashbookAccountId}
+              onChange={(e) => {
+                const selected = cashbookOptions.find((item) => String(item._id) === String(e.target.value));
+                setPaymentForm((prev) => ({ ...prev, defaultCashbookAccountId: e.target.value, defaultCashbookAccountName: selected?.name || prev.defaultCashbookAccountName || "" }));
+              }}
+              disabled={loadingCashbooks}
+            >
+              <option value="">{loadingCashbooks ? "Loading cashbooks..." : "Select receiving cashbook"}</option>
+              {cashbookOptions.map((account) => (
+                <option key={account._id} value={account._id}>{account.name} {account.code ? `(${account.code})` : ""}</option>
+              ))}
+            </Select>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-700">Consumer Key</label>
+            <Input type="password" value={paymentForm.consumerKey} onChange={(e) => setPaymentForm((prev) => ({ ...prev, consumerKey: e.target.value }))} placeholder={paymentForm.hasConsumerKey ? "Leave blank to keep saved key" : "Enter consumer key"} />
+            <div className="mt-1 text-[10px] text-slate-400">{paymentForm.hasConsumerKey ? `Saved: ${paymentForm.consumerKeyMasked || "Yes"}` : "No saved consumer key yet."}</div>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-700">Consumer Secret</label>
+            <Input type="password" value={paymentForm.consumerSecret} onChange={(e) => setPaymentForm((prev) => ({ ...prev, consumerSecret: e.target.value }))} placeholder={paymentForm.hasConsumerSecret ? "Leave blank to keep saved secret" : "Enter consumer secret"} />
+            <div className="mt-1 text-[10px] text-slate-400">{paymentForm.hasConsumerSecret ? `Saved: ${paymentForm.consumerSecretMasked || "Yes"}` : "No saved consumer secret yet."}</div>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-700">Passkey</label>
+            <Input type="password" value={paymentForm.passkey} onChange={(e) => setPaymentForm((prev) => ({ ...prev, passkey: e.target.value }))} placeholder={paymentForm.hasPasskey ? "Leave blank to keep saved passkey" : "Enter passkey"} />
+            <div className="mt-1 text-[10px] text-slate-400">{paymentForm.hasPasskey ? `Saved: ${paymentForm.passkeyMasked || "Yes"}` : "No saved passkey yet."}</div>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-700">M-Pesa Response Mode</label>
+            <Select value={paymentForm.responseType} onChange={(e) => setPaymentForm((prev) => ({ ...prev, responseType: e.target.value }))}>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </Select>
+          </div>
+
+          <div className="md:col-span-2 border-t border-slate-200 pt-3">
+            <div className="mb-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Transaction Status Query — for payer phone retrieval</div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-bold text-slate-700">Initiator Name</label>
+                <Input type="text" value={paymentForm.initiatorName} onChange={(e) => setPaymentForm((prev) => ({ ...prev, initiatorName: e.target.value }))} placeholder="API operator username from Daraja portal" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700">Initiator Password</label>
+                <Input type="password" value={paymentForm.initiatorPassword} onChange={(e) => setPaymentForm((prev) => ({ ...prev, initiatorPassword: e.target.value }))} placeholder={paymentForm.hasInitiatorPassword ? "Leave blank to keep saved password" : "Operator password"} />
+                <div className="mt-1 text-[10px] text-slate-400">{paymentForm.hasInitiatorPassword ? `Saved: ${paymentForm.initiatorPasswordMasked || "Yes"}` : ""}</div>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs font-bold text-slate-700">Security Credential <span className="font-normal text-slate-400">(alternative — paste pre-generated value)</span></label>
+                <Input type="password" value={paymentForm.securityCredential} onChange={(e) => setPaymentForm((prev) => ({ ...prev, securityCredential: e.target.value }))} placeholder={paymentForm.hasSecurityCredential ? "Leave blank to keep saved credential" : "Base64 RSA-encrypted initiator password"} />
+                <div className="mt-1 text-[10px] text-slate-400">{paymentForm.hasSecurityCredential ? `Saved: ${paymentForm.securityCredentialMasked || "Yes"}` : ""}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="md:col-span-2 border-t border-slate-200 pt-3">
+            <div className="mb-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Safeguards & Processing Rules</div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-bold text-slate-700">Unmatched Payment Handling</label>
+                <Select value={paymentForm.unmatchedPaymentMode} onChange={(e) => setPaymentForm((prev) => ({ ...prev, unmatchedPaymentMode: e.target.value }))}>
+                  <option value="manual_review">Send to manual review</option>
+                  <option value="hold_unallocated">Hold as unallocated payment</option>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700">Matched Payment Processing</label>
+                <Select value={paymentForm.postingMode} onChange={(e) => setPaymentForm((prev) => ({ ...prev, postingMode: e.target.value }))}>
+                  <option value="manual_review">Manual review before posting</option>
+                  <option value="auto_post_matched">Auto-post matched payments</option>
+                </Select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Email Profile Modal ── */}
+      <Modal
+        open={emailModalOpen}
+        onClose={() => setEmailModalOpen(false)}
+        title={selectedEmailProfileId === EMAIL_DRAFT_ID ? "New Email Profile" : "Edit Email Profile"}
+        subtitle="Save the sender details, SMTP server settings, internal copy preferences and purpose tags."
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <button className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={resetEmailEditor}>
+              Reset
+            </button>
+            <button className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={() => setEmailModalOpen(false)}>
+              Cancel
+            </button>
+            <button disabled={savingEmails} onClick={handleSaveEmailProfile} className="inline-flex items-center gap-2 bg-[#FF8C00] px-4 py-2 text-[11px] font-bold text-white hover:bg-[#E67E00] disabled:opacity-50">
+              <FaSave /> {savingEmails ? "Saving..." : selectedEmailProfileId === EMAIL_DRAFT_ID ? "Save Profile" : "Update Profile"}
+            </button>
+          </div>
+        }
+      >
+        <div className={`border p-3 ${emailTheme.panel}`}>
+          <div className="flex items-center gap-2.5">
+            <span className="text-base">{emailTheme.icon}</span>
+            <div>
+              <div className="text-xs font-bold text-slate-900">{emailStatus.label}</div>
+              <div className="text-xs leading-5 text-slate-600">{emailStatus.reason}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <label className="text-xs font-bold text-slate-700">Profile Name</label>
+            <Input value={emailForm.name} onChange={(e) => setEmailForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Example: Main Business Email" />
+          </div>
+
+          <ToggleRow
+            checked={emailForm.enabled}
+            onChange={(e) => setEmailForm((prev) => ({ ...prev, enabled: e.target.checked, isDefault: e.target.checked ? prev.isDefault : false }))}
+            title="Enable this email profile"
+            description="Turn this on when this profile is ready to send operational emails."
+          />
+          <ToggleRow
+            checked={emailForm.isDefault}
+            onChange={(e) => setEmailForm((prev) => ({ ...prev, isDefault: e.target.checked, enabled: e.target.checked ? true : prev.enabled }))}
+            title="Set as default sender"
+            description="The default profile is used by receipts, invoices, statements and system notices."
+          />
+
+          <div>
+            <label className="text-xs font-bold text-slate-700">Sender Name</label>
+            <Input value={emailForm.senderName} onChange={(e) => setEmailForm((prev) => ({ ...prev, senderName: e.target.value }))} placeholder="ABRI REALTORS" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-700">Sender Email</label>
+            <Input type="email" value={emailForm.senderEmail} onChange={(e) => setEmailForm((prev) => ({ ...prev, senderEmail: e.target.value }))} placeholder="info@company.com" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-700">Reply-To Email</label>
+            <Input type="email" value={emailForm.replyTo} onChange={(e) => setEmailForm((prev) => ({ ...prev, replyTo: e.target.value }))} placeholder="support@company.com" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-700">SMTP Host</label>
+            <Input value={emailForm.smtpHost} onChange={(e) => setEmailForm((prev) => ({ ...prev, smtpHost: e.target.value }))} placeholder="smtp.gmail.com" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-700">SMTP Port</label>
+            <Input type="number" value={emailForm.smtpPort} onChange={(e) => setEmailForm((prev) => ({ ...prev, smtpPort: e.target.value }))} placeholder="465" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-700">Encryption</label>
+            <Select value={emailForm.encryption} onChange={(e) => setEmailForm((prev) => ({ ...prev, encryption: e.target.value }))}>
+              <option value="ssl">SSL</option>
+              <option value="tls">TLS</option>
+              <option value="none">None</option>
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-700">SMTP Username</label>
+            <Input value={emailForm.username} onChange={(e) => setEmailForm((prev) => ({ ...prev, username: e.target.value }))} placeholder="your-smtp-username" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-700">SMTP Password / App Password</label>
+            <Input type="password" value={emailForm.password} onChange={(e) => setEmailForm((prev) => ({ ...prev, password: e.target.value }))} placeholder={emailForm.hasPassword ? "Leave blank to keep saved password" : "Enter SMTP password"} />
+            <div className="mt-1 text-[10px] text-slate-400">{emailForm.hasPassword ? emailForm.passwordMasked || "Saved and masked" : "No saved password yet."}</div>
+          </div>
+
+          <div className="md:col-span-2 border-t border-slate-200 pt-3">
+            <div className="mb-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Internal Copy & Usage</div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-bold text-slate-700">Internal Copy Email</label>
+                <Input type="email" value={emailForm.internalCopyEmail} onChange={(e) => setEmailForm((prev) => ({ ...prev, internalCopyEmail: e.target.value }))} placeholder="backoffice@company.com" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700">Internal Copy Mode</label>
+                <Select value={emailForm.internalCopyMode} onChange={(e) => setEmailForm((prev) => ({ ...prev, internalCopyMode: e.target.value }))}>
+                  <option value="none">No internal copy</option>
+                  <option value="bcc">BCC internal copy</option>
+                  <option value="cc">CC internal copy</option>
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <div className="text-xs font-bold text-slate-700">Usage Tags</div>
+              <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3">
+                {emailUsageOptions.map((option) => {
+                  const checked = emailForm.usageTags.includes(option.value);
+                  return (
+                    <label key={option.value} className={["flex items-center gap-2 border px-3 py-2 text-xs transition cursor-pointer", checked ? "border-emerald-200 bg-emerald-50/80" : "border-slate-200 bg-white hover:border-slate-300"].join(" ")}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleUsageTag(option.value)} className="h-3.5 w-3.5 border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                      <span className="font-semibold text-slate-800">{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="md:col-span-2 border-t border-slate-200 pt-3">
+            <div className="mb-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Test This Profile</div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto] md:items-end">
+              <div>
+                <label className="text-xs font-bold text-slate-700">Test Recipient Email</label>
+                <Input type="email" value={emailForm.testRecipient} onChange={(e) => setEmailForm((prev) => ({ ...prev, testRecipient: e.target.value }))} placeholder={currentCompany?.email || "company@example.com"} />
+              </div>
+              <button disabled={testingEmail || selectedEmailProfileId === EMAIL_DRAFT_ID} onClick={() => handleSendTestEmail()} className="inline-flex items-center justify-center gap-2 border border-emerald-200 bg-emerald-50 px-4 py-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
+                <FaPaperPlane /> {testingEmail ? "Sending..." : "Send Test"}
+              </button>
+            </div>
+            {emailForm.lastTestStatus && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className={`inline-flex border px-2 py-0.5 text-[10px] font-bold ${resolveEmailTestBadge(emailForm.lastTestStatus)}`}>{emailForm.lastTestStatus}</span>
+                {emailForm.lastTestMessage ? <span className="text-xs text-slate-500">{emailForm.lastTestMessage}</span> : null}
+              </div>
+            )}
+          </div>
+        </div>
       </Modal>
     </DashboardLayout>
   );

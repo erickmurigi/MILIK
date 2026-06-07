@@ -21,6 +21,9 @@ const carWashStaffSavingSchema = new Schema(
     notes:     { type: String, trim: true, default: "" },
     date:      { type: Date, default: Date.now, index: true },
     createdBy: { type: Types.ObjectId, ref: "User", default: null },
+    isReversed:  { type: Boolean, default: false },
+    reversedAt:  { type: Date, default: null },
+    reversedBy:  { type: Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );

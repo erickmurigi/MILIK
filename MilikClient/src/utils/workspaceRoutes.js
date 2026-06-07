@@ -127,6 +127,22 @@ export const getWorkspaceFromRoute = (pathname = '') => {
     return WORKSPACE_IDS.ACCOUNTS;
   }
 
+  // Accounting-owned /financial/* routes — map to Accounts workspace regardless of
+  // whether the company also has PMS. PMS-specific sub-paths (landlord-statement) are
+  // excluded and fall through to the PROPERTY default below.
+  const ACCOUNTS_FINANCIAL_PREFIXES = [
+    '/financial/chart-of-accounts',
+    '/financial/journals',
+    '/financial/payment-vouchers',
+    '/financial/service-providers',
+    '/financial/ledger-entries',
+    '/financial/petty-cash',
+    '/financial/expenses',
+  ];
+  if (ACCOUNTS_FINANCIAL_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'))) {
+    return WORKSPACE_IDS.ACCOUNTS;
+  }
+
   if (pathname === '/carwash' || pathname.startsWith('/carwash/')) {
     return WORKSPACE_IDS.CARWASH;
   }

@@ -148,7 +148,7 @@ export const getStaffSavingsBalance = async (businessId, staffId) => {
       }},
     ]),
     CarWashStaffSaving.aggregate([
-      { $match: { business: new mongoose.Types.ObjectId(String(businessId)), staff: new mongoose.Types.ObjectId(String(staffId)), type: "disbursement" } },
+      { $match: { business: new mongoose.Types.ObjectId(String(businessId)), staff: new mongoose.Types.ObjectId(String(staffId)), type: "disbursement", isReversed: { $ne: true } } },
       { $group: { _id: null, totalDisbursed: { $sum: "$amount" } } },
     ]),
   ]);

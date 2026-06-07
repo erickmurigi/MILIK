@@ -374,15 +374,15 @@ const extractErrorMessage = (error) =>
   error?.response?.data?.message || error?.message || "Failed to process company settings request";
 
 const Card = ({ title, subtitle, action, children }) => (
-  <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <div className="flex flex-col gap-3 border-b border-slate-200 p-5 md:flex-row md:items-start md:justify-between">
+  <div className="border border-slate-200 bg-white shadow-sm">
+    <div className="flex items-center justify-between gap-3 bg-[#0B3B2E] px-3 py-2">
       <div>
-        <div className="text-sm font-extrabold text-slate-900">{title}</div>
-        {subtitle ? <div className="mt-1 text-xs leading-5 text-slate-600">{subtitle}</div> : null}
+        <div className="text-[11px] font-bold uppercase tracking-wide text-white">{title}</div>
+        {subtitle ? <div className="mt-0.5 text-[10px] text-[#B7C9C0]">{subtitle}</div> : null}
       </div>
       {action}
     </div>
-    <div className="p-5">{children}</div>
+    <div className="p-4">{children}</div>
   </div>
 );
 
@@ -400,21 +400,21 @@ const StatusBadge = ({ active }) => (
 const Input = ({ className = "", ...props }) => (
   <input
     {...props}
-    className={`w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 ${className}`}
+    className={`w-full border border-slate-300 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 ${className}`}
   />
 );
 
 const Select = ({ className = "", ...props }) => (
   <select
     {...props}
-    className={`w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 ${className}`}
+    className={`w-full border border-slate-300 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 ${className}`}
   />
 );
 
 const ActionButton = ({ children, onClick, variant = "default", disabled = false }) => {
   const classes = {
-    default: "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-    primary: "border-transparent bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white hover:opacity-95",
+    default: "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+    primary: "border-transparent bg-[#FF8C00] text-white hover:bg-[#E67E00]",
     subtle: "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100",
     danger: "border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
   };
@@ -424,7 +424,7 @@ const ActionButton = ({ children, onClick, variant = "default", disabled = false
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${classes[variant]}`}
+      className={`inline-flex items-center gap-2 border px-3 py-2 text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-50 ${classes[variant]}`}
     >
       {children}
     </button>
@@ -433,32 +433,32 @@ const ActionButton = ({ children, onClick, variant = "default", disabled = false
 
 const ToggleRow = ({ checked, onChange, title, description }) => (
   <label
-    className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition ${
-      checked ? "border-emerald-200 bg-emerald-50/80" : "border-slate-200 bg-white"
+    className={`flex items-start gap-3 border px-3 py-2.5 transition ${
+      checked ? "border-[#0B3B2E]/30 bg-[#EDF5F1]" : "border-slate-200 bg-white"
     } cursor-pointer hover:border-slate-300`}
   >
     <input
       type="checkbox"
       checked={checked}
       onChange={onChange}
-      className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+      className="mt-0.5 h-3.5 w-3.5 border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
     />
     <div>
-      <div className="text-sm font-bold text-slate-900">{title}</div>
-      <div className="mt-1 text-xs leading-5 text-slate-600">{description}</div>
+      <div className="text-[12px] font-bold text-slate-900">{title}</div>
+      <div className="mt-0.5 text-[11px] leading-4 text-slate-600">{description}</div>
     </div>
   </label>
 );
 
 const SettingRow = ({ title, meta, status, children }) => (
-  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+  <div className="border border-slate-200 bg-slate-50 p-3">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="text-sm font-extrabold text-slate-900">{title}</div>
+          <div className="text-[12px] font-extrabold text-slate-900">{title}</div>
           {status}
         </div>
-        {meta ? <div className="mt-2 text-xs leading-5 text-slate-600">{meta}</div> : null}
+        {meta ? <div className="mt-1.5 text-[11px] leading-4 text-slate-600">{meta}</div> : null}
       </div>
       <div className="flex flex-wrap gap-2">{children}</div>
     </div>
@@ -470,18 +470,18 @@ const Modal = ({ open, title, subtitle, children, onClose, footer }) => {
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/50 px-4 py-6">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between gap-4 bg-[#0B3B2E] px-4 py-3">
           <div>
-            <div className="text-lg font-extrabold text-slate-900">{title}</div>
-            {subtitle ? <div className="mt-1 text-sm text-slate-600">{subtitle}</div> : null}
+            <div className="text-[12px] font-bold uppercase tracking-wide text-white">{title}</div>
+            {subtitle ? <div className="mt-0.5 text-[10px] text-[#B7C9C0]">{subtitle}</div> : null}
           </div>
-          <button onClick={onClose} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">
+          <button onClick={onClose} className="border border-[#2A5C4A] px-3 py-1 text-[11px] font-bold text-white hover:bg-[#0A3127]">
             Close
           </button>
         </div>
-        <div className="max-h-[72vh] overflow-y-auto px-6 py-5">{children}</div>
-        {footer ? <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">{footer}</div> : null}
+        <div className="max-h-[72vh] overflow-y-auto px-4 py-4">{children}</div>
+        {footer ? <div className="border-t border-slate-200 bg-[#F6FAF8] px-4 py-3">{footer}</div> : null}
       </div>
     </div>
   );
@@ -1057,7 +1057,7 @@ const CompanySettings = () => {
               Show archived
             </label>
           </div>
-          <button onClick={() => openCreateModal(tabKey)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#0d4a38]">
+          <button onClick={() => openCreateModal(tabKey)} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0A3127]">
             <FaPlus className="text-[10px]" /> Add {tab.label.slice(0, -1)}
           </button>
         </div>
@@ -1094,7 +1094,7 @@ const CompanySettings = () => {
           </ActionButton>
         }
       >
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+        <div className="border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-5 text-amber-800">
           Use this screen to define future default tax behavior. Historical financial truth remains intact.
         </div>
 
@@ -1193,7 +1193,7 @@ const CompanySettings = () => {
       >
         <div className="space-y-4">
           {taxConfig.taxCodes.map((code, index) => (
-            <div key={code._id || index} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+            <div key={code._id || index} className="border border-slate-200 bg-slate-50 p-3">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <div>
                   <label className="mb-1 block text-xs font-bold text-slate-700">Key</label>
@@ -1261,7 +1261,7 @@ const CompanySettings = () => {
         const selectedAccount = options.find((account) => String(account?._id || "") === String(defaults[field.key] || ""));
 
         return (
-          <div key={field.key} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+          <div key={field.key} className="border border-slate-200 bg-slate-50 p-3">
             <div className="text-sm font-extrabold text-slate-900">{field.label}</div>
             <div className="mt-1 text-xs leading-5 text-slate-600">{field.description}</div>
 
@@ -1308,7 +1308,7 @@ const CompanySettings = () => {
             </ActionButton>
           }
         >
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+          <div className="border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-5 text-amber-800">
             Choose real Chart of Accounts rows. These defaults only guide future posting where no more specific account has been selected.
           </div>
 
@@ -1332,7 +1332,7 @@ const CompanySettings = () => {
             </ActionButton>
           }
         >
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-800">
+          <div className="border border-blue-200 bg-blue-50 px-3 py-2.5 text-[11px] leading-5 text-blue-800">
             These accounts are used when the HR module posts payroll journals. PAYE, NHIF/SHA, NSSF, AHL and net pay each post to their respective liability accounts. Gross salary expense is debited to the salary expense account.
           </div>
 
@@ -1356,7 +1356,7 @@ const CompanySettings = () => {
             </ActionButton>
           }
         >
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs leading-5 text-emerald-800">
+          <div className="border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[11px] leading-5 text-emerald-800">
             These accounts are used when inventory and POS transactions post journal entries. Inventory Asset is debited on purchase and credited on sale (offset by COGS). Sales Revenue is credited on every POS sale.
           </div>
 
@@ -1371,7 +1371,7 @@ const CompanySettings = () => {
       )}
 
       {!hasPM && !hasHR && !hasInv && (
-        <div className="flex h-40 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm text-slate-400">
+        <div className="flex h-40 items-center justify-center border border-slate-200 bg-white text-[12px] text-slate-400">
           No accounting defaults are configured for your active modules.
         </div>
       )}
@@ -1524,30 +1524,30 @@ const CompanySettings = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden p-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
 
           {/* Header */}
-          <div className="flex-shrink-0 border-b border-slate-200 px-4 py-3">
+          <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <FaCog className="text-base text-[#0B3B2E]" />
+              <div className="flex items-center gap-2">
+                <FaCog className="text-sm text-[#B7C9C0]" />
                 <div>
-                  <h1 className="text-sm font-bold text-slate-900">Operational Settings</h1>
-                  <p className="mt-0.5 text-xs text-slate-500">Reusable defaults — changes here do not affect posted financial history.</p>
+                  <h1 className="text-[12px] font-bold uppercase tracking-wide text-white">Operational Settings</h1>
+                  <p className="mt-0.5 text-[10px] text-[#B7C9C0]">Reusable defaults — changes here do not affect posted financial history.</p>
                 </div>
               </div>
               <button
                 onClick={() => navigate("/company-setup")}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                className="inline-flex h-7 items-center gap-1.5 border border-[#2A5C4A] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"
               >
-                Company Setup <FaArrowRight />
+                Company Setup <FaArrowRight size={10} />
               </button>
             </div>
           </div>
 
-          {/* Tab bar — underline style, filtered to company modules */}
-          <div className="flex flex-shrink-0 gap-0 overflow-x-auto border-b border-slate-200 px-2">
+          {/* Tab bar */}
+          <div className="flex flex-shrink-0 gap-0 overflow-x-auto border-b border-slate-200">
             {visibleTabEntries.map(([key, tab]) => {
               const Icon = tab.icon;
               const isActive = key === activeTab;
@@ -1555,14 +1555,14 @@ const CompanySettings = () => {
                 <button
                   key={key}
                   onClick={() => switchTab(key)}
-                  className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2.5 text-xs font-semibold transition ${
-                    isActive ? "border-[#0B3B2E] text-[#0B3B2E]" : "border-transparent text-slate-500 hover:text-slate-700"
+                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition ${
+                    isActive ? "border-[#FF8C00] bg-[#EDF5F1] text-[#0B3B2E]" : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700"
                   }`}
                 >
-                  <Icon />
+                  <Icon size={10} />
                   {tab.label}
                   {!["tax", "accounting"].includes(key) && (
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${isActive ? "bg-[#0B3B2E]/10 text-[#0B3B2E]" : "bg-slate-100 text-slate-500"}`}>
+                    <span className={`px-1.5 py-0.5 text-[9px] font-bold ${isActive ? "bg-[#0B3B2E]/10 text-[#0B3B2E]" : "bg-slate-100 text-slate-500"}`}>
                       {activeCounts[key] ?? 0}
                     </span>
                   )}

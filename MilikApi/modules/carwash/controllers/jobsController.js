@@ -5,6 +5,7 @@ import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
+import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
 import { carpetUpload, fileUrlFromName, deletePhotoFile } from "../middleware/carpetUpload.js";
@@ -99,8 +100,12 @@ const getJobDeleteBlocker = async (business, job) => {
   if (job.paymentStatus !== "unpaid" || job.status === "paid") {
     return "Only unpaid Car Wash jobs can be deleted";
   }
-  const payments = await CarWashPayment.countDocuments({ business, job: job._id });
+  const [payments, activeComms] = await Promise.all([
+    CarWashPayment.countDocuments({ business, job: job._id }),
+    CarWashStaffCommission.countDocuments({ business, job: job._id, status: { $in: ["earned", "payable", "paid"] } }),
+  ]);
   if (payments > 0) return "Cannot delete a Car Wash job that has payments";
+  if (activeComms > 0) return "Reverse all commissions for this job before deleting";
   return "";
 };
 
@@ -341,13 +346,20 @@ export const createJob = async (req, res, next) => {
       }
     }
 
-    // Auto-apply prepaid credit — deduct from accountCredit if the account is prepaid and has balance
+    // Auto-apply prepaid credit — atomically deduct min(accountCredit, netPrice) with no race condition.
+    // Uses a MongoDB 4.2+ aggregation-pipeline update so the read-modify-write is a single atomic op.
     const netPrice = round2(Math.max(0, totalPrice - discountAmount));
     if (resolvedCreditAccount && netPrice > 0) {
       try {
-        const prepaidAcc = await CarWashCreditAccount.findOne({ _id: resolvedCreditAccount, business, accountType: "prepaid" });
-        if (prepaidAcc && prepaidAcc.accountCredit > 0.009) {
-          const autoApply = round2(Math.min(prepaidAcc.accountCredit, netPrice));
+        // Atomically floor accountCredit at 0 while returning the pre-update value.
+        // The $max ensures we never store a negative balance even under concurrent requests.
+        const prevAcc = await CarWashCreditAccount.findOneAndUpdate(
+          { _id: resolvedCreditAccount, business, accountType: "prepaid", accountCredit: { $gt: 0.009 } },
+          [{ $set: { accountCredit: { $max: [0, { $subtract: ["$accountCredit", netPrice] }] } } }],
+          { new: false, lean: true }
+        );
+        if (prevAcc) {
+          const autoApply = round2(Math.min(prevAcc.accountCredit, netPrice));
           await CarWashPayment.create({
             business,
             branch: branchId || null,
@@ -359,8 +371,6 @@ export const createJob = async (req, res, next) => {
             createdBy: userId,
             updatedBy: userId,
           });
-          prepaidAcc.accountCredit = round2(prepaidAcc.accountCredit - autoApply);
-          await prepaidAcc.save();
           const newPaymentStatus = autoApply >= netPrice - 0.009 ? "paid" : "partial";
           const newStatus = newPaymentStatus === "paid" && job.status !== "cancelled" ? "paid" : job.status;
           await CarWashJob.updateOne({ _id: job._id }, { paymentStatus: newPaymentStatus, status: newStatus });

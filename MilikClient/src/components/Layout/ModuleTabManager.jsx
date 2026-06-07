@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { FaHome, FaTimes, FaCog, FaBuilding, FaCar, FaHandshake, FaUsers, FaBook, FaBoxes } from 'react-icons/fa';
+import { FaHome, FaTimes, FaCog, FaBuilding, FaCar, FaHandshake, FaUsers, FaBook, FaBoxes, FaSms } from 'react-icons/fa';
 import { selectCurrentCompany } from '../../redux/selectors';
 import {
   WORKSPACE_IDS,
@@ -71,6 +71,13 @@ const MODULES = {
     title: 'Company Setup',
     route: '/company-setup',
     icon: <FaBuilding className="w-4 h-4" />,
+    closable: true,
+  },
+  [WORKSPACE_IDS.COMMUNICATIONS]: {
+    id: WORKSPACE_IDS.COMMUNICATIONS,
+    title: 'Communications',
+    route: '/communications/sms',
+    icon: <FaSms className="w-4 h-4" />,
     closable: true,
   },
 };

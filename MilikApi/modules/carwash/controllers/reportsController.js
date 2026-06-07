@@ -270,7 +270,7 @@ export const dailySummary = async (req, res, next) => {
     const paidExpenseMatch = { business: businessOId, expenseDate: { $gte: start, $lt: end }, status: "paid", ...branchFilter };
     const pendingExpenseMatch = { business: businessOId, expenseDate: { $gte: start, $lt: end }, status: { $in: ["draft", "approved"] }, ...branchFilter };
 
-    const [jobStatusRows, paymentRows, expenseRows, pendingExpenseRows, expenseCategoryRows, jobsCount] = await Promise.all([
+    const [jobStatusRows, paymentRows, expenseRows, pendingExpenseRows, expenseCategoryRows] = await Promise.all([
       CarWashJob.aggregate([
         { $match: { business: businessOId, createdAt: { $gte: start, $lt: end }, ...branchFilter } },
         { $group: { _id: "$status", count: { $sum: 1 } } },
@@ -293,13 +293,13 @@ export const dailySummary = async (req, res, next) => {
         { $sort: { amount: -1, count: -1 } },
         { $limit: 20 },
       ]),
-      CarWashJob.countDocuments({ business, createdAt: { $gte: start, $lt: end }, ...(branchId ? { branch: branchId } : {}) }),
     ]);
 
     const statusCounts = emptyStatusCounts();
     jobStatusRows.forEach((row) => {
       if (row?._id in statusCounts) statusCounts[row._id] = row.count;
     });
+    const jobsCount = Object.values(statusCounts).reduce((sum, n) => sum + n, 0);
 
     const revenueByMethod = paymentRows.reduce((acc, row) => {
       acc[row._id || "other"] = Number(row.amount || 0);
@@ -404,6 +404,7 @@ export const serviceReport = async (req, res, next) => {
       ]),
     ]);
 
+    const jobMap     = new Map(serviceJobRows.map((r) => [r._id, r]));
     const revenueMap = new Map(paymentByServiceRows.map((r) => [r._id, r]));
 
     const serviceSet = new Set([
@@ -412,19 +413,19 @@ export const serviceReport = async (req, res, next) => {
     ]);
 
     let rows = [...serviceSet].map((service) => {
-      const j = serviceJobRows.find((r) => r._id === service) || { jobs: 0, totalPrice: 0, paidJobs: 0, cancelledJobs: 0, category: "" };
+      const j = jobMap.get(service)     || { jobs: 0, totalPrice: 0, paidJobs: 0, cancelledJobs: 0, category: "" };
       const p = revenueMap.get(service) || { revenue: 0, payments: 0, cash: 0, mpesa: 0 };
       return {
         service,
-        category: j.category || "",
-        jobs: j.jobs,
-        paidJobs: j.paidJobs,
+        category:      j.category      || "",
+        jobs:          j.jobs,
+        paidJobs:      j.paidJobs,
         cancelledJobs: j.cancelledJobs,
-        totalPrice: j.totalPrice,
-        revenue: p.revenue,
-        payments: p.payments,
-        cash: p.cash,
-        mpesa: p.mpesa,
+        totalPrice:    j.totalPrice,
+        revenue:       p.revenue,
+        payments:      p.payments,
+        cash:          p.cash,
+        mpesa:         p.mpesa,
       };
     });
 
@@ -534,21 +535,27 @@ export const staffReport = async (req, res, next) => {
         },
         { $sort: { jobs: -1 } },
       ]),
+      // Group payments by job first (many→few) before lookups — far fewer docs to join
       CarWashPayment.aggregate([
         { $match: paymentMatch },
-        { $lookup: { from: "carwashjobs", localField: "job", foreignField: "_id", as: "jobDoc" } },
-        { $unwind: { path: "$jobDoc", preserveNullAndEmptyArrays: true } },
+        { $group: {
+          _id:      "$job",
+          revenue:  { $sum: "$amount" },
+          payments: { $sum: 1 },
+          cash:     { $sum: { $cond: [{ $eq: ["$method", "cash"]  }, "$amount", 0] } },
+          mpesa:    { $sum: { $cond: [{ $eq: ["$method", "mpesa"] }, "$amount", 0] } },
+        }},
+        { $lookup: { from: "carwashjobs",   localField: "_id",                foreignField: "_id", as: "jobDoc"  } },
+        { $unwind: { path: "$jobDoc",  preserveNullAndEmptyArrays: true } },
         { $lookup: { from: "carwashstaffs", localField: "jobDoc.assignedStaff", foreignField: "_id", as: "staffDoc" } },
         { $unwind: { path: "$staffDoc", preserveNullAndEmptyArrays: true } },
-        {
-          $group: {
-            _id: { staffId: { $ifNull: ["$staffDoc._id", null] }, staffName: { $ifNull: ["$staffDoc.name", "Unassigned"] } },
-            revenue: { $sum: "$amount" },
-            payments: { $sum: 1 },
-            cash: { $sum: { $cond: [{ $eq: ["$method", "cash"] }, "$amount", 0] } },
-            mpesa: { $sum: { $cond: [{ $eq: ["$method", "mpesa"] }, "$amount", 0] } },
-          },
-        },
+        { $group: {
+          _id:      { staffId: { $ifNull: ["$staffDoc._id", null] }, staffName: { $ifNull: ["$staffDoc.name", "Unassigned"] } },
+          revenue:  { $sum: "$revenue" },
+          payments: { $sum: "$payments" },
+          cash:     { $sum: "$cash" },
+          mpesa:    { $sum: "$mpesa" },
+        }},
       ]),
       CarWashStaffCommission.aggregate([
         { $match: commissionMatch },

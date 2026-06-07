@@ -80,11 +80,38 @@ const applyVars = (template, vars = {}) =>
     Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key] ?? "") : `{{${key}}}`
   );
 
+// ─── Settings cache ───────────────────────────────────────────────────────────
+// Avoids a Company query on every payment/stamp SMS. TTL is 5 minutes; call
+// invalidateSmsSettingsCache() from the settings controller on every save.
+
+const _smsCache = new Map(); // businessId string → { ts: number, templates: [] }
+const SMS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+export const invalidateSmsSettingsCache = (businessId) => {
+  _smsCache.delete(String(businessId));
+};
+
+const loadSmsTemplates = async (businessId) => {
+  const key = String(businessId);
+  const now = Date.now();
+  const cached = _smsCache.get(key);
+  if (cached && now - cached.ts < SMS_CACHE_TTL_MS) return cached.templates;
+  try {
+    const company = await Company.findById(businessId).select("carwashSettings").lean();
+    const templates = company?.carwashSettings?.smsTemplates || [];
+    _smsCache.set(key, { ts: now, templates });
+    return templates;
+  } catch {
+    return [];
+  }
+};
+
 // ─── Resolver ─────────────────────────────────────────────────────────────────
 /**
  * Returns the final SMS body for a given templateKey.
- * Loads the operator's saved template from Company.carwashSettings.smsTemplates.
- * Falls back to CW_SMS_TEMPLATE_DEFAULTS if not configured or disabled.
+ * Loads the operator's saved template from Company.carwashSettings.smsTemplates
+ * (cached per business for 5 minutes). Falls back to CW_SMS_TEMPLATE_DEFAULTS
+ * if not configured or disabled.
  *
  * @param {string|object} businessId  — ObjectId or string
  * @param {string}        templateKey — e.g. "carwash_payment_confirmed"
@@ -93,22 +120,15 @@ const applyVars = (template, vars = {}) =>
  */
 export const resolveCarWashSmsBody = async (businessId, templateKey, vars = {}) => {
   const def = CW_SMS_TEMPLATE_DEFAULTS.find((t) => t.key === templateKey);
+  const templates = await loadSmsTemplates(businessId);
+  const saved = templates.find((t) => t.key === templateKey);
 
-  try {
-    const company = await Company.findById(businessId).select("carwashSettings").lean();
-    const saved = (company?.carwashSettings?.smsTemplates || []).find((t) => t.key === templateKey);
-
-    if (saved) {
-      if (saved.enabled === false) return null; // operator explicitly disabled this SMS
-      const body = String(saved.messageBody || def?.messageBody || "").trim();
-      return body ? applyVars(body, vars) : null;
-    }
-  } catch {
-    // Fall through to default — never block a payment/stamp flow for a settings lookup failure
+  if (saved) {
+    if (saved.enabled === false) return null;
+    const body = String(saved.messageBody || def?.messageBody || "").trim();
+    return body ? applyVars(body, vars) : null;
   }
 
-  // Use default
-  if (!def) return null;
-  if (def.enabled === false) return null;
+  if (!def || def.enabled === false) return null;
   return applyVars(def.messageBody, vars);
 };

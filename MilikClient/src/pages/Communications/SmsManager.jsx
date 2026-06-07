@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  FaSms, FaCheckDouble, FaExclamationCircle, FaClock, FaSpinner,
-  FaSearch, FaSyncAlt, FaPaperPlane, FaTimesCircle, FaPlus,
-  FaTimes, FaUsers, FaEnvelope, FaCheckCircle,
+  FaSms, FaSpinner, FaSearch, FaSyncAlt, FaPaperPlane,
+  FaTimesCircle, FaPlus, FaTimes, FaUsers, FaEnvelope, FaCheckCircle,
+  FaChevronDown, FaChevronUp,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -12,19 +12,19 @@ import { adminRequests } from "../../utils/requestMethods";
 import { getTenants } from "../../redux/tenantsRedux";
 
 const TABS = [
-  { key: "all",     label: "All",     count_key: "all" },
-  { key: "sent",    label: "Sent",    count_key: "sent" },
-  { key: "failed",  label: "Failed",  count_key: "failed" },
-  { key: "pending", label: "Pending", count_key: "pending" },
+  { key: "all",     label: "ALL",     count_key: "all" },
+  { key: "sent",    label: "SENT",    count_key: "sent" },
+  { key: "failed",  label: "FAILED",  count_key: "failed" },
+  { key: "pending", label: "PENDING", count_key: "pending" },
 ];
 const VALID_TABS = new Set(TABS.map(t => t.key));
 
 const STATUS_META = {
-  sent:      { label: "Sent",      cls: "bg-emerald-100 text-emerald-700" },
-  delivered: { label: "Delivered", cls: "bg-teal-100 text-teal-700" },
-  failed:    { label: "Failed",    cls: "bg-rose-100 text-rose-700" },
-  error:     { label: "Error",     cls: "bg-rose-100 text-rose-700" },
-  pending:   { label: "Pending",   cls: "bg-amber-100 text-amber-700" },
+  sent:      { label: "Sent",      cls: "border-emerald-300 bg-emerald-50 text-emerald-700" },
+  delivered: { label: "Delivered", cls: "border-teal-300 bg-teal-50 text-teal-700" },
+  failed:    { label: "Failed",    cls: "border-rose-300 bg-rose-50 text-rose-700" },
+  error:     { label: "Error",     cls: "border-rose-300 bg-rose-50 text-rose-700" },
+  pending:   { label: "Pending",   cls: "border-amber-300 bg-amber-50 text-amber-700" },
 };
 
 const fmtDateTime = (v) => {
@@ -43,13 +43,17 @@ const fmtRel = (v) => {
 };
 
 const StatusChip = ({ status }) => {
-  const meta = STATUS_META[status] || { label: status || "Pending", cls: "bg-slate-100 text-slate-600" };
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${meta.cls}`}>{meta.label}</span>;
+  const meta = STATUS_META[status] || { label: status || "Pending", cls: "border-slate-300 bg-slate-50 text-slate-600" };
+  return (
+    <span className={`inline-flex items-center border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${meta.cls}`}>
+      {meta.label}
+    </span>
+  );
 };
 
-// ── Compose panel ─────────────────────────────────────────────────────────────
+// ── Compose slide panel ────────────────────────────────────────────────────────
 const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
-  const [recipientMode, setRecipientMode] = useState("select"); // select | manual
+  const [recipientMode, setRecipientMode] = useState("select");
   const [selectedIds, setSelectedIds] = useState([]);
   const [manualPhone, setManualPhone] = useState("");
   const [body, setBody] = useState("");
@@ -62,9 +66,7 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
   }, [tenants, tenantSearch]);
 
   const toggleTenant = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-
   const reset = () => { setSelectedIds([]); setManualPhone(""); setBody(""); setTenantSearch(""); setSending(false); };
-
   const handleClose = () => { reset(); onClose(); };
 
   const handleSend = async () => {
@@ -74,9 +76,7 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
     setSending(true);
     try {
       if (recipientMode === "manual") {
-        await adminRequests.post("/communications/test-sms", {
-          business: businessId, phone: manualPhone.trim(), message: body.trim(),
-        });
+        await adminRequests.post("/communications/test-sms", { business: businessId, phone: manualPhone.trim(), message: body.trim() });
       } else {
         await adminRequests.post("/communications/send", {
           business: businessId, contextType: "tenant_bulk", channel: "sms",
@@ -95,16 +95,16 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
 
   return (
     <div className="fixed inset-0 z-[80] flex">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-[520px] flex-col bg-white shadow-2xl">
+      <div className="absolute inset-0 bg-black/40" onClick={handleClose} />
+      <div className="absolute inset-y-0 right-0 flex w-full max-w-[500px] flex-col bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-4">
+        <div className="flex shrink-0 items-center justify-between bg-[#0B3B2E] px-5 py-3">
           <div>
-            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">Compose</div>
-            <div className="mt-0.5 text-base font-black text-white">New SMS</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#B7C9C0]">Compose</div>
+            <div className="mt-0.5 text-sm font-extrabold text-white">New SMS</div>
           </div>
-          <button onClick={handleClose} className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20">
-            <FaTimes size={13} />
+          <button onClick={handleClose} className="flex h-7 w-7 items-center justify-center bg-white/10 text-white/80 hover:bg-white/20">
+            <FaTimes size={12} />
           </button>
         </div>
 
@@ -112,8 +112,8 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Recipient mode toggle */}
           <div>
-            <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 mb-1.5">Recipients</label>
-            <div className="flex rounded-xl border border-slate-200 overflow-hidden text-xs font-bold">
+            <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">Recipients</label>
+            <div className="flex border border-slate-300 text-xs font-bold overflow-hidden">
               <button
                 onClick={() => setRecipientMode("select")}
                 className={`flex-1 py-2 transition ${recipientMode === "select" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
@@ -122,7 +122,7 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
               </button>
               <button
                 onClick={() => setRecipientMode("manual")}
-                className={`flex-1 py-2 transition ${recipientMode === "manual" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                className={`flex-1 py-2 transition border-l border-slate-300 ${recipientMode === "manual" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
               >
                 <FaSms className="inline mr-1.5" size={10} /> Manual Phone
               </button>
@@ -131,19 +131,19 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
 
           {recipientMode === "manual" ? (
             <div>
-              <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 mb-1.5">Phone Number</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">Phone Number</label>
               <input
                 value={manualPhone} onChange={e => setManualPhone(e.target.value)}
                 placeholder="+254 7XX XXX XXX"
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
               />
             </div>
           ) : (
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <label className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Select Tenants</label>
+              <div className="flex items-center gap-2 mb-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Select Tenants</label>
                 {selectedIds.length > 0 && (
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-700">
+                  <span className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">
                     {selectedIds.length} selected
                   </span>
                 )}
@@ -151,25 +151,25 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
                   <button onClick={() => setSelectedIds([])} className="ml-auto text-[10px] font-bold text-rose-500 hover:text-rose-700">Clear</button>
                 )}
               </div>
-              <div className="mb-2 flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-                <FaSearch size={11} className="text-slate-400 shrink-0" />
+              <div className="mb-2 flex items-center gap-2 border border-slate-300 px-3 py-2">
+                <FaSearch size={10} className="text-slate-400 shrink-0" />
                 <input value={tenantSearch} onChange={e => setTenantSearch(e.target.value)} placeholder="Search tenants…"
                   className="flex-1 bg-transparent text-xs outline-none text-slate-700 placeholder-slate-400" />
               </div>
-              <div className="max-h-[200px] overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
+              <div className="max-h-[180px] overflow-y-auto border border-slate-200 divide-y divide-slate-100">
                 {filteredTenants.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-slate-400">No tenants found</div>
+                  <div className="py-5 text-center text-xs text-slate-400">No tenants found</div>
                 ) : filteredTenants.map(tn => {
                   const sel = selectedIds.includes(tn._id);
                   return (
                     <button key={tn._id} onClick={() => toggleTenant(tn._id)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition ${sel ? "bg-emerald-50" : "hover:bg-slate-50"}`}
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-left transition ${sel ? "bg-[#EDF5F1]" : "hover:bg-slate-50"}`}
                     >
-                      <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition ${sel ? "border-emerald-600 bg-emerald-600" : "border-slate-300"}`}>
-                        {sel && <FaCheckCircle size={10} className="text-white" />}
+                      <div className={`flex h-5 w-5 shrink-0 items-center justify-center border-2 transition ${sel ? "border-[#0B3B2E] bg-[#0B3B2E]" : "border-slate-300"}`}>
+                        {sel && <FaCheckCircle size={9} className="text-white" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className={`truncate text-xs font-semibold ${sel ? "text-emerald-800" : "text-slate-800"}`}>{tn.name || "Tenant"}</div>
+                        <div className={`truncate text-[11px] font-bold ${sel ? "text-[#0B3B2E]" : "text-slate-800"}`}>{tn.name || "Tenant"}</div>
                         <div className="truncate text-[10px] text-slate-400">{tn.phone || tn.phoneNo || "No phone"}</div>
                       </div>
                     </button>
@@ -182,21 +182,21 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
           {/* Message */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Message</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Message</label>
               <span className={`text-[10px] font-bold ${body.length > 160 ? "text-amber-600" : "text-slate-400"}`}>{body.length}/160</span>
             </div>
             <textarea
               value={body} onChange={e => setBody(e.target.value)} rows={5} placeholder="Type your message here…"
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none resize-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              className="w-full border border-slate-300 px-3 py-2.5 text-xs outline-none resize-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="border-t border-slate-200 bg-slate-50 px-5 py-3 flex items-center justify-between">
-          <button onClick={handleClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100">Cancel</button>
+        <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-5 py-3 flex items-center justify-end gap-2">
+          <button onClick={handleClose} className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-600 transition hover:bg-slate-100">Cancel</button>
           <button onClick={handleSend} disabled={sending || !body.trim()}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-5 py-2 text-xs font-black text-white transition hover:opacity-90 disabled:opacity-40">
+            className="inline-flex items-center gap-2 bg-[#FF8C00] px-5 py-2 text-[11px] font-bold text-white transition hover:bg-[#E67E00] disabled:opacity-40">
             {sending ? <FaSpinner className="animate-spin" size={11} /> : <FaPaperPlane size={11} />}
             {sending ? "Sending…" : "Send SMS"}
           </button>
@@ -242,10 +242,7 @@ const SmsManager = () => {
     finally { setLoading(false); }
   }, [businessId]);
 
-  useEffect(() => {
-    if (businessId) dispatch(getTenants({ business: businessId }));
-  }, [businessId, dispatch]);
-
+  useEffect(() => { if (businessId) dispatch(getTenants({ business: businessId })); }, [businessId, dispatch]);
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   const filtered = useMemo(() => {
@@ -270,63 +267,74 @@ const SmsManager = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden bg-slate-50">
 
-        {/* ── Top bar ─────────────────────────────────────────────────────── */}
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-teal-600 text-white">
-              <FaSms size={14} />
-            </div>
-            <div>
-              <div className="text-sm font-extrabold text-slate-900 leading-none">SMS Communications</div>
-              <div className="mt-0.5 text-[10px] text-slate-500">{counts.all} message{counts.all !== 1 ? "s" : ""} · {businessId ? "Live" : "No company"}</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
+        {/* ── Channel nav bar ──────────────────────────────────────────────── */}
+        <div className="shrink-0 flex items-center justify-between gap-3 bg-[#0B3B2E] px-4 py-2">
+          <div className="flex items-center gap-1">
+            <button
+              className="inline-flex items-center gap-2 border-b-2 border-[#FF8C00] bg-transparent px-3 py-1.5 text-[11px] font-bold text-white"
+            >
+              <FaSms size={11} /> SMS
+            </button>
             <button
               onClick={() => navigate("/communications/email")}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex items-center gap-2 border-b-2 border-transparent px-3 py-1.5 text-[11px] font-bold text-[#B7C9C0] transition hover:text-white"
             >
-              <FaEnvelope size={10} /> Email Communications
+              <FaEnvelope size={11} /> Email
             </button>
+          </div>
+          <div className="flex items-center gap-2">
             <button onClick={fetchLogs} disabled={loading}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
+              className="inline-flex items-center gap-1.5 border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-white/20 disabled:opacity-50">
               <FaSyncAlt size={10} className={loading ? "animate-spin" : ""} /> Refresh
             </button>
             <button onClick={() => setCompose(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white transition hover:opacity-90">
+              className="inline-flex items-center gap-1.5 bg-[#FF8C00] px-4 py-1.5 text-[11px] font-bold text-white transition hover:bg-[#E67E00]">
               <FaPlus size={10} /> Compose SMS
             </button>
           </div>
         </div>
 
-        {/* ── Stats strip ─────────────────────────────────────────────────── */}
-        <div className="shrink-0 grid grid-cols-4 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50/80">
-          {TABS.map(tab => (
-            <button key={tab.key} onClick={() => switchTab(tab.key)}
-              className={`flex flex-col items-center py-2.5 text-center transition hover:bg-white ${activeTab === tab.key ? "bg-white" : ""}`}>
-              <span className="text-lg font-extrabold text-slate-900">{counts[tab.count_key]}</span>
-              <span className={`text-[10px] font-black uppercase tracking-wide ${activeTab === tab.key ? "text-[#0B3B2E]" : "text-slate-500"}`}>{tab.label}</span>
-            </button>
-          ))}
+        {/* ── Page header + stat tiles ─────────────────────────────────────── */}
+        <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center bg-[#0B3B2E] text-white">
+                <FaSms size={12} />
+              </div>
+              <div>
+                <div className="text-[11px] font-extrabold text-slate-900 leading-none">SMS Communications</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">{counts.all} message{counts.all !== 1 ? "s" : ""} · {businessId ? "Live" : "No company"}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-2">
+            {TABS.map(tab => (
+              <button key={tab.key} onClick={() => switchTab(tab.key)}
+                className={`border px-3 py-2.5 text-center transition ${activeTab === tab.key ? "border-[#0B3B2E] bg-[#EDF5F1]" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+                <div className={`text-base font-extrabold ${activeTab === tab.key ? "text-[#0B3B2E]" : "text-slate-900"}`}>{counts[tab.count_key]}</div>
+                <div className={`text-[10px] font-bold uppercase tracking-wide ${activeTab === tab.key ? "text-[#0B3B2E]" : "text-slate-500"}`}>{tab.label}</div>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* ── Toolbar ─────────────────────────────────────────────────────── */}
+        {/* ── Filter + search bar ──────────────────────────────────────────── */}
         <div className="shrink-0 flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2">
-          {/* Tab pills */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0">
             {TABS.map(tab => (
               <button key={tab.key} onClick={() => switchTab(tab.key)}
                 className={[
-                  "rounded-lg px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition",
+                  "px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide transition border-b-2",
                   activeTab === tab.key
-                    ? "bg-gradient-to-r from-[#F97316] to-[#16A34A] text-white shadow-sm"
-                    : "text-slate-500 hover:bg-slate-100",
+                    ? "border-[#FF8C00] bg-[#EDF5F1] text-[#0B3B2E]"
+                    : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50",
                 ].join(" ")}>
                 {tab.label}
                 {counts[tab.count_key] > 0 && (
-                  <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] ${activeTab === tab.key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
+                  <span className={`ml-1 border px-1.5 py-0.5 text-[9px] font-bold ${activeTab === tab.key ? "border-[#0B3B2E]/30 bg-[#0B3B2E]/10 text-[#0B3B2E]" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
                     {counts[tab.count_key]}
                   </span>
                 )}
@@ -334,67 +342,66 @@ const SmsManager = () => {
             ))}
           </div>
 
-          <div className="ml-auto flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 min-w-[220px]">
-            <FaSearch size={11} className="shrink-0 text-slate-400" />
+          <div className="ml-auto flex items-center gap-2 border border-slate-300 bg-white px-3 py-1.5 min-w-[220px]">
+            <FaSearch size={10} className="shrink-0 text-slate-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search recipient, message…"
-              className="flex-1 bg-transparent text-xs text-slate-700 placeholder-slate-400 outline-none" />
-            {search && <button onClick={() => setSearch("")}><FaTimesCircle size={12} className="text-slate-400 hover:text-slate-600" /></button>}
+              className="flex-1 bg-transparent text-[11px] text-slate-700 placeholder-slate-400 outline-none" />
+            {search && <button onClick={() => setSearch("")}><FaTimesCircle size={11} className="text-slate-400 hover:text-slate-600" /></button>}
           </div>
         </div>
 
         {/* ── Table ───────────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-auto">
           {loading ? (
-            <div className="flex items-center justify-center gap-2 py-20 text-sm text-slate-400">
-              <FaSpinner className="animate-spin" size={16} /> Loading SMS logs…
+            <div className="flex items-center justify-center gap-2 py-20 text-xs text-slate-400">
+              <FaSpinner className="animate-spin" size={14} /> Loading SMS logs…
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-20">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-300">
-                <FaSms size={24} />
-              </div>
-              <p className="text-sm font-semibold text-slate-400">{search ? "No messages match your search." : "No SMS messages yet. Compose one above."}</p>
+            <div className="flex flex-col items-center justify-center gap-2 py-20">
+              <FaSms size={32} className="text-slate-200" />
+              <p className="text-xs font-semibold text-slate-400">{search ? "No messages match your search." : "No SMS messages yet. Compose one above."}</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[640px] text-xs">
               <thead className="sticky top-0 z-10">
-                <tr className="border-b border-slate-200 bg-[#0B3B2E]/5">
-                  <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Recipient</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Message</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Type</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Status</th>
-                  <th className="px-4 py-2.5 text-right text-[10px] font-black uppercase tracking-[0.18em] text-[#0B3B2E]">Sent</th>
+                <tr className="bg-[#0B3B2E] text-white">
+                  <th className="px-4 py-2.5 text-left font-semibold">Recipient</th>
+                  <th className="px-4 py-2.5 text-left font-semibold">Message</th>
+                  <th className="px-4 py-2.5 text-left font-semibold">Type</th>
+                  <th className="px-4 py-2.5 text-center font-semibold">Status</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Sent</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((log, i) => {
-                  const isExpanded = expandedId === (log._id || i);
+                  const rowKey = log._id || i;
+                  const isExpanded = expandedId === rowKey;
                   return (
-                    <React.Fragment key={log._id || i}>
+                    <React.Fragment key={rowKey}>
                       <tr
-                        onClick={() => setExpanded(isExpanded ? null : (log._id || i))}
-                        className="cursor-pointer hover:bg-emerald-50/40 transition-colors"
+                        onClick={() => setExpanded(isExpanded ? null : rowKey)}
+                        className="cursor-pointer bg-white transition hover:bg-[#EDF5F1]"
                       >
                         <td className="px-4 py-2.5">
-                          <div className="font-semibold text-slate-900 text-xs">{log.recipientName || "—"}</div>
+                          <div className="font-bold text-slate-900">{log.recipientName || "—"}</div>
                           <div className="text-[10px] text-slate-400">{log.recipient || log.to || ""}</div>
                         </td>
                         <td className="px-4 py-2.5 max-w-[320px]">
-                          <p className="line-clamp-1 text-xs text-slate-700">{log.body || log.message || "—"}</p>
+                          <p className="line-clamp-1 text-slate-700">{log.body || log.message || "—"}</p>
                         </td>
                         <td className="px-4 py-2.5">
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{log.templateName || log.type || "—"}</span>
+                          <span className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">{log.templateName || log.type || "—"}</span>
                         </td>
-                        <td className="px-4 py-2.5"><StatusChip status={log.status} /></td>
+                        <td className="px-4 py-2.5 text-center"><StatusChip status={log.status} /></td>
                         <td className="px-4 py-2.5 text-right">
-                          <div className="text-xs font-semibold text-slate-700">{fmtRel(log.sentAt || log.createdAt)}</div>
+                          <div className="font-semibold text-slate-700">{fmtRel(log.sentAt || log.createdAt)}</div>
                           <div className="text-[10px] text-slate-400">{fmtDateTime(log.sentAt || log.createdAt)}</div>
                         </td>
                       </tr>
                       {isExpanded && (
-                        <tr className="bg-emerald-50/30">
+                        <tr className="bg-[#EDF5F1]">
                           <td colSpan={5} className="px-4 py-3">
-                            <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
+                            <div className="border border-slate-200 bg-white p-4">
                               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-3">
                                 {[
                                   { label: "Recipient", value: log.recipientName || "—" },
@@ -403,19 +410,19 @@ const SmsManager = () => {
                                   { label: "Cost", value: log.costLabel || "—" },
                                 ].map(({ label, value }) => (
                                   <div key={label}>
-                                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
-                                    <p className="mt-0.5 text-xs font-semibold text-slate-800">{value}</p>
+                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
+                                    <p className="mt-0.5 text-[11px] font-semibold text-slate-800">{value}</p>
                                   </div>
                                 ))}
                               </div>
                               <div>
-                                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 mb-1">Full Message</p>
-                                <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{log.body || log.message || "—"}</p>
+                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400 mb-1">Full Message</p>
+                                <p className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">{log.body || log.message || "—"}</p>
                               </div>
                               {log.error && (
-                                <div className="mt-3 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2">
-                                  <p className="text-[9px] font-black uppercase text-rose-500 mb-0.5">Error</p>
-                                  <p className="text-xs text-rose-700">{log.error}</p>
+                                <div className="mt-3 border border-rose-200 bg-rose-50 px-3 py-2">
+                                  <p className="text-[9px] font-bold uppercase text-rose-500 mb-0.5">Error</p>
+                                  <p className="text-[11px] text-rose-700">{log.error}</p>
                                 </div>
                               )}
                             </div>
@@ -430,9 +437,9 @@ const SmsManager = () => {
           )}
         </div>
 
-        {/* Footer count */}
+        {/* ── Footer ───────────────────────────────────────────────────────── */}
         {filtered.length > 0 && (
-          <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-1.5 text-right">
+          <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-1.5 flex items-center justify-between">
             <span className="text-[10px] text-slate-400">Showing {filtered.length} of {logs.length} message{logs.length !== 1 ? "s" : ""}</span>
           </div>
         )}

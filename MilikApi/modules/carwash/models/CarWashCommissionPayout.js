@@ -18,6 +18,11 @@ const carWashCommissionPayoutSchema = new mongoose.Schema(
     netCash:     { type: Number, default: null }, // actual cash paid to staff (amount - savingsHeld)
     ledgerEntries: [{ type: mongoose.Schema.Types.ObjectId, ref: "FinancialLedgerEntry" }],
     notes: { type: String, trim: true, default: "" },
+    // Reversal fields
+    isReversed:    { type: Boolean, default: false, index: true },
+    reversedAt:    { type: Date, default: null },
+    reversedBy:    { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    reversalNotes: { type: String, trim: true, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },

@@ -722,37 +722,55 @@ export const revokeStampForJob = async ({ business, jobId, plate }) => {
 export const backfillCustomersAndStamps = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const jobs = await CarWashJob.find({
-      business,
-      jobType: 'vehicle',
-      plateNumber: { $exists: true, $ne: '' },
-      status: { $nin: ['cancelled'] },
-    }).lean();
 
+    const BATCH_SIZE = 500;
+    let offset = 0;
+    let totalJobs = 0;
     let customersCreated = 0;
     let stampsAwarded = 0;
     let errors = 0;
 
-    for (const job of jobs) {
-      try {
-        // Always ensure customer exists
-        const before = await CarWashCustomer.countDocuments({ business, plates: job.plateNumber });
-        await ensureCarWashCustomer({ business, plate: job.plateNumber, customerName: job.customerName, phone: job.phone });
-        const after = await CarWashCustomer.countDocuments({ business, plates: job.plateNumber });
-        if (after > before) customersCreated++;
+    while (true) {
+      const jobs = await CarWashJob.find({
+        business,
+        jobType: 'vehicle',
+        plateNumber: { $exists: true, $ne: '' },
+        status: { $nin: ['cancelled'] },
+      }).sort({ _id: 1 }).skip(offset).limit(BATCH_SIZE).lean();
 
-        // Award stamp for completed jobs
-        if (['done', 'paid'].includes(job.status)) {
-          const result = await awardLoyaltyStamp({ business, job });
-          if (result?.card) stampsAwarded++;
+      if (jobs.length === 0) break;
+      totalJobs += jobs.length;
+      offset += jobs.length;
+
+      // Pre-fetch all plates already known in this batch — one query replaces 2N countDocuments
+      const batchPlates = [...new Set(
+        jobs.map((j) => String(j.plateNumber || '').trim().toUpperCase()).filter(Boolean)
+      )];
+      const existingCustomers = await CarWashCustomer.find(
+        { business, plates: { $in: batchPlates } },
+        { plates: 1 }
+      ).lean();
+      const knownPlates = new Set(existingCustomers.flatMap((c) => c.plates.map((p) => p.toUpperCase())));
+
+      for (const job of jobs) {
+        try {
+          const plate = String(job.plateNumber || '').trim().toUpperCase();
+          const isNew = !knownPlates.has(plate);
+          await ensureCarWashCustomer({ business, plate, customerName: job.customerName, phone: job.phone });
+          if (isNew) { customersCreated++; knownPlates.add(plate); }
+
+          if (['done', 'paid'].includes(job.status)) {
+            const result = await awardLoyaltyStamp({ business, job });
+            if (result?.card) stampsAwarded++;
+          }
+        } catch (err) {
+          console.error('[Backfill] job=%s plate=%s error=%s', job.jobNumber, job.plateNumber, err?.message);
+          errors++;
         }
-      } catch (err) {
-        console.error('[Backfill] job=%s plate=%s error=%s', job.jobNumber, job.plateNumber, err?.message);
-        errors++;
       }
     }
 
-    res.json({ success: true, message: `Backfill complete`, jobs: jobs.length, customersCreated, stampsAwarded, errors });
+    res.json({ success: true, message: 'Backfill complete', jobs: totalJobs, customersCreated, stampsAwarded, errors });
   } catch (err) {
     next(err);
   }
@@ -787,6 +805,13 @@ export const migrateToPerCustomerCards = async (req, res, next) => {
       byCustomer.get(key).push(card);
     }
 
+    // Pre-load all distinct loyalty programs to avoid N queries inside the loop
+    const distinctProgramIds = [...new Set(allCards.map((c) => String(c.program)).filter(Boolean))];
+    const programDocs = distinctProgramIds.length > 0
+      ? await CarWashLoyaltyProgram.find({ _id: { $in: distinctProgramIds } }).lean()
+      : [];
+    const programMap = new Map(programDocs.map((p) => [String(p._id), p]));
+
     let merged = 0;
     let skipped = 0;
 
@@ -803,7 +828,7 @@ export const migrateToPerCustomerCards = async (req, res, next) => {
         ...rest.flatMap(c => c.stampHistory),
       ].sort((a, b) => new Date(a.awardedAt) - new Date(b.awardedAt));
 
-      const program = await CarWashLoyaltyProgram.findById(base.program).lean();
+      const program = programMap.get(String(base.program));
       const stampsRequired = Number(program?.stampsRequired || 10);
 
       let currentStamps = 0, rewardsEarned = 0, totalStamps = 0, lastStampAt = null;

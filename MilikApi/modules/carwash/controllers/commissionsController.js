@@ -7,7 +7,7 @@ import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, escapeRegex, parseBoolean, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { generatePayoutNumber } from "../services/commissionService.js";
-import { postCarWashCommissionPayout, postCarWashCommissionPayoutWithSavings, resolvePayoutCashbook } from "../services/carwashAccountingService.js";
+import { postCarWashCommissionPayout, postCarWashCommissionPayoutWithSavings, resolvePayoutCashbook, reverseCarWashCommissionAccrual, reverseCarWashPayoutLedgerEntries } from "../services/carwashAccountingService.js";
 import { holdSavingsForPayout, getStaffSavingsBalance, disburseSavings, processDailySavings } from "../services/savingsService.js";
 import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
 
@@ -69,11 +69,16 @@ export const upsertCommissionRule = async (req, res, next) => {
     if (!Number.isFinite(rate) || rate < 0) return next(createError(400, "Commission rate must be zero or more"));
     if (commissionType === "percentage" && rate > 100) return next(createError(400, "Percentage rate cannot exceed 100%"));
 
+    const [service, staff] = await Promise.all([
+      ensureService(business, req.body.service),
+      ensureStaff(business, req.body.staff),
+    ]);
+
     const payload = {
       business,
       name,
-      service: await ensureService(business, req.body.service),
-      staff: await ensureStaff(business, req.body.staff),
+      service,
+      staff,
       commissionType,
       rate,
       active: req.body.active !== false,
@@ -339,6 +344,127 @@ export const getStaffWallet = async (req, res, next) => {
   }
 };
 
+// ─── Single earned/payable commission reversal ────────────────────────────────
+export const reverseEarnedCommission = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(String(id))) return next(createError(400, "Invalid commission ID"));
+
+    const commission = await CarWashStaffCommission.findOne({ _id: id, business });
+    if (!commission) return next(createError(404, "Commission not found"));
+
+    if (!["earned", "payable"].includes(commission.status)) {
+      return next(createError(400,
+        commission.status === "paid"
+          ? "Cannot reverse a paid commission — reverse the payout first"
+          : "Commission is already cancelled"
+      ));
+    }
+
+    // Reverse accrual ledger entries; the service function also calls commission.save()
+    await reverseCarWashCommissionAccrual({ req, commission });
+
+    // Set status to cancelled (separate update after accrual service has already saved)
+    await CarWashStaffCommission.updateOne(
+      { _id: commission._id },
+      { $set: { status: "cancelled", notes: String(req.body.notes || "").trim() || commission.notes, updatedBy: currentUserId(req) } }
+    );
+
+    res.json({
+      success: true,
+      message: "Commission reversed and cancelled",
+      data: { ...commission.toObject(), status: "cancelled" },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── Commission payout reversal ───────────────────────────────────────────────
+export const reverseCommissionPayout = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(String(id))) return next(createError(400, "Invalid payout ID"));
+
+    const payout = await CarWashCommissionPayout.findOne({ _id: id, business });
+    if (!payout) return next(createError(404, "Commission payout not found"));
+    if (payout.isReversed) return next(createError(400, "This payout has already been reversed"));
+
+    const userId = currentUserId(req);
+    const reason = String(req.body.notes || req.body.reversalNotes || "").trim();
+    const reasonStr = `Commission payout ${payout.payoutNumber} reversed${reason ? `: ${reason}` : ""}`;
+
+    // 1. Reverse ledger entries (Dr/Cr unwound)
+    if (payout.ledgerEntries?.length) {
+      await reverseCarWashPayoutLedgerEntries({ req, businessId: business, entryIds: payout.ledgerEntries, reason: reasonStr });
+    }
+
+    // 2. Reset included commissions back to payable
+    if (payout.commissions?.length) {
+      await CarWashStaffCommission.updateMany(
+        { _id: { $in: payout.commissions }, business, status: "paid" },
+        { $set: { status: "payable", paidAt: null, payout: null, payoutLedgerEntries: [], updatedBy: userId } }
+      );
+    }
+
+    // 3. Release savings holds — unlink daily records from this payout so they
+    //    remain available for future payouts (do NOT delete; they still accrued)
+    if (payout.savingsHeld > 0) {
+      await CarWashStaffSaving.updateMany(
+        { business, commissionPayout: payout._id, type: "daily" },
+        { $set: { commissionPayout: null } }
+      );
+    }
+
+    // 4. Mark payout as reversed
+    payout.isReversed    = true;
+    payout.reversedAt    = new Date();
+    payout.reversedBy    = userId;
+    payout.reversalNotes = reason;
+    await payout.save();
+
+    res.json({
+      success: true,
+      message: `Commission payout ${payout.payoutNumber} reversed successfully`,
+      data: payout,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── Savings disbursement reversal ────────────────────────────────────────────
+export const reverseSavingsPayout = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(String(id))) return next(createError(400, "Invalid savings payout ID"));
+
+    const record = await CarWashStaffSaving.findOne({ _id: id, business, type: "disbursement" });
+    if (!record) return next(createError(404, "Savings payout not found"));
+    if (record.isReversed) return next(createError(400, "This savings payout has already been reversed"));
+
+    const userId = currentUserId(req);
+    const reason = String(req.body.notes || "").trim();
+    const reasonStr = `Savings payout ${record.savingsPayoutNumber || record._id} reversed${reason ? `: ${reason}` : ""}`;
+
+    if (record.ledgerEntries?.length) {
+      await reverseCarWashPayoutLedgerEntries({ req, businessId: business, entryIds: record.ledgerEntries, reason: reasonStr });
+    }
+
+    record.isReversed = true;
+    record.reversedAt = new Date();
+    record.reversedBy = userId;
+    await record.save();
+
+    res.json({ success: true, message: `Savings payout reversed successfully`, data: record });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ─── Savings payout (annual or on-demand) ────────────────────────────────────
 export const createSavingsPayout = async (req, res, next) => {
   try {
@@ -447,7 +573,7 @@ export const listSavingsBalances = async (req, res, next) => {
     const businessOid = toObjectId(business);
 
     const rows = await CarWashStaffSaving.aggregate([
-      { $match: { business: businessOid } },
+      { $match: { business: businessOid, isReversed: { $ne: true } } },
       { $group: {
         _id:       "$staff",
         daily:     { $sum: { $cond: [{ $eq: ["$type", "daily"] },        "$amount", 0] } },

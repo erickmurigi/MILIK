@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import Company from "../../../models/Company.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
-import { CW_SMS_TEMPLATE_DEFAULTS } from "../services/carwashSmsService.js";
+import { CW_SMS_TEMPLATE_DEFAULTS, invalidateSmsSettingsCache } from "../services/carwashSmsService.js";
 
 const METHODS = ["cash", "mpesa", "bank", "card", "other"];
 
@@ -106,6 +106,7 @@ export const updateCarWashSettings = async (req, res, next) => {
     }
 
     await Company.updateOne({ _id: business }, { $set: update });
+    invalidateSmsSettingsCache(business);
     res.json({ success: true, message: "Car Wash settings saved" });
   } catch (err) {
     next(err);

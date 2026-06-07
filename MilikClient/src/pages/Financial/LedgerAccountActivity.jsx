@@ -101,9 +101,10 @@ const LedgerAccountActivity = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { accountId } = useParams();
-  const backRoute = location.pathname.startsWith("/carwash/") ? "/carwash/chart-of-accounts"
-    : location.pathname.startsWith("/hr/")   ? "/hr/chart-of-accounts"
-    : location.pathname.startsWith("/sale/") ? "/sale/chart-of-accounts"
+  const backRoute = location.pathname.startsWith("/carwash/")  ? "/carwash/chart-of-accounts"
+    : location.pathname.startsWith("/hr/")       ? "/hr/chart-of-accounts"
+    : location.pathname.startsWith("/sale/")     ? "/sale/chart-of-accounts"
+    : location.pathname.startsWith("/accounts/") ? "/accounts/chart-of-accounts"
     : "/financial/chart-of-accounts";
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);

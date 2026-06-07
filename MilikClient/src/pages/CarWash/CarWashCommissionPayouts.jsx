@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
-import { FaMoneyBillWave, FaPiggyBank, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
+import { FaMoneyBillWave, FaPiggyBank, FaRedoAlt, FaSearch, FaTimes, FaUndo, FaBan } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
@@ -62,6 +62,9 @@ const CarWashCommissionPayouts = () => {
   const [showModal, setShowModal]       = useState(false);
   const [refError, setRefError]         = useState(false);
   const [pendingSavings, setPendingSavings] = useState(0);
+  const [reverseTarget, setReverseTarget]   = useState(null);
+  const [reversalNotes, setReversalNotes]   = useState("");
+  const [isReversing, setIsReversing]       = useState(false);
   const [form, setForm] = useState({ staff: "", commissionIds: [], method: "cash", cashbookAccount: "", payoutDate: todayISO(), reference: "", notes: "" });
   const canPay = useCarWashPermission("carwash-commissions", "pay");
 
@@ -181,6 +184,24 @@ const CarWashCommissionPayouts = () => {
     }
   };
 
+  const openReverseModal = (row) => { setReverseTarget(row); setReversalNotes(""); };
+  const closeReverseModal = () => { setReverseTarget(null); setReversalNotes(""); };
+
+  const confirmReverse = async () => {
+    if (!reverseTarget) return;
+    setIsReversing(true);
+    try {
+      await carWashApi.reverseCommissionPayout(reverseTarget._id, reversalNotes);
+      toast.success(`Payout ${reverseTarget.payoutNumber} reversed`);
+      closeReverseModal();
+      loadPayouts();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Reversal failed");
+    } finally {
+      setIsReversing(false);
+    }
+  };
+
   const savingsDeduction = Math.min(pendingSavings, selectedTotal);
   const netCash          = Math.max(0, selectedTotal - savingsDeduction);
 
@@ -245,7 +266,7 @@ const CarWashCommissionPayouts = () => {
         </div>
 
         <div className="flex-1 min-h-0 overflow-x-auto">
-          <table className="w-full min-w-[820px] text-xs">
+          <table className="w-full min-w-[900px] text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
                 <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Payout No.</th>
@@ -256,31 +277,58 @@ const CarWashCommissionPayouts = () => {
                 <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Savings Held</th>
                 <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Net Cash</th>
                 <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Date</th>
+                {canPay && <th className="px-3 py-1.5 text-center font-bold uppercase tracking-wide text-slate-500">Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {payouts.length ? payouts.map((row) => (
-                <tr key={row._id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-2 font-extrabold font-mono text-[11px] text-[#0B3B2E]">{row.payoutNumber}</td>
-                  <td className="px-3 py-2 font-extrabold text-slate-900">{row.staff?.name || "—"}</td>
-                  <td className="px-3 py-2 uppercase text-slate-600">{row.method}</td>
-                  <td className="px-3 py-2 text-slate-500">{row.cashbookAccount?.code} {row.cashbookAccount?.name}</td>
-                  <td className="px-3 py-2 text-right tabular-nums font-bold">{formatMoney(row.amount)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-amber-700">
-                    {row.savingsHeld > 0
-                      ? <span className="inline-flex items-center gap-1"><FaPiggyBank size={9} />{formatMoney(row.savingsHeld)}</span>
-                      : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-extrabold text-emerald-700">
-                    {formatMoney(row.netCash ?? row.amount)}
-                  </td>
-                  <td className="px-3 py-2 text-slate-500">
-                    {row.payoutDate ? new Date(row.payoutDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
-                  </td>
-                </tr>
-              )) : (
+              {payouts.length ? payouts.map((row) => {
+                const reversed = Boolean(row.isReversed);
+                return (
+                  <tr key={row._id} className={`border-b border-slate-100 ${reversed ? "bg-rose-50/40" : "hover:bg-slate-50"}`}>
+                    <td className="px-3 py-2">
+                      <span className={`font-extrabold font-mono text-[11px] ${reversed ? "text-rose-400 line-through" : "text-[#0B3B2E]"}`}>{row.payoutNumber}</span>
+                      {reversed && (
+                        <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-rose-600">
+                          <FaBan size={7} /> Reversed
+                        </span>
+                      )}
+                    </td>
+                    <td className={`px-3 py-2 font-extrabold ${reversed ? "text-slate-400" : "text-slate-900"}`}>{row.staff?.name || "—"}</td>
+                    <td className={`px-3 py-2 uppercase ${reversed ? "text-slate-400" : "text-slate-600"}`}>{row.method}</td>
+                    <td className={`px-3 py-2 ${reversed ? "text-slate-400" : "text-slate-500"}`}>{row.cashbookAccount?.code} {row.cashbookAccount?.name}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums font-bold ${reversed ? "text-slate-400 line-through" : ""}`}>{formatMoney(row.amount)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {row.savingsHeld > 0
+                        ? <span className={`inline-flex items-center gap-1 ${reversed ? "text-slate-400 line-through" : "text-amber-700"}`}><FaPiggyBank size={9} />{formatMoney(row.savingsHeld)}</span>
+                        : <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className={`px-3 py-2 text-right tabular-nums font-extrabold ${reversed ? "text-slate-400 line-through" : "text-emerald-700"}`}>
+                      {formatMoney(row.netCash ?? row.amount)}
+                    </td>
+                    <td className={`px-3 py-2 ${reversed ? "text-slate-400" : "text-slate-500"}`}>
+                      {row.payoutDate ? new Date(row.payoutDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                    </td>
+                    {canPay && (
+                      <td className="px-3 py-2 text-center">
+                        {!reversed ? (
+                          <button
+                            type="button"
+                            onClick={() => openReverseModal(row)}
+                            title="Reverse this payout"
+                            className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-100 hover:border-rose-300"
+                          >
+                            <FaUndo size={8} /> Reverse
+                          </button>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              }) : (
                 <tr>
-                  <td colSpan={8} className="px-3 py-12 text-center text-xs font-semibold text-slate-400">
+                  <td colSpan={canPay ? 9 : 8} className="px-3 py-12 text-center text-xs font-semibold text-slate-400">
                     No commission payouts found for the selected filters.
                   </td>
                 </tr>
@@ -313,6 +361,54 @@ const CarWashCommissionPayouts = () => {
           </div>
         </div>
       </div>
+
+      {reverseTarget && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-rose-200 bg-rose-700 px-4 py-3 text-white">
+              <div>
+                <h2 className="text-sm font-extrabold uppercase tracking-wide">Reverse Commission Payout</h2>
+                <p className="mt-0.5 text-xs font-semibold text-rose-100">{reverseTarget.payoutNumber} · {reverseTarget.staff?.name}</p>
+              </div>
+              <button type="button" onClick={closeReverseModal} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-700">
+                <p className="font-bold">This action will:</p>
+                <ul className="mt-1 list-disc pl-4 space-y-0.5 font-semibold">
+                  <li>Reverse all ledger entries for this payout</li>
+                  <li>Restore the included commissions to <em>Payable</em></li>
+                  {reverseTarget.savingsHeld > 0 && <li>Release {formatMoney(reverseTarget.savingsHeld)} savings hold back to pending</li>}
+                </ul>
+              </div>
+              <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                <div className="flex justify-between"><span className="text-slate-500">Commission</span><span className="font-bold">{formatMoney(reverseTarget.amount)}</span></div>
+                <div className="flex justify-between mt-1"><span className="text-slate-500">Date</span><span className="font-bold">{new Date(reverseTarget.payoutDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}</span></div>
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Reason / Notes (optional)</label>
+                <input
+                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-rose-400 focus:outline-none"
+                  placeholder="Enter reason for reversal…"
+                  value={reversalNotes}
+                  onChange={(e) => setReversalNotes(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button type="button" onClick={closeReverseModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Cancel</button>
+              <button
+                type="button"
+                onClick={confirmReverse}
+                disabled={isReversing}
+                className="inline-flex items-center gap-1.5 bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                <FaUndo size={9} /> {isReversing ? "Reversing…" : "Confirm Reversal"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <Modal

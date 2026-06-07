@@ -502,6 +502,36 @@ export const reverseCarWashCommissionAccrual = async ({ req, commission }) => {
   if (accountIds.size) await aggregateChartOfAccountBalances(commission.business, [...accountIds]);
 };
 
+// ─── Generic payout ledger reversal ──────────────────────────────────────────
+/**
+ * Reverses a set of ledger entry IDs for a commission or savings payout.
+ * Safe to call if some entries are already reversed — skips those silently.
+ */
+export const reverseCarWashPayoutLedgerEntries = async ({ req, businessId, entryIds, reason }) => {
+  if (!entryIds?.length) return;
+  const actorId = await resolveAuditActorUserId({ req, businessId });
+
+  const entries = await FinancialLedgerEntry.find({
+    _id: { $in: entryIds },
+    business: new mongoose.Types.ObjectId(String(businessId)),
+    status: { $ne: "reversed" },
+  }).lean();
+
+  if (!entries.length) return;
+
+  const accountIds = new Set();
+  for (const entry of entries) {
+    try {
+      const { originalEntry, reversalEntry } = await reverseCwEntry(entry, actorId, reason);
+      if (originalEntry?.accountId) accountIds.add(String(originalEntry.accountId));
+      if (reversalEntry?.accountId)  accountIds.add(String(reversalEntry.accountId));
+    } catch (err) {
+      if (!/already reversed/i.test(String(err?.message || ""))) throw err;
+    }
+  }
+  if (accountIds.size) await aggregateChartOfAccountBalances(businessId, [...accountIds]);
+};
+
 // ─── Commission cancellation list ─────────────────────────────────────────────
 /**
  * Cancels a list of commission records: reverses their accrual entries and
