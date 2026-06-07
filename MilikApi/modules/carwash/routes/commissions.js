@@ -8,7 +8,9 @@ import {
   listCommissionRules,
   listCommissions,
   listSavings,
+  listSavingsBalances,
   processDailySavingsManual,
+  resetSavings,
   upsertCommissionRule,
 } from "../controllers/commissionsController.js";
 
@@ -21,9 +23,11 @@ router.put("/rules/:id", requireCompanyPermission("carwash-commissions", "manage
 router.get("/",       requireCompanyPermission("carwash-commissions", "view",   "carwash"), listCommissions);
 router.get("/payouts",  requireCompanyPermission("carwash-commissions", "view", "carwash"), listCommissionPayouts);
 router.post("/payouts", requireCompanyPermission("carwash-commissions", "pay",  "carwash"), createCommissionPayout);
-router.get("/savings",  requireCompanyPermission("carwash-commissions", "view", "carwash"), listSavings);
-router.post("/savings/payouts",  requireCompanyPermission("carwash-commissions", "pay",  "carwash"), createSavingsPayout);
-router.post("/savings/process",  requireCompanyPermission("carwash-commissions", "pay",  "carwash"), processDailySavingsManual);
+router.get("/savings",          requireCompanyPermission("carwash-commissions", "view", "carwash"), listSavings);
+router.get("/savings/balances", requireCompanyPermission("carwash-commissions", "view", "carwash"), listSavingsBalances);
+router.post("/savings/payouts",  requireCompanyPermission("carwash-commissions", "pay",    "carwash"), createSavingsPayout);
+router.post("/savings/process", requireCompanyPermission("carwash-commissions", "pay",    "carwash"), processDailySavingsManual);
+router.delete("/savings/reset", requireCompanyPermission("carwash-commissions", "manage", "carwash"), resetSavings);
 router.get("/staff/:staffId/wallet", requireCompanyPermission("carwash-commissions", "view", "carwash"), getStaffWallet);
 
 export default router;

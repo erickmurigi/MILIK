@@ -48,9 +48,10 @@ export const getCarWashSettings = async (req, res, next) => {
     }, {});
 
     const savingsDeductionPerJob = Number(company?.carwashSettings?.savingsDeductionPerJob ?? 100);
+    const savingsEnabled = company?.carwashSettings?.savingsEnabled !== false;
     const smsTemplates = mergeSmsTemplates(company?.carwashSettings?.smsTemplates);
 
-    res.json({ success: true, data: { defaultCashbooks, savingsDeductionPerJob, smsTemplates } });
+    res.json({ success: true, data: { defaultCashbooks, savingsEnabled, savingsDeductionPerJob, smsTemplates } });
   } catch (err) {
     next(err);
   }
@@ -59,7 +60,7 @@ export const getCarWashSettings = async (req, res, next) => {
 export const updateCarWashSettings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { defaultCashbooks = {}, savingsDeductionPerJob, smsTemplates } = req.body;
+    const { defaultCashbooks = {}, savingsEnabled, savingsDeductionPerJob, smsTemplates } = req.body;
 
     const update = {};
 
@@ -78,6 +79,10 @@ export const updateCarWashSettings = async (req, res, next) => {
         }
       }
       update[`carwashSettings.defaultCashbooks.${method}`] = val;
+    }
+
+    if (savingsEnabled !== undefined) {
+      update["carwashSettings.savingsEnabled"] = Boolean(savingsEnabled);
     }
 
     if (savingsDeductionPerJob !== undefined) {

@@ -29,10 +29,11 @@ const SectionHeader = ({ icon: Icon, title, subtitle }) => (
 );
 
 export default function CarWashSettings() {
-  const [cashbooks, setCashbooks]         = useState([]);
-  const [defaults, setDefaults]           = useState(emptyDefaults);
-  const [savingsAmount, setSavingsAmount] = useState(100);
-  const [smsTemplates, setSmsTemplates]   = useState([]);
+  const [cashbooks, setCashbooks]           = useState([]);
+  const [defaults, setDefaults]             = useState(emptyDefaults);
+  const [savingsEnabled, setSavingsEnabled] = useState(true);
+  const [savingsAmount, setSavingsAmount]   = useState(100);
+  const [smsTemplates, setSmsTemplates]     = useState([]);
   const [expandedSms, setExpandedSms]     = useState(null);
   const [loading, setLoading]             = useState(false);
   const [saving, setSaving]               = useState(false);
@@ -49,6 +50,7 @@ export default function CarWashSettings() {
       setCashbooks(normalizeListPayload(cbRes, "accounts"));
       const saved = settingsRes?.defaultCashbooks || {};
       setDefaults(METHODS.reduce((acc, m) => { acc[m] = saved[m]?._id || saved[m] || ""; return acc; }, {}));
+      setSavingsEnabled(settingsRes?.savingsEnabled !== false);
       setSavingsAmount(Number(settingsRes?.savingsDeductionPerJob ?? 100));
       setSmsTemplates(Array.isArray(settingsRes?.smsTemplates) ? settingsRes.smsTemplates : []);
       setDirty(false);
@@ -70,6 +72,7 @@ export default function CarWashSettings() {
     try {
       await carWashApi.updateCarWashSettings({
         defaultCashbooks: defaults,
+        savingsEnabled,
         savingsDeductionPerJob: Number(savingsAmount),
         smsTemplates: smsTemplates.map(({ key, enabled, messageBody }) => ({ key, enabled, messageBody })),
       });
@@ -165,24 +168,40 @@ export default function CarWashSettings() {
                 title="Staff Savings Scheme"
                 subtitle="A fixed deduction from each commission payout, held in savings and disbursed via the Commissions page."
               />
-              <div className="p-5">
-                <div className="grid gap-4 sm:grid-cols-2">
+              <div className="p-5 space-y-4">
+                {/* Enable / Disable toggle */}
+                <div className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-4 py-3">
                   <div>
-                    <label className={labelCls}>Deduction per job (Ksh)</label>
+                    <p className="text-xs font-bold text-slate-800">Savings scheme</p>
+                    <p className="text-[10px] text-slate-400">{savingsEnabled ? "Active — deductions run on each payout" : "Disabled — no deductions will be made"}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { if (canManage) { setSavingsEnabled((v) => !v); setDirty(true); } }}
+                    disabled={!canManage}
+                    className="flex-shrink-0 disabled:opacity-50"
+                    title={savingsEnabled ? "Disable savings" : "Enable savings"}
+                  >
+                    {savingsEnabled
+                      ? <FaToggleOn size={32} className="text-emerald-500" />
+                      : <FaToggleOff size={32} className="text-slate-300" />}
+                  </button>
+                </div>
+
+                {/* Deduction amount (only shown when enabled) */}
+                {savingsEnabled && (
+                  <div>
+                    <label className={labelCls}>Deduction per day (Ksh)</label>
                     <input type="number" min="0" step="10" className={inputCls}
                       value={savingsAmount}
                       onChange={(e) => { setSavingsAmount(e.target.value); setDirty(true); }}
                       disabled={!canManage}
                     />
-                    <p className="mt-1.5 text-[10px] text-slate-400">Set to <strong>0</strong> to disable entirely.</p>
-                  </div>
-                  <div className="flex items-start gap-2.5 rounded border border-blue-100 bg-blue-50 p-3">
-                    <FaInfoCircle size={11} className="mt-0.5 flex-shrink-0 text-blue-400" />
-                    <p className="text-[10px] leading-4 text-blue-700">
-                      Savings accumulate each time a commission is paid out. Staff can view their balance and request disbursement from the Commissions module.
+                    <p className="mt-1.5 text-[10px] text-slate-400">
+                      Posted once per staff member per calendar day. Withheld from each commission payout and held until disbursed.
                     </p>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 

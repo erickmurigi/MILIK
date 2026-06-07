@@ -394,18 +394,18 @@ export const processDailySavingsManual = async (req, res, next) => {
 // ─── Savings transaction history ──────────────────────────────────────────────
 export const listSavings = async (req, res, next) => {
   try {
-    const business  = resolveActiveBusinessId(req);
-    const branchId  = resolveActiveBranchId(req);
-    const filter    = { business: new mongoose.Types.ObjectId(String(business)) };
-    if (branchId) filter.branch = new mongoose.Types.ObjectId(String(branchId));
+    const business = resolveActiveBusinessId(req);
+    const filter   = { business: new mongoose.Types.ObjectId(String(business)) };
     if (req.query.staff && mongoose.Types.ObjectId.isValid(String(req.query.staff))) {
       filter.staff = new mongoose.Types.ObjectId(String(req.query.staff));
     }
     if (req.query.type) filter.type = String(req.query.type).trim();
     if (req.query.dateFrom || req.query.dateTo) {
-      filter.date = {};
-      if (req.query.dateFrom) { const d = new Date(req.query.dateFrom); d.setUTCHours(0,0,0,0);      filter.date.$gte = d; }
-      if (req.query.dateTo)   { const d = new Date(req.query.dateTo);   d.setUTCHours(23,59,59,999); filter.date.$lte = d; }
+      // daily records use savingsDate (canonical business date); disbursements use date
+      const dateField = req.query.type === "disbursement" ? "date" : "savingsDate";
+      filter[dateField] = {};
+      if (req.query.dateFrom) { const d = new Date(req.query.dateFrom); d.setUTCHours(0,0,0,0);      filter[dateField].$gte = d; }
+      if (req.query.dateTo)   { const d = new Date(req.query.dateTo);   d.setUTCHours(23,59,59,999); filter[dateField].$lte = d; }
     }
 
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
@@ -414,7 +414,7 @@ export const listSavings = async (req, res, next) => {
     const [records, total] = await Promise.all([
       CarWashStaffSaving.find(filter)
         .populate("staff", "name phone role")
-        .sort({ date: -1, createdAt: -1 })
+        .sort({ savingsDate: -1, date: -1, createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
@@ -422,8 +422,55 @@ export const listSavings = async (req, res, next) => {
     ]);
 
     const pages = Math.max(Math.ceil(total / limit), 1);
-    const pagination = { page, limit, total, pages };
-    res.json({ success: true, data: { records, pagination }, records, total, pagination });
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ success: true, data: { records, pagination: { page, limit, total, pages } }, records, total, pagination: { page, limit, total, pages } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── Wipe all savings records for the business (admin reset) ──────────────────
+export const resetSavings = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const result   = await CarWashStaffSaving.deleteMany({ business: new mongoose.Types.ObjectId(String(business)) });
+    res.json({ success: true, deleted: result.deletedCount });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── Savings balance summary (all staff, one aggregation) ─────────────────────
+export const listSavingsBalances = async (req, res, next) => {
+  try {
+    const business    = resolveActiveBusinessId(req);
+    const businessOid = toObjectId(business);
+
+    const rows = await CarWashStaffSaving.aggregate([
+      { $match: { business: businessOid } },
+      { $group: {
+        _id:       "$staff",
+        daily:     { $sum: { $cond: [{ $eq: ["$type", "daily"] },        "$amount", 0] } },
+        disbursed: { $sum: { $cond: [{ $eq: ["$type", "disbursement"] }, "$amount", 0] } },
+      }},
+      { $addFields: { balance: { $max: [0, { $subtract: ["$daily", "$disbursed"] }] } } },
+      { $sort: { balance: -1, _id: 1 } },
+    ]);
+
+    // Populate staff names in one query
+    const staffIds  = rows.map((r) => r._id).filter(Boolean);
+    const staffDocs = await CarWashStaff.find({ _id: { $in: staffIds } }).select("name").lean();
+    const staffMap  = new Map(staffDocs.map((s) => [String(s._id), s.name]));
+
+    const balances = rows.map((r) => ({
+      staffId:   r._id,
+      staffName: staffMap.get(String(r._id)) || "Unknown",
+      daily:     r.daily,
+      disbursed: r.disbursed,
+      balance:   r.balance,
+    }));
+
+    res.json({ success: true, data: { balances }, balances });
   } catch (error) {
     next(error);
   }

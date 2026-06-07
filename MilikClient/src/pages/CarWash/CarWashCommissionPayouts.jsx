@@ -60,6 +60,7 @@ const CarWashCommissionPayouts = () => {
   const [filters, setFilters]           = useState(emptyFilters);
   const [applied, setApplied]           = useState(emptyFilters);
   const [showModal, setShowModal]       = useState(false);
+  const [refError, setRefError]         = useState(false);
   const [pendingSavings, setPendingSavings] = useState(0);
   const [form, setForm] = useState({ staff: "", commissionIds: [], method: "cash", cashbookAccount: "", payoutDate: todayISO(), reference: "", notes: "" });
   const canPay = useCarWashPermission("carwash-commissions", "pay");
@@ -166,6 +167,10 @@ const CarWashCommissionPayouts = () => {
 
   const savePayout = async (e) => {
     e.preventDefault();
+    if (form.method === "mpesa" && !form.reference?.trim()) {
+      setRefError(true);
+      return;
+    }
     try {
       await carWashApi.createCommissionPayout(form);
       setShowModal(false);
@@ -175,6 +180,9 @@ const CarWashCommissionPayouts = () => {
       toast.error(err?.response?.data?.message || "Failed to record payout");
     }
   };
+
+  const savingsDeduction = Math.min(pendingSavings, selectedTotal);
+  const netCash          = Math.max(0, selectedTotal - savingsDeduction);
 
   const pageTotal = useMemo(() => payouts.reduce((s, p) => s + Number(p.amount || 0), 0), [payouts]);
 
@@ -316,7 +324,7 @@ const CarWashCommissionPayouts = () => {
               <button type="button" onClick={() => setShowModal(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Cancel</button>
               {canPay && (
                 <button type="submit" form="cw-payout-form" disabled={!selectedTotal} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
-                  <FaMoneyBillWave /> Pay {formatMoney(selectedTotal)}
+                  <FaMoneyBillWave /> Pay {formatMoney(netCash || selectedTotal)} to Staff
                 </button>
               )}
             </>
@@ -332,7 +340,7 @@ const CarWashCommissionPayouts = () => {
             </div>
             <div>
               <label className={labelClass}>Method</label>
-              <select className={inputClass} value={form.method} onChange={(e) => setForm((p) => ({ ...p, method: e.target.value, cashbookAccount: preferredCashbook(cashbooks, e.target.value) }))}>
+              <select className={inputClass} value={form.method} onChange={(e) => { setForm((p) => ({ ...p, method: e.target.value, cashbookAccount: preferredCashbook(cashbooks, e.target.value) })); setRefError(false); }}>
                 {methods.map((m) => <option key={m} value={m}>{m.toUpperCase()}</option>)}
               </select>
             </div>
@@ -348,36 +356,56 @@ const CarWashCommissionPayouts = () => {
               <input type="date" className={inputClass} value={form.payoutDate} onChange={(e) => setForm((p) => ({ ...p, payoutDate: e.target.value }))} />
             </div>
             <div>
-              <label className={labelClass}>Reference</label>
-              <input className={inputClass} value={form.reference} onChange={(e) => setForm((p) => ({ ...p, reference: e.target.value }))} placeholder="Optional" />
+              <label className={labelClass}>
+                Reference{form.method === "mpesa" && <span className="ml-0.5 text-red-500">*</span>}
+              </label>
+              <input
+                className={`${inputClass} ${refError && form.method === "mpesa" && !form.reference?.trim() ? "border-red-400 focus:border-red-400" : ""}`}
+                value={form.reference}
+                onChange={(e) => { setForm((p) => ({ ...p, reference: e.target.value })); if (e.target.value.trim()) setRefError(false); }}
+                placeholder={form.method === "mpesa" ? "M-Pesa transaction code (required)" : "Optional"}
+              />
+              {refError && form.method === "mpesa" && !form.reference?.trim() && (
+                <p className="mt-0.5 text-[10px] font-bold text-red-500">M-Pesa transaction code is required</p>
+              )}
             </div>
             <div>
               <label className={labelClass}>Notes</label>
               <input className={inputClass} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional" />
             </div>
 
-            {/* Payout breakdown preview */}
+            {/* Payout breakdown */}
             {selectedTotal > 0 && (
-              <div className="sm:col-span-2 space-y-1 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
-                <p className="font-black uppercase tracking-wide text-amber-800">Payout Breakdown</p>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Commission total</span>
-                  <span className="font-bold">{formatMoney(selectedTotal)}</span>
+              <div className="sm:col-span-2 overflow-hidden rounded border border-slate-200 text-xs">
+                <div className="bg-[#EDF5F1] px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#0B3B2E]">
+                  Payout Breakdown
                 </div>
-                {pendingSavings > 0 && (
-                  <div className="flex justify-between text-amber-700">
-                    <span className="flex items-center gap-1"><FaPiggyBank size={9} /> Savings deduction{Math.min(pendingSavings, selectedTotal) < pendingSavings ? " (capped)" : ""}</span>
-                    <span className="font-bold">− {formatMoney(Math.min(pendingSavings, selectedTotal))}</span>
+                <div className="divide-y divide-slate-100 bg-white">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-slate-500">Commission total</span>
+                    <span className="font-bold tabular-nums text-slate-800">{formatMoney(selectedTotal)}</span>
                   </div>
-                )}
-                <div className="flex justify-between border-t border-amber-200 pt-1">
-                  <span className="font-extrabold text-slate-800">Net cash to staff</span>
-                  <span className="font-extrabold text-emerald-700">
-                    {formatMoney(Math.max(0, selectedTotal - Math.min(pendingSavings, selectedTotal)))}
-                  </span>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="flex items-center gap-1.5 text-amber-700">
+                      <FaPiggyBank size={9} />
+                      Savings deduction
+                      {savingsDeduction < pendingSavings && pendingSavings > 0 && (
+                        <span className="rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-bold">capped</span>
+                      )}
+                    </span>
+                    <span className={`font-bold tabular-nums ${savingsDeduction > 0 ? "text-amber-700" : "text-slate-300"}`}>
+                      {savingsDeduction > 0 ? `− ${formatMoney(savingsDeduction)}` : "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between bg-slate-50 px-3 py-2.5">
+                    <span className="font-extrabold text-slate-800">Net cash to staff</span>
+                    <span className="text-base font-black tabular-nums text-emerald-700">{formatMoney(netCash)}</span>
+                  </div>
                 </div>
                 {pendingSavings === 0 && (
-                  <p className="text-[10px] italic text-slate-400">No pending savings deductions for this staff member.</p>
+                  <p className="border-t border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] italic text-slate-400">
+                    No pending savings deductions for this staff member.
+                  </p>
                 )}
               </div>
             )}
@@ -387,11 +415,18 @@ const CarWashCommissionPayouts = () => {
               <div className="max-h-56 overflow-auto rounded border border-slate-200">
                 {selectedStaffPayable.length ? selectedStaffPayable.map((c) => (
                   <label key={c._id} className="flex cursor-pointer items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
-                    <span className="flex items-center gap-2">
-                      <input type="checkbox" checked={commIdSet.has(c._id)} onChange={() => toggleComm(c._id)} className="accent-[#0B3B2E]" />
-                      <span>{c.jobNumber || "—"} · {c.serviceName || "—"}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <input type="checkbox" checked={commIdSet.has(c._id)} onChange={() => toggleComm(c._id)} className="flex-shrink-0 accent-[#0B3B2E]" />
+                      <span className="min-w-0">
+                        <span className="font-mono font-bold text-[#0B3B2E]">{c.job?.jobNumber || c.jobNumber || "—"}</span>
+                        <span className="text-slate-400"> · </span>
+                        <span className="text-slate-700">{c.service?.name || c.serviceName || "—"}</span>
+                        {(c.job?.plateNumber || c.job?.customerName) && (
+                          <span className="ml-1 text-slate-400">· {c.job?.plateNumber || c.job?.customerName}</span>
+                        )}
+                      </span>
                     </span>
-                    <span className="font-extrabold text-slate-900">{formatMoney(c.commissionAmount)}</span>
+                    <span className="flex-shrink-0 font-extrabold text-slate-900">{formatMoney(c.commissionAmount)}</span>
                   </label>
                 )) : (
                   <p className="px-3 py-8 text-center text-xs font-semibold text-slate-400">No payable commissions for this staff member.</p>

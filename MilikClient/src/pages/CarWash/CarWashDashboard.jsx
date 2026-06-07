@@ -1,102 +1,121 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaCar, FaCheckCircle, FaClock, FaMoneyBillWave, FaPhone, FaPlus, FaRedoAlt, FaSoap } from "react-icons/fa";
+import {
+  FaBan, FaCar, FaCheckCircle, FaClock, FaHandHoldingUsd,
+  FaMoneyBillWave, FaPhone, FaPlus, FaRedoAlt, FaSoap,
+} from "react-icons/fa";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 
-const statusLabels = {
-  waiting: "Waiting",
-  washing: "Washing",
-  done: "Done",
-  paid: "Paid",
-  cancelled: "Cancelled",
+const paymentLabels = { cash: "Cash", mpesa: "M-Pesa", bank: "Bank", card: "Card", other: "Other" };
+
+const paymentColors = {
+  cash:  { bar: "bg-[#0B3B2E]",   text: "text-[#0B3B2E]" },
+  mpesa: { bar: "bg-[#E65F1A]",   text: "text-[#E65F1A]" },
+  bank:  { bar: "bg-sky-600",     text: "text-sky-600" },
+  card:  { bar: "bg-violet-600",  text: "text-violet-600" },
+  other: { bar: "bg-slate-400",   text: "text-slate-500" },
 };
 
-const paymentLabels = {
-  cash: "Cash",
-  mpesa: "M-Pesa",
-  bank: "Bank",
-  card: "Card",
-  other: "Other",
+const queueStatus = [
+  { key: "waiting",   label: "Waiting",   icon: FaClock,          ring: "border-amber-400",   num: "text-amber-600",   bg: "bg-amber-50",   hover: "hover:bg-amber-50"   },
+  { key: "washing",   label: "Washing",   icon: FaSoap,           ring: "border-sky-400",     num: "text-sky-600",     bg: "bg-sky-50",     hover: "hover:bg-sky-50"     },
+  { key: "done",      label: "Done",      icon: FaCheckCircle,    ring: "border-indigo-400",  num: "text-indigo-600",  bg: "bg-indigo-50",  hover: "hover:bg-indigo-50"  },
+  { key: "paid",      label: "Paid",      icon: FaHandHoldingUsd, ring: "border-emerald-500", num: "text-emerald-700", bg: "bg-emerald-50", hover: "hover:bg-emerald-50" },
+  { key: "cancelled", label: "Cancelled", icon: FaBan,            ring: "border-slate-300",   num: "text-slate-500",   bg: "bg-slate-50",   hover: "hover:bg-slate-100"  },
+];
+
+const fmt = (v) => {
+  if (!v) return "—";
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" });
 };
 
-const formatTime = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" });
-};
-
-const StatCard = ({ label, value, icon: StatIcon, tone = "green" }) => {
-  const toneMap = {
-    green: {
-      bg: "bg-[#174D3A]",
-      border: "border-[#174D3A]",
-      iconBox: "bg-white/10 text-white",
-      value: "text-white",
-      label: "text-emerald-50",
-    },
-    orange: {
-      bg: "bg-[#E65F1A]",
-      border: "border-[#E65F1A]",
-      iconBox: "bg-white/10 text-white",
-      value: "text-white",
-      label: "text-orange-50",
-    },
-  };
-  const colors = toneMap[tone] || toneMap.green;
+const StatCard = ({ label, value, icon: Icon, tone = "green", sub }) => {
+  const s = {
+    green:  "bg-[#0B3B2E] border-[#0B3B2E]",
+    orange: "bg-[#C8511A] border-[#C8511A]",
+    slate:  "bg-slate-700 border-slate-700",
+  }[tone] || "bg-[#0B3B2E] border-[#0B3B2E]";
   return (
-    <div className={`border ${colors.border} ${colors.bg} px-3 py-2 shadow-sm`}>
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className={`text-[11px] font-bold uppercase tracking-wide ${colors.label}`}>{label}</div>
-          <div className={`mt-1 text-xl font-extrabold leading-none ${colors.value}`}>{value}</div>
-        </div>
-        <span className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center ${colors.iconBox}`}>
-          {React.createElement(StatIcon, { className: "h-3.5 w-3.5" })}
-        </span>
-      </div>
+    <div className={`relative overflow-hidden border ${s} px-4 py-3 shadow-sm`}>
+      <Icon className="absolute right-3 top-2.5 h-10 w-10 text-white/10" />
+      <p className="text-[9px] font-extrabold uppercase tracking-widest text-white/60">{label}</p>
+      <p className="mt-1.5 text-2xl font-black leading-none text-white">{value}</p>
+      {sub && <p className="mt-1 text-[10px] text-white/50">{sub}</p>}
     </div>
   );
 };
 
-const Section = ({ title, right, children, className = "" }) => (
-  <section className={`border border-slate-200 bg-white shadow-sm ${className}`}>
-    <div className="flex min-h-9 flex-wrap items-center justify-between gap-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
-      <h2 className="text-xs font-extrabold uppercase tracking-wide text-[#0B3B2E]">{title}</h2>
-      {right}
+const Card = ({ title, right, children, className = "" }) => (
+  <div className={`border border-slate-200 bg-white shadow-sm ${className}`}>
+    <div className="flex min-h-8 flex-wrap items-center justify-between gap-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
+      <h2 className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">{title}</h2>
+      {right && <div className="flex items-center gap-2">{right}</div>}
     </div>
     {children}
-  </section>
+  </div>
 );
 
-const EmptyRow = ({ colSpan, text }) => (
-  <tr>
-    <td colSpan={colSpan} className="px-3 py-8 text-center text-xs font-semibold text-slate-500">
-      {text}
-    </td>
-  </tr>
-);
+const payBadge = (status) =>
+  status === "paid"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-orange-200 bg-orange-50 text-orange-700";
+
+const jobStatusBadge = (status) => {
+  const map = {
+    waiting:   "border-amber-200 bg-amber-50 text-amber-700",
+    washing:   "border-sky-200 bg-sky-50 text-sky-700",
+    done:      "border-indigo-200 bg-indigo-50 text-indigo-700",
+    paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
+    cancelled: "border-slate-200 bg-slate-50 text-slate-500",
+  };
+  return map[status] || "border-slate-200 bg-slate-50 text-slate-500";
+};
+
+const DASH_DATE_KEY = "cw_dash_date";
 
 const CarWashDashboard = () => {
-  const navigate = useNavigate();
-  const [summary, setSummary] = useState(null);
-  const [jobs, setJobs] = useState([]);
+  const navigate     = useNavigate();
+  const dateInputRef = useRef(null);
+  const [summary, setSummary]   = useState(null);
+  const [jobs, setJobs]         = useState([]);
   const [payments, setPayments] = useState([]);
-  const [date, setDate] = useState(todayISO());
-  const [loading, setLoading] = useState(false);
+  const [date, setDate]         = useState(() => sessionStorage.getItem(DASH_DATE_KEY) || todayISO());
+  const [loading, setLoading]   = useState(false);
+
+  const today = todayISO();
+
+  const changeDate = (val) => {
+    sessionStorage.setItem(DASH_DATE_KEY, val);
+    setDate(val);
+  };
+
+  const stepDay = (n) => {
+    const d = new Date(date + "T00:00:00");
+    d.setDate(d.getDate() + n);
+    const yyyy = d.getFullYear();
+    const mm   = String(d.getMonth() + 1).padStart(2, "0");
+    const dd   = String(d.getDate()).padStart(2, "0");
+    changeDate(`${yyyy}-${mm}-${dd}`);
+  };
+
+  const resetToday = () => {
+    sessionStorage.removeItem(DASH_DATE_KEY);
+    setDate(todayISO());
+  };
 
   const loadDashboard = async () => {
     setLoading(true);
     try {
-      const [summaryPayload, jobsPayload, paymentsPayload] = await Promise.all([
+      const [sumRes, jobsRes, payRes] = await Promise.all([
         carWashApi.getDailySummary(date),
-        carWashApi.listJobs({ date, limit: 20 }),
-        carWashApi.listPayments({ date, limit: 20 }),
+        carWashApi.listJobs({ date, limit: 30 }),
+        carWashApi.listPayments({ date, limit: 10 }),
       ]);
-      setSummary(summaryPayload || null);
-      setJobs(normalizeListPayload(jobsPayload, "jobs"));
-      setPayments(normalizeListPayload(paymentsPayload, "payments"));
+      setSummary(sumRes || null);
+      setJobs(normalizeListPayload(jobsRes, "jobs"));
+      setPayments(normalizeListPayload(payRes, "payments"));
     } catch {
       setSummary(null);
       setJobs([]);
@@ -106,25 +125,19 @@ const CarWashDashboard = () => {
     }
   };
 
-  useEffect(() => {
-    loadDashboard();
-  }, [date]);
+  useEffect(() => { loadDashboard(); }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const counts = summary?.statusCounts || {};
-  const revenueByMethod = summary?.revenueByMethod || {};
-  const totalRevenue = Number(summary?.todayRevenue || 0);
-  const activeQueue = Number(counts.waiting || 0) + Number(counts.washing || 0) + Number(counts.done || 0);
-  const paidJobs = Number(counts.paid || 0);
-  const unpaidJobs = jobs.filter((job) => job.paymentStatus !== "paid").length;
+  const counts        = summary?.statusCounts    || {};
+  const byMethod      = summary?.revenueByMethod || {};
+  const totalRevenue  = Number(summary?.todayRevenue || 0);
+  const activeQueue   = (counts.waiting || 0) + (counts.washing || 0) + (counts.done || 0);
+  const cashTotal     = Number(summary?.cashTotal   || 0);
+  const mpesaTotal    = Number(summary?.mpesaTotal  || 0);
+  const nonCash       = totalRevenue - cashTotal;
 
   const paymentRows = useMemo(
-    () =>
-      Object.keys(paymentLabels).map((method) => ({
-        method,
-        label: paymentLabels[method],
-        amount: Number(revenueByMethod[method] || 0),
-      })),
-    [revenueByMethod]
+    () => Object.keys(paymentLabels).map((m) => ({ method: m, label: paymentLabels[m], amount: Number(byMethod[m] || 0) })),
+    [byMethod]
   );
 
   return (
@@ -132,266 +145,284 @@ const CarWashDashboard = () => {
       title="Daily Operations"
       action={
         <>
-          <input
-            type="date"
-            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-          />
+          {/* Date stepper */}
+          <div className="flex h-7 items-center divide-x divide-slate-300 border border-slate-300 bg-white">
+            <button
+              type="button"
+              onClick={() => stepDay(-1)}
+              className="flex h-full w-6 items-center justify-center text-slate-500 hover:bg-slate-100"
+              title="Previous day"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              onClick={() => dateInputRef.current?.showPicker()}
+              className="relative flex h-full items-center px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              title="Pick a date"
+            >
+              {new Date(date + "T00:00:00").toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={date}
+                onChange={(e) => changeDate(e.target.value)}
+                className="pointer-events-none absolute inset-0 h-0 w-0 opacity-0"
+                tabIndex={-1}
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => stepDay(1)}
+              className="flex h-full w-6 items-center justify-center text-slate-500 hover:bg-slate-100"
+              title="Next day"
+            >
+              ›
+            </button>
+          </div>
+          {/* Today reset — only shown when not on today */}
+          {date !== today && (
+            <button
+              type="button"
+              onClick={resetToday}
+              className="h-7 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+            >
+              Today
+            </button>
+          )}
           <button
             type="button"
             onClick={loadDashboard}
-            className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
           >
-            <FaRedoAlt className={loading ? "animate-spin" : ""} />
-            Refresh
+            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button
             type="button"
-            onClick={() => navigate("/carwash/jobs")}
-            className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]"
+            onClick={() => navigate("/carwash/jobs/new")}
+            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
           >
-            <FaPlus />
-            New Job
+            <FaPlus size={9} /> New Job
           </button>
         </>
       }
     >
-      <div className="grid gap-1.5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Today Jobs" value={summary?.todayJobsCount || 0} icon={FaCar} tone="green" />
-        <StatCard label="Active Queue" value={activeQueue} icon={FaClock} tone="orange" />
-        <StatCard label="Today Revenue" value={formatMoney(totalRevenue)} icon={FaMoneyBillWave} tone="green" />
-        <StatCard label="Cash" value={formatMoney(summary?.cashTotal)} icon={FaMoneyBillWave} tone="orange" />
-        <StatCard label="M-Pesa" value={formatMoney(summary?.mpesaTotal)} icon={FaPhone} tone="green" />
+      <div className="flex-1 min-h-0 overflow-y-auto">
+      {/* ── Stat cards ─────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">
+        <StatCard label={date === today ? "Today Jobs" : "Jobs"} value={summary?.todayJobsCount || 0} icon={FaCar} tone="green" />
+        <StatCard label="Active Queue"  value={activeQueue}                  icon={FaClock}         tone="orange" sub={activeQueue > 0 ? "in progress" : "all clear"} />
+        <StatCard label={date === today ? "Today Revenue" : "Revenue"} value={formatMoney(totalRevenue)} icon={FaMoneyBillWave} tone="green" />
+        <StatCard label="Cash"          value={formatMoney(cashTotal)}       icon={FaMoneyBillWave} tone="orange" />
+        <StatCard label="M-Pesa"        value={formatMoney(mpesaTotal)}      icon={FaPhone}         tone="green" />
       </div>
 
-      <div className="mt-1.5 grid items-start gap-2 grid-cols-1 xl:grid-cols-[1.15fr_0.85fr]">
-        <Section title="Operations Queue" right={<span className="text-[11px] font-bold text-slate-500">{date}</span>}>
-          <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 sm:grid-cols-5 sm:divide-y-0">
-            {[
-              ["waiting", FaClock],
-              ["washing", FaSoap],
-              ["done", FaCheckCircle],
-              ["paid", FaMoneyBillWave],
-              ["cancelled", FaCar],
-            ].map(([status, StatusIcon]) => (
-              <div key={status} className="p-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{statusLabels[status]}</span>
-                  {React.createElement(StatusIcon, { className: "h-3.5 w-3.5 text-[#FF8C00]" })}
-                </div>
-                <div className="mt-1 text-xl font-extrabold leading-none text-[#082F25]">{counts[status] || 0}</div>
+      {/* ── Operations Queue ───────────────────────────────────────────────── */}
+      <Card title="Operations Queue" className="mt-1.5" right={
+        <span className="text-[10px] font-bold text-slate-400">
+          {new Date(date).toLocaleDateString("en-KE", { weekday: "long", day: "2-digit", month: "short", year: "numeric" })}
+        </span>
+      }>
+        <div className="grid grid-cols-5 divide-x divide-slate-100">
+          {queueStatus.map(({ key, label, icon: Icon, ring, num, bg, hover }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => navigate(`/carwash/jobs?status=${key}&dateFrom=${date}&dateTo=${date}`)}
+              className={`group flex flex-col items-center justify-between gap-1 px-2 py-3 transition ${hover} sm:flex-row sm:gap-2 sm:px-3`}
+              title={`View ${label} jobs`}
+            >
+              <div className="flex flex-col items-center gap-1 sm:flex-row sm:gap-2">
+                <span className={`inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border-2 ${ring} ${bg}`}>
+                  <Icon className={`h-3 w-3 ${num}`} />
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</span>
               </div>
-            ))}
-          </div>
-        </Section>
+              <span className={`text-xl font-black leading-none tabular-nums ${num}`}>{counts[key] || 0}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
 
-        <Section title="Payment Mix">
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[280px] text-xs">
-            <thead className="bg-[#0B3B2E] text-white">
-              <tr>
-                <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Method</th>
-                <th className="px-3 py-2 text-right font-bold uppercase tracking-wide">Amount</th>
-                <th className="px-3 py-2 text-right font-bold uppercase tracking-wide">Share</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paymentRows.map((row) => {
-                const share = totalRevenue > 0 ? Math.round((row.amount / totalRevenue) * 100) : 0;
-                return (
-                  <tr key={row.method} className="border-b border-slate-200 last:border-b-0">
-                    <td className="px-3 py-2 font-semibold text-slate-700">{row.label}</td>
-                    <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(row.amount)}</td>
-                    <td className="px-3 py-2 text-right font-semibold text-[#0B3B2E]">{share}%</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          </div>
-        </Section>
-      </div>
+      {/* ── Main two-column area ───────────────────────────────────────────── */}
+      <div className="mt-1.5 grid grid-cols-1 items-start gap-1.5 xl:grid-cols-[1fr_280px]">
 
-      <div className="mt-2 grid items-start gap-2 grid-cols-1 xl:grid-cols-[1.4fr_0.6fr]">
-        <Section
-          title="Daily Control Summary"
-          right={<span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Jobs and collections</span>}
-        >
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[340px] text-xs">
-            <thead className="bg-[#0B3B2E] text-white">
-              <tr>
-                <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Metric</th>
-                <th className="px-3 py-2 text-right font-bold uppercase tracking-wide">Value</th>
-                <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                ["Paid Jobs", paidJobs, "Completed and fully paid"],
-                ["Unpaid Jobs", unpaidJobs, "Requires follow-up or payment"],
-                ["Payments", summary?.paymentCount || 0, "Receipts recorded today"],
-                ["Non-Cash", formatMoney(totalRevenue - Number(summary?.cashTotal || 0)), "M-Pesa, bank, card and other"],
-              ].map(([label, value, note]) => (
-                <tr key={label} className="border-b border-slate-200 last:border-b-0 hover:bg-slate-50">
-                  <td className="px-3 py-2 font-semibold text-slate-700">{label}</td>
-                  <td className="px-3 py-2 text-right font-extrabold text-slate-950">{value}</td>
-                  <td className="px-3 py-2 text-slate-500">{note}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </Section>
-        <Section title="Actions">
-          <div className="grid gap-2 p-3">
-            <button
-              type="button"
-              onClick={() => navigate("/carwash/jobs")}
-              className="border border-[#0B3B2E] bg-[#0B3B2E] px-3 py-2 text-left text-xs font-bold text-white hover:bg-[#0A3127]"
-            >
-              New Job
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/carwash/payments")}
-              className="border border-[#B7C9C0] bg-white px-3 py-2 text-left text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-            >
-              Payments
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/carwash/reports")}
-              className="border border-[#B7C9C0] bg-white px-3 py-2 text-left text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-            >
-              Reports
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/carwash/financials")}
-              className="border border-[#B7C9C0] bg-white px-3 py-2 text-left text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-            >
-              Financials
-            </button>
-          </div>
-        </Section>
-      </div>
-
-      <div className="mt-2 grid items-start gap-2 grid-cols-1 xl:grid-cols-[1.4fr_0.6fr]">
-        <Section
+        {/* Left: Today Jobs */}
+        <Card
           title="Today Jobs"
           right={
             <button
               type="button"
               onClick={() => navigate("/carwash/jobs")}
-              className="text-[11px] font-extrabold uppercase tracking-wide text-[#0B3B2E] hover:text-[#FF8C00]"
+              className="text-[10px] font-extrabold uppercase tracking-wide text-[#0B3B2E] hover:text-[#FF8C00]"
             >
-              Open Jobs
+              View All →
             </button>
           }
         >
-          {/* Mobile job cards */}
-          <div className="sm:hidden divide-y divide-slate-200">
-            {jobs.length ? jobs.slice(0, 8).map((job) => (
+          {/* Mobile cards */}
+          <div className="divide-y divide-slate-100 xl:hidden">
+            {jobs.length ? jobs.slice(0, 10).map((job) => (
               <div key={job._id} className="flex items-center justify-between gap-2 px-3 py-2.5">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-extrabold text-slate-900">{job.jobNumber || "-"}</span>
-                    <span className="font-extrabold uppercase text-slate-700 text-[11px]">{job.plateNumber || "-"}</span>
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="font-mono font-bold text-[#0B3B2E]">{job.jobNumber || "—"}</span>
+                    <span className="font-extrabold text-slate-800">{job.plateNumber || "—"}</span>
                   </div>
-                  <div className="text-[11px] text-slate-500">{job.serviceName || "-"} · {formatTime(job.createdAt)}</div>
+                  <div className="mt-0.5 text-[11px] text-slate-500">
+                    {job.serviceName || "—"} · {fmt(job.createdAt)}
+                  </div>
                 </div>
-                <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                  <span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${job.paymentStatus === "paid" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>{job.paymentStatus || "unpaid"}</span>
-                  <span className="font-bold text-slate-900 text-xs">{formatMoney(job.price)}</span>
+                <div className="flex flex-shrink-0 flex-col items-end gap-1">
+                  <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${jobStatusBadge(job.status)}`}>
+                    {job.status || "—"}
+                  </span>
+                  <span className="text-xs font-extrabold text-slate-900">{formatMoney(job.price)}</span>
                 </div>
               </div>
             )) : (
-              <div className="px-3 py-8 text-center text-xs font-semibold text-slate-500">No Car Wash jobs recorded for this date.</div>
+              <p className="px-3 py-8 text-center text-xs font-semibold text-slate-400">
+                No jobs recorded for this date.
+              </p>
             )}
           </div>
           {/* Desktop table */}
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full min-w-[920px] text-xs">
-              <thead className="bg-[#0B3B2E] text-white">
-                <tr>
-                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Time</th>
-                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Job No.</th>
-                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Plate</th>
-                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Service</th>
-                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Staff</th>
-                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Status</th>
-                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Payment</th>
-                  <th className="px-3 py-2 text-right font-bold uppercase tracking-wide">Price</th>
+          <div className="hidden overflow-x-auto xl:block">
+            <table className="w-full min-w-[700px] text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Time</th>
+                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Job No.</th>
+                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Plate</th>
+                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Service</th>
+                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Staff</th>
+                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Status</th>
+                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Payment</th>
+                  <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Price</th>
                 </tr>
               </thead>
               <tbody>
-                {jobs.length ? (
-                  jobs.slice(0, 8).map((job) => (
-                    <tr key={job._id} className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className="px-3 py-2 font-semibold text-slate-600">{formatTime(job.createdAt)}</td>
-                      <td className="px-3 py-2 font-bold text-slate-900">{job.jobNumber || "-"}</td>
-                      <td className="px-3 py-2 font-extrabold text-slate-900">{job.plateNumber || "-"}</td>
-                      <td className="px-3 py-2 text-slate-700">{job.serviceName || "-"}</td>
-                      <td className="px-3 py-2 text-slate-700">{job.assignedStaff?.name || "-"}</td>
-                      <td className="px-3 py-2">
-                        <span className="inline-flex border border-slate-200 bg-slate-50 px-2 py-0.5 font-bold uppercase text-slate-700">
-                          {statusLabels[job.status] || job.status || "-"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex border px-2 py-0.5 font-bold uppercase ${
-                            job.paymentStatus === "paid"
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-orange-200 bg-orange-50 text-orange-700"
-                          }`}
-                        >
-                          {job.paymentStatus || "unpaid"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(job.price)}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <EmptyRow colSpan={8} text="No Car Wash jobs recorded for this date." />
+                {jobs.length ? jobs.slice(0, 15).map((job) => (
+                  <tr key={job._id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-3 py-2 text-slate-400">{fmt(job.createdAt)}</td>
+                    <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{job.jobNumber || "—"}</td>
+                    <td className="px-3 py-2 font-extrabold text-slate-900">{job.plateNumber || "—"}</td>
+                    <td className="px-3 py-2 text-slate-600">{job.serviceName || "—"}</td>
+                    <td className="px-3 py-2 text-slate-600">{job.assignedStaff?.name || "—"}</td>
+                    <td className="px-3 py-2">
+                      <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${jobStatusBadge(job.status)}`}>
+                        {job.status || "—"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${payBadge(job.paymentStatus)}`}>
+                        {job.paymentStatus || "unpaid"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(job.price)}</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-10 text-center text-xs font-semibold text-slate-400">
+                      No Car Wash jobs recorded for this date.
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
           </div>
-        </Section>
+        </Card>
 
-        <Section title="Recent Payments">
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[260px] text-xs">
-            <thead className="bg-[#0B3B2E] text-white">
-              <tr>
-                <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Time</th>
-                <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Ref</th>
-                <th className="px-3 py-2 text-right font-bold uppercase tracking-wide">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.length ? (
-                payments.slice(0, 8).map((payment) => (
-                  <tr key={payment._id} className="border-b border-slate-200 last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-2 font-semibold text-slate-600">{formatTime(payment.paymentDate)}</td>
-                    <td className="px-3 py-2">
-                      <div className="font-bold uppercase text-slate-900">{payment.method || "-"}</div>
-                      <div className="text-[11px] text-slate-500">{payment.reference || payment.job?.jobNumber || "-"}</div>
-                    </td>
-                    <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(payment.amount)}</td>
-                  </tr>
-                ))
-              ) : (
-                <EmptyRow colSpan={3} text="No payments recorded for this date." />
+        {/* Right sidebar */}
+        <div className="flex flex-col gap-1.5">
+
+          {/* Daily Summary */}
+          <Card title="Daily Summary">
+            <div className="divide-y divide-slate-100">
+              {[
+                { label: "Paid Jobs",     value: counts.paid || 0,               note: "fully settled",           bold: true },
+                { label: "In Queue",      value: activeQueue,                    note: "not yet paid",            warn: activeQueue > 0 },
+                { label: "Cancelled",     value: counts.cancelled || 0,          note: "not counted in revenue",  muted: true },
+                { label: "Payments",      value: summary?.paymentCount || 0,     note: "transactions recorded" },
+                { label: "Non-Cash",      value: formatMoney(nonCash),           note: "M-Pesa · bank · card",   money: true },
+              ].map(({ label, value, note, bold, warn, muted, money }) => (
+                <div key={label} className="flex items-center justify-between gap-2 px-3 py-2">
+                  <div>
+                    <p className={`text-xs font-bold ${muted ? "text-slate-400" : "text-slate-700"}`}>{label}</p>
+                    <p className="text-[10px] text-slate-400">{note}</p>
+                  </div>
+                  <span className={`text-right font-extrabold tabular-nums ${
+                    bold ? "text-emerald-700" :
+                    warn ? "text-orange-600" :
+                    muted ? "text-slate-400" :
+                    money ? "text-[#0B3B2E]" :
+                    "text-slate-900"
+                  } ${money ? "text-sm" : "text-base"}`}>
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Payment Mix */}
+          <Card title="Payment Mix">
+            <div className="space-y-1 px-3 py-2">
+              {paymentRows.map(({ method, label, amount }) => {
+                const pct = totalRevenue > 0 ? Math.round((amount / totalRevenue) * 100) : 0;
+                const { bar, text } = paymentColors[method] || paymentColors.other;
+                return (
+                  <div key={method}>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-600">{label}</span>
+                      <span className={`font-extrabold tabular-nums ${amount > 0 ? text : "text-slate-300"}`}>
+                        {formatMoney(amount)}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                        <div className={`h-full rounded-full ${bar} transition-all`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="w-7 text-right text-[10px] font-bold text-slate-400">{pct}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {totalRevenue === 0 && (
+                <p className="py-2 text-center text-[10px] text-slate-400">No revenue recorded yet.</p>
               )}
-            </tbody>
-          </table>
-          </div>
-        </Section>
+            </div>
+          </Card>
+
+          {/* Recent Payments */}
+          <Card title="Recent Payments">
+            <div className="divide-y divide-slate-100">
+              {payments.length ? payments.map((p) => (
+                <div key={p._id} className="flex items-center justify-between gap-2 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="font-bold uppercase text-slate-800">{p.method || "—"}</span>
+                      {p.reference && <span className="truncate font-mono text-[10px] text-slate-400">{p.reference}</span>}
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      {fmt(p.paymentDate)}{p.job?.jobNumber ? ` · ${p.job.jobNumber}` : ""}
+                    </p>
+                  </div>
+                  <span className="flex-shrink-0 text-sm font-extrabold tabular-nums text-[#0B3B2E]">
+                    {formatMoney(p.amount)}
+                  </span>
+                </div>
+              )) : (
+                <p className="px-3 py-6 text-center text-[11px] font-semibold text-slate-400">
+                  No payments recorded yet.
+                </p>
+              )}
+            </div>
+          </Card>
+
+        </div>
       </div>
+      </div>{/* end overflow-y-auto */}
     </CarWashShell>
   );
 };

@@ -17,6 +17,13 @@ const carWashExpenseSchema = new mongoose.Schema(
     payee: { type: String, trim: true, default: "" },
     category: { type: String, trim: true, required: true },
     description: { type: String, trim: true, default: "" },
+    items: [{
+      _id: false,
+      description: { type: String, trim: true, default: "" },
+      qty:         { type: Number, default: 1,   min: 0 },
+      unitPrice:   { type: Number, default: 0,   min: 0 },
+      amount:      { type: Number, default: 0,   min: 0 },
+    }],
     amount: { type: Number, required: true, min: 0 },
     method: { type: String, enum: EXPENSE_METHODS, default: "cash" },
     cashbookAccount: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null, index: true },

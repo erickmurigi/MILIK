@@ -32,6 +32,9 @@ const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 export const getSavingsDeductionAmount = async (businessId) => {
   const company = await Company.findById(businessId).select("carwashSettings").lean();
+  // savingsEnabled treated as true when field is absent (backward compat for existing businesses)
+  const enabled = company?.carwashSettings?.savingsEnabled !== false;
+  if (!enabled) return 0;
   const amt = Number(company?.carwashSettings?.savingsDeductionPerJob ?? 100);
   return Number.isFinite(amt) && amt >= 0 ? round2(amt) : 100;
 };

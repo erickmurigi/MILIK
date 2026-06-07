@@ -162,14 +162,24 @@ const CarWashJobs = () => {
   const [cashbookDefaults, setCashbookDefaults] = useState({});
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [filters, setFilters] = useState(() => {
-    const p = new URLSearchParams(location.search);
-    const plate = p.get("plate");
-    return plate ? { ...defaultFilters, search: plate, dateFrom: "", dateTo: "" } : defaultFilters;
+    const p      = new URLSearchParams(location.search);
+    const plate  = p.get("plate");
+    const status = p.get("status");
+    const from   = p.get("dateFrom");
+    const to     = p.get("dateTo");
+    if (plate)  return { ...defaultFilters, search: plate, dateFrom: "", dateTo: "" };
+    if (status || from) return { ...defaultFilters, status: status || "", dateFrom: from || defaultFilters.dateFrom, dateTo: to || defaultFilters.dateTo };
+    return defaultFilters;
   });
   const [appliedFilters, setAppliedFilters] = useState(() => {
-    const p = new URLSearchParams(location.search);
-    const plate = p.get("plate");
-    return plate ? { ...defaultFilters, search: plate, dateFrom: "", dateTo: "" } : defaultFilters;
+    const p      = new URLSearchParams(location.search);
+    const plate  = p.get("plate");
+    const status = p.get("status");
+    const from   = p.get("dateFrom");
+    const to     = p.get("dateTo");
+    if (plate)  return { ...defaultFilters, search: plate, dateFrom: "", dateTo: "" };
+    if (status || from) return { ...defaultFilters, status: status || "", dateFrom: from || defaultFilters.dateFrom, dateTo: to || defaultFilters.dateTo };
+    return defaultFilters;
   });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentJobPaidSoFar, setPaymentJobPaidSoFar] = useState(0);

@@ -1,102 +1,144 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
-import { FaCalendarCheck, FaPiggyBank, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
+import {
+  FaCalendarCheck,
+  FaChevronDown,
+  FaChevronUp,
+  FaPiggyBank,
+  FaRedoAlt,
+  FaTimes,
+  FaTrash,
+} from "react-icons/fa";
 import { toast } from "react-toastify";
-import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
+import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 
-const ic  = "h-7 w-full border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
+// Backend returns: { staffId, staffName, daily, disbursed, balance }
+const ic  = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const icc = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const lc  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const fmtDate = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
-const getMonthBounds = () => {
-  const now   = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { from: first.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
+const localISO = (d) => {
+  const y  = d.getFullYear();
+  const m  = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
 };
+const monthStart = () => { const n = new Date(); return localISO(new Date(n.getFullYear(), n.getMonth(), 1)); };
+const todayISO  = () => localISO(new Date());
 
-const emptyFilters = () => {
-  const { from, to } = getMonthBounds();
-  return { staff: "", type: "", dateFrom: from, dateTo: to };
-};
+const typePill = (type) =>
+  type === "disbursement"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-amber-200 bg-amber-50 text-amber-700";
 
-const Modal = ({ title, children, footer, onClose }) => (
-  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className="w-full max-w-lg border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-        <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
-        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-      </div>
-      <div className="p-4">{children}</div>
-      {footer && <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
-    </div>
-  </div>
-);
-
-const PAGE = 50;
+const DETAIL_LIMIT = 30;
 
 const CarWashStaffSavings = () => {
   const currentCompany = useSelector(selectCurrentCompany);
-  const [records, setRecords]   = useState([]);
-  const [staff, setStaff]       = useState([]);
-  const [cashbooks, setCashbooks] = useState([]);
-  const [loading, setLoading]   = useState(false);
-  const [filters, setFilters]   = useState(emptyFilters);
-  const [applied, setApplied]   = useState(emptyFilters);
-  const [processing, setProcessing] = useState(false);
-  const [page, setPage]         = useState(1);
-  const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 1 });
-  const [showModal, setShowModal] = useState(false);
-  const [disburseStaff, setDisburseStaff] = useState(null);
-  const [disburseForm, setDisburseForm]   = useState({ amount: "", cashbookAccount: "", notes: "" });
-  const [disbursing, setDisbursing]       = useState(false);
 
-  // Staff and cashbooks are static — load once
-  const loadStatic = useCallback(async () => {
-    if (staff.length && cashbooks.length) return;
+  // ── Balances ────────────────────────────────────────────────────────────────
+  const [balances,        setBalances]        = useState([]);
+  const [balancesLoading, setBalancesLoading] = useState(false);
+  const [savingsEnabled,  setSavingsEnabled]  = useState(true);
+
+  // ── Detail panel — selectedStaff shape: { staffId, staffName, balance } ────
+  const [selectedStaff,  setSelectedStaff]  = useState(null);
+  const [records,        setRecords]        = useState([]);
+  const [recordsTotal,   setRecordsTotal]   = useState(0);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [detailFrom,     setDetailFrom]     = useState(monthStart());
+  const [detailTo,       setDetailTo]       = useState(todayISO());
+  const [detailPage,     setDetailPage]     = useState(1);
+  const detailRef  = useRef(null);
+  const prevStaffId = useRef(null);
+
+  // ── Disbursement modal ──────────────────────────────────────────────────────
+  const [cashbooks,     setCashbooks]     = useState([]);
+  const [showDisburse,  setShowDisburse]  = useState(false);
+  const [disburseStaff, setDisburseStaff] = useState(null);
+  const [dForm,         setDForm]         = useState({ amount: "", cashbookAccount: "", notes: "" });
+  const [disbursing,    setDisbursing]    = useState(false);
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
+  const [processing, setProcessing] = useState(false);
+  const [resetting,  setResetting]  = useState(false);
+
+  // ── Data loaders ────────────────────────────────────────────────────────────
+  const loadBalances = useCallback(async () => {
+    setBalancesLoading(true);
     try {
-      const [staffPayload, cbPayload] = await Promise.all([
-        carWashApi.listStaff({ active: true }),
+      const [balRes, settingsRes, cbRes] = await Promise.allSettled([
+        carWashApi.listSavingsBalances(),
+        carWashApi.getCarWashSettings(),
         currentCompany?._id
-          ? carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" })
+          ? carWashApi.listChartOfAccounts({ type: "asset", moduleScope: "carwash" })
           : Promise.resolve([]),
       ]);
-      setStaff(normalizeListPayload(staffPayload, "staff"));
-      setCashbooks(Array.isArray(cbPayload) ? cbPayload : []);
-    } catch { /* non-critical */ }
-  }, [currentCompany?._id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loadRecords = useCallback(async () => {
-    setLoading(true);
-    try {
-      const payload = await carWashApi.listSavings({
-        staff:    applied.staff    || undefined,
-        type:     applied.type     || undefined,
-        dateFrom: applied.dateFrom || undefined,
-        dateTo:   applied.dateTo   || undefined,
-        page,
-        limit: PAGE,
-      });
-      setRecords(normalizeListPayload(payload, "records"));
-      setPagination(payload?.pagination || { page, total: payload?.total || 0, pages: 1 });
-    } catch {
-      toast.error("Failed to load savings records");
+      if (balRes.status === "fulfilled")      setBalances(balRes.value?.balances || []);
+      if (settingsRes.status === "fulfilled") setSavingsEnabled(settingsRes.value?.savingsEnabled !== false);
+      if (cbRes.status === "fulfilled") {
+        const list = Array.isArray(cbRes.value) ? cbRes.value : normalizeListPayload(cbRes.value, "accounts");
+        setCashbooks(list);
+      }
     } finally {
-      setLoading(false);
+      setBalancesLoading(false);
     }
-  }, [applied, page]);
+  }, [currentCompany?._id]);
 
-  useEffect(() => { loadStatic(); }, [loadStatic]);
-  useEffect(() => { loadRecords(); }, [loadRecords]);
+  const loadRecords = useCallback(async (staffId, from, to, page) => {
+    setRecordsLoading(true);
+    try {
+      const res = await carWashApi.listSavings({ staff: staffId, dateFrom: from, dateTo: to, page, limit: DETAIL_LIMIT });
+      setRecords(normalizeListPayload(res, "records"));
+      setRecordsTotal(res?.pagination?.total ?? 0);
+    } catch {
+      setRecords([]);
+      setRecordsTotal(0);
+    } finally {
+      setRecordsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadBalances(); }, [loadBalances]);
+
+  useEffect(() => {
+    if (!selectedStaff) return;
+    loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
+  }, [selectedStaff, detailFrom, detailTo, detailPage, loadRecords]);
+
+  // Scroll detail panel into view on first open
+  useEffect(() => {
+    if (selectedStaff && selectedStaff.staffId !== prevStaffId.current) {
+      setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+    }
+    prevStaffId.current = selectedStaff?.staffId ?? null;
+  }, [selectedStaff]);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────────
+  const handleToggleStaff = (b) => {
+    if (selectedStaff?.staffId === b.staffId) {
+      setSelectedStaff(null);
+    } else {
+      setSelectedStaff(b);
+      setDetailPage(1);
+    }
+  };
+
+  const handleDetailDateChange = (field, val) => {
+    if (field === "from") setDetailFrom(val); else setDetailTo(val);
+    setDetailPage(1);
+  };
 
   const processToday = async () => {
     setProcessing(true);
     try {
-      const result = await carWashApi.processDailySavings();
-      toast.success(`Daily savings: ${result?.posted ?? 0} posted, ${result?.skipped ?? 0} already done`);
-      loadRecords();
+      const r = await carWashApi.processDailySavings();
+      toast.success(`Daily savings: ${r?.posted ?? 0} posted, ${r?.skipped ?? 0} already done`);
+      loadBalances();
+      if (selectedStaff) loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to process daily savings");
     } finally {
@@ -104,252 +146,371 @@ const CarWashStaffSavings = () => {
     }
   };
 
-  // Balance summary from current page (approximate — wallet gives precise)
-  const balanceByStaff = useMemo(() => {
-    const map = new Map();
-    for (const rec of records) {
-      const id = String(rec.staff?._id || rec.staff || "");
-      if (!id) continue;
-      const cur = map.get(id) || { name: rec.staff?.name || "Staff", daily: 0, disbursed: 0 };
-      if (rec.type === "daily")        cur.daily     += Number(rec.amount || 0);
-      if (rec.type === "disbursement") cur.disbursed += Number(rec.amount || 0);
-      map.set(id, cur);
-    }
-    return map;
-  }, [records]);
-
-  const openDisburse = async (staffMember) => {
+  const handleReset = async () => {
+    if (!window.confirm("Delete ALL savings records for this business? This cannot be undone.")) return;
+    setResetting(true);
     try {
-      const wallet  = await carWashApi.getStaffWallet(staffMember._id);
-      const balance = wallet?.savings?.balance ?? 0;
-      const preferred = cashbooks.find((cb) => /cash|hand|safe/.test(`${cb?.name || ""} ${cb?.code || ""}`.toLowerCase()))?._id || cashbooks[0]?._id || "";
-      setDisburseStaff({ ...staffMember, balance });
-      setDisburseForm({ amount: String(balance), cashbookAccount: preferred, notes: "" });
-      setShowModal(true);
-    } catch {
-      toast.error("Failed to load savings balance");
+      const r = await carWashApi.resetSavings();
+      toast.success(`Deleted ${r?.deleted ?? 0} savings records`);
+      setBalances([]);
+      setSelectedStaff(null);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Reset failed");
+    } finally {
+      setResetting(false);
     }
+  };
+
+  const openDisburse = (b) => {
+    const preferred = cashbooks.find((cb) =>
+      /cash|hand|safe/.test(`${cb?.name || ""} ${cb?.code || ""}`.toLowerCase())
+    )?._id ?? cashbooks[0]?._id ?? "";
+    setDisburseStaff(b);
+    setDForm({ amount: String(b.balance), cashbookAccount: preferred, notes: "" });
+    setShowDisburse(true);
   };
 
   const saveDisbursement = async (e) => {
     e.preventDefault();
+    if (!disburseStaff || !dForm.amount || !dForm.cashbookAccount) return;
     setDisbursing(true);
     try {
       await carWashApi.createSavingsPayout({
-        staff:            disburseStaff._id,
-        amount:           Number(disburseForm.amount),
-        cashbookAccount:  disburseForm.cashbookAccount,
-        notes:            disburseForm.notes,
+        staff:           disburseStaff.staffId,   // backend reads req.body.staff
+        cashbookAccount: dForm.cashbookAccount,
+        amount:          Number(dForm.amount),
+        notes:           dForm.notes,
       });
-      setShowModal(false);
-      loadRecords();
-      toast.success(`Savings payout recorded for ${disburseStaff.name}`);
+      toast.success(`Savings disbursed to ${disburseStaff.staffName}`);
+      setShowDisburse(false);
+      loadBalances();
+      if (selectedStaff?.staffId === disburseStaff.staffId) {
+        loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
+      }
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Payout failed");
+      toast.error(err?.response?.data?.message || "Disbursement failed");
     } finally {
       setDisbursing(false);
     }
   };
 
-  const typeTag = (type) => type === "disbursement"
-    ? <span className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-700">Paid Out</span>
-    : <span className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-700">Daily</span>;
-
-  const applyFilters  = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
-  const resetFilters  = () => { const d = emptyFilters(); setFilters(d); setPage(1); setApplied(d); };
+  const totalPages = Math.max(Math.ceil(recordsTotal / DETAIL_LIMIT), 1);
 
   return (
     <CarWashShell
       title="Staff Savings"
       action={
-        <div className="flex items-center gap-1">
+        <>
           <button
             type="button"
-            onClick={loadRecords}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+            onClick={loadBalances}
+            className="inline-flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
           >
-            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+            <FaRedoAlt size={9} /> Refresh
           </button>
-          <button
-            type="button"
-            onClick={processToday}
-            disabled={processing}
-            className="inline-flex h-7 items-center gap-1 bg-amber-600 px-3 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-60"
-            title="Post today's standing order savings for all active staff"
-          >
-            <FaCalendarCheck size={9} />
-            {processing ? "Processing…" : "Process Today"}
-          </button>
-        </div>
+          {savingsEnabled && (
+            <button
+              type="button"
+              onClick={processToday}
+              disabled={processing}
+              className="inline-flex h-7 items-center gap-1.5 bg-[#C8511A] px-3 text-xs font-bold text-white hover:bg-[#b04616] disabled:opacity-50"
+            >
+              <FaCalendarCheck size={9} /> {processing ? "Processing…" : "Process Today"}
+            </button>
+          )}
+        </>
       }
     >
-      {/* Balance cards — approximate from current page */}
-      {balanceByStaff.size > 0 && (
-        <div className="mt-0.5 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
-          {[...balanceByStaff.entries()].map(([id, data]) => {
-            const balance     = Math.max(0, data.daily - data.disbursed); // FIX: was data.accrued
-            const staffMember = staff.find((s) => s._id === id);
-            return (
-              <div key={id} className="flex items-center justify-between gap-3 border border-slate-200 bg-white px-3 py-2 shadow-sm text-xs">
-                <div>
-                  <p className="font-extrabold text-slate-900">{data.name}</p>
-                  <p className="text-slate-500">Saved: {formatMoney(data.daily)}</p>
-                  <p className={`font-bold ${balance > 0 ? "text-amber-700" : "text-slate-400"}`}>
-                    Balance: {formatMoney(balance)}
-                  </p>
-                </div>
-                {balance > 0 && staffMember && (
-                  <button
-                    type="button"
-                    onClick={() => openDisburse(staffMember)}
-                    className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800 hover:bg-amber-100"
-                  >
-                    <FaPiggyBank size={8} /> Pay Out
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <div className="flex-1 min-h-0 overflow-y-auto">
 
-      {/* Filter bar */}
-      <form onSubmit={applyFilters} className="mt-1 flex flex-wrap items-end gap-1.5 border border-slate-200 bg-white px-3 py-2 shadow-sm">
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Staff</label>
-          <select className={`${ic} min-w-[130px]`} value={filters.staff} onChange={(e) => setFilters((p) => ({ ...p, staff: e.target.value }))}>
-            <option value="">All staff</option>
-            {staff.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-          </select>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Type</label>
-          <select className={`${ic} min-w-[140px]`} value={filters.type} onChange={(e) => setFilters((p) => ({ ...p, type: e.target.value }))}>
-            <option value="">All types</option>
-            <option value="daily">Daily Standing Order</option>
-            <option value="disbursement">Disbursements</option>
-          </select>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">From</label>
-          <input type="date" className={ic} value={filters.dateFrom} onChange={(e) => setFilters((p) => ({ ...p, dateFrom: e.target.value }))} />
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">To</label>
-          <input type="date" className={ic} value={filters.dateTo} onChange={(e) => setFilters((p) => ({ ...p, dateTo: e.target.value }))} />
-        </div>
-        <button type="submit" className="inline-flex h-7 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white hover:bg-[#E67E00]">
-          <FaSearch size={9} /> Search
-        </button>
-        <button type="button" onClick={resetFilters} className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-          <FaRedoAlt size={9} /> Reset
-        </button>
-      </form>
+        {/* ── Staff Balances Table ──────────────────────────────────────────── */}
+        <div className="border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
+            <h2 className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">
+              <FaPiggyBank size={11} /> Staff Savings Balances
+            </h2>
+            <span className="text-[10px] text-slate-400">{balances.length} staff</span>
+          </div>
 
-      {/* Table */}
-      <div className="mt-1 flex flex-1 min-h-0 flex-col border border-slate-200 bg-white shadow-sm">
-        <div className="flex-shrink-0 flex flex-wrap items-center gap-x-4 gap-y-0.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-          <span>Showing <strong className="text-[#0B3B2E]">{records.length}</strong>/{pagination.total}</span>
-          <span>Page <strong className="text-[#0B3B2E]">{pagination.page}</strong>/{pagination.pages}</span>
-          {loading && <span className="text-slate-400">Loading…</span>}
-        </div>
+          {!savingsEnabled && (
+            <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-700">
+              Savings are disabled. Enable them in Car Wash Settings to resume daily deductions.
+            </div>
+          )}
 
-        <div className="flex-1 min-h-0 overflow-x-auto">
-          <table className="w-full min-w-[720px] text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Date</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Staff</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Type</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Savings Date / Ref</th>
-                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Amount</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.length ? records.map((rec) => (
-                <tr key={rec._id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-2 text-slate-500">{fmtDate(rec.date)}</td>
-                  <td className="px-3 py-2 font-extrabold text-slate-900">{rec.staff?.name || "—"}</td>
-                  <td className="px-3 py-2">{typeTag(rec.type)}</td>
-                  <td className="px-3 py-2 text-slate-600">
-                    {rec.type === "daily" ? fmtDate(rec.savingsDate) : (rec.savingsPayoutNumber || "—")}
-                  </td>
-                  <td className={`px-3 py-2 text-right font-extrabold tabular-nums ${rec.type === "disbursement" ? "text-emerald-700" : "text-amber-700"}`}>
-                    {rec.type === "disbursement" ? "−" : "+"}{formatMoney(rec.amount)}
-                  </td>
-                  <td className="px-3 py-2 text-slate-500">{rec.notes || "—"}</td>
-                </tr>
-              )) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-xs">
+              <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                 <tr>
-                  <td colSpan={6} className="px-3 py-12 text-center text-xs font-semibold text-slate-400">
-                    No savings records found for the selected filters.
-                  </td>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Staff</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Total Saved</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Disbursed</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Balance</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Actions</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {balancesLoading ? (
+                  <tr><td colSpan={5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">Loading…</td></tr>
+                ) : balances.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">
+                      No savings data yet. Click <strong>Process Today</strong> to begin.
+                    </td>
+                  </tr>
+                ) : balances.map((b) => {
+                  const isOpen = selectedStaff?.staffId === b.staffId;
+                  return (
+                    <tr
+                      key={b.staffId}
+                      className={`border-b border-slate-200 transition-colors ${isOpen ? "bg-[#EDF5F1]" : "hover:bg-slate-50"}`}
+                    >
+                      <td className="px-2 py-1 font-extrabold text-slate-900">{b.staffName}</td>
+                      <td className="px-2 py-1 text-right font-semibold tabular-nums text-[#C8511A]">
+                        {formatMoney(b.daily)}
+                      </td>
+                      <td className="px-2 py-1 text-right font-semibold tabular-nums text-emerald-600">
+                        {formatMoney(b.disbursed)}
+                      </td>
+                      <td className="px-2 py-1 text-right font-extrabold tabular-nums text-slate-900">
+                        {formatMoney(b.balance)}
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          {b.balance > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => openDisburse(b)}
+                              className="border border-[#C8511A] px-2 py-0.5 text-[11px] font-bold text-[#C8511A] transition-colors hover:bg-[#C8511A] hover:text-white"
+                            >
+                              Pay Out
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStaff(b)}
+                            className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[11px] font-bold transition-colors ${
+                              isOpen
+                                ? "border-[#0B3B2E] bg-[#0B3B2E] text-white"
+                                : "border-slate-300 text-slate-600 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+                            }`}
+                          >
+                            {isOpen ? <FaChevronUp size={8} /> : <FaChevronDown size={8} />}
+                            {isOpen ? "Hide" : "Details"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-        {/* Pagination — matches Jobs pattern */}
-        <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span className="font-semibold normal-case text-slate-500">Per page: {PAGE}</span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-end border-t border-slate-100 bg-slate-50 px-4 py-1.5">
             <button
               type="button"
-              onClick={() => setPage((p) => Math.max(p - 1, 1))}
-              disabled={page <= 1 || loading}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
+              onClick={handleReset}
+              disabled={resetting}
+              className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 hover:text-red-500 disabled:opacity-50"
             >
-              Previous
-            </button>
-            <span>Page {pagination.page} of {pagination.pages}</span>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(p + 1, pagination.pages))}
-              disabled={page >= pagination.pages || loading}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Next
+              <FaTrash size={8} />
+              {resetting ? "Resetting…" : "Reset all savings data"}
             </button>
           </div>
         </div>
+
+        {/* ── Detail Panel ─────────────────────────────────────────────────── */}
+        {selectedStaff && (
+          <div ref={detailRef} className="mt-3 border border-slate-200 bg-white shadow-sm">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-2 bg-[#0B3B2E] px-3 py-2.5">
+              <div>
+                <p className="text-[9px] font-semibold uppercase tracking-widest text-white/60">Savings History</p>
+                <p className="text-sm font-extrabold text-white">{selectedStaff.staffName}</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-white/60">Balance</p>
+                  <p className="text-base font-black text-white">{formatMoney(selectedStaff.balance)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStaff(null)}
+                  className="p-1.5 text-white/60 hover:bg-white/10 hover:text-white"
+                >
+                  <FaTimes size={12} />
+                </button>
+              </div>
+            </div>
+
+            {/* Date filter bar */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">From</span>
+              <input
+                type="date"
+                className={ic}
+                value={detailFrom}
+                onChange={(e) => handleDetailDateChange("from", e.target.value)}
+              />
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">To</span>
+              <input
+                type="date"
+                className={ic}
+                value={detailTo}
+                onChange={(e) => handleDetailDateChange("to", e.target.value)}
+              />
+              <span className="ml-1 text-[10px] text-slate-400">
+                {recordsTotal} record{recordsTotal !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            {/* Records table */}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[580px] text-xs">
+                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Savings Date</th>
+                    <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Type</th>
+                    <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Amount</th>
+                    <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Reference / Notes</th>
+                    <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Recorded On</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recordsLoading ? (
+                    <tr><td colSpan={5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">Loading…</td></tr>
+                  ) : records.length === 0 ? (
+                    <tr><td colSpan={5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">No records in this date range.</td></tr>
+                  ) : records.map((r) => (
+                    <tr key={r._id} className="border-b border-slate-200 hover:bg-slate-50">
+                      <td className="px-2 py-1 font-semibold text-slate-800">
+                        {r.savingsDate ? fmtDate(r.savingsDate) : "—"}
+                      </td>
+                      <td className="px-2 py-1">
+                        <span className={`border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider ${typePill(r.type)}`}>
+                          {r.type}
+                        </span>
+                      </td>
+                      <td className={`px-2 py-1 text-right font-extrabold tabular-nums ${r.type === "disbursement" ? "text-emerald-600" : "text-[#C8511A]"}`}>
+                        {r.type === "disbursement" ? "−" : "+"}{formatMoney(r.amount)}
+                      </td>
+                      <td className="max-w-xs truncate px-2 py-1 text-slate-600">
+                        {r.savingsPayoutNumber || r.notes || "—"}
+                      </td>
+                      <td className="px-2 py-1 text-slate-400">{fmtDate(r.date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-4 py-2">
+                <span className="text-[10px] text-slate-500">Page {detailPage} of {totalPages}</span>
+                <div className="flex gap-1">
+                  <button
+                    disabled={detailPage <= 1}
+                    onClick={() => setDetailPage((p) => p - 1)}
+                    className="h-6 border border-slate-200 px-2.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+                  >
+                    ← Prev
+                  </button>
+                  <button
+                    disabled={detailPage >= totalPages}
+                    onClick={() => setDetailPage((p) => p + 1)}
+                    className="h-6 border border-slate-200 px-2.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {showModal && disburseStaff && (
-        <Modal
-          title={`Savings Payout — ${disburseStaff.name}`}
-          onClose={() => setShowModal(false)}
-          footer={
-            <>
-              <button type="button" onClick={() => setShowModal(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Cancel</button>
-              <button type="submit" form="savings-disburse-form" disabled={disbursing} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
-                <FaPiggyBank size={10} /> {disbursing ? "Processing…" : "Confirm Payout"}
+      {/* ── Pay Out Modal ─────────────────────────────────────────────────────── */}
+      {showDisburse && disburseStaff && (
+        <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/40 px-4 py-8 backdrop-blur-[2px] sm:items-center">
+          <form
+            onSubmit={saveDisbursement}
+            className="w-full max-w-md border border-slate-200 bg-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between gap-3 bg-[#0B3B2E] px-4 py-3 text-white">
+              <div>
+                <p className="text-[9px] font-semibold uppercase tracking-widest text-white/60">Pay Out Savings</p>
+                <h2 className="text-sm font-extrabold">{disburseStaff.staffName}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDisburse(false)}
+                className="p-1.5 text-white/60 hover:bg-white/10 hover:text-white"
+              >
+                <FaTimes size={13} />
               </button>
-            </>
-          }
-        >
-          <form id="savings-disburse-form" onSubmit={saveDisbursement} className="space-y-3">
-            <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Available balance: <strong>{formatMoney(disburseStaff.balance)}</strong>
             </div>
-            <div>
-              <label className={lc}>Amount (Ksh) *</label>
-              <input type="number" min="1" max={disburseStaff.balance} step="1" required className={icc} value={disburseForm.amount} onChange={(e) => setDisburseForm((p) => ({ ...p, amount: e.target.value }))} />
+
+            <div className="space-y-4 p-4">
+              <div className="border border-[#B7C9C0] bg-[#EDF5F1] px-3 py-2.5">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#0B3B2E]/60">Available Balance</p>
+                <p className="mt-0.5 text-2xl font-black text-[#0B3B2E]">{formatMoney(disburseStaff.balance)}</p>
+              </div>
+
+              <div>
+                <label className={lc}>Amount to Disburse (KES) *</label>
+                <input
+                  type="number" min={1} max={disburseStaff.balance} step="any" required
+                  className={icc}
+                  value={dForm.amount}
+                  onChange={(e) => setDForm((p) => ({ ...p, amount: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className={lc}>Cashbook / Account *</label>
+                <select
+                  required className={icc}
+                  value={dForm.cashbookAccount}
+                  onChange={(e) => setDForm((p) => ({ ...p, cashbookAccount: e.target.value }))}
+                >
+                  <option value="">Select cashbook…</option>
+                  {cashbooks.map((cb) => (
+                    <option key={cb._id} value={cb._id}>
+                      {cb.name}{cb.code ? ` — ${cb.code}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className={lc}>Notes (optional)</label>
+                <input
+                  type="text" className={icc}
+                  placeholder="e.g. Annual savings payout June 2026"
+                  value={dForm.notes}
+                  onChange={(e) => setDForm((p) => ({ ...p, notes: e.target.value }))}
+                />
+              </div>
             </div>
-            <div>
-              <label className={lc}>Cashbook *</label>
-              <select required className={icc} value={disburseForm.cashbookAccount} onChange={(e) => setDisburseForm((p) => ({ ...p, cashbookAccount: e.target.value }))}>
-                <option value="">Select cashbook</option>
-                {cashbooks.map((cb) => <option key={cb._id} value={cb._id}>{cb.code} {cb.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={lc}>Notes</label>
-              <input className={icc} placeholder="Annual savings payout…" value={disburseForm.notes} onChange={(e) => setDisburseForm((p) => ({ ...p, notes: e.target.value }))} />
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setShowDisburse(false)}
+                className="h-8 border border-slate-300 px-4 text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit" disabled={disbursing}
+                className="h-8 bg-[#0B3B2E] px-5 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
+              >
+                {disbursing ? "Processing…" : `Disburse ${dForm.amount ? formatMoney(Number(dForm.amount)) : ""}`}
+              </button>
             </div>
           </form>
-        </Modal>
+        </div>
       )}
     </CarWashShell>
   );

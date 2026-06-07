@@ -150,6 +150,7 @@ const CarWashStaff          = lazy(() => import("./pages/CarWash/CarWashStaff"))
 const CarWashReports        = lazy(() => import("./pages/CarWash/CarWashReports"));
 const CarWashServiceReport  = lazy(() => import("./pages/CarWash/CarWashServiceReport"));
 const CarWashStaffReport    = lazy(() => import("./pages/CarWash/CarWashStaffReport"));
+const CarWashExpensesReport = lazy(() => import("./pages/CarWash/CarWashExpensesReport"));
 const CarWashCommissions         = lazy(() => import("./pages/CarWash/CarWashCommissions"));
 const CarWashCommissionPayouts   = lazy(() => import("./pages/CarWash/CarWashCommissionPayouts"));
 const CarWashCommissionRules     = lazy(() => import("./pages/CarWash/CarWashCommissionRules"));
@@ -589,6 +590,7 @@ function App() {
             <Route path="/carwash/reports"                element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashReports /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/reports/services"       element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashServiceReport /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/reports/staff"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashStaffReport /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/carwash/reports/expenses"       element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashExpensesReport /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/commissions"            element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissions /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/commissions/payouts"    element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissionPayouts /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/carwash/commissions/rules"      element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissionRules /></PermissionRoute></CompanyModuleRoute>} />

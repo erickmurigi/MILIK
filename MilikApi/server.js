@@ -727,13 +727,54 @@ async function startServer() {
       console.error('[CW Customer] phone cleanup warning (non-fatal):', e?.message || e);
     }
 
+    // ── Startup: back-fill any daily savings missed while server was down ───
+    // Safe to run on every restart — the unique index skips already-posted dates.
+    try {
+      const { default: Company }           = await import('./models/Company.js');
+      const { default: CarWashStaffSaving } = await import('./modules/carwash/models/CarWashStaffSaving.js');
+      const { processDailySavings }         = await import('./modules/carwash/services/savingsService.js');
+
+      const businesses = await Company.find({ 'modules.carwash': true }).select('_id').lean();
+      let totalBackfilled = 0;
+
+      for (const biz of businesses) {
+        const last = await CarWashStaffSaving.findOne(
+          { business: biz._id, type: 'daily' },
+          { savingsDate: 1 },
+          { sort: { savingsDate: -1 } }
+        ).lean();
+
+        if (!last?.savingsDate) continue; // no history yet — cron starts fresh tonight
+
+        const lastDate = new Date(last.savingsDate);
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        console.log(`[CW Savings Catchup] biz …${String(biz._id).slice(-6)}: lastSavingsDate=${lastDate.toISOString().slice(0,10)} today=${today.toISOString().slice(0,10)}`);
+
+        const cur = new Date(lastDate);
+        cur.setUTCDate(cur.getUTCDate() + 1); // start from the day after the last posted date
+
+        while (cur <= today) {
+          const result = await processDailySavings(String(biz._id), new Date(cur));
+          console.log(`[CW Savings Catchup] ${cur.toISOString().slice(0, 10)}: posted=${result.posted} skipped=${result.skipped}`);
+          if (result.posted > 0) totalBackfilled += result.posted;
+          cur.setUTCDate(cur.getUTCDate() + 1);
+        }
+      }
+
+      console.log(totalBackfilled > 0
+        ? `[CW Savings Catchup] Backfilled ${totalBackfilled} missing records`
+        : '[CW Savings Catchup] No missed days — savings up to date');
+    } catch (catchupErr) {
+      console.error('[CW Savings Catchup] Warning (non-fatal):', catchupErr?.message || catchupErr);
+    }
+
     // ── Daily staff savings cron ────────────────────────────────────────────
-    // Runs every day at 23:59 EAT (UTC+3 = 20:59 UTC).
+    // Runs every day at 20:59 EAT (timezone: Africa/Nairobi).
     // Posts Ksh X standing-order savings for every active Car Wash staff member.
     try {
       const cron = await import("node-cron");
       const { runDailySavingsCron } = await import("./modules/carwash/services/savingsService.js");
-      // "59 20 * * *" = 23:59 EAT daily
       cron.default.schedule("59 20 * * *", async () => {
         console.log("[CW Savings Cron] Running daily savings for", new Date().toISOString().slice(0, 10));
         try {
