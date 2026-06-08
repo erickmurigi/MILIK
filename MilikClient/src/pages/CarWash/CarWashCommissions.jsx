@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { FaRedoAlt, FaSearch, FaUndo } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -32,49 +33,43 @@ const inp = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 fo
 
 const CarWashCommissions = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const canManage = useCarWashPermission("carwash-commissions", "manage");
 
-  const [commissions, setCommissions] = useState([]);
-  const [staff, setStaff]             = useState([]);
-  const [summary, setSummary]         = useState({ total: { amount: 0, count: 0 } });
   const [filters, setFilters]         = useState(emptyFilters);
   const [applied, setApplied]         = useState(emptyFilters);
   const [page, setPage]               = useState(1);
-  const [pagination, setPagination]   = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
-  const [loading, setLoading]         = useState(false);
 
   // Reversal modal state
   const [reverseTarget, setReverseTarget] = useState(null);
   const [reversalNotes, setReversalNotes] = useState("");
   const [isReversing, setIsReversing]     = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [commPayload, staffPayload] = await Promise.all([
-        carWashApi.listCommissions({
-          status:   applied.status   || undefined,
-          staff:    applied.staff    || undefined,
-          dateFrom: applied.dateFrom || undefined,
-          dateTo:   applied.dateTo   || undefined,
-          page,
-          limit: PAGE_SIZE,
-        }),
-        staff.length ? Promise.resolve(null) : carWashApi.listStaff({ active: true }),
-      ]);
-      const rows = normalizeListPayload(commPayload, "commissions");
-      setCommissions(rows);
-      setPagination(commPayload?.pagination || { page, limit: PAGE_SIZE, total: rows.length, pages: 1 });
-      setSummary(commPayload?.summary || { total: { amount: 0, count: rows.length } });
-      if (staffPayload) setStaff(normalizeListPayload(staffPayload, "staff"));
-    } catch {
-      toast.error("Failed to load commissions");
-    } finally {
-      setLoading(false);
-    }
-  }, [applied, page, staff.length]);
+  const { data: commData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ["cw-commissions", applied, page],
+    queryFn: () => carWashApi.listCommissions({
+      status:   applied.status   || undefined,
+      staff:    applied.staff    || undefined,
+      dateFrom: applied.dateFrom || undefined,
+      dateTo:   applied.dateTo   || undefined,
+      page,
+      limit: PAGE_SIZE,
+    }),
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const { data: staffRaw } = useQuery({
+    queryKey: ["cw-staff-ref"],
+    queryFn: () => carWashApi.listStaff({ active: true }),
+    staleTime: 5 * 60_000,
+  });
+
+  useEffect(() => { if (error) toast.error("Failed to load commissions"); }, [error]);
+
+  const commissions = normalizeListPayload(commData, "commissions");
+  const pagination = commData?.pagination || { page, limit: PAGE_SIZE, total: commissions.length, pages: 1 };
+  const summary = commData?.summary || { total: { amount: 0, count: commissions.length } };
+  const staff = normalizeListPayload(staffRaw, "staff");
 
   const applyFilters = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
   const resetFilters = () => { const d = emptyFilters(); setFilters(d); setPage(1); setApplied(d); };
@@ -89,7 +84,7 @@ const CarWashCommissions = () => {
       await carWashApi.reverseCommission(reverseTarget._id, reversalNotes);
       toast.success("Commission reversed and cancelled");
       closeReverseModal();
-      load();
+      queryClient.invalidateQueries({ queryKey: ["cw-commissions"] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to reverse commission");
     } finally {
@@ -108,7 +103,7 @@ const CarWashCommissions = () => {
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={load}
+            onClick={() => refetch()}
             className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
           >
             <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh

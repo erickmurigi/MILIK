@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { FaChevronDown, FaChevronRight, FaRedoAlt, FaSearch, FaSms, FaTimes } from "react-icons/fa";
@@ -19,51 +20,40 @@ const reconciliationBadgeClass = {
 };
 
 const CarWashPayments = () => {
+  const queryClient = useQueryClient();
   const currentCompany = useSelector(selectCurrentCompany);
   const isConsolidated = !getActiveBranchId();
-  const [rows, setRows] = useState([]);
-  const [cashbooks, setCashbooks] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [expandedIds, setExpandedIds] = useState([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 });
-  const [loading, setLoading] = useState(false);
   const [smsTarget, setSmsTarget] = useState(null);
   const [smsBody, setSmsBody] = useState("");
   const [smsSending, setSmsSending] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const payload = await carWashApi.listPayments({ ...appliedFilters, limit: pageSize, page });
-      const payments = normalizeListPayload(payload, "payments");
-      setRows(payments);
-      setPagination(payload?.pagination || { page, limit: pageSize, total: payments.length, pages: 1 });
-      setExpandedIds([]);
-    } catch {
-      toast.error("Failed to load payments");
-    } finally {
-      setLoading(false);
-    }
-  }, [appliedFilters, page, pageSize]);
+  const { data: paymentsData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ["cw-payments", appliedFilters, page, pageSize],
+    queryFn: () => carWashApi.listPayments({ ...appliedFilters, limit: pageSize, page }),
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => { load(); }, [load]);
-
-  const loadCashbooks = async () => {
-    if (!currentCompany?._id) return;
-    try {
+  const { data: cashbooksRaw } = useQuery({
+    queryKey: ["cw-payment-cashbooks", currentCompany?._id],
+    queryFn: async () => {
       const accounts = await carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" });
-      setCashbooks(Array.isArray(accounts) ? accounts : []);
-    } catch {
-      setCashbooks([]);
-    }
-  };
+      return Array.isArray(accounts) ? accounts : [];
+    },
+    enabled: !!currentCompany?._id,
+    staleTime: 5 * 60_000,
+  });
 
-  useEffect(() => {
-    loadCashbooks();
-  }, [currentCompany?._id]);
+  useEffect(() => { if (error) toast.error("Failed to load payments"); }, [error]);
+  useEffect(() => { setExpandedIds([]); }, [paymentsData]);
+
+  const rows = normalizeListPayload(paymentsData, "payments");
+  const pagination = paymentsData?.pagination || { page, limit: pageSize, total: rows.length, pages: 1 };
+  const cashbooks = cashbooksRaw ?? [];
 
   const rowStats = useMemo(() => {
     let totalAmount = 0, pendingCount = 0, reconciledCount = 0, flaggedCount = 0;
@@ -139,7 +129,7 @@ const CarWashPayments = () => {
     const note = status === "flagged" ? window.prompt("Reason for flagging this payment?", row.reconciliationNote || "") || "" : row.reconciliationNote || "";
     try {
       await carWashApi.updatePaymentReconciliation(row._id, { reconciliationStatus: status, reconciliationNote: note });
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ["cw-payments"] });
       toast.success("Payment reconciliation updated");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to update reconciliation");
@@ -150,7 +140,7 @@ const CarWashPayments = () => {
     <CarWashShell
       title="Payments Register"
       action={
-        <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+        <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
           <FaRedoAlt className={loading ? "animate-spin" : ""} />
           Refresh
         </button>

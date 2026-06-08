@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useDebounce from "../../hooks/useDebounce";
 import {
   FaCheck,
@@ -267,7 +267,7 @@ const LandlordAdvancements = () => {
     })();
   }, [dispatch, currentCompany?._id]);
 
-  const loadRows = async () => {
+  const loadRows = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
@@ -289,11 +289,11 @@ const LandlordAdvancements = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.advanceType, currentPage]);
 
   useEffect(() => {
     loadRows();
-  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.advanceType, currentPage]);
+  }, [loadRows]);
 
   useEffect(() => {
     if (!showModal) return;

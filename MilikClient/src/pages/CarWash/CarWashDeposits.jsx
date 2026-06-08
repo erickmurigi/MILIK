@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -38,10 +39,9 @@ const Modal = ({ title, children, footer, onClose }) => (
 );
 
 const CarWashDeposits = () => {
+  const queryClient = useQueryClient();
   const currentCompany = useSelector(selectCurrentCompany);
   const isConsolidated = !getActiveBranchId();
-  const [rows, setRows] = useState([]);
-  const [cashbooks, setCashbooks] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [form, setForm] = useState(() => readDraft("cw-deposits-form") || emptyForm);
@@ -49,46 +49,42 @@ const CarWashDeposits = () => {
   const [showModal, setShowModal] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 });
-  const [summary, setSummary] = useState({ pending: {}, confirmed: {}, cancelled: {}, totalAmount: 0, totalCount: 0 });
-  const [loading, setLoading] = useState(false);
   const canCreate = useCarWashPermission("carwash-deposits", "create");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const payload = await carWashApi.listDeposits({ ...appliedFilters, limit: pageSize, page });
-      const deposits = normalizeListPayload(payload, "deposits");
-      setRows(deposits);
-      setPagination(payload?.pagination || { page, limit: pageSize, total: deposits.length, pages: 1 });
-      setSummary(payload?.summary || { pending: {}, confirmed: {}, cancelled: {}, totalAmount: 0, totalCount: 0 });
-      setExpandedIds([]);
-    } catch {
-      toast.error("Failed to load Car Wash deposits");
-    } finally {
-      setLoading(false);
-    }
-  }, [appliedFilters, page, pageSize]);
+  const depositsQueryKey = ["cw-deposits", appliedFilters, page, pageSize];
 
-  useEffect(() => { load(); }, [load]);
+  const { data: depositsData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: depositsQueryKey,
+    queryFn: () => carWashApi.listDeposits({ ...appliedFilters, limit: pageSize, page }),
+    placeholderData: (prev) => prev,
+  });
 
-  const loadCashbooks = async () => {
-    if (!currentCompany?._id) return;
-    try {
+  const { data: cashbooksRaw } = useQuery({
+    queryKey: ["cw-deposit-cashbooks", currentCompany?._id],
+    queryFn: async () => {
       const accounts = await carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" });
-      const options = (Array.isArray(accounts) ? accounts : []).filter((account) =>
+      return (Array.isArray(accounts) ? accounts : []).filter((account) =>
         String(account?.subGroup || "").toLowerCase().includes("cashbook") && account.isPosting !== false
       );
-      setCashbooks(options);
-      setForm((prev) => (prev.cashbookAccount || !options[0]?._id ? prev : { ...prev, cashbookAccount: options[0]._id }));
-    } catch {
-      toast.error("Failed to load deposit cashbooks");
-    }
-  };
+    },
+    enabled: !!currentCompany?._id,
+    staleTime: 5 * 60_000,
+  });
 
+  useEffect(() => { if (error) toast.error("Failed to load Car Wash deposits"); }, [error]);
+  useEffect(() => { setExpandedIds([]); }, [depositsData]);
+
+  const cashbooks = cashbooksRaw ?? [];
+  const rows = normalizeListPayload(depositsData, "deposits");
+  const pagination = depositsData?.pagination || { page, limit: pageSize, total: rows.length, pages: 1 };
+  const summary = depositsData?.summary || { pending: {}, confirmed: {}, cancelled: {}, totalAmount: 0, totalCount: 0 };
+
+  // Auto-select first cashbook when form opens without a selection
   useEffect(() => {
-    loadCashbooks();
-  }, [currentCompany?._id]);
+    if (cashbooks[0]?._id) {
+      setForm((prev) => prev.cashbookAccount ? prev : { ...prev, cashbookAccount: cashbooks[0]._id });
+    }
+  }, [cashbooks]);
 
   // Auto-save deposit form draft
   useEffect(() => {
@@ -132,7 +128,7 @@ const CarWashDeposits = () => {
       }
       await carWashApi.createDeposit({ ...form, amount: Number(form.amount || 0) });
       closeModal();
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ["cw-deposits"] });
       toast.success("Deposit recorded");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to record deposit");
@@ -143,7 +139,7 @@ const CarWashDeposits = () => {
     const notes = status === "cancelled" ? window.prompt("Reason for cancelling this deposit?", row.notes || "") || "" : row.notes || "";
     try {
       await carWashApi.updateDepositStatus(row._id, { status, notes });
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ["cw-deposits"] });
       toast.success("Deposit status updated");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to update deposit");
@@ -159,7 +155,7 @@ const CarWashDeposits = () => {
       title="Deposits Register"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} />
             Refresh
           </button>

@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaBuilding, FaCheck, FaEdit, FaPlus, FaPrint, FaSearch, FaSquare, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -30,10 +31,8 @@ const blankForm = {
 
 const SaleListings = () => {
   const confirm = useConfirm();
+  const queryClient = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const [listings, setListings] = useState([]);
-  const [agents, setAgents] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
@@ -45,38 +44,37 @@ const SaleListings = () => {
 
   const biz = currentCompany?._id;
 
-  const load = useCallback(async () => {
-    if (!biz) return;
-    setLoading(true);
-    try {
-      const [rows, agentRows] = await Promise.all([
-        saleApi.listListings({ business: biz, ...filters, search: debouncedSearch, limit: 500 }),
-        saleApi.listAgents({ business: biz, status: "active" }),
-      ]);
-      setListings(Array.isArray(rows) ? rows : []);
-      setAgents(Array.isArray(agentRows) ? agentRows : []);
-    } catch {
-      toast.error("Failed to load listings");
-    } finally {
-      setLoading(false);
-    }
-  }, [biz, debouncedSearch, filters.status, filters.propertyType]);
+  const { data: listingsData, isLoading: loading, error } = useQuery({
+    queryKey: ["sale-listings", biz, debouncedSearch, filters.status, filters.propertyType, page],
+    queryFn: () => saleApi.listListings({ business: biz, ...filters, search: debouncedSearch, page, limit: ITEMS_PER_PAGE }),
+    enabled: !!biz,
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const { data: agentsData } = useQuery({
+    queryKey: ["sale-agents-ref", biz],
+    queryFn: () => saleApi.listAgents({ business: biz, status: "active", limit: 500 }),
+    enabled: !!biz,
+    staleTime: 5 * 60_000,
+  });
 
+  useEffect(() => { if (error) toast.error("Failed to load listings"); }, [error]);
+  useEffect(() => setPage(1), [debouncedSearch, filters.status, filters.propertyType]);
+
+  const listings = listingsData?.data ?? [];
+  const serverTotal = listingsData?.total ?? 0;
+  const agents = agentsData?.data ?? [];
+  const totalPages = Math.max(1, Math.ceil(serverTotal / ITEMS_PER_PAGE));
+  const safePage = page;
+  const pageRows = listings;
   const filtered = listings;
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
-
-  useEffect(() => setPage(1), [filters.search, filters.status, filters.propertyType]);
 
   const stats = useMemo(() => ({
-    total: listings.length,
+    total: serverTotal,
     available: listings.filter((l) => l.status === "available").length,
     sold: listings.filter((l) => l.status === "sold").length,
     totalValue: listings.reduce((a, l) => a + Number(l.askingPrice || 0), 0),
-  }), [listings]);
+  }), [listings, serverTotal]);
 
   const openCreate = () => { setEditingId(""); setForm(blankForm); setShowModal(true); };
   const openEdit = (row) => {
@@ -110,10 +108,9 @@ const SaleListings = () => {
         amenities: form.amenities ? form.amenities.split(",").map((s) => s.trim()).filter(Boolean) : [],
         assignedAgent: form.assignedAgent || undefined,
       };
-      const saved = editingId
-        ? await saleApi.updateListing(editingId, payload)
-        : await saleApi.createListing(payload);
-      setListings((prev) => editingId ? prev.map((r) => r._id === editingId ? saved : r) : [saved, ...prev]);
+      if (editingId) await saleApi.updateListing(editingId, payload);
+      else await saleApi.createListing(payload);
+      await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
       setShowModal(false);
       toast.success(`Listing ${editingId ? "updated" : "created"} successfully`);
     } catch (err) {
@@ -127,7 +124,7 @@ const SaleListings = () => {
     if (!await confirm({ title: "Delete Listing", message: `Delete "${row.title}"?`, confirmText: "Delete", isDangerous: true })) return;
     try {
       await saleApi.deleteListing(row._id);
-      setListings((prev) => prev.filter((r) => r._id !== row._id));
+      await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
       toast.success("Listing deleted");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Cannot delete this listing");
@@ -136,8 +133,8 @@ const SaleListings = () => {
 
   const handleStatusChange = async (row, status) => {
     try {
-      const updated = await saleApi.updateListingStatus(row._id, status);
-      setListings((prev) => prev.map((r) => r._id === row._id ? { ...r, ...updated } : r));
+      await saleApi.updateListingStatus(row._id, status);
+      await queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] });
       toast.success(`Listing marked ${status}`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to update status");
@@ -326,7 +323,7 @@ ${row.notes?`<div class="section-title">Notes</div><div class="desc-box">${esc(r
             </table>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-500">
-            <span>Showing <strong className="text-slate-900">{filtered.length === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1}</strong>–<strong className="text-slate-900">{Math.min(safePage * ITEMS_PER_PAGE, filtered.length)}</strong> of <strong className="text-slate-900">{filtered.length}</strong></span>
+            <span>Showing <strong className="text-slate-900">{serverTotal === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1}</strong>–<strong className="text-slate-900">{Math.min(safePage * ITEMS_PER_PAGE, serverTotal)}</strong> of <strong className="text-slate-900">{serverTotal}</strong></span>
             <div className="flex items-center gap-2">
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Prev</button>
               <span>Page {safePage} of {totalPages}</span>

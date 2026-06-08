@@ -5,7 +5,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import { verifyUser } from '../../../controllers/verifyToken.js';
 import HREmployee from '../models/HREmployee.js';
 import HRDepartment from '../models/HRDepartment.js';
-import { resolveCompanyId, currentUserId, escapeRegex, parsePage, parseLimit } from '../services/hrScope.js';
+import { resolveCompanyId, currentUserId, parsePage, parseLimit } from '../services/hrScope.js';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -105,12 +105,7 @@ router.get('/', verifyUser, async (req, res) => {
     if (department && department !== 'all') query.department = department;
     if (employmentType && employmentType !== 'all') query.employmentType = employmentType;
     if (search) {
-      const rx = { $regex: escapeRegex(search), $options: 'i' };
-      query.$or = [
-        { surname: rx }, { otherNames: rx },
-        { email: rx }, { phoneNumber: rx },
-        { employeeNumber: rx }, { nationalId: rx },
-      ];
+      query.$text = { $search: search };
     }
 
     const [employees, total] = await Promise.all([

@@ -1,25 +1,31 @@
 import { createError } from "../../../utils/error.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleAgent from "../models/SaleAgent.js";
-import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 
 export const listListings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { search = "", status = "", propertyType = "", agentId = "" } = req.query;
+    const { search = "", status = "", propertyType = "", agentId = "", page = 1, limit = 50 } = req.query;
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
     const filter = { business };
     if (status) filter.status = status;
     if (propertyType) filter.propertyType = propertyType;
     if (agentId) filter.assignedAgent = agentId;
     if (search.trim()) {
-      const rx = new RegExp(escapeRegex(search.trim()), "i");
-      filter.$or = [{ title: rx }, { listingNumber: rx }, { location: rx }, { town: rx }, { titleDeedNumber: rx }];
+      filter.$text = { $search: search.trim() };
     }
-    const listings = await SaleListing.find(filter)
-      .populate("assignedAgent", "fullName agentNumber phone")
-      .sort({ createdAt: -1 })
-      .lean();
-    res.status(200).json(listings);
+    const [listings, total] = await Promise.all([
+      SaleListing.find(filter)
+        .populate("assignedAgent", "fullName agentNumber phone")
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      SaleListing.countDocuments(filter),
+    ]);
+    res.status(200).json({ data: listings, total, page: pageNum, pages: Math.ceil(total / limitNum) || 1 });
   } catch (err) {
     next(err);
   }

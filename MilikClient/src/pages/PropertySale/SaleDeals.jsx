@@ -51,8 +51,8 @@ const SaleDeals = () => {
     if (!biz) return;
     setLoading(true);
     try {
-      const rows = await saleApi.listDeals({ business: biz, status: statusFilter, limit: 200 });
-      setDeals(Array.isArray(rows) ? rows : []);
+      const { data: dealRows } = await saleApi.listDeals({ business: biz, status: statusFilter, limit: 200 });
+      setDeals(dealRows ?? []);
     } catch { toast.error("Failed to load deals"); }
     finally { setLoading(false); }
   }, [biz, statusFilter]);
@@ -63,13 +63,13 @@ const SaleDeals = () => {
   useEffect(() => {
     if (!biz) return;
     Promise.all([
-      saleApi.listListings({ business: biz }),
-      saleApi.listBuyers({ business: biz }),
-      saleApi.listAgents({ business: biz, status: "active" }),
-    ]).then(([listingRows, buyerRows, agentRows]) => {
-      setListings(Array.isArray(listingRows) ? listingRows : []);
-      setBuyers(Array.isArray(buyerRows) ? buyerRows : []);
-      setAgents(Array.isArray(agentRows) ? agentRows : []);
+      saleApi.listListings({ business: biz, limit: 500 }),
+      saleApi.listBuyers({ business: biz, limit: 500 }),
+      saleApi.listAgents({ business: biz, status: "active", limit: 500 }),
+    ]).then(([{ data: listingRows }, { data: buyerRows }, { data: agentRows }]) => {
+      setListings(listingRows ?? []);
+      setBuyers(buyerRows ?? []);
+      setAgents(agentRows ?? []);
     }).catch(() => toast.error("Failed to load reference data"));
   }, [biz]);
   useEffect(() => setPage(1), [statusFilter, search, pageSize]);

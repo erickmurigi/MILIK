@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaBook, FaCheckSquare, FaEdit, FaEye, FaPlus, FaRedoAlt, FaSearch, FaSquare, FaTimes, FaTrash } from "react-icons/fa";
@@ -67,9 +68,9 @@ const groupForType = (type = "") => {
 
 const CarWashChartOfAccounts = () => {
   const confirm = useConfirm();
+  const queryClient = useQueryClient();
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
-  const [accounts, setAccounts] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -77,28 +78,23 @@ const CarWashChartOfAccounts = () => {
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [activityModal, setActivityModal] = useState({ open: false, account: null, rows: [], openingBalance: 0, closingBalance: 0 });
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const canCreate = hasCompanyPermission(currentUser || {}, currentCompany, "chartOfAccounts", "create", "accounts");
   const canUpdate = hasCompanyPermission(currentUser || {}, currentCompany, "chartOfAccounts", "update", "accounts");
   const canDelete = hasCompanyPermission(currentUser || {}, currentCompany, "chartOfAccounts", "delete", "accounts");
 
-  const load = useCallback(async () => {
-    if (!currentCompany?._id) return;
-    setLoading(true);
-    try {
-      const rows = await carWashApi.listChartOfAccounts({ business: currentCompany._id, moduleScope: "carwash" });
-      setAccounts(Array.isArray(rows) ? rows : []);
-      setSelectedIds([]);
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to load Car Wash chart of accounts");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentCompany?._id]);
+  const { data: rawAccounts, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ["cw-chart-accounts", currentCompany?._id],
+    queryFn: () => carWashApi.listChartOfAccounts({ business: currentCompany._id, moduleScope: "carwash" }),
+    enabled: !!currentCompany?._id,
+    select: (rows) => Array.isArray(rows) ? rows : [],
+  });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (error) toast.error(error?.response?.data?.message || "Failed to load Car Wash chart of accounts"); }, [error]);
+  useEffect(() => { setSelectedIds([]); }, [rawAccounts]);
+
+  const accounts = rawAccounts ?? [];
 
   const filteredAccounts = useMemo(() => {
     const search = appliedFilters.search.trim().toLowerCase();
@@ -210,7 +206,7 @@ const CarWashChartOfAccounts = () => {
       setShowForm(false);
       setEditingId("");
       setForm(emptyForm);
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ["cw-chart-accounts"] });
     } catch (error) {
       toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to save chart account");
     } finally {
@@ -240,7 +236,7 @@ const CarWashChartOfAccounts = () => {
         await carWashApi.deleteChartAccount(account._id, { business: currentCompany?._id });
       }
       toast.success("Selected account(s) deleted.");
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ["cw-chart-accounts"] });
     } catch (error) {
       toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to delete selected account(s)");
     } finally {
@@ -276,7 +272,7 @@ const CarWashChartOfAccounts = () => {
           <button type="button" onClick={openCreate} disabled={!canCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white hover:bg-[#E67E00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> Add Account</button>
           <button type="button" onClick={openEdit} disabled={selectedAccounts.length !== 1 || selectedHasSystem || !canUpdate} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"><FaEdit /> Edit</button>
           <button type="button" onClick={deleteSelected} disabled={!selectedAccounts.length || selectedHasSystem || !canDelete || saving} className="inline-flex h-8 items-center gap-1.5 border border-red-200 bg-red-50 px-2.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-45"><FaTrash /> Delete</button>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaRedoAlt className={loading ? "animate-spin" : ""} />Refresh</button>
+          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaRedoAlt className={loading ? "animate-spin" : ""} />Refresh</button>
         </>
       }
     >

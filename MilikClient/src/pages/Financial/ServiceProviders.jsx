@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaEdit, FaPlus, FaSave, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -89,7 +89,7 @@ const ServiceProviders = () => {
     setForm(blankForm);
   };
 
-  const loadRows = async () => {
+  const loadRows = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
@@ -108,11 +108,11 @@ const ServiceProviders = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCompany?._id, search, currentPage, pageSize]);
 
   useEffect(() => {
     loadRows();
-  }, [currentCompany?._id, search, currentPage, pageSize]);
+  }, [loadRows]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {

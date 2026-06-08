@@ -6,7 +6,6 @@ import { createError } from "../../../utils/error.js";
 import {
   resolveActiveBusinessId,
   currentUserId,
-  escapeRegex,
   parseBoolean,
 } from "../services/inventoryScope.js";
 import { getMultiLocationBalances } from "../services/stockLedger.js";
@@ -23,8 +22,7 @@ export const listProducts = async (req, res, next) => {
     }
     if (req.query.trackStock !== undefined) filter.trackStock = parseBoolean(req.query.trackStock);
     if (req.query.search) {
-      const rx = new RegExp(escapeRegex(String(req.query.search).trim()), "i");
-      filter.$or = [{ name: rx }, { sku: rx }, { barcode: rx }];
+      filter.$text = { $search: String(req.query.search).trim() };
     }
 
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);

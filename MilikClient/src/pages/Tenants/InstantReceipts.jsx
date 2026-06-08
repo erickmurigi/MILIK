@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany,
@@ -115,7 +115,7 @@ const InstantReceipts = () => {
     return primaryConfig?.defaultCashbookAccountName || "M-Pesa Collections";
   };
 
-  const loadRows = async () => {
+  const loadRows = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
@@ -132,12 +132,11 @@ const InstantReceipts = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCompany?._id, selectedShortCode, sourceFilter, dispatch]);
 
   useEffect(() => {
     loadRows();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCompany?._id, selectedShortCode, sourceFilter]);
+  }, [loadRows]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {

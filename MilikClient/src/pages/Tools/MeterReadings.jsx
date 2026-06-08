@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { toast } from "react-toastify";
@@ -301,7 +301,7 @@ const MeterReadings = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowActionKey, setRowActionKey] = useState("");
 
-  const loadPageData = async () => {
+  const loadPageData = useCallback(async () => {
     if (!businessId) return;
 
     setLoading(true);
@@ -352,11 +352,11 @@ const MeterReadings = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [businessId]);
 
   useEffect(() => {
     loadPageData();
-  }, [businessId]);
+  }, [loadPageData]);
 
   const filteredUnits = useMemo(() => {
     if (!form.property) return units;

@@ -1,20 +1,24 @@
 import { createError } from "../../../utils/error.js";
 import SaleBuyer from "../models/SaleBuyer.js";
-import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 
 export const listBuyers = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { search = "", source = "", kycStatus = "" } = req.query;
+    const { search = "", source = "", kycStatus = "", page = 1, limit = 50 } = req.query;
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
     const filter = { business };
     if (source) filter.source = source;
     if (kycStatus) filter.kycStatus = kycStatus;
     if (search.trim()) {
-      const rx = new RegExp(escapeRegex(search.trim()), "i");
-      filter.$or = [{ fullName: rx }, { buyerNumber: rx }, { phone: rx }, { email: rx }, { idNumber: rx }];
+      filter.$text = { $search: search.trim() };
     }
-    const buyers = await SaleBuyer.find(filter).sort({ createdAt: -1 }).lean();
-    res.status(200).json(buyers);
+    const [buyers, total] = await Promise.all([
+      SaleBuyer.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
+      SaleBuyer.countDocuments(filter),
+    ]);
+    res.status(200).json({ data: buyers, total, page: pageNum, pages: Math.ceil(total / limitNum) || 1 });
   } catch (err) {
     next(err);
   }

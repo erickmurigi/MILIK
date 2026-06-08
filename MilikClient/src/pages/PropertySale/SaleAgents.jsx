@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaEdit, FaPlus, FaPrint, FaSearch, FaTimes, FaTrash, FaUserTie } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -16,9 +17,8 @@ const blankForm = {
 
 const SaleAgents = () => {
   const confirm = useConfirm();
+  const queryClient = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const [agents, setAgents] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
@@ -29,21 +29,22 @@ const SaleAgents = () => {
 
   const biz = currentCompany?._id;
 
-  const load = useCallback(async () => {
-    if (!biz) return;
-    setLoading(true);
-    try {
-      const rows = await saleApi.listAgents({ business: biz, search: debouncedSearch, limit: 200 });
-      setAgents(Array.isArray(rows) ? rows : []);
-    } catch { toast.error("Failed to load agents"); }
-    finally { setLoading(false); }
-  }, [biz, debouncedSearch]);
+  const queryKey = ["sale-agents", biz, debouncedSearch, page];
+  const { data: agentsData, isLoading: loading, error } = useQuery({
+    queryKey,
+    queryFn: () => saleApi.listAgents({ business: biz, search: debouncedSearch, page, limit: ITEMS_PER_PAGE }),
+    enabled: !!biz,
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (error) toast.error("Failed to load agents"); }, [error]);
+  useEffect(() => setPage(1), [debouncedSearch]);
 
-  const totalPages = Math.max(1, Math.ceil(agents.length / ITEMS_PER_PAGE));
-  const safePage = Math.min(page, totalPages);
-  const pageRows = agents.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+  const agents = agentsData?.data ?? [];
+  const serverTotal = agentsData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(serverTotal / ITEMS_PER_PAGE));
+  const safePage = page;
+  const pageRows = agents;
 
   const openCreate = () => { setEditingId(""); setForm(blankForm); setShowModal(true); };
   const openEdit = (row) => {
@@ -58,8 +59,9 @@ const SaleAgents = () => {
     setSaving(true);
     try {
       const payload = { ...form, business: biz, commissionRate: Number(form.commissionRate) };
-      const saved = editingId ? await saleApi.updateAgent(editingId, payload) : await saleApi.createAgent(payload);
-      setAgents((prev) => editingId ? prev.map((r) => r._id === editingId ? saved : r) : [saved, ...prev]);
+      if (editingId) await saleApi.updateAgent(editingId, payload);
+      else await saleApi.createAgent(payload);
+      await queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] });
       setShowModal(false);
       toast.success(`Agent ${editingId ? "updated" : "registered"}`);
     } catch (err) { toast.error(err?.response?.data?.message || "Failed to save agent"); }
@@ -70,7 +72,7 @@ const SaleAgents = () => {
     if (!await confirm({ title: "Remove Agent", message: `Remove agent "${row.fullName}"?`, confirmText: "Remove", isDangerous: true })) return;
     try {
       await saleApi.deleteAgent(row._id);
-      setAgents((prev) => prev.filter((r) => r._id !== row._id));
+      await queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] });
       toast.success("Agent removed");
     } catch (err) { toast.error(err?.response?.data?.message || "Cannot remove this agent"); }
   };
@@ -142,14 +144,14 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
   return (
     <PropertySaleShell
       title="Sales Agents"
-      subtitle={`${agents.length} agent(s)`}
+      subtitle={`${serverTotal} agent(s)`}
       action={<button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-[#027333] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0c5d2b]"><FaPlus /> New Agent</button>}
     >
       <div className="flex h-full flex-col gap-2">
         {/* KPI Strip */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
-            { label: "Total Agents", value: agents.length, cls: "bg-slate-900 text-white" },
+            { label: "Total Agents", value: serverTotal, cls: "bg-slate-900 text-white" },
             { label: "Active", value: agents.filter((a) => a.status === "active").length, cls: "bg-[#027333] text-white" },
             { label: "Inactive", value: agents.filter((a) => a.status !== "active").length, cls: "bg-slate-100 border border-slate-200 text-slate-700" },
             {
@@ -216,7 +218,7 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
             </table>
           </div>
           <div className="flex items-center justify-between border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-500">
-            <span><strong className="text-slate-900">{agents.length}</strong> agent(s)</span>
+            <span><strong className="text-slate-900">{serverTotal}</strong> agent(s)</span>
             <div className="flex items-center gap-2">
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Prev</button>
               <span>Page {safePage} of {totalPages}</span>

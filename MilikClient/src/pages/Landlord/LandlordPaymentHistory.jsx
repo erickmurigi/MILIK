@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { FaArrowLeft, FaRedoAlt } from "react-icons/fa";
@@ -17,7 +17,7 @@ const LandlordPaymentHistory = () => {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const loadPayments = async () => {
+  const loadPayments = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
@@ -26,12 +26,11 @@ const LandlordPaymentHistory = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCompany?._id]);
 
   useEffect(() => {
     loadPayments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCompany?._id]);
+  }, [loadPayments]);
 
   const filteredPayments = useMemo(() => {
     return payments.filter((payment) => {

@@ -25,5 +25,6 @@ const saleBuyerSchema = new mongoose.Schema(
 
 saleBuyerSchema.index({ business: 1, buyerNumber: 1 }, { unique: true });
 saleBuyerSchema.index({ business: 1, createdAt: -1 });
+saleBuyerSchema.index({ fullName: "text", buyerNumber: "text", phone: "text", email: "text", idNumber: "text" }, { default_language: "none" });
 
 export default mongoose.model("SaleBuyer", saleBuyerSchema);

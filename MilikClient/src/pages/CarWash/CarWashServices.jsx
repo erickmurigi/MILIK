@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { FaChevronDown, FaChevronRight, FaEdit, FaMinus, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -27,7 +28,7 @@ const Modal = ({ title, children, footer, onClose }) => (
 );
 
 const CarWashServices = () => {
-  const [rows, setRows]               = useState([]);
+  const queryClient = useQueryClient();
   const [form, setForm]               = useState(emptyForm);
   const [editingId, setEditingId]     = useState("");
   const [filters, setFilters]         = useState({ search: "", status: "" });
@@ -35,12 +36,34 @@ const CarWashServices = () => {
   const [expandedIds, setExpandedIds] = useState([]);
   const [page, setPage]               = useState(1);
   const [pageSize, setPageSize]       = useState(DEFAULT_PAGE_SIZE);
-  const [pagination, setPagination]   = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 });
   const [showModal, setShowModal]     = useState(false);
-  const [loading, setLoading]         = useState(false);
-  const [categories, setCategories]   = useState([]);
   const [categoryMode, setCategoryMode] = useState("select");
   const canManage = useCarWashPermission("carwash-services", "manage");
+
+  const servicesQueryKey = ["cw-services", appliedFilters, page, pageSize];
+
+  const { data: servicesData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: servicesQueryKey,
+    queryFn: () => carWashApi.listServices({
+      limit: pageSize, page,
+      search: appliedFilters.search || undefined,
+      active: appliedFilters.status === "active" ? true : appliedFilters.status === "inactive" ? false : undefined,
+    }),
+    placeholderData: (prev) => prev,
+  });
+
+  const { data: categoriesData } = useQuery({
+    queryKey: ["cw-service-categories"],
+    queryFn: () => carWashApi.listServiceCategories(),
+    staleTime: 5 * 60_000,
+  });
+
+  useEffect(() => { if (error) toast.error("Failed to load services"); }, [error]);
+  useEffect(() => { setExpandedIds([]); }, [servicesData]);
+
+  const rows = normalizeListPayload(servicesData, "services");
+  const pagination = servicesData?.pagination || { page, limit: pageSize, total: rows.length, pages: 1 };
+  const categories = Array.isArray(categoriesData) ? categoriesData : Array.isArray(categoriesData?.categories) ? categoriesData.categories : [];
 
   const rowStats = useMemo(() => {
     let active = 0, inactive = 0;
@@ -52,31 +75,6 @@ const CarWashServices = () => {
     () => new Set((form.pricingTiers || []).map((t) => t.vehicleType)),
     [form.pricingTiers]
   );
-
-  const loadCategories = async () => {
-    try {
-      const result = await carWashApi.listServiceCategories();
-      setCategories(Array.isArray(result) ? result : Array.isArray(result?.categories) ? result.categories : []);
-    } catch { setCategories([]); }
-  };
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const payload = await carWashApi.listServices({
-        limit: pageSize, page,
-        search: appliedFilters.search || undefined,
-        active: appliedFilters.status === "active" ? true : appliedFilters.status === "inactive" ? false : undefined,
-      });
-      const services = normalizeListPayload(payload, "services");
-      setRows(services);
-      setPagination(payload?.pagination || { page, limit: pageSize, total: services.length, pages: 1 });
-      setExpandedIds([]);
-    } finally { setLoading(false); }
-  }, [appliedFilters, page, pageSize]);
-
-  useEffect(() => { load().catch(() => toast.error("Failed to load services")); }, [load]);
-  useEffect(() => { loadCategories(); }, []);
 
   // Auto-save service form draft while modal is open
   useEffect(() => {
@@ -151,7 +149,10 @@ const CarWashServices = () => {
       if (editingId) await carWashApi.updateService(editingId, payload);
       else await carWashApi.createService(payload);
       closeModal();
-      await Promise.all([load(), loadCategories()]);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["cw-services"] }),
+        queryClient.invalidateQueries({ queryKey: ["cw-service-categories"] }),
+      ]);
       toast.success("Service saved");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Unable to save service");
@@ -168,7 +169,7 @@ const CarWashServices = () => {
       title="Services Register"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           {canManage && (

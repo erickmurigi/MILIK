@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaCheck, FaEdit, FaPlus, FaPrint, FaSearch, FaSquare, FaTimes, FaTrash, FaUsers } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -24,9 +25,8 @@ const blankForm = {
 
 const SaleBuyers = () => {
   const confirm = useConfirm();
+  const queryClient = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const [buyers, setBuyers] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
@@ -38,23 +38,21 @@ const SaleBuyers = () => {
 
   const biz = currentCompany?._id;
 
-  const load = useCallback(async () => {
-    if (!biz) return;
-    setLoading(true);
-    try {
-      const rows = await saleApi.listBuyers({ business: biz, search: debouncedSearch, kycStatus: kycFilter, limit: 500 });
-      setBuyers(Array.isArray(rows) ? rows : []);
-    } catch { toast.error("Failed to load buyers"); }
-    finally { setLoading(false); }
-  }, [biz, debouncedSearch, kycFilter]);
+  const { data: buyersData, isLoading: loading, error } = useQuery({
+    queryKey: ["sale-buyers", biz, debouncedSearch, kycFilter, page],
+    queryFn: () => saleApi.listBuyers({ business: biz, search: debouncedSearch, kycStatus: kycFilter, page, limit: ITEMS_PER_PAGE }),
+    enabled: !!biz,
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (error) toast.error("Failed to load buyers"); }, [error]);
+  useEffect(() => setPage(1), [debouncedSearch, kycFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(buyers.length / ITEMS_PER_PAGE));
-  const safePage = Math.min(page, totalPages);
-  const pageRows = buyers.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
-
-  useEffect(() => setPage(1), [search, kycFilter]);
+  const buyers = buyersData?.data ?? [];
+  const serverTotal = buyersData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(serverTotal / ITEMS_PER_PAGE));
+  const safePage = page;
+  const pageRows = buyers;
 
   const openCreate = () => { setEditingId(""); setForm(blankForm); setShowModal(true); };
   const openEdit = (row) => {
@@ -68,8 +66,9 @@ const SaleBuyers = () => {
     setSaving(true);
     try {
       const payload = { ...form, business: biz };
-      const saved = editingId ? await saleApi.updateBuyer(editingId, payload) : await saleApi.createBuyer(payload);
-      setBuyers((prev) => editingId ? prev.map((r) => r._id === editingId ? saved : r) : [saved, ...prev]);
+      if (editingId) await saleApi.updateBuyer(editingId, payload);
+      else await saleApi.createBuyer(payload);
+      await queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] });
       setShowModal(false);
       toast.success(`Buyer ${editingId ? "updated" : "registered"} successfully`);
     } catch (err) { toast.error(err?.response?.data?.message || "Failed to save buyer"); }
@@ -80,7 +79,7 @@ const SaleBuyers = () => {
     if (!await confirm({ title: "Remove Buyer", message: `Remove "${row.fullName}" from the system?`, confirmText: "Remove", isDangerous: true })) return;
     try {
       await saleApi.deleteBuyer(row._id);
-      setBuyers((prev) => prev.filter((r) => r._id !== row._id));
+      await queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] });
       toast.success("Buyer removed");
     } catch (err) { toast.error(err?.response?.data?.message || "Cannot delete this buyer"); }
   };
@@ -144,10 +143,11 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
   };
 
   const kpiStats = useMemo(() => ({
+    total: serverTotal,
     verified: buyers.filter((b) => b.kycStatus === "verified").length,
     pending: buyers.filter((b) => b.kycStatus === "pending").length,
     rejected: buyers.filter((b) => b.kycStatus === "rejected").length,
-  }), [buyers]);
+  }), [buyers, serverTotal]);
 
   const f = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
   const inputCls = "mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20";
@@ -155,14 +155,14 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
   return (
     <PropertySaleShell
       title="Buyers / Clients"
-      subtitle={`${buyers.length} registered`}
+      subtitle={`${serverTotal} registered`}
       action={<button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-[#027333] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0c5d2b]"><FaPlus /> New Buyer</button>}
     >
       <div className="flex h-full flex-col gap-2">
         {/* KPI Strip */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
-            { label: "Total Buyers", value: buyers.length, cls: "bg-slate-900 text-white" },
+            { label: "Total Buyers", value: kpiStats.total, cls: "bg-slate-900 text-white" },
             { label: "Verified KYC", value: kpiStats.verified, cls: "bg-emerald-50 border border-emerald-200 text-emerald-900" },
             { label: "Pending KYC", value: kpiStats.pending, cls: "bg-amber-50 border border-amber-200 text-amber-900" },
             { label: "KYC Rejected", value: kpiStats.rejected, cls: "bg-rose-50 border border-rose-200 text-rose-900" },
@@ -227,7 +227,7 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
             </table>
           </div>
           <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-500">
-            <span>Showing <strong className="text-slate-900">{buyers.length === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1}</strong>–<strong className="text-slate-900">{Math.min(safePage * ITEMS_PER_PAGE, buyers.length)}</strong> of <strong className="text-slate-900">{buyers.length}</strong></span>
+            <span>Showing <strong className="text-slate-900">{serverTotal === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1}</strong>–<strong className="text-slate-900">{Math.min(safePage * ITEMS_PER_PAGE, serverTotal)}</strong> of <strong className="text-slate-900">{serverTotal}</strong></span>
             <div className="flex items-center gap-2">
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Prev</button>
               <span>Page {safePage} of {totalPages}</span>

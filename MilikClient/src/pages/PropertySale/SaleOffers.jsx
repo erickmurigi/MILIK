@@ -71,10 +71,10 @@ const SaleOffers = () => {
     if (!biz) return;
     const p = { business: biz, limit: 200 };
     Promise.all([saleApi.listListings(p), saleApi.listBuyers(p), saleApi.listAgents(p)])
-      .then(([l, b, a]) => {
-        setListings(Array.isArray(l) ? l : (l?.listings ?? []));
-        setBuyers(Array.isArray(b) ? b : (b?.buyers ?? []));
-        setAgents(Array.isArray(a) ? a : (a?.agents ?? []));
+      .then(([{ data: l }, { data: b }, { data: a }]) => {
+        setListings(l ?? []);
+        setBuyers(b ?? []);
+        setAgents(a ?? []);
       })
       .catch(() => {});
   }, [biz]);

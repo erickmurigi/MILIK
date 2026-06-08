@@ -28,5 +28,6 @@ invProductSchema.index({ business: 1, sku: 1 }, { unique: true, sparse: true });
 invProductSchema.index({ business: 1, barcode: 1 }, { sparse: true });
 invProductSchema.index({ business: 1, active: 1, name: 1 });
 invProductSchema.index({ business: 1, category: 1 });
+invProductSchema.index({ name: "text", sku: "text", barcode: "text", description: "text" }, { default_language: "none" });
 
 export default mongoose.model("InvProduct", invProductSchema);

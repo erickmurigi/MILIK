@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FaExternalLinkAlt, FaRedoAlt, FaSearch } from "react-icons/fa";
@@ -16,26 +17,21 @@ const isCashbookAccount = (account = {}) =>
 const CarWashCashbooks = () => {
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const [accounts, setAccounts] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!currentCompany?._id) return;
-    setLoading(true);
-    try {
-      const rows = await carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" });
-      setAccounts(Array.isArray(rows) ? rows.filter(isCashbookAccount) : []);
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to load cashbooks");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentCompany?._id]);
+  const { data: rawAccounts, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ["cw-cashbooks", currentCompany?._id],
+    queryFn: () => carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" }),
+    enabled: !!currentCompany?._id,
+    select: (rows) => Array.isArray(rows) ? rows.filter(isCashbookAccount) : [],
+    staleTime: 2 * 60_000,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (error) toast.error(error?.response?.data?.message || "Failed to load cashbooks"); }, [error]);
+
+  const accounts = rawAccounts ?? [];
 
   const filteredAccounts = useMemo(() => {
     const search = appliedFilters.search.trim().toLowerCase();
@@ -70,7 +66,7 @@ const CarWashCashbooks = () => {
       title="Cashbooks"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} />
             Refresh
           </button>

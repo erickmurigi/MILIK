@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -553,7 +553,7 @@ const CompanySettings = () => {
     setSearchParams(nextParams);
   };
 
-  const loadSettings = async ({ silent = false } = {}) => {
+  const loadSettings = useCallback(async ({ silent = false } = {}) => {
     if (!currentCompany?._id) {
       setSettings(null);
       setTaxConfig(normalizeTaxConfiguration());
@@ -576,9 +576,9 @@ const CompanySettings = () => {
     } finally {
       if (!silent) setLoading(false);
     }
-  };
+  }, [currentCompany?._id]);
 
-  const loadChartAccounts = async () => {
+  const loadChartAccounts = useCallback(async () => {
     if (!currentCompany?._id) {
       setChartAccounts([]);
       setLoadedChartAccountCompanyId("");
@@ -604,16 +604,16 @@ const CompanySettings = () => {
     } finally {
       setLoadingAccounts(false);
     }
-  };
+  }, [currentCompany?._id, loadedChartAccountCompanyId]);
 
   useEffect(() => {
     loadSettings();
-  }, [currentCompany?._id]);
+  }, [loadSettings]);
 
   useEffect(() => {
     if (activeTab !== "accounting" && activeTab !== "hrAccounting") return;
     loadChartAccounts();
-  }, [activeTab, currentCompany?._id, loadedChartAccountCompanyId]);
+  }, [loadChartAccounts, activeTab]);
 
   const activeCounts = useMemo(
     () => ({

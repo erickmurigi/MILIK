@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
@@ -139,7 +139,7 @@ const LedgerAccountActivity = () => {
     accountCanManage(currentUser) &&
     hasCompanyPermission(currentUser || {}, currentCompany, "ledger", "reverse", "accounts");
 
-  const loadActivity = async () => {
+  const loadActivity = useCallback(async () => {
     if (!businessId || !accountId) return;
     setLoading(true);
     try {
@@ -169,12 +169,11 @@ const LedgerAccountActivity = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [businessId, accountId, filters]);
 
   useEffect(() => {
     loadActivity();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, accountId]);
+  }, [loadActivity]);
 
   useEffect(() => {
     if (!businessId) return;

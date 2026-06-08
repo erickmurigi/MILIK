@@ -149,6 +149,351 @@ const getStaffDisplay = (job) => {
   return `${list[0]?.name || "?"} +${list.length - 1}`;
 };
 
+const MobileJobCard = React.memo(({
+  job, expanded, selected, jobPaymentsEntry,
+  canUpdateJob, canRecordPayment,
+  onToggleExpand, onToggleSelect, onUpdateStatus, onOpenPayment, onOpenSms, onReversePayment, onNavigateEdit,
+}) => {
+  const canDelete = job.paymentStatus === "unpaid" && job.status !== "paid";
+  return (
+    <div className="p-3">
+      <div className="flex items-start gap-2">
+        <input type="checkbox" className="mt-1 shrink-0" checked={selected} onChange={() => onToggleSelect(job._id)} disabled={!canDelete} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-extrabold text-slate-900">{job.jobNumber}</span>
+            {job.jobType === "carpet" && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-700">Carpet</span>}
+            <span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${paymentBadgeClass[job.paymentStatus] || paymentBadgeClass.unpaid}`}>{job.paymentStatus || "unpaid"}</span>
+          </div>
+          <div className="mt-0.5 text-sm font-extrabold uppercase text-slate-900">
+            {job.jobType === "carpet" ? <span className="font-semibold normal-case text-slate-700">{job.itemDescription || "-"}</span> : (job.plateNumber || "-")}
+          </div>
+          {job.customerName && <div className="text-xs text-slate-500">{job.customerName}</div>}
+          <div className="text-xs text-slate-400">{getServiceDisplay(job)} · {getStaffDisplay(job)}</div>
+        </div>
+        <div className="flex-shrink-0 text-right">
+          {Number(job.discountAmount) > 0 ? (
+            <div>
+              <div className="text-[10px] text-slate-400 line-through">{formatMoney(job.price)}</div>
+              <div className="font-extrabold text-slate-900">{formatMoney(Math.max(0, job.price - job.discountAmount))}</div>
+            </div>
+          ) : <span className="font-extrabold text-slate-900">{formatMoney(job.price)}</span>}
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <select
+          className="h-7 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 focus:outline-none"
+          value={job.status}
+          onChange={(e) => onUpdateStatus(job, e.target.value)}
+        >
+          {statuses.filter((s) => s !== "paid" || job.paymentStatus === "paid").map((s) => (
+            <option key={s} value={s}>{getJobStatusLabel(s, job.jobType)}</option>
+          ))}
+        </select>
+        {canUpdateJob && (
+          <button type="button" onClick={() => onNavigateEdit(job._id)} disabled={job.status === "cancelled"} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
+            <FaEdit className="text-[9px]" /> Edit
+          </button>
+        )}
+        {canRecordPayment && (
+          <button type="button" onClick={() => onOpenPayment(job)} disabled={job.paymentStatus === "paid"} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50">
+            Pay
+          </button>
+        )}
+        {job.phone && job.status === "done" && job.paymentStatus !== "paid" && (
+          <button type="button" onClick={() => onOpenSms(job, "ready")} className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+            <FaSms /> Ready
+          </button>
+        )}
+        {job.phone && (
+          <button type="button" onClick={() => onOpenSms(job)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <FaSms /> SMS
+          </button>
+        )}
+        <button type="button" onClick={() => onToggleExpand(job._id)} className="ml-auto inline-flex items-center gap-1 border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+          {expanded ? <FaChevronDown className="text-[9px]" /> : <FaChevronRight className="text-[9px]" />} Details
+        </button>
+      </div>
+      {expanded && (
+        <div className="mt-2 space-y-1 rounded border border-slate-200 bg-[#F8FBF9] p-2 text-[11px] text-slate-600">
+          <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
+          <div><span className="font-extrabold uppercase text-slate-500">Phone:</span>{" "}{job.phone || <span className="italic text-slate-400">via M-Pesa on payment</span>}</div>
+          {job.notes && <div><span className="font-extrabold uppercase text-slate-500">Notes:</span> {job.notes}</div>}
+          <div>
+            <span className="font-extrabold uppercase text-slate-500">Payments:</span>
+            {jobPaymentsEntry?.loading && <span className="ml-1 italic text-slate-400">Loading…</span>}
+            {!jobPaymentsEntry?.loading && !jobPaymentsEntry?.list?.length && <span className="ml-1 italic text-slate-400">None recorded</span>}
+            {!jobPaymentsEntry?.loading && jobPaymentsEntry?.list?.length > 0 && (
+              <div className="mt-1 space-y-1">
+                {jobPaymentsEntry.list.map((pmt) => (
+                  <div key={pmt._id} className="flex items-center justify-between rounded bg-white px-2 py-1">
+                    <span>{pmt.method?.toUpperCase()} · {pmt.paymentDate ? new Date(pmt.paymentDate).toLocaleDateString("en-KE") : "—"}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold">{formatMoney(pmt.amount)}</span>
+                      <button type="button" onClick={() => onReversePayment(pmt._id, job._id)} className="text-red-500 hover:text-red-700" title="Reverse"><FaUndoAlt className="text-[9px]" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+const DesktopJobRow = React.memo(({
+  job, expanded, selected, jobPaymentsEntry, jobPhotosList, isCameraOpen,
+  isConsolidated, canUpdateJob, canRecordPayment,
+  onToggleExpand, onToggleSelect, onUpdateStatus, onOpenPayment, onOpenSms, onReversePayment, onNavigateEdit,
+  onSetPhotos, onSetCameraJobId, onSetLightboxSrc,
+}) => {
+  const canDelete = job.paymentStatus === "unpaid" && job.status !== "paid";
+  return (
+    <React.Fragment>
+      <tr className="border-b border-slate-200 hover:bg-slate-50">
+        <td className="px-2 py-1">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(job._id)}
+            disabled={!canDelete}
+            title={canDelete ? "Select job" : "Only unpaid jobs with no payments can be deleted"}
+          />
+        </td>
+        <td className="px-2 py-1">
+          <button type="button" onClick={() => onToggleExpand(job._id)} className="text-[#0B3B2E] hover:text-[#FF8C00]" title={expanded ? "Hide details" : "Show details"}>
+            {expanded ? <FaChevronDown /> : <FaChevronRight />}
+          </button>
+        </td>
+        <td className="px-2 py-1 font-extrabold text-slate-900">
+          {job.jobNumber}
+          {job.jobType === "carpet" && (
+            <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold uppercase text-amber-700">Carpet</span>
+          )}
+        </td>
+        <td className="px-2 py-1 font-extrabold uppercase text-slate-900">
+          {job.jobType === "carpet"
+            ? <span className="font-semibold normal-case text-slate-700">{job.itemDescription || "-"}</span>
+            : job.plateNumber || "-"}
+        </td>
+        <td className="px-2 py-1 font-semibold text-slate-800">{job.customerName || "-"}</td>
+        <td className="px-2 py-1 text-slate-700">{getServiceDisplay(job)}</td>
+        <td className="px-2 py-1 text-slate-700">{getStaffDisplay(job)}</td>
+        {isConsolidated && <td className="px-2 py-1 text-slate-600">{job.branch?.name || <span className="text-slate-400">—</span>}</td>}
+        <td className="px-2 py-1">
+          <select
+            className="h-6 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700"
+            value={job.status}
+            onChange={(event) => onUpdateStatus(job, event.target.value)}
+          >
+            {statuses
+              .filter((status) => status !== "paid" || job.paymentStatus === "paid")
+              .map((status) => (
+                <option key={status} value={status}>
+                  {getJobStatusLabel(status, job.jobType)}
+                </option>
+              ))}
+          </select>
+        </td>
+        <td className="px-2 py-1">
+          <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${paymentBadgeClass[job.paymentStatus] || paymentBadgeClass.unpaid}`}>
+            {job.paymentStatus || "unpaid"}
+          </span>
+        </td>
+        <td className="px-2 py-1 text-right font-extrabold text-slate-900">
+          {Number(job.discountAmount) > 0 ? (
+            <span className="flex flex-col items-end gap-0.5">
+              <span className="text-[10px] text-slate-400 line-through">{formatMoney(job.price)}</span>
+              <span>{formatMoney(Math.max(0, job.price - job.discountAmount))}</span>
+            </span>
+          ) : formatMoney(job.price)}
+        </td>
+        <td className="px-2 py-1 text-right">
+          <div className="inline-flex items-center gap-1">
+            {canUpdateJob && (
+              <button
+                type="button"
+                onClick={() => onNavigateEdit(job._id)}
+                disabled={job.status === "cancelled"}
+                className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-40"
+                title="Edit job"
+              >
+                <FaEdit className="text-[9px]" /> Edit
+              </button>
+            )}
+            {canRecordPayment && (
+              <button
+                type="button"
+                onClick={() => onOpenPayment(job)}
+                disabled={job.paymentStatus === "paid"}
+                className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Pay
+              </button>
+            )}
+            {job.phone && job.status === "done" && job.paymentStatus !== "paid" && (
+              <button
+                type="button"
+                onClick={() => onOpenSms(job, "ready")}
+                className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
+                title="Notify customer — job ready"
+              >
+                <FaSms /> Ready
+              </button>
+            )}
+            {job.phone && (
+              <button
+                type="button"
+                onClick={() => onOpenSms(job)}
+                className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+                title={`Send SMS to ${job.phone}`}
+              >
+                <FaSms /> SMS
+              </button>
+            )}
+          </div>
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="border-b border-slate-200 bg-[#F8FBF9]">
+          <td colSpan={isConsolidated ? 12 : 11} className="px-10 py-3">
+            <div className="grid gap-3 text-[11px] text-slate-600 md:grid-cols-5">
+              <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
+              <div>
+                <span className="font-extrabold uppercase text-slate-500">Phone:</span>{" "}
+                {job.phone ? job.phone : <span className="text-slate-400 italic">via M-Pesa on payment</span>}
+              </div>
+              {job.jobType === "carpet" ? (
+                <div><span className="font-extrabold uppercase text-slate-500">Ready By:</span> {job.expectedReadyAt ? new Date(job.expectedReadyAt).toLocaleDateString("en-KE") : "-"}</div>
+              ) : (
+                <div><span className="font-extrabold uppercase text-slate-500">Vehicle:</span> {job.serviceLines?.[0]?.vehicleType || job.vehicleType || "-"}</div>
+              )}
+              <div>
+                <span className="font-extrabold uppercase text-slate-500">Staff:</span>{" "}
+                {Array.isArray(job.assignedStaff) && job.assignedStaff.length
+                  ? job.assignedStaff.map((s) => s?.name || s).join(", ")
+                  : "-"}
+              </div>
+              <div><span className="font-extrabold uppercase text-slate-500">Delete:</span> {canDelete ? "Safe" : "Locked"}</div>
+              {Array.isArray(job.serviceLines) && job.serviceLines.length > 1 && (
+                <div className="md:col-span-5">
+                  <span className="font-extrabold uppercase text-slate-500">Service Lines:</span>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {job.serviceLines.map((line, li) => (
+                      <span key={li} className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                        {line.serviceName} — {formatMoney(line.price)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="md:col-span-5"><span className="font-extrabold uppercase text-slate-500">Notes:</span> {job.notes || "-"}</div>
+              {job.jobType === "carpet" && (() => {
+                const photos = jobPhotosList ?? (Array.isArray(job.photos) ? job.photos : []);
+                const handleCapture = async (file) => {
+                  if (photos.length >= 5) { toast.error("Max 5 photos per job"); return; }
+                  try {
+                    const result = await carWashApi.uploadJobPhotos(job._id, [file]);
+                    onSetPhotos(job._id, result?.photos || photos);
+                    toast.success("Photo added");
+                  } catch { toast.error("Upload failed"); }
+                };
+                const handleDelete = async (url) => {
+                  try {
+                    const result = await carWashApi.deleteJobPhoto(job._id, url);
+                    onSetPhotos(job._id, result?.photos || photos.filter((p) => p !== url));
+                  } catch { toast.error("Delete failed"); }
+                };
+                return (
+                  <div className="md:col-span-5">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span className="font-extrabold uppercase text-slate-500">Carpet Photos:</span>
+                      {photos.length < 5 && (
+                        <button type="button" onClick={() => onSetCameraJobId(job._id)} className="inline-flex items-center gap-1 rounded border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                          <FaCamera size={8} /> Take Photo
+                        </button>
+                      )}
+                      {isCameraOpen && (
+                        <CarpetCameraModal
+                          onCapture={handleCapture}
+                          onClose={() => onSetCameraJobId(null)}
+                        />
+                      )}
+                    </div>
+                    {photos.length === 0 ? (
+                      <span className="italic text-slate-400">No photos — click "Take Photo" to add one</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {photos.map((url) => (
+                          <div key={url} className="group relative h-20 w-20 overflow-hidden rounded border border-slate-200 bg-slate-100">
+                            <img src={photoUrl(url)} alt="Carpet" className="h-full w-full cursor-pointer object-cover" onClick={() => onSetLightboxSrc(photoUrl(url))} />
+                            <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100">
+                              <button type="button" onClick={() => onSetLightboxSrc(photoUrl(url))} className="rounded-full bg-white/80 p-1 text-slate-700"><FaExpand size={9} /></button>
+                              <button type="button" onClick={() => handleDelete(url)} className="rounded-full bg-red-500/90 p-1 text-white"><FaTimesCircle size={9} /></button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              <div className="md:col-span-5">
+                <span className="font-extrabold uppercase text-slate-500">Payments:</span>
+                {jobPaymentsEntry?.loading && (
+                  <span className="ml-2 italic text-slate-400">Loading…</span>
+                )}
+                {!jobPaymentsEntry?.loading && jobPaymentsEntry?.list?.length === 0 && (
+                  <span className="ml-2 italic text-slate-400">No payments recorded</span>
+                )}
+                {!jobPaymentsEntry?.loading && jobPaymentsEntry?.list?.length > 0 && (
+                  <div className="mt-1.5 overflow-x-auto">
+                    <table className="min-w-[520px] text-[11px]">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500">
+                          <th className="pb-1 pr-4 text-left font-extrabold uppercase">Date</th>
+                          <th className="pb-1 pr-4 text-left font-extrabold uppercase">Method</th>
+                          <th className="pb-1 pr-4 text-left font-extrabold uppercase">Reference</th>
+                          <th className="pb-1 pr-4 text-right font-extrabold uppercase">Amount</th>
+                          <th className="pb-1 text-right font-extrabold uppercase">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {jobPaymentsEntry.list.map((pmt) => (
+                          <tr key={pmt._id} className="border-b border-slate-100">
+                            <td className="py-1 pr-4 text-slate-600">
+                              {pmt.paymentDate ? new Date(pmt.paymentDate).toLocaleDateString("en-KE") : "—"}
+                            </td>
+                            <td className="py-1 pr-4 font-bold uppercase text-slate-700">{pmt.method}</td>
+                            <td className="py-1 pr-4 text-slate-500">{pmt.reference || "—"}</td>
+                            <td className="py-1 pr-4 text-right font-extrabold text-slate-900">{formatMoney(pmt.amount)}</td>
+                            <td className="py-1 text-right">
+                              <button
+                                type="button"
+                                onClick={() => onReversePayment(pmt._id, job._id)}
+                                className="inline-flex items-center gap-1 border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-50"
+                                title="Reverse this payment"
+                              >
+                                <FaUndoAlt className="text-[8px]" /> Reverse
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </React.Fragment>
+  );
+});
+
 const CarWashJobs = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -226,6 +571,17 @@ const CarWashJobs = () => {
     return Math.max(0, net - paymentJobPaidSoFar);
   }, [selectedPaymentJob, paymentJobPaidSoFar]);
 
+  // Refs let stable useCallback closures always read latest state without being re-created
+  const jobsRef = useRef(jobs);
+  useEffect(() => { jobsRef.current = jobs; }, [jobs]);
+  const jobPaymentsRef = useRef(jobPayments);
+  useEffect(() => { jobPaymentsRef.current = jobPayments; }, [jobPayments]);
+  const cashbooksRef = useRef(cashbooks);
+  useEffect(() => { cashbooksRef.current = cashbooks; }, [cashbooks]);
+  const cashbookDefaultsRef = useRef(cashbookDefaults);
+  useEffect(() => { cashbookDefaultsRef.current = cashbookDefaults; }, [cashbookDefaults]);
+  const loadJobsRef = useRef(null);
+
   const loadReferenceData = async () => {
     try {
       const [servicePayload, staffPayload, cashbookPayload, settingsPayload, branchData] = await Promise.all([
@@ -255,7 +611,7 @@ const CarWashJobs = () => {
     }
   };
 
-  const loadJobs = async () => {
+  const loadJobs = useCallback(async () => {
     setLoading(true);
     try {
       const jobPayload = await carWashApi.listJobs({
@@ -280,12 +636,13 @@ const CarWashJobs = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [appliedFilters, page, pageSize]);
+  useEffect(() => { loadJobsRef.current = loadJobs; }, [loadJobs]);
 
-  const load = () => loadJobs();
+  const load = useCallback(() => loadJobsRef.current?.(), []);
 
   useEffect(() => { loadReferenceData(); }, []);
-  useEffect(() => { loadJobs(); }, [appliedFilters, page, pageSize]);
+  useEffect(() => { loadJobs(); }, [loadJobs]);
 
   useEffect(() => {
     if (!selectedPaymentJob) return;
@@ -321,52 +678,44 @@ const CarWashJobs = () => {
     return () => clearTimeout(t);
   }, [paymentForm.job, paymentForm.method, paymentForm.cashbookAccount, paymentForm.discountAmount, paymentForm.reference, paymentForm.receivedFromPhone, paymentForm.paymentDate, showPaymentModal]);
 
-  const openPaymentModal = async (job = null) => {
+  const openPaymentModal = useCallback(async (job = null) => {
     const draft = readDraft("cw-payment-form");
     const useDraft = draft?.job === job?._id;
-
-    // Compute paid-so-far from cache if available, otherwise start at 0 and refine async
-    const cachedList = job?._id ? jobPayments[job._id]?.list : null;
+    const cachedList = job?._id ? jobPaymentsRef.current[job._id]?.list : null;
     const cachedPaid = cachedList
       ? cachedList.reduce((s, p) => s + Number(p.amount || 0) + Number(p.discountAmount || 0), 0)
       : 0;
     const initialOutstanding = Math.max(0, Number(job?.price || 0) - Number(job?.discountAmount || 0) - cachedPaid);
-
     setPaymentJobPaidSoFar(cachedPaid);
     setPaymentForm({
       ...emptyPaymentForm,
       job: job?._id || "",
       amount: job ? String(initialOutstanding) : "",
       method:            useDraft ? draft.method            : emptyPaymentForm.method,
-      cashbookAccount:   useDraft ? draft.cashbookAccount   : preferredCashbookForMethod(cashbooks, emptyPaymentForm.method, cashbookDefaults),
+      cashbookAccount:   useDraft ? draft.cashbookAccount   : preferredCashbookForMethod(cashbooksRef.current, emptyPaymentForm.method, cashbookDefaultsRef.current),
       discountAmount:    useDraft ? draft.discountAmount     : "",
       reference:         useDraft ? draft.reference          : "",
       receivedFromPhone: useDraft ? draft.receivedFromPhone  : String(job?.phone || "").trim(),
       paymentDate:       useDraft ? draft.paymentDate        : todayISO(),
     });
-    // Seed job dropdown immediately from current page's data so it's usable before the API call returns
-    setModalUnpaidJobs(jobs.filter((j) => j.paymentStatus !== "paid"));
+    setModalUnpaidJobs(jobsRef.current.filter((j) => j.paymentStatus !== "paid"));
     setShowPaymentModal(true);
-
     try {
-      // Refresh with full list (current page may be filtered/paginated)
       const needsPayments = job?._id && !cachedList;
       const [jobsPayload, pmtsPayload] = await Promise.all([
         carWashApi.listJobs({ limit: 100 }),
         needsPayments ? carWashApi.listPayments({ job: job._id, limit: 20 }) : Promise.resolve(null),
       ]);
       setModalUnpaidJobs(normalizeListPayload(jobsPayload, "jobs").filter((j) => j.paymentStatus !== "paid"));
-
       if (pmtsPayload && job) {
         const list = normalizeListPayload(pmtsPayload, "payments");
         const paid = list.reduce((s, p) => s + Number(p.amount || 0) + Number(p.discountAmount || 0), 0);
         const precise = Math.max(0, Number(job.price || 0) - Number(job.discountAmount || 0) - paid);
         setPaymentJobPaidSoFar(paid);
-        // Only update amount if user hasn't started typing yet
         setPaymentForm((prev) => prev.job === job._id ? { ...prev, amount: String(precise) } : prev);
       }
     } catch { /* modal already seeded from page jobs above */ }
-  };
+  }, []);
 
   const recordPayment = async (event) => {
     event.preventDefault();
@@ -381,7 +730,7 @@ const CarWashJobs = () => {
         discountAmount: Number(paymentForm.discountAmount || 0),
       });
       closePaymentModal();
-      await loadJobs();
+      await loadJobsRef.current?.();
       toast.success("Payment recorded");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to record payment");
@@ -410,7 +759,7 @@ const CarWashJobs = () => {
     }
   };
 
-  const updateStatus = async (job, status) => {
+  const updateStatus = useCallback(async (job, status) => {
     const previous = job.status;
     setJobs((prev) => prev.map((j) => (j._id === job._id ? { ...j, status } : j)));
     try {
@@ -419,11 +768,11 @@ const CarWashJobs = () => {
       setJobs((prev) => prev.map((j) => (j._id === job._id ? { ...j, status: previous } : j)));
       toast.error(error?.response?.data?.message || "Unable to update job status");
     }
-  };
+  }, []);
 
-  const toggleSelected = (id) => {
+  const toggleSelected = useCallback((id) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
-  };
+  }, []);
 
   const loadJobPayments = useCallback(async (jobId) => {
     setJobPayments((prev) => {
@@ -439,15 +788,15 @@ const CarWashJobs = () => {
     }
   }, []);
 
-  const toggleExpanded = (id) => {
+  const toggleExpanded = useCallback((id) => {
     setExpandedIds((prev) => {
       const expanding = !prev.includes(id);
       if (expanding) loadJobPayments(id);
       return expanding ? [...prev, id] : prev.filter((item) => item !== id);
     });
-  };
+  }, [loadJobPayments]);
 
-  const reversePayment = async (paymentId, jobId) => {
+  const reversePayment = useCallback(async (paymentId, jobId) => {
     const confirmed = await confirm({
       title: "Reverse Payment",
       message: "This deletes the payment record, reverts the job payment status, and cancels any unpaid commissions. This action cannot be undone.",
@@ -457,14 +806,13 @@ const CarWashJobs = () => {
     if (!confirmed) return;
     try {
       await carWashApi.deletePayment(paymentId);
-      await loadJobs();
-      // Clear cached payments so the list reloads on next expand
+      await loadJobsRef.current?.();
       setJobPayments((prev) => { const next = { ...prev }; delete next[jobId]; return next; });
       toast.success("Payment reversed");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to reverse payment");
     }
-  };
+  }, [confirm]);
 
   const toggleSelectAllVisible = () => {
     setSelectedIds((prev) => {
@@ -501,7 +849,7 @@ const CarWashJobs = () => {
     ];
   };
 
-  const openSmsModal = (job, type) => {
+  const openSmsModal = useCallback((job, type) => {
     setSmsTarget(job);
     const name = job.customerName || "Customer";
     const num  = job.jobNumber || "";
@@ -511,7 +859,13 @@ const CarWashJobs = () => {
     } else {
       setSmsBody(`Hi ${name}, your car wash job ${num} is ${statusLabels[job.status] || job.status}. Thank you!`);
     }
-  };
+  }, []);
+
+  const onSetPhotos = useCallback((jobId, photos) => {
+    setJobPhotos((prev) => ({ ...prev, [jobId]: photos }));
+  }, []);
+
+  const handleNavigateEdit = useCallback((id) => navigate(`/carwash/jobs/${id}/edit`), [navigate]);
 
   const sendSms = async (phone, body) => {
     if (!smsTarget) return;
@@ -693,98 +1047,24 @@ const CarWashJobs = () => {
 
         {/* ── Mobile card list ─────────────────────────────────────────── */}
         <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-slate-200">
-          {jobs.length ? jobs.map((job) => {
-            const canDelete = job.paymentStatus === "unpaid" && job.status !== "paid";
-            const expanded  = expandedIds.includes(job._id);
-            return (
-              <React.Fragment key={job._id}>
-                <div className="p-3">
-                  <div className="flex items-start gap-2">
-                    <input type="checkbox" className="mt-1 shrink-0" checked={selectedIds.includes(job._id)} onChange={() => toggleSelected(job._id)} disabled={!canDelete} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-extrabold text-slate-900">{job.jobNumber}</span>
-                        {job.jobType === "carpet" && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-700">Carpet</span>}
-                        <span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${paymentBadgeClass[job.paymentStatus] || paymentBadgeClass.unpaid}`}>{job.paymentStatus || "unpaid"}</span>
-                      </div>
-                      <div className="mt-0.5 text-sm font-extrabold uppercase text-slate-900">
-                        {job.jobType === "carpet" ? <span className="font-semibold normal-case text-slate-700">{job.itemDescription || "-"}</span> : (job.plateNumber || "-")}
-                      </div>
-                      {job.customerName && <div className="text-xs text-slate-500">{job.customerName}</div>}
-                      <div className="text-xs text-slate-400">{getServiceDisplay(job)} · {getStaffDisplay(job)}</div>
-                    </div>
-                    <div className="flex-shrink-0 text-right">
-                      {Number(job.discountAmount) > 0 ? (
-                        <div>
-                          <div className="text-[10px] text-slate-400 line-through">{formatMoney(job.price)}</div>
-                          <div className="font-extrabold text-slate-900">{formatMoney(Math.max(0, job.price - job.discountAmount))}</div>
-                        </div>
-                      ) : <span className="font-extrabold text-slate-900">{formatMoney(job.price)}</span>}
-                    </div>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <select
-                      className="h-7 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 focus:outline-none"
-                      value={job.status}
-                      onChange={(e) => updateStatus(job, e.target.value)}
-                    >
-                      {statuses.filter((s) => s !== "paid" || job.paymentStatus === "paid").map((s) => (
-                        <option key={s} value={s}>{getJobStatusLabel(s, job.jobType)}</option>
-                      ))}
-                    </select>
-                    {canUpdateJob && (
-                      <button type="button" onClick={() => navigate(`/carwash/jobs/${job._id}/edit`)} disabled={job.status === "cancelled"} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
-                        <FaEdit className="text-[9px]" /> Edit
-                      </button>
-                    )}
-                    {canRecordPayment && (
-                      <button type="button" onClick={() => openPaymentModal(job)} disabled={job.paymentStatus === "paid"} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50">
-                        Pay
-                      </button>
-                    )}
-                    {job.phone && job.status === "done" && job.paymentStatus !== "paid" && (
-                      <button type="button" onClick={() => openSmsModal(job, "ready")} className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                        <FaSms /> Ready
-                      </button>
-                    )}
-                    {job.phone && (
-                      <button type="button" onClick={() => openSmsModal(job)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                        <FaSms /> SMS
-                      </button>
-                    )}
-                    <button type="button" onClick={() => toggleExpanded(job._id)} className="ml-auto inline-flex items-center gap-1 border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
-                      {expanded ? <FaChevronDown className="text-[9px]" /> : <FaChevronRight className="text-[9px]" />} Details
-                    </button>
-                  </div>
-                  {expanded && (
-                    <div className="mt-2 space-y-1 rounded border border-slate-200 bg-[#F8FBF9] p-2 text-[11px] text-slate-600">
-                      <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
-                      <div><span className="font-extrabold uppercase text-slate-500">Phone:</span>{" "}{job.phone || <span className="italic text-slate-400">via M-Pesa on payment</span>}</div>
-                      {job.notes && <div><span className="font-extrabold uppercase text-slate-500">Notes:</span> {job.notes}</div>}
-                      <div>
-                        <span className="font-extrabold uppercase text-slate-500">Payments:</span>
-                        {jobPayments[job._id]?.loading && <span className="ml-1 italic text-slate-400">Loading…</span>}
-                        {!jobPayments[job._id]?.loading && !jobPayments[job._id]?.list?.length && <span className="ml-1 italic text-slate-400">None recorded</span>}
-                        {!jobPayments[job._id]?.loading && jobPayments[job._id]?.list?.length > 0 && (
-                          <div className="mt-1 space-y-1">
-                            {jobPayments[job._id].list.map((pmt) => (
-                              <div key={pmt._id} className="flex items-center justify-between rounded bg-white px-2 py-1">
-                                <span>{pmt.method?.toUpperCase()} · {pmt.paymentDate ? new Date(pmt.paymentDate).toLocaleDateString("en-KE") : "—"}</span>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold">{formatMoney(pmt.amount)}</span>
-                                  <button type="button" onClick={() => reversePayment(pmt._id, job._id)} className="text-red-500 hover:text-red-700" title="Reverse"><FaUndoAlt className="text-[9px]" /></button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </React.Fragment>
-            );
-          }) : (
+          {jobs.length ? jobs.map((job) => (
+            <MobileJobCard
+              key={job._id}
+              job={job}
+              expanded={expandedIds.includes(job._id)}
+              selected={selectedIds.includes(job._id)}
+              jobPaymentsEntry={jobPayments[job._id]}
+              canUpdateJob={canUpdateJob}
+              canRecordPayment={canRecordPayment}
+              onToggleExpand={toggleExpanded}
+              onToggleSelect={toggleSelected}
+              onUpdateStatus={updateStatus}
+              onOpenPayment={openPaymentModal}
+              onOpenSms={openSmsModal}
+              onReversePayment={reversePayment}
+              onNavigateEdit={handleNavigateEdit}
+            />
+          )) : (
             <div className="py-10 text-center text-xs font-semibold text-slate-500">No Car Wash jobs recorded for this date.</div>
           )}
         </div>
@@ -819,256 +1099,30 @@ const CarWashJobs = () => {
           </thead>
           <tbody>
             {jobs.length ? (
-              jobs.map((job) => {
-                const canDelete = job.paymentStatus === "unpaid" && job.status !== "paid";
-                const expanded = expandedIds.includes(job._id);
-                return (
-                  <React.Fragment key={job._id}>
-                    <tr className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className="px-2 py-1">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(job._id)}
-                          onChange={() => toggleSelected(job._id)}
-                          disabled={!canDelete}
-                          title={canDelete ? "Select job" : "Only unpaid jobs with no payments can be deleted"}
-                        />
-                      </td>
-                      <td className="px-2 py-1">
-                        <button type="button" onClick={() => toggleExpanded(job._id)} className="text-[#0B3B2E] hover:text-[#FF8C00]" title={expanded ? "Hide details" : "Show details"}>
-                          {expanded ? <FaChevronDown /> : <FaChevronRight />}
-                        </button>
-                      </td>
-                      <td className="px-2 py-1 font-extrabold text-slate-900">
-                        {job.jobNumber}
-                        {job.jobType === "carpet" && (
-                          <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold uppercase text-amber-700">Carpet</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-1 font-extrabold uppercase text-slate-900">
-                        {job.jobType === "carpet"
-                          ? <span className="font-semibold normal-case text-slate-700">{job.itemDescription || "-"}</span>
-                          : job.plateNumber || "-"}
-                      </td>
-                      <td className="px-2 py-1 font-semibold text-slate-800">{job.customerName || "-"}</td>
-                      <td className="px-2 py-1 text-slate-700">{getServiceDisplay(job)}</td>
-                      <td className="px-2 py-1 text-slate-700">{getStaffDisplay(job)}</td>
-                      {isConsolidated && <td className="px-2 py-1 text-slate-600">{job.branch?.name || <span className="text-slate-400">—</span>}</td>}
-                      <td className="px-2 py-1">
-                        <select
-                          className="h-6 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700"
-                          value={job.status}
-                          onChange={(event) => updateStatus(job, event.target.value)}
-                        >
-                          {statuses
-                            .filter((status) => status !== "paid" || job.paymentStatus === "paid")
-                            .map((status) => (
-                              <option key={status} value={status}>
-                                {getJobStatusLabel(status, job.jobType)}
-                              </option>
-                            ))}
-                        </select>
-                      </td>
-                      <td className="px-2 py-1">
-                        <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${paymentBadgeClass[job.paymentStatus] || paymentBadgeClass.unpaid}`}>
-                          {job.paymentStatus || "unpaid"}
-                        </span>
-                      </td>
-                      <td className="px-2 py-1 text-right font-extrabold text-slate-900">
-                        {Number(job.discountAmount) > 0 ? (
-                          <span className="flex flex-col items-end gap-0.5">
-                            <span className="text-[10px] text-slate-400 line-through">{formatMoney(job.price)}</span>
-                            <span>{formatMoney(Math.max(0, job.price - job.discountAmount))}</span>
-                          </span>
-                        ) : formatMoney(job.price)}
-                      </td>
-                      <td className="px-2 py-1 text-right">
-                        <div className="inline-flex items-center gap-1">
-                          {canUpdateJob && (
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/carwash/jobs/${job._id}/edit`)}
-                              disabled={job.status === "cancelled"}
-                              className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-40"
-                              title="Edit job"
-                            >
-                              <FaEdit className="text-[9px]" /> Edit
-                            </button>
-                          )}
-                          {canRecordPayment && (
-                            <button
-                              type="button"
-                              onClick={() => openPaymentModal(job)}
-                              disabled={job.paymentStatus === "paid"}
-                              className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              Pay
-                            </button>
-                          )}
-                          {job.phone && job.status === "done" && job.paymentStatus !== "paid" && (
-                            <button
-                              type="button"
-                              onClick={() => openSmsModal(job, "ready")}
-                              className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
-                              title="Notify customer — job ready"
-                            >
-                              <FaSms /> Ready
-                            </button>
-                          )}
-                          {job.phone && (
-                            <button
-                              type="button"
-                              onClick={() => openSmsModal(job)}
-                              className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-                              title={`Send SMS to ${job.phone}`}
-                            >
-                              <FaSms /> SMS
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                    {expanded && (
-                      <tr className="border-b border-slate-200 bg-[#F8FBF9]">
-                        <td colSpan={isConsolidated ? 12 : 11} className="px-10 py-3">
-                          <div className="grid gap-3 text-[11px] text-slate-600 md:grid-cols-5">
-                            <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
-                            <div>
-                              <span className="font-extrabold uppercase text-slate-500">Phone:</span>{" "}
-                              {job.phone ? job.phone : <span className="text-slate-400 italic">via M-Pesa on payment</span>}
-                            </div>
-                            {job.jobType === "carpet" ? (
-                              <div><span className="font-extrabold uppercase text-slate-500">Ready By:</span> {job.expectedReadyAt ? new Date(job.expectedReadyAt).toLocaleDateString("en-KE") : "-"}</div>
-                            ) : (
-                              <div><span className="font-extrabold uppercase text-slate-500">Vehicle:</span> {job.serviceLines?.[0]?.vehicleType || job.vehicleType || "-"}</div>
-                            )}
-                            <div>
-                              <span className="font-extrabold uppercase text-slate-500">Staff:</span>{" "}
-                              {Array.isArray(job.assignedStaff) && job.assignedStaff.length
-                                ? job.assignedStaff.map((s) => s?.name || s).join(", ")
-                                : "-"}
-                            </div>
-                            <div><span className="font-extrabold uppercase text-slate-500">Delete:</span> {canDelete ? "Safe" : "Locked"}</div>
-                            {Array.isArray(job.serviceLines) && job.serviceLines.length > 1 && (
-                              <div className="md:col-span-5">
-                                <span className="font-extrabold uppercase text-slate-500">Service Lines:</span>
-                                <div className="mt-1 flex flex-wrap gap-2">
-                                  {job.serviceLines.map((line, li) => (
-                                    <span key={li} className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                                      {line.serviceName} — {formatMoney(line.price)}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            <div className="md:col-span-5"><span className="font-extrabold uppercase text-slate-500">Notes:</span> {job.notes || "-"}</div>
-
-                            {/* Carpet photo gallery */}
-                            {job.jobType === "carpet" && (() => {
-                              const photos = jobPhotos[job._id] ?? (Array.isArray(job.photos) ? job.photos : []);
-                              const handleCapture = async (file) => {
-                                if (photos.length >= 5) { toast.error("Max 5 photos per job"); return; }
-                                try {
-                                  const result = await carWashApi.uploadJobPhotos(job._id, [file]);
-                                  setJobPhotos((prev) => ({ ...prev, [job._id]: result?.photos || photos }));
-                                  toast.success("Photo added");
-                                } catch { toast.error("Upload failed"); }
-                              };
-                              const handleDelete = async (url) => {
-                                try {
-                                  const result = await carWashApi.deleteJobPhoto(job._id, url);
-                                  setJobPhotos((prev) => ({ ...prev, [job._id]: result?.photos || photos.filter((p) => p !== url) }));
-                                } catch { toast.error("Delete failed"); }
-                              };
-                              return (
-                                <div className="md:col-span-5">
-                                  <div className="mb-1.5 flex items-center gap-2">
-                                    <span className="font-extrabold uppercase text-slate-500">Carpet Photos:</span>
-                                    {photos.length < 5 && (
-                                      <button type="button" onClick={() => setCameraJobId(job._id)} className="inline-flex items-center gap-1 rounded border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                                        <FaCamera size={8} /> Take Photo
-                                      </button>
-                                    )}
-                                    {cameraJobId === job._id && (
-                                      <CarpetCameraModal
-                                        onCapture={handleCapture}
-                                        onClose={() => setCameraJobId(null)}
-                                      />
-                                    )}
-                                  </div>
-                                  {photos.length === 0 ? (
-                                    <span className="italic text-slate-400">No photos — click "Take Photo" to add one</span>
-                                  ) : (
-                                    <div className="flex flex-wrap gap-2">
-                                      {photos.map((url) => (
-                                        <div key={url} className="group relative h-20 w-20 overflow-hidden rounded border border-slate-200 bg-slate-100">
-                                          <img src={photoUrl(url)} alt="Carpet" className="h-full w-full cursor-pointer object-cover" onClick={() => setLightboxSrc(photoUrl(url))} />
-                                          <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100">
-                                            <button type="button" onClick={() => setLightboxSrc(photoUrl(url))} className="rounded-full bg-white/80 p-1 text-slate-700"><FaExpand size={9} /></button>
-                                            <button type="button" onClick={() => handleDelete(url)} className="rounded-full bg-red-500/90 p-1 text-white"><FaTimesCircle size={9} /></button>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-
-                            {/* Payments sub-section */}
-                            <div className="md:col-span-5">
-                              <span className="font-extrabold uppercase text-slate-500">Payments:</span>
-                              {jobPayments[job._id]?.loading && (
-                                <span className="ml-2 italic text-slate-400">Loading…</span>
-                              )}
-                              {!jobPayments[job._id]?.loading && jobPayments[job._id]?.list?.length === 0 && (
-                                <span className="ml-2 italic text-slate-400">No payments recorded</span>
-                              )}
-                              {!jobPayments[job._id]?.loading && jobPayments[job._id]?.list?.length > 0 && (
-                                <div className="mt-1.5 overflow-x-auto">
-                                  <table className="min-w-[520px] text-[11px]">
-                                    <thead>
-                                      <tr className="border-b border-slate-200 text-slate-500">
-                                        <th className="pb-1 pr-4 text-left font-extrabold uppercase">Date</th>
-                                        <th className="pb-1 pr-4 text-left font-extrabold uppercase">Method</th>
-                                        <th className="pb-1 pr-4 text-left font-extrabold uppercase">Reference</th>
-                                        <th className="pb-1 pr-4 text-right font-extrabold uppercase">Amount</th>
-                                        <th className="pb-1 text-right font-extrabold uppercase">Action</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {jobPayments[job._id].list.map((pmt) => (
-                                        <tr key={pmt._id} className="border-b border-slate-100">
-                                          <td className="py-1 pr-4 text-slate-600">
-                                            {pmt.paymentDate ? new Date(pmt.paymentDate).toLocaleDateString("en-KE") : "—"}
-                                          </td>
-                                          <td className="py-1 pr-4 font-bold uppercase text-slate-700">{pmt.method}</td>
-                                          <td className="py-1 pr-4 text-slate-500">{pmt.reference || "—"}</td>
-                                          <td className="py-1 pr-4 text-right font-extrabold text-slate-900">{formatMoney(pmt.amount)}</td>
-                                          <td className="py-1 text-right">
-                                            <button
-                                              type="button"
-                                              onClick={() => reversePayment(pmt._id, job._id)}
-                                              className="inline-flex items-center gap-1 border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-50"
-                                              title="Reverse this payment"
-                                            >
-                                              <FaUndoAlt className="text-[8px]" /> Reverse
-                                            </button>
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-              );
-              })
+              jobs.map((job) => (
+                <DesktopJobRow
+                  key={job._id}
+                  job={job}
+                  expanded={expandedIds.includes(job._id)}
+                  selected={selectedIds.includes(job._id)}
+                  jobPaymentsEntry={jobPayments[job._id]}
+                  jobPhotosList={jobPhotos[job._id]}
+                  isCameraOpen={cameraJobId === job._id}
+                  isConsolidated={isConsolidated}
+                  canUpdateJob={canUpdateJob}
+                  canRecordPayment={canRecordPayment}
+                  onToggleExpand={toggleExpanded}
+                  onToggleSelect={toggleSelected}
+                  onUpdateStatus={updateStatus}
+                  onOpenPayment={openPaymentModal}
+                  onOpenSms={openSmsModal}
+                  onReversePayment={reversePayment}
+                  onNavigateEdit={handleNavigateEdit}
+                  onSetPhotos={onSetPhotos}
+                  onSetCameraJobId={setCameraJobId}
+                  onSetLightboxSrc={setLightboxSrc}
+                />
+              ))
             ) : (
               <EmptyRow colSpan={isConsolidated ? 12 : 11} text="No Car Wash jobs recorded for this date." />
             )}

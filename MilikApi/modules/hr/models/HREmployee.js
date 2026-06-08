@@ -86,6 +86,7 @@ employeeSchema.index({ company: 1, department: 1 });
 employeeSchema.index({ company: 1, employmentType: 1 });
 employeeSchema.index({ company: 1, surname: 1, otherNames: 1 });
 employeeSchema.index({ company: 1, employeeNumber: 1 }, { unique: true, sparse: true });
+employeeSchema.index({ surname: "text", otherNames: "text", employeeNumber: "text", phoneNumber: "text", email: "text" }, { default_language: "none" });
 
 employeeSchema.pre('validate', async function (next) {
   if (this.isNew && !this.employeeNumber) {

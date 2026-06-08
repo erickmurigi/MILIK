@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
@@ -70,7 +70,7 @@ const MpesaBatchImport = () => {
     }
   }, [mpesaConfigs, selectedShortCode]);
 
-  const loadRows = async () => {
+  const loadRows = useCallback(async () => {
     if (!currentCompany?._id) return;
     setIsLoading(true);
     try {
@@ -84,12 +84,11 @@ const MpesaBatchImport = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentCompany?._id, selectedShortCode]);
 
   useEffect(() => {
     loadRows();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCompany?._id, selectedShortCode]);
+  }, [loadRows]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {

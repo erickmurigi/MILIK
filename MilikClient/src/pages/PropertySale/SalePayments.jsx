@@ -94,7 +94,7 @@ const SalePayments = () => {
   useEffect(() => {
     if (!biz) return;
     saleApi.listDeals({ business: biz, limit: 200 })
-      .then((res) => setDeals(Array.isArray(res) ? res : (res?.deals ?? [])))
+      .then(({ data: dealRows }) => setDeals(dealRows ?? []))
       .catch(() => {});
   }, [biz]);
 

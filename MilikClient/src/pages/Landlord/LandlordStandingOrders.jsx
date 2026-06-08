@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useDebounce from "../../hooks/useDebounce";
 import {
   FaCalendarAlt,
@@ -227,7 +227,7 @@ const LandlordStandingOrders = () => {
     };
   }, [dispatch, currentCompany?._id]);
 
-  const loadRows = async () => {
+  const loadRows = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
@@ -247,11 +247,11 @@ const LandlordStandingOrders = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.propertyId, currentPage]);
 
   useEffect(() => {
     loadRows();
-  }, [currentCompany?._id, debouncedSearch, filters.status, filters.landlordId, filters.propertyId, currentPage]);
+  }, [loadRows]);
 
   useEffect(() => {
     setSelectedIds((prev) =>

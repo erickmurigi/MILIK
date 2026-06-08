@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
   FaCalendarAlt, FaCheckCircle, FaChevronDown, FaChevronRight,
@@ -295,13 +296,10 @@ const TopUpModal = ({ account, cashbooks, onSave, onClose }) => {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 const CarWashAccounts = () => {
+  const queryClient = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const businessId = currentCompany?._id;
 
-  const [accounts, setAccounts] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [cashbooks, setCashbooks] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [expandedStatements, setExpandedStatements] = useState({});
   const [showCreate, setShowCreate] = useState(false);
@@ -316,34 +314,36 @@ const CarWashAccounts = () => {
   const [filterStatus, setFilterStatus] = useState("active");
   const [filterType, setFilterType] = useState("");
 
-  const loadAccounts = useCallback(async () => {
-    if (!businessId) return;
-    setLoading(true);
-    try {
+  const { data: accountsData, isLoading: loading, error, refetch: refetchAccounts } = useQuery({
+    queryKey: ["cw-credit-accounts", businessId, filterStatus, filterType],
+    queryFn: async () => {
       const params = {};
       if (filterStatus) params.status = filterStatus;
       if (filterType) params.accountType = filterType;
-      const data = await carWashApi.listCreditAccounts(params);
-      setAccounts(Array.isArray(data) ? data : []);
-    } catch {
-      toast.error("Failed to load credit accounts");
-    } finally {
-      setLoading(false);
-    }
-  }, [businessId, filterStatus, filterType]);
+      return carWashApi.listCreditAccounts(params);
+    },
+    enabled: !!businessId,
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => {
-    if (!businessId) return;
-    Promise.all([
+  const { data: refData } = useQuery({
+    queryKey: ["cw-accounts-ref", businessId],
+    queryFn: () => Promise.all([
       carWashApi.listLoyaltyCustomers({}).catch(() => []),
       carWashApi.listChartOfAccounts({ type: "asset" }).catch(() => []),
-    ]).then(([c, cb]) => {
-      setCustomers(Array.isArray(c) ? c : []);
-      setCashbooks(Array.isArray(cb) ? cb.filter((a) => a.isPosting !== false) : []);
-    });
-  }, [businessId]);
+    ]).then(([c, cb]) => ({
+      customers: Array.isArray(c) ? c : [],
+      cashbooks: Array.isArray(cb) ? cb.filter((a) => a.isPosting !== false) : [],
+    })),
+    enabled: !!businessId,
+    staleTime: 5 * 60_000,
+  });
 
-  useEffect(() => { loadAccounts(); }, [loadAccounts]);
+  useEffect(() => { if (error) toast.error("Failed to load credit accounts"); }, [error]);
+
+  const accounts = Array.isArray(accountsData) ? accountsData : [];
+  const customers = refData?.customers ?? [];
+  const cashbooks = refData?.cashbooks ?? [];
 
   const toggleExpand = async (acc) => {
     if (expandedId === acc._id) { setExpandedId(null); return; }
@@ -363,7 +363,7 @@ const CarWashAccounts = () => {
     await carWashApi.createCreditAccount(payload);
     toast.success("Credit account created");
     setShowCreate(false);
-    loadAccounts();
+    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
   };
 
   const handlePayment = async (form) => {
@@ -372,9 +372,10 @@ const CarWashAccounts = () => {
       amount: Number(form.amount),
     });
     toast.success(res?.message || "Payment applied");
+    const targetId = payTarget._id;
     setPayTarget(null);
-    loadAccounts();
-    if (expandedId === payTarget._id) loadStatements(payTarget._id);
+    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
+    if (expandedId === targetId) loadStatements(targetId);
   };
 
   const handleTopup = async (form) => {
@@ -383,9 +384,10 @@ const CarWashAccounts = () => {
       amount: Number(form.amount),
     });
     toast.success(res?.message || "Wallet topped up");
+    const targetId = topupTarget._id;
     setTopupTarget(null);
-    loadAccounts();
-    if (expandedId === topupTarget._id) loadTopups(topupTarget._id);
+    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
+    if (expandedId === targetId) loadTopups(targetId);
   };
 
   const loadTopups = async (accId) => {
@@ -401,7 +403,7 @@ const CarWashAccounts = () => {
     try {
       const res = await carWashApi.generateStatement(acc._id, {});
       toast.success(`Statement ${res?.statementNumber || ""} generated`);
-      loadAccounts();
+      queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
       loadStatements(acc._id);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to generate statement");
@@ -458,7 +460,7 @@ const CarWashAccounts = () => {
                 <option value="credit">Credit</option>
                 <option value="monthly">Monthly</option>
               </select>
-              <button onClick={loadAccounts} className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /></button>
+              <button onClick={() => refetchAccounts()} className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /></button>
               <button onClick={() => setShowCreate(true)} className="flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
                 <FaPlus size={9} /> New Account
               </button>

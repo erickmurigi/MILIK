@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaBan, FaCar, FaCheckCircle, FaClock, FaHandHoldingUsd,
@@ -105,7 +105,7 @@ const CarWashDashboard = () => {
     setDate(todayISO());
   };
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
       const [sumRes, jobsRes, payRes] = await Promise.all([
@@ -123,9 +123,9 @@ const CarWashDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [date]);
 
-  useEffect(() => { loadDashboard(); }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
   const counts        = summary?.statusCounts    || {};
   const byMethod      = summary?.revenueByMethod || {};

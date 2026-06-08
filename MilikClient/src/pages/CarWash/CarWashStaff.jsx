@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import {
   FaChevronDown, FaChevronRight, FaEdit, FaPiggyBank, FaPlus,
@@ -241,7 +242,7 @@ const WalletDrawer = ({ row, cashbooks, onPayoutSuccess }) => {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 const CarWashStaff = () => {
-  const [rows, setRows]         = useState([]);
+  const queryClient = useQueryClient();
   const [form, setForm]         = useState(emptyForm);
   const [editingId, setEditingId] = useState("");
   const [filters, setFilters]   = useState({ search: "", status: "" });
@@ -249,11 +250,29 @@ const CarWashStaff = () => {
   const [expandedIds, setExpandedIds] = useState([]);
   const [page, setPage]         = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 });
   const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [cashbooks, setCashbooks] = useState([]);
   const canManage = useCarWashPermission("carwash-staff", "manage");
+
+  const staffQueryKey = ["cw-staff", appliedFilters, page, pageSize];
+
+  const { data: staffData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: staffQueryKey,
+    queryFn: async () => {
+      const [payload, cbRes] = await Promise.all([
+        carWashApi.listStaff({ limit: pageSize, page, search: appliedFilters.search || undefined, active: appliedFilters.status === "active" ? true : appliedFilters.status === "inactive" ? false : undefined }),
+        carWashApi.listCashbooks(),
+      ]);
+      return { staffPayload: payload, cashbooksPayload: cbRes };
+    },
+    placeholderData: (prev) => prev,
+  });
+
+  useEffect(() => { if (error) toast.error("Failed to load staff"); }, [error]);
+  useEffect(() => { setExpandedIds([]); }, [staffData]);
+
+  const rows = normalizeListPayload(staffData?.staffPayload, "staff");
+  const pagination = staffData?.staffPayload?.pagination || { page, limit: pageSize, total: 0, pages: 1 };
+  const cashbooks = normalizeListPayload(staffData?.cashbooksPayload, "accounts");
 
   const rowStats = useMemo(() => {
     let active = 0, inactive = 0;
@@ -261,23 +280,6 @@ const CarWashStaff = () => {
     return { active, inactive };
   }, [rows]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [payload, cbRes] = await Promise.all([
-        carWashApi.listStaff({ limit: pageSize, page, search: appliedFilters.search || undefined, active: appliedFilters.status === "active" ? true : appliedFilters.status === "inactive" ? false : undefined }),
-        carWashApi.listCashbooks(),
-      ]);
-      setRows(normalizeListPayload(payload, "staff"));
-      setPagination(payload?.pagination || { page, limit: pageSize, total: 0, pages: 1 });
-      setCashbooks(normalizeListPayload(cbRes, "accounts"));
-      setExpandedIds([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [appliedFilters, page, pageSize]);
-
-  useEffect(() => { load().catch(() => toast.error("Failed to load staff")); }, [load]);
 
   // Auto-save staff form draft while modal is open
   useEffect(() => {
@@ -309,7 +311,7 @@ const CarWashStaff = () => {
       if (editingId) await carWashApi.updateStaff(editingId, form);
       else await carWashApi.createStaff(form);
       closeModal();
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ["cw-staff"] });
       toast.success("Staff saved");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Unable to save staff");
@@ -325,7 +327,7 @@ const CarWashStaff = () => {
       title="Staff Register"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           {canManage && (
@@ -443,7 +445,7 @@ const CarWashStaff = () => {
                       key={`wallet-${row._id}`}
                       row={row}
                       cashbooks={cashbooks}
-                      onPayoutSuccess={load}
+                      onPayoutSuccess={() => queryClient.invalidateQueries({ queryKey: ["cw-staff"] })}
                     />
                   )}
                 </React.Fragment>

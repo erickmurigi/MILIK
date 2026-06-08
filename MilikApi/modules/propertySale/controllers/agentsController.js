@@ -1,19 +1,23 @@
 import { createError } from "../../../utils/error.js";
 import SaleAgent from "../models/SaleAgent.js";
-import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 
 export const listAgents = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { search = "", status = "" } = req.query;
+    const { search = "", status = "", page = 1, limit = 50 } = req.query;
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
     const filter = { business };
     if (status) filter.status = status;
     if (search.trim()) {
-      const rx = new RegExp(escapeRegex(search.trim()), "i");
-      filter.$or = [{ fullName: rx }, { agentNumber: rx }, { phone: rx }, { email: rx }];
+      filter.$text = { $search: search.trim() };
     }
-    const agents = await SaleAgent.find(filter).sort({ createdAt: -1 }).lean();
-    res.status(200).json(agents);
+    const [agents, total] = await Promise.all([
+      SaleAgent.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
+      SaleAgent.countDocuments(filter),
+    ]);
+    res.status(200).json({ data: agents, total, page: pageNum, pages: Math.ceil(total / limitNum) || 1 });
   } catch (err) {
     next(err);
   }
