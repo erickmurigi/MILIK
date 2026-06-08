@@ -35,5 +35,6 @@ const invPurchaseOrderSchema = new mongoose.Schema(
 invPurchaseOrderSchema.index({ business: 1, poNumber: 1 }, { unique: true });
 invPurchaseOrderSchema.index({ business: 1, status: 1, createdAt: -1 });
 invPurchaseOrderSchema.index({ business: 1, supplier: 1, createdAt: -1 });
+invPurchaseOrderSchema.index({ business: 1, location: 1, createdAt: -1 });
 
 export default mongoose.model("InvPurchaseOrder", invPurchaseOrderSchema);

@@ -26,6 +26,8 @@ const LEDGER_CATEGORIES = [
   "CARWASH_COMMISSION_PAYOUT",
   "CARWASH_PAYMENT",
   "CARWASH_EXPENSE",
+  "CARWASH_PREPAID_TOPUP",
+  "CARWASH_SAVINGS_DISBURSEMENT",
   "POS_SALE",
   "POS_PURCHASE",
   "POS_STOCK_ADJUSTMENT",
@@ -60,6 +62,8 @@ const SOURCE_TYPES = [
   "carwash_commission_payout",
   "carwash_payment",
   "carwash_expense",
+  "carwash_prepaid_topup",
+  "carwash_savings_disbursement",
   "pos_sale",
   "pos_purchase_receipt",
   "pos_stock_adjustment",
@@ -267,6 +271,8 @@ FinancialLedgerEntrySchema.index({ business: 1, transactionDate: -1 });
 FinancialLedgerEntrySchema.index({ business: 1, accountId: 1, status: 1 });
 FinancialLedgerEntrySchema.index({ business: 1, tenant: 1, transactionDate: -1 });
 FinancialLedgerEntrySchema.index({ business: 1, property: 1, status: 1, transactionDate: -1 });
+FinancialLedgerEntrySchema.index({ business: 1, landlord: 1, status: 1, transactionDate: -1 });
+FinancialLedgerEntrySchema.index({ business: 1, unit: 1, status: 1, transactionDate: -1 });
 // Optimized for report aggregations: $match on business+status+date, $group on accountId
 FinancialLedgerEntrySchema.index({ business: 1, status: 1, transactionDate: 1, accountId: 1 });
 

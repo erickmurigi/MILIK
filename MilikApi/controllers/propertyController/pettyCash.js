@@ -298,7 +298,7 @@ export const createDisbursement = async (req, res, next) => {
     if (account.status === "closed") return res.status(400).json({ message: "Cannot disburse from a closed petty cash account" });
 
     const disbursementAmount = numberOrZero(amount);
-    if (disbursementAmount > account.currentBalance && account.currentBalance > 0) {
+    if (disbursementAmount > account.currentBalance) {
       return res.status(400).json({ message: `Insufficient petty cash balance. Available: ${account.currentBalance.toFixed(2)}` });
     }
 
@@ -335,11 +335,20 @@ export const createDisbursement = async (req, res, next) => {
       console.warn("Petty cash ledger posting failed (non-fatal):", ledgerErr.message);
     }
 
-    // Deduct from account balance
-    account.currentBalance = Math.max(0, account.currentBalance - disbursementAmount);
-    await account.save();
+    // Atomically deduct balance — conditional update prevents race conditions and negative balances
+    const updatedAccount = await PettyCashAccount.findOneAndUpdate(
+      { _id: account._id, currentBalance: { $gte: disbursementAmount } },
+      { $inc: { currentBalance: -disbursementAmount } },
+      { new: true }
+    ).lean();
 
-    return res.status(201).json({ success: true, data: disbursement, account: { currentBalance: account.currentBalance } });
+    if (!updatedAccount) {
+      // Concurrent disbursement depleted the balance between our check and this write
+      await PettyCashDisbursement.deleteOne({ _id: disbursement._id });
+      return res.status(409).json({ message: "Insufficient petty cash balance — another disbursement was processed concurrently. Please retry." });
+    }
+
+    return res.status(201).json({ success: true, data: disbursement, account: { currentBalance: updatedAccount.currentBalance } });
   } catch (err) {
     next(err);
   }
@@ -419,12 +428,11 @@ export const voidDisbursement = async (req, res, next) => {
     disbursement.voidReason = voidReason?.trim() || "";
     await disbursement.save();
 
-    // Restore balance
-    const account = await PettyCashAccount.findById(disbursement.pettyCashAccount);
-    if (account) {
-      account.currentBalance = account.currentBalance + numberOrZero(disbursement.amount);
-      await account.save();
-    }
+    // Atomically restore balance
+    await PettyCashAccount.findByIdAndUpdate(
+      disbursement.pettyCashAccount,
+      { $inc: { currentBalance: numberOrZero(disbursement.amount) } }
+    );
 
     return res.status(200).json({ success: true, data: disbursement });
   } catch (err) {

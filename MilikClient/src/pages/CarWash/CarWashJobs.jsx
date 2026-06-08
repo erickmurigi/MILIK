@@ -204,20 +204,17 @@ const CarWashJobs = () => {
   const canUpdateJob     = useCarWashPermission("carwash-jobs", "update");
   const canRecordPayment = useCarWashPermission("carwash-payments", "record");
 
-  const unpaidJobs = useMemo(() => jobs.filter((job) => job.paymentStatus !== "paid"), [jobs]);
-  const jobStats = useMemo(() => {
+  const { jobStats, safeVisibleJobIds } = useMemo(() => {
     let unpaid = 0, washing = 0, done = 0;
-    jobs.forEach((job) => {
+    const safeIds = [];
+    for (const job of jobs) {
       if (job.paymentStatus !== "paid") unpaid++;
+      if (job.paymentStatus === "unpaid" && job.status !== "paid") safeIds.push(job._id);
       if (job.status === "washing") washing++;
       if (job.status === "done") done++;
-    });
-    return { unpaid, washing, done };
+    }
+    return { jobStats: { unpaid, washing, done }, safeVisibleJobIds: safeIds };
   }, [jobs]);
-  const safeVisibleJobIds = useMemo(
-    () => jobs.filter((job) => job.paymentStatus === "unpaid" && job.status !== "paid").map((job) => job._id),
-    [jobs]
-  );
   const allPaymentJobs = useMemo(() => {
     const seen = new Set();
     return [...modalUnpaidJobs, ...jobs].filter((j) => { if (seen.has(j._id)) return false; seen.add(j._id); return true; });
@@ -285,9 +282,7 @@ const CarWashJobs = () => {
     }
   };
 
-  const load = async () => {
-    await Promise.all([loadJobs(), loadReferenceData()]);
-  };
+  const load = () => loadJobs();
 
   useEffect(() => { loadReferenceData(); }, []);
   useEffect(() => { loadJobs(); }, [appliedFilters, page, pageSize]);

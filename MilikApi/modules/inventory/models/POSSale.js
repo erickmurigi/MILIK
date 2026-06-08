@@ -59,5 +59,6 @@ posSaleSchema.index({ business: 1, location: 1, createdAt: -1 });
 posSaleSchema.index({ business: 1, session: 1, createdAt: -1 });
 posSaleSchema.index({ business: 1, status: 1, createdAt: -1 });
 posSaleSchema.index({ business: 1, cashier: 1, createdAt: -1 });
+posSaleSchema.index({ business: 1, cashier: 1, status: 1, createdAt: -1 });
 
 export default mongoose.model("POSSale", posSaleSchema);

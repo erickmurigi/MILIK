@@ -10,6 +10,7 @@ import Receipt from "../../models/Receipts.js";
 import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
 import MpesaCollection from "../../models/MpesaCollection.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import SequenceCounter from "../../models/SequenceCounter.js";
 import LandlordStatementLine from "../../models/LandlordStatementLine.js";
 import Maintenance from "../../models/Maintenance.js";
 import Inspection from "../../models/Inspection.js";
@@ -446,18 +447,12 @@ const authorizeTenantAccess = (req, tenant) => {
 };
 
 const generateNextTenantCode = async (businessId) => {
-  const result = await Tenant.aggregate([
-    {
-      $match: {
-        business: new mongoose.Types.ObjectId(String(businessId)),
-        tenantCode: { $regex: /^TT\d+$/ },
-      },
-    },
-    { $project: { num: { $toInt: { $substr: ["$tenantCode", 2, -1] } } } },
-    { $group: { _id: null, maxNum: { $max: "$num" } } },
-  ]);
-  const maxNumber = result[0]?.maxNum ?? 0;
-  return `TT${String(maxNumber + 1).padStart(4, "0")}`;
+  const counter = await SequenceCounter.findOneAndUpdate(
+    { business: String(businessId), key: "tenant_code" },
+    { $inc: { sequence: 1 } },
+    { upsert: true, new: true }
+  ).lean();
+  return `TT${String(counter.sequence).padStart(4, "0")}`;
 };
 
 export const updatePropertyUnitCounts = async (propertyId) => {

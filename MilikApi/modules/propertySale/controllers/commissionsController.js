@@ -14,12 +14,17 @@ export const listCommissions = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const { agentId = "", status = "", dealId = "" } = req.query;
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const filter = { business };
     if (agentId) filter.agent = agentId;
     if (status) filter.status = status;
     if (dealId) filter.deal = dealId;
-    const commissions = await populateCommission(SaleCommission.find(filter).sort({ createdAt: -1 })).lean();
-    res.status(200).json(commissions);
+    const [commissions, total] = await Promise.all([
+      populateCommission(SaleCommission.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
+      SaleCommission.countDocuments(filter),
+    ]);
+    res.status(200).json({ data: commissions, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {
     next(err);
   }

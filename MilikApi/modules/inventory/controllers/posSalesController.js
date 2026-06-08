@@ -151,6 +151,7 @@ export const createSale = async (req, res, next) => {
         vatAmount,
         lineTotal,
         costPrice: product.costPrice || 0,
+        trackStock: Boolean(product.trackStock),
       });
     }
 
@@ -189,8 +190,7 @@ export const createSale = async (req, res, next) => {
 
     // Deduct stock for tracked products
     for (const line of enrichedLines) {
-      const product = await InvProduct.findById(line.product).lean();
-      if (!product?.trackStock) continue;
+      if (!line.trackStock) continue;
       await postStockEntry({
         business,
         location: String(location),
@@ -227,10 +227,13 @@ export const voidSale = async (req, res, next) => {
     if (sale.status !== "completed") throw createError(400, "Only completed sales can be voided");
     if (!voidReason?.trim()) throw createError(400, "Void reason is required");
 
-    // Reverse stock entries for tracked products
+    // Reverse stock entries for tracked products — batch-fetch to avoid N+1
+    const productIds = [...new Set(sale.lines.map((l) => String(l.product)))];
+    const stockProducts = await InvProduct.find({ _id: { $in: productIds }, business }).select("trackStock").lean();
+    const trackStockMap = Object.fromEntries(stockProducts.map((p) => [String(p._id), p.trackStock]));
+
     for (const line of sale.lines) {
-      const product = await InvProduct.findById(line.product).lean();
-      if (!product?.trackStock) continue;
+      if (!trackStockMap[String(line.product)]) continue;
       await postStockEntry({
         business,
         location: String(sale.location),
@@ -279,24 +282,25 @@ export const salesSummary = async (req, res, next) => {
       filter.createdAt = { $gte: start, $lt: end };
     }
 
-    const [summary] = await POSSale.aggregate([
-      { $match: filter },
-      {
-        $group: {
-          _id: null,
-          count: { $sum: 1 },
-          subtotal: { $sum: "$subtotal" },
-          totalDiscount: { $sum: "$totalDiscount" },
-          totalVat: { $sum: "$totalVat" },
-          grandTotal: { $sum: "$grandTotal" },
+    const [[summary], paymentBreakdown] = await Promise.all([
+      POSSale.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            subtotal: { $sum: "$subtotal" },
+            totalDiscount: { $sum: "$totalDiscount" },
+            totalVat: { $sum: "$totalVat" },
+            grandTotal: { $sum: "$grandTotal" },
+          },
         },
-      },
-    ]);
-
-    const paymentBreakdown = await POSSale.aggregate([
-      { $match: filter },
-      { $unwind: "$payments" },
-      { $group: { _id: "$payments.method", total: { $sum: "$payments.amount" } } },
+      ]),
+      POSSale.aggregate([
+        { $match: filter },
+        { $unwind: "$payments" },
+        { $group: { _id: "$payments.method", total: { $sum: "$payments.amount" } } },
+      ]),
     ]);
 
     res.json({

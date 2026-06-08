@@ -157,7 +157,7 @@ export const postPropertySaleCommissionAccrual = async ({ businessId, commission
     business: businessId,
     sourceTransactionType: "property_sale_commission",
     sourceTransactionId: String(commission._id),
-    transactionDate: new Date(),
+    transactionDate: commission.createdAt || new Date(),
     statementPeriodStart: start,
     statementPeriodEnd: end,
     journalGroupId,
@@ -172,56 +172,16 @@ export const postPropertySaleCommissionAccrual = async ({ businessId, commission
   ]);
 };
 
-// ─── Commission payout — Dr Commission Payable / Cr Receipts Control ─────────
+// ─── Commission payout — ensure accrual only ─────────────────────────────────
 
 /**
- * Posted when a commission status moves to "paid".
- * Handles two cases:
- *   - Normal: accrual already posted → just clears the payable
- *   - Skip-approval: posts accrual first, then payout, netting to Dr Expense / Cr Receipts
+ * Called when a commission is marked "paid".
+ * Only ensures the accrual entry exists (Dr 5320 / Cr 2180).
+ * The actual cash outflow (Dr 2180 / Cr Bank) must be recorded via a Payment Voucher,
+ * which is the correct accounting treatment for agent commission payments.
  */
 export const postPropertySaleCommissionPayout = async ({ businessId, commission, userId }) => {
-  const amount = round2(Number(commission.commissionAmount || 0));
-  if (amount <= 0) return;
-
-  // Ensure accrual exists (posts it if not)
   await postPropertySaleCommissionAccrual({ businessId, commission, userId });
-
-  const existing = await FinancialLedgerEntry.countDocuments({
-    business: businessId,
-    sourceTransactionType: "property_sale_commission_payout",
-    sourceTransactionId: String(commission._id),
-    status: { $ne: "reversed" },
-  });
-  if (existing > 0) return;
-
-  const { start, end } = dayRange(new Date());
-  const journalGroupId = new mongoose.Types.ObjectId();
-
-  const [payableAcc, receiptsAcc] = await Promise.all([
-    resolvePSAccount(businessId, "2180"),
-    resolvePSAccount(businessId, "1311"),
-  ]);
-
-  const ref = commission.commissionNumber || String(commission._id);
-
-  const base = {
-    business: businessId,
-    sourceTransactionType: "property_sale_commission_payout",
-    sourceTransactionId: String(commission._id),
-    transactionDate: new Date(),
-    statementPeriodStart: start,
-    statementPeriodEnd: end,
-    journalGroupId,
-    category: "PROPERTY_SALE_COMMISSION_PAYOUT",
-    createdBy: userId,
-    allowUnscoped: true,
-  };
-
-  await Promise.all([
-    postEntry({ ...base, accountId: payableAcc._id,  direction: "debit",  amount, notes: `Agent commission payout — ${ref}` }),
-    postEntry({ ...base, accountId: receiptsAcc._id, direction: "credit", amount, notes: `Agent commission paid from receipts — ${ref}` }),
-  ]);
 };
 
 // ─── Commission reversal — when cancelled after accrual ──────────────────────

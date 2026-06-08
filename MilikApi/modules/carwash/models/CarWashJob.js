@@ -64,6 +64,7 @@ const carWashJobSchema = new mongoose.Schema(
 carWashJobSchema.index({ business: 1, jobNumber: 1 }, { unique: true });
 carWashJobSchema.index({ business: 1, createdAt: -1 });
 carWashJobSchema.index({ business: 1, branch: 1, createdAt: -1 });
+carWashJobSchema.index({ business: 1, branch: 1, status: 1, createdAt: -1 });
 carWashJobSchema.index({ business: 1, jobType: 1, createdAt: -1 });
 carWashJobSchema.index({ business: 1, plateNumber: 1 });
 carWashJobSchema.index({ business: 1, jobType: 1, status: 1 });

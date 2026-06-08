@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AppSelect from "../../components/common/AppSelect";
 import useDebounce from "../../hooks/useDebounce";
 import {
@@ -229,7 +229,7 @@ const PaymentVouchers = () => {
     [categories]
   );
 
-  const loadVouchers = async () => {
+  const loadVouchers = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
@@ -249,13 +249,13 @@ const PaymentVouchers = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCompany?._id, debouncedSearch, filters.category, filters.status, filters.propertyId, currentPage, pageSize]);
 
   useEffect(() => {
     loadVouchers();
-  }, [currentCompany?._id, debouncedSearch, filters.category, filters.status, filters.propertyId, currentPage, pageSize]);
+  }, [loadVouchers]);
 
-  const filtered = useMemo(() => vouchers, [vouchers]);
+  const filtered = vouchers;
 
   const stats = useMemo(() => {
     const total = filtered.reduce((sum, voucher) => sum + Number(voucher.amount || 0), 0);
@@ -540,10 +540,11 @@ const PaymentVouchers = () => {
   const bulkDeleteSelected = async () => {
     if (selectedRows.length === 0) return toast.info("Select vouchers first");
     if (!await confirm({ title: "Delete Vouchers", message: `Delete ${selectedRows.length} selected vouchers?`, confirmText: "Delete", isDangerous: true })) return;
-    for (const voucher of selectedRows) {
-      // eslint-disable-next-line no-await-in-loop
-      await deletePaymentVoucher(voucher._id, { business: currentCompany?._id, company: currentCompany?._id }).catch(() => null);
-    }
+    await Promise.all(
+      selectedRows.map((voucher) =>
+        deletePaymentVoucher(voucher._id, { business: currentCompany?._id, company: currentCompany?._id }).catch(() => null)
+      )
+    );
     await loadVouchers();
     setSelectedIds([]);
     toast.success("Selected vouchers deleted where allowed");

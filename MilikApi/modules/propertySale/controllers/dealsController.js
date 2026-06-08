@@ -29,6 +29,8 @@ export const listDeals = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const { search = "", status = "", agentId = "", buyerId = "" } = req.query;
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const filter = { business };
     if (status) filter.status = status;
     if (agentId) filter.agent = agentId;
@@ -37,18 +39,23 @@ export const listDeals = async (req, res, next) => {
       const rx = new RegExp(escapeRegex(search.trim()), "i");
       filter.$or = [{ dealNumber: rx }];
     }
-    const deals = await populateDeal(SaleDeal.find(filter).sort({ createdAt: -1 })).lean();
-    const dealIds = deals.map((d) => d._id);
-    const paymentTotals = await SalePayment.aggregate([
-      { $match: { business: new mongoose.Types.ObjectId(String(business)), deal: { $in: dealIds }, status: "paid" } },
-      { $group: { _id: "$deal", totalPaid: { $sum: "$amount" } } },
+    const [deals, total] = await Promise.all([
+      populateDeal(SaleDeal.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
+      SaleDeal.countDocuments(filter),
     ]);
+    const dealIds = deals.map((d) => d._id);
+    const paymentTotals = dealIds.length
+      ? await SalePayment.aggregate([
+          { $match: { business: new mongoose.Types.ObjectId(String(business)), deal: { $in: dealIds }, status: "paid" } },
+          { $group: { _id: "$deal", totalPaid: { $sum: "$amount" } } },
+        ])
+      : [];
     const totalsMap = Object.fromEntries(paymentTotals.map((p) => [String(p._id), p.totalPaid]));
-    const enriched = deals.map((d) => {
+    const data = deals.map((d) => {
       const totalPaid = totalsMap[String(d._id)] || 0;
       return { ...d, totalPaid, balance: d.agreedPrice - totalPaid };
     });
-    res.status(200).json(enriched);
+    res.status(200).json({ data, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {
     next(err);
   }
@@ -71,17 +78,15 @@ export const createDeal = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
 
-    const listing = await SaleListing.findOne({ _id: req.body.listing, business }).lean();
+    const [listing, buyer, agent] = await Promise.all([
+      SaleListing.findOne({ _id: req.body.listing, business }).lean(),
+      SaleBuyer.findOne({ _id: req.body.buyer, business }).lean(),
+      req.body.agent ? SaleAgent.findOne({ _id: req.body.agent, business }).lean() : Promise.resolve(null),
+    ]);
     if (!listing) return next(createError(400, "Listing not found"));
     if (listing.status === "sold") return next(createError(400, "This listing is already sold"));
-
-    const buyer = await SaleBuyer.findOne({ _id: req.body.buyer, business }).lean();
     if (!buyer) return next(createError(400, "Buyer not found"));
-
-    if (req.body.agent) {
-      const agent = await SaleAgent.findOne({ _id: req.body.agent, business }).lean();
-      if (!agent) return next(createError(400, "Agent not found"));
-    }
+    if (req.body.agent && !agent) return next(createError(400, "Agent not found"));
 
     if (req.body.offer) {
       await SaleOffer.findByIdAndUpdate(req.body.offer, { status: "accepted" });
@@ -96,35 +101,37 @@ export const createDeal = async (req, res, next) => {
       updatedBy: userId,
     });
 
-    await SaleListing.findByIdAndUpdate(listing._id, { status: "under_contract" });
+    const postDealOps = [SaleListing.findByIdAndUpdate(listing._id, { status: "under_contract" })];
 
-    if (req.body.agent) {
-      const agent = await SaleAgent.findById(req.body.agent).lean();
-      if (agent) {
-        const commissionNumber = await generateSequentialNumber(SaleCommission, business, "COM");
-        const saleAmount = req.body.agreedPrice;
-        const commissionAmount = agent.commissionType === "percentage"
-          ? (saleAmount * agent.commissionRate) / 100
-          : agent.commissionRate;
-        await SaleCommission.create({
-          business,
-          commissionNumber,
-          deal: deal._id,
-          agent: agent._id,
-          listing: req.body.listing,
-          buyer: req.body.buyer,
-          saleAmount,
-          commissionRate: agent.commissionRate,
-          commissionType: agent.commissionType,
-          commissionAmount,
-          status: "pending",
-          createdBy: userId,
-        });
-      }
+    if (agent) {
+      const saleAmount = req.body.agreedPrice;
+      const commissionAmount = agent.commissionType === "percentage"
+        ? (saleAmount * agent.commissionRate) / 100
+        : agent.commissionRate;
+      postDealOps.push(
+        generateSequentialNumber(SaleCommission, business, "COM").then((commissionNumber) =>
+          SaleCommission.create({
+            business,
+            commissionNumber,
+            deal: deal._id,
+            agent: agent._id,
+            listing: req.body.listing,
+            buyer: req.body.buyer,
+            saleAmount,
+            commissionRate: agent.commissionRate,
+            commissionType: agent.commissionType,
+            commissionAmount,
+            status: "pending",
+            createdBy: userId,
+          })
+        )
+      );
     }
 
-    const populated = await populateDeal(SaleDeal.findById(deal._id));
-    res.status(201).json({ ...populated.toObject(), totalPaid: 0, balance: populated.agreedPrice });
+    await Promise.all(postDealOps);
+
+    const populated = await populateDeal(SaleDeal.findById(deal._id)).lean();
+    res.status(201).json({ ...populated, totalPaid: 0, balance: populated.agreedPrice });
   } catch (err) {
     next(err);
   }
@@ -170,10 +177,12 @@ export const closeDeal = async (req, res, next) => {
     deal.updatedBy = userId;
     await deal.save();
 
-    await SaleListing.findByIdAndUpdate(deal.listing, { status: "sold" });
+    const [, pendingCommissions] = await Promise.all([
+      SaleListing.findByIdAndUpdate(deal.listing, { status: "sold" }),
+      SaleCommission.find({ business, deal: deal._id, status: "pending" }).lean(),
+    ]);
 
     // Post GL accrual for each pending commission before approving them
-    const pendingCommissions = await SaleCommission.find({ business, deal: deal._id, status: "pending" }).lean();
     for (const commission of pendingCommissions) {
       postPropertySaleCommissionAccrual({ businessId: business, commission, userId }).catch((err) =>
         console.error("[PS GL] postPropertySaleCommissionAccrual failed:", err.message)
@@ -200,10 +209,12 @@ export const cancelDeal = async (req, res, next) => {
     deal.updatedBy = userId;
     await deal.save();
 
-    await SaleListing.findByIdAndUpdate(deal.listing, { status: "available" });
+    const [, approvedCommissions] = await Promise.all([
+      SaleListing.findByIdAndUpdate(deal.listing, { status: "available" }),
+      SaleCommission.find({ business, deal: deal._id, status: "approved" }).lean(),
+    ]);
 
     // Reverse GL accrual for any already-approved commissions before cancelling
-    const approvedCommissions = await SaleCommission.find({ business, deal: deal._id, status: "approved" }).lean();
     const cancellationReason = req.body.cancellationReason ? `Deal cancelled: ${req.body.cancellationReason}` : "Deal cancelled";
     for (const commission of approvedCommissions) {
       reversePropertySaleCommissionAccrual({ businessId: business, commission, userId, reason: cancellationReason }).catch((err) =>

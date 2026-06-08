@@ -204,27 +204,25 @@ export const receiveGoods = async (req, res, next) => {
 
       const unitCost = Number(recv.unitCost ?? line.unitCost ?? 0);
 
-      const stockEntry = await postStockEntry({
-        business,
-        location: String(order.location),
-        product: String(line.product),
-        type: "purchase",
-        qty,
-        unitCost,
-        reference: order.poNumber,
-        purchaseOrder: order._id,
-        notes: `Goods received from PO ${order.poNumber}`,
-        createdBy: userId,
-      });
+      const [stockEntry] = await Promise.all([
+        postStockEntry({
+          business,
+          location: String(order.location),
+          product: String(line.product),
+          type: "purchase",
+          qty,
+          unitCost,
+          reference: order.poNumber,
+          purchaseOrder: order._id,
+          notes: `Goods received from PO ${order.poNumber}`,
+          createdBy: userId,
+        }),
+        // Update product cost price to reflect latest purchase cost
+        InvProduct.updateOne({ _id: line.product, business }, { $set: { costPrice: unitCost } }),
+      ]);
 
       postPurchaseReceiptLedger({ businessId: business, stockEntry, poNumber: order.poNumber, userId }).catch((err) =>
         console.error("[INV GL] postPurchaseReceiptLedger failed:", err.message)
-      );
-
-      // Update product cost price to reflect latest purchase cost
-      await InvProduct.updateOne(
-        { _id: line.product, business },
-        { $set: { costPrice: unitCost } }
       );
 
       line.qtyReceived = Number(line.qtyReceived) + qty;

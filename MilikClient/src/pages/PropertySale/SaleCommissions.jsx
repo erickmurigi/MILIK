@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaCheck, FaMoneyBillWave } from "react-icons/fa";
@@ -89,14 +89,16 @@ const SaleCommissions = () => {
     }
   };
 
-  const pending = commissions.filter((c) => c.status === "pending").length;
-  const approved = commissions.filter((c) => c.status === "approved").length;
-  const totalDue = commissions
-    .filter((c) => ["pending", "approved"].includes(c.status))
-    .reduce((sum, c) => sum + Number(c.commissionAmount || 0), 0);
-  const totalPaid = commissions
-    .filter((c) => c.status === "paid")
-    .reduce((sum, c) => sum + Number(c.commissionAmount || 0), 0);
+  const { pending, approved, totalDue, totalPaid } = useMemo(() => {
+    let p = 0, a = 0, due = 0, paid = 0;
+    for (const c of commissions) {
+      const amt = Number(c.commissionAmount || 0);
+      if (c.status === "pending") { p++; due += amt; }
+      else if (c.status === "approved") { a++; due += amt; }
+      else if (c.status === "paid") paid += amt;
+    }
+    return { pending: p, approved: a, totalDue: due, totalPaid: paid };
+  }, [commissions]);
 
   const totalPages = Math.ceil(total / LIMIT) || 1;
 

@@ -50,7 +50,7 @@ const POSSalesHistory = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [res, locs, sum] = await Promise.allSettled([
+      const [res, locs] = await Promise.allSettled([
         inventoryApi.listSales({
           location: locationFilter || undefined,
           status: statusFilter || undefined,
@@ -60,7 +60,6 @@ const POSSalesHistory = () => {
           limit: 30,
         }),
         locations.length ? Promise.resolve(locations) : inventoryApi.listLocations({ active: true }),
-        inventoryApi.getSalesSummary({ location: locationFilter || undefined, date: date || undefined }),
       ]);
       if (res.status === "fulfilled") {
         const d = res.value;
@@ -75,13 +74,19 @@ const POSSalesHistory = () => {
         if (Array.isArray(d)) setLocations(d);
         else if (Array.isArray(d?.data)) setLocations(d.data);
       }
-      if (sum.status === "fulfilled") setSummary(sum.value?.data ?? sum.value);
     } finally {
       setLoading(false);
     }
   }, [locationFilter, statusFilter, date, search, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Summary only depends on location+date, not page — fetch independently to avoid churn
+  useEffect(() => {
+    inventoryApi.getSalesSummary({ location: locationFilter || undefined, date: date || undefined })
+      .then((r) => setSummary(r?.data ?? r))
+      .catch(() => {});
+  }, [locationFilter, date]);
 
   const openVoid = (sale) => { setSelected(sale); setVoidReason(""); setShowVoid(true); };
 

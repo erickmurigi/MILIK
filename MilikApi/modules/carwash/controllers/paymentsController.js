@@ -64,7 +64,7 @@ const refreshJobPaymentStatus = async (business, jobId) => {
     job.status = "done";
   }
   await job.save();
-  return job;
+  return { job, paidAmount };
 };
 
 export const listPayments = async (req, res, next) => {
@@ -154,7 +154,7 @@ export const recordPayment = async (req, res, next) => {
       createdBy: userId,
       updatedBy: userId,
     });
-    const updatedJob = await refreshJobPaymentStatus(business, job._id);
+    const { job: updatedJob, paidAmount: totalEffectivePaid } = await refreshJobPaymentStatus(business, job._id);
 
     // Persist M-Pesa payer phone to the job + loyalty customer (enables SMS button + loyalty lookup)
     if (receivedFromPhone) {
@@ -170,16 +170,6 @@ export const recordPayment = async (req, res, next) => {
       }
     }
 
-    // Build allocation: highest-price line paid first for commission recognition.
-    // When job is fully paid, paidLineSet is null (all lines recognised).
-    // Job-level discounts (e.g. loyalty rewards) count toward line coverage so attendants
-    // are not penalised when part of the price is covered by a reward rather than cash.
-    const totalEffectivePaid = round2(
-      (await CarWashPayment.aggregate([
-        { $match: { business: job.business, job: job._id } },
-        ...effectivePaidAggregation,
-      ]))?.[0]?.paid || 0
-    );
     const serviceLines = Array.isArray(updatedJob.serviceLines) && updatedJob.serviceLines.length
       ? updatedJob.serviceLines
       : [{ serviceName: updatedJob.serviceName || "", price: Number(updatedJob.price || 0) }];
@@ -233,7 +223,7 @@ export const deletePayment = async (req, res, next) => {
     await reverseCarWashPaymentLedger({ businessId: business, paymentId: payment._id, req });
     await revokeStampForJob({ business, jobId: jobBeforeDelete._id, plate: jobBeforeDelete.plateNumber });
     await payment.deleteOne();
-    const job = await refreshJobPaymentStatus(business, payment.job);
+    const { job } = await refreshJobPaymentStatus(business, payment.job);
     await handleJobPaymentStatusAfterPaymentChange({ business, job });
     res.status(200).json({ success: true, job, message: "Car Wash payment deleted" });
   } catch (error) {

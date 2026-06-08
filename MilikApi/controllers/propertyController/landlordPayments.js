@@ -73,17 +73,24 @@ const resolveCashbookAccount = async ({ businessId, cashbook, paymentMethod }) =
 export const listLandlordPayments = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const query = {};
     if (businessId) query.business = businessId;
     if (isValidObjectId(req.query.landlordId || req.query.landlord)) query.landlord = req.query.landlordId || req.query.landlord;
 
-    const payments = await LandlordPayment.find(query)
-      .populate("landlord", "landlordName landlordCode status")
-      .populate("cashbook", "name code accountName accountCode")
-      .sort({ date: -1, createdAt: -1 })
-      .lean();
+    const [payments, total] = await Promise.all([
+      LandlordPayment.find(query)
+        .populate("landlord", "landlordName landlordCode status")
+        .populate("cashbook", "name code accountName accountCode")
+        .sort({ date: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      LandlordPayment.countDocuments(query),
+    ]);
 
-    res.status(200).json({ success: true, data: payments, count: payments.length });
+    res.status(200).json({ success: true, data: payments, count: total, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {
     next(err);
   }

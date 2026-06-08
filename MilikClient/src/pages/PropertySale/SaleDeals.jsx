@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { FaBan, FaCheck, FaEdit, FaHandshake, FaPlus, FaPrint, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -47,25 +47,31 @@ const SaleDeals = () => {
 
   const biz = currentCompany?._id;
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!biz) return;
     setLoading(true);
     try {
-      const [rows, listingRows, buyerRows, agentRows] = await Promise.all([
-        saleApi.listDeals({ business: biz, status: statusFilter, limit: 1000 }),
-        saleApi.listListings({ business: biz }),
-        saleApi.listBuyers({ business: biz }),
-        saleApi.listAgents({ business: biz, status: "active" }),
-      ]);
+      const rows = await saleApi.listDeals({ business: biz, status: statusFilter, limit: 200 });
       setDeals(Array.isArray(rows) ? rows : []);
+    } catch { toast.error("Failed to load deals"); }
+    finally { setLoading(false); }
+  }, [biz, statusFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Reference data (listings, buyers, agents) only changes when business changes — load once, not on every filter change
+  useEffect(() => {
+    if (!biz) return;
+    Promise.all([
+      saleApi.listListings({ business: biz }),
+      saleApi.listBuyers({ business: biz }),
+      saleApi.listAgents({ business: biz, status: "active" }),
+    ]).then(([listingRows, buyerRows, agentRows]) => {
       setListings(Array.isArray(listingRows) ? listingRows : []);
       setBuyers(Array.isArray(buyerRows) ? buyerRows : []);
       setAgents(Array.isArray(agentRows) ? agentRows : []);
-    } catch { toast.error("Failed to load deals"); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { load(); }, [biz, statusFilter]);
+    }).catch(() => toast.error("Failed to load reference data"));
+  }, [biz]);
   useEffect(() => setPage(1), [statusFilter, search, pageSize]);
 
   const filtered = useMemo(() => {
@@ -78,12 +84,15 @@ const SaleDeals = () => {
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
-  const stats = useMemo(() => ({
-    active: deals.filter((d) => d.status === "active").length,
-    closed: deals.filter((d) => d.status === "closed").length,
-    activeValue: deals.filter((d) => d.status === "active").reduce((a, d) => a + d.agreedPrice, 0),
-    closedValue: deals.filter((d) => d.status === "closed").reduce((a, d) => a + d.agreedPrice, 0),
-  }), [deals]);
+  const stats = useMemo(() => {
+    let active = 0, closed = 0, activeValue = 0, closedValue = 0, totalValue = 0;
+    for (const d of deals) {
+      totalValue += d.agreedPrice;
+      if (d.status === "active") { active++; activeValue += d.agreedPrice; }
+      else if (d.status === "closed") { closed++; closedValue += d.agreedPrice; }
+    }
+    return { active, closed, activeValue, closedValue, totalValue };
+  }, [deals]);
 
   const openCreate = () => { setEditingId(""); setForm(blankForm); setShowModal(true); };
   const openEdit = (row) => {
@@ -283,7 +292,7 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
             { label: "Active Deals", value: stats.active, sub: fmtKES(stats.activeValue), cls: "bg-blue-600 text-white" },
             { label: "Closed Deals", value: stats.closed, sub: fmtKES(stats.closedValue), cls: "bg-[#027333] text-white" },
             { label: "Total Listed", value: deals.length, cls: "bg-slate-900 text-white" },
-            { label: "Total Deal Value", value: fmtKES(deals.reduce((a, d) => a + d.agreedPrice, 0)), cls: "bg-emerald-50 border border-emerald-200 text-emerald-900" },
+            { label: "Total Deal Value", value: fmtKES(stats.totalValue), cls: "bg-emerald-50 border border-emerald-200 text-emerald-900" },
           ].map((c) => (
             <div key={c.label} className={`rounded-lg px-3 py-2 ${c.cls}`}>
               <div className="text-[10px] font-black uppercase tracking-wider opacity-70">{c.label}</div>

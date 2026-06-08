@@ -1243,35 +1243,60 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
 };
 
 const CASH_ACCOUNT_OPERATING_TYPES = new Set([
+  // Property management
   "rent_payment", "landlord_receipt", "invoice", "invoice_note",
   "expense", "payment_voucher", "petty_cash_disbursement",
   "petty_cash_replenishment", "meter_reading", "recurring_deduction",
+  // Car wash
+  "carwash_payment", "carwash_expense", "carwash_prepaid_topup",
+  "carwash_savings_disbursement", "carwash_commission_payout",
+  // Inventory / POS
+  "pos_sale", "pos_purchase_receipt",
+  // Property sales
+  "property_sale_payment", "property_sale_commission_payout",
+  // Payroll
+  "payroll_period",
 ]);
 const CASH_ACCOUNT_FINANCING_TYPES = new Set([
   "landlord_payment", "advance", "processed_statement",
   "processed_statement_payment", "deposit",
+  "fixed_asset_disposal",
 ]);
 const CASH_FLOW_LABELS = {
-  rent_payment:               "Collections from Tenants",
-  landlord_receipt:           "Direct Landlord Receipts",
-  invoice:                    "Invoice-Linked Cash",
-  invoice_note:               "Invoice Adjustment Cash",
-  expense:                    "Expense Payments",
-  payment_voucher:            "Payment Voucher Disbursements",
-  petty_cash_disbursement:    "Petty Cash Disbursements",
-  petty_cash_replenishment:   "Petty Cash Replenishments",
-  meter_reading:              "Utility / Meter Charges",
-  recurring_deduction:        "Recurring Deduction Payments",
-  landlord_payment:           "Landlord Remittances",
-  advance:                    "Landlord Advances",
-  processed_statement:        "Statement Movements",
-  processed_statement_payment:"Statement Settlement Payments",
-  deposit:                    "Security Deposit Movements",
-  manual_adjustment:          "Manual Adjustments",
-  system_migration:           "System Migration Entries",
-  carwash_commission:         "Car Wash Commission Accruals",
-  carwash_commission_payout:  "Car Wash Commission Payouts",
-  other:                      "Other Movements",
+  rent_payment:                    "Collections from Tenants",
+  landlord_receipt:                "Direct Landlord Receipts",
+  invoice:                         "Invoice-Linked Cash",
+  invoice_note:                    "Invoice Adjustment Cash",
+  expense:                         "Expense Payments",
+  payment_voucher:                 "Payment Voucher Disbursements",
+  petty_cash_disbursement:         "Petty Cash Disbursements",
+  petty_cash_replenishment:        "Petty Cash Replenishments",
+  meter_reading:                   "Utility / Meter Charges",
+  recurring_deduction:             "Recurring Deduction Payments",
+  landlord_payment:                "Landlord Remittances",
+  advance:                         "Landlord Advances",
+  processed_statement:             "Statement Movements",
+  processed_statement_payment:     "Statement Settlement Payments",
+  deposit:                         "Security Deposit Movements",
+  manual_adjustment:               "Manual Adjustments",
+  system_migration:                "System Migration Entries",
+  carwash_payment:                 "Car Wash Job Collections",
+  carwash_expense:                 "Car Wash Operating Expenses",
+  carwash_prepaid_topup:           "Car Wash Prepaid Top-Ups",
+  carwash_savings_disbursement:    "Car Wash Staff Savings Disbursements",
+  carwash_commission:              "Car Wash Commission Accruals",
+  carwash_commission_payout:       "Car Wash Commission Payouts",
+  pos_sale:                        "POS Sales Collections",
+  pos_purchase_receipt:            "Inventory Purchases",
+  pos_stock_adjustment:            "Stock Adjustments",
+  property_sale_payment:           "Property Sale Receipts",
+  property_sale_commission:        "Property Sale Commission Accruals",
+  property_sale_commission_payout: "Property Sale Commission Payouts",
+  payroll_period:                  "Payroll Disbursements",
+  fixed_asset_depreciation:        "Depreciation (Non-Cash)",
+  fixed_asset_disposal:            "Proceeds from Asset Disposals",
+  journal_entry:                   "Manual Journal Entries",
+  other:                           "Other Movements",
 };
 
 export const getCashFlowReport = async (req, res, next) => {
@@ -1698,9 +1723,9 @@ export const getCashMonthlySummary = async (req, res, next) => {
 
     const businessOid = new mongoose.Types.ObjectId(String(businessId));
 
-    // Cashbook account codes — same set as SHARED_CASHBOOK_CODES
+    // 1100/1110/1130 = standard cash/bank; 1310/1311 = carwash and property-sale receipt control accounts
     const cashbookAccounts = await ChartOfAccount.find(
-      { business: businessId, code: { $in: ["1100", "1110", "1130"] } },
+      { business: businessId, code: { $in: ["1100", "1110", "1130", "1310", "1311"] } },
       { _id: 1 }
     ).lean();
 

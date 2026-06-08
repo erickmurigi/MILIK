@@ -40,5 +40,6 @@ invStockEntrySchema.index({ business: 1, location: 1, type: 1, createdAt: -1 });
 invStockEntrySchema.index({ business: 1, product: 1, createdAt: -1 });
 invStockEntrySchema.index({ business: 1, stockTransfer: 1 });
 invStockEntrySchema.index({ business: 1, purchaseOrder: 1 });
+invStockEntrySchema.index({ business: 1, posSale: 1 });
 
 export default mongoose.model("InvStockEntry", invStockEntrySchema);

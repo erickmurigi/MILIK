@@ -31,15 +31,26 @@ const generateJobNumber = async (business) => {
 // Validate and resolve multi-service lines from request body
 const resolveServiceLines = async (business, rawLines) => {
   if (!Array.isArray(rawLines) || !rawLines.length) return null;
+  const sliced = rawLines.slice(0, 20);
+
+  // Batch-fetch all referenced services in one query
+  const serviceIds = sliced
+    .filter((r) => r.service && mongoose.Types.ObjectId.isValid(String(r.service)))
+    .map((r) => String(r.service));
+  const fetchedServices = serviceIds.length
+    ? await CarWashService.find({ _id: { $in: serviceIds }, business }).lean()
+    : [];
+  const svcMap = new Map(fetchedServices.map((s) => [String(s._id), s]));
+
   const lines = [];
-  for (const raw of rawLines.slice(0, 20)) {
+  for (const raw of sliced) {
     let serviceId = null;
     let serviceName = String(raw.serviceName || "").trim();
     let vehicleType = String(raw.vehicleType || "").trim();
     let price = Number(raw.price ?? 0);
 
     if (raw.service && mongoose.Types.ObjectId.isValid(String(raw.service))) {
-      const svc = await CarWashService.findOne({ _id: raw.service, business }).lean();
+      const svc = svcMap.get(String(raw.service));
       if (!svc) throw createError(400, "One or more selected services are invalid for this company");
       serviceId = svc._id;
       serviceName = serviceName || String(svc.name || "").trim();

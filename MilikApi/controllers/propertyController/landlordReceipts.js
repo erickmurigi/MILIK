@@ -9,6 +9,7 @@ import { resolvePropertyAccountingContext } from "../../services/propertyAccount
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
+import SequenceCounter from "../../models/SequenceCounter.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const escapeRegExp = (value = "") => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -47,21 +48,12 @@ const populateQuery = (query) =>
     .populate("reversedBy", "surname otherNames email");
 
 const generateReceiptNumber = async (businessId) => {
-  const prefix = "LRC";
-  const latest = await LandlordReceipt.findOne({
-    business: businessId,
-    receiptNumber: { $regex: `^${prefix}\\d+$` },
-  })
-    .sort({ createdAt: -1 })
-    .select("receiptNumber")
-    .lean();
-
-  let nextSeq = 1;
-  if (latest?.receiptNumber) {
-    nextSeq = (parseInt(String(latest.receiptNumber).replace(prefix, ""), 10) || 0) + 1;
-  }
-
-  return `${prefix}${String(nextSeq).padStart(5, "0")}`;
+  const counter = await SequenceCounter.findOneAndUpdate(
+    { business: String(businessId), key: "landlord_receipt" },
+    { $inc: { sequence: 1 } },
+    { upsert: true, new: true }
+  ).lean();
+  return `LRC${String(counter.sequence).padStart(5, "0")}`;
 };
 
 const resolveCashbookAccount = async ({ businessId, cashbook, paymentMethod }) => {

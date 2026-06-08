@@ -22,6 +22,7 @@ import {
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { logAuditEvent } from "../../utils/auditLogger.js";
+import SequenceCounter from "../../models/SequenceCounter.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -304,14 +305,12 @@ const normalizeDate = (value, fallback = new Date()) => {
 const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
 const generateReceiptNumber = async (businessId) => {
-  const prefix = "REC";
-  const result = await RentPayment.aggregate([
-    { $match: { business: new mongoose.Types.ObjectId(String(businessId)), receiptNumber: { $regex: /^REC\d+$/ } } },
-    { $project: { num: { $toInt: { $substr: ["$receiptNumber", 3, -1] } } } },
-    { $group: { _id: null, maxNum: { $max: "$num" } } },
-  ]);
-  const next = (result[0]?.maxNum ?? 0) + 1;
-  return `${prefix}${String(next).padStart(5, "0")}`;
+  const counter = await SequenceCounter.findOneAndUpdate(
+    { business: String(businessId), key: "rent_receipt" },
+    { $inc: { sequence: 1 } },
+    { upsert: true, new: true }
+  ).lean();
+  return `REC${String(counter.sequence).padStart(5, "0")}`;
 };
 
 const getStatementPeriodFromPayment = (payment) => {
