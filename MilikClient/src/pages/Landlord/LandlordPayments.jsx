@@ -88,8 +88,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
       }
     };
     fetchData();
-    // eslint-disable-next-line
-  }, [dispatch, currentCompany]);
+  }, [dispatch, currentCompany?._id]);
 
   useEffect(() => {
     const loadCashbooks = async () => {

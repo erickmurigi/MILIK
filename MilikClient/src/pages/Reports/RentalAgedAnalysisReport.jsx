@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaClock, FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from "react-icons/fa";
@@ -49,7 +49,7 @@ const RentalAgedAnalysisReport = () => {
   const [filters, setFilters] = useState({ propertyId: "all", category: "all", search: "" });
   const [currentPage, setCurrentPage] = useState(1);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
     try {
@@ -121,11 +121,9 @@ const RentalAgedAnalysisReport = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, [businessId]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FaExternalLinkAlt, FaRedoAlt, FaSearch } from "react-icons/fa";
@@ -22,7 +22,7 @@ const CarWashCashbooks = () => {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
@@ -33,11 +33,9 @@ const CarWashCashbooks = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    load();
   }, [currentCompany?._id]);
+
+  useEffect(() => { load(); }, [load]);
 
   const filteredAccounts = useMemo(() => {
     const search = appliedFilters.search.trim().toLowerCase();

@@ -391,19 +391,18 @@ function PublicOnlyRoute({ children }) {
   return <Navigate to={resolveDefaultAuthenticatedRoute(resolvedUser)} replace />;
 }
 
+const PUBLIC_TITLE_PATHS = new Set(["/", "/login", "/property-management", "/car-wash", "/human-resources", "/inventory-pos", "/property-sales"]);
+
 function AppDocumentTitleGuard() {
   const location = useLocation();
 
   useEffect(() => {
-    if (typeof document === "undefined") return undefined;
-    const forceTitle = () => { if (document.title !== "MILIK") document.title = "MILIK"; };
-    forceTitle();
-    const observer = new MutationObserver(() => {
-      if (document.title !== "MILIK") document.title = "MILIK";
-    });
-    if (document.head) observer.observe(document.head, { subtree: true, childList: true, characterData: true });
-    return () => observer.disconnect();
-  }, [location.pathname, location.search, location.hash]);
+    // Only reset to "MILIK" for authenticated app routes.
+    // Public pages (landing, login, module pages) manage their own titles.
+    if (!PUBLIC_TITLE_PATHS.has(location.pathname)) {
+      document.title = "MILIK";
+    }
+  }, [location.pathname]);
 
   return null;
 }

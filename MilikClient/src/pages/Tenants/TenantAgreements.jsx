@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany,
@@ -187,7 +187,7 @@ const TenantAgreements = () => {
     return () => document.removeEventListener("click", close);
   }, [openDropdownId]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!currentCompany?._id) return;
     await Promise.all([
       getLeases(dispatch, currentCompany._id),
@@ -195,13 +195,13 @@ const TenantAgreements = () => {
       dispatch(getProperties({ business: currentCompany._id })),
       dispatch(getUnits({ business: currentCompany._id })),
     ]);
-  };
+  }, [currentCompany?._id, dispatch]);
 
   useEffect(() => {
     loadData().catch((error) => {
       toast.error(error?.message || "Failed to load tenant agreements.");
     });
-  }, [currentCompany?._id]);
+  }, [loadData]);
 
   useEffect(() => {
     setCurrentPage(1);

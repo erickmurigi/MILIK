@@ -966,7 +966,7 @@ export const createTenant = async (req, res, next) => {
 // Get all tenants
 export const getTenants = async (req, res, next) => {
   try {
-    const { status, unit } = req.query;
+    const { status, unit, search: rawSearch, tenantName: rawTenantName, tenantCode: rawTenantCode, property: propertyId } = req.query;
     const businessId = resolveBusinessId(req);
 
     if (!businessId) {
@@ -989,6 +989,28 @@ export const getTenants = async (req, res, next) => {
         });
       }
       filter.unit = unit;
+    } else if (propertyId && mongoose.Types.ObjectId.isValid(String(propertyId))) {
+      const propertyUnits = await Unit.find({ property: propertyId, business: businessId }).select("_id").lean();
+      filter.unit = { $in: propertyUnits.map((u) => u._id) };
+    }
+
+    const search = rawSearch ? rawSearch.trim() : "";
+    const tenantName = rawTenantName ? rawTenantName.trim() : "";
+    const tenantCode = rawTenantCode ? rawTenantCode.trim() : "";
+
+    if (search) {
+      const re = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      filter.$or = [
+        { tenantName: re },
+        { phone: re },
+        { email: re },
+        { tenantCode: re },
+        { idNumber: re },
+      ];
+    } else if (tenantName) {
+      filter.tenantName = { $regex: tenantName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+    } else if (tenantCode) {
+      filter.tenantCode = { $regex: tenantCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
     }
 
     const page = Math.max(1, parseInt(req.query.page) || 1);

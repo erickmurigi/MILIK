@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Toaster } from "react-hot-toast";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -454,6 +454,150 @@ const HelpMegaPanel = ({ darkMode, onClose, navigate }) => {
   );
 };
 
+const MENU_COLOR_MAP = {
+  properties: { color: "#3B82F6", label: "Properties", icon: FaHome },
+  landlord: { color: "#F59E0B", label: "Landlords", icon: FaUser },
+  units: { color: "#8B5CF6", label: "Units & Spaces", icon: FaSquare },
+  tenants: { color: "#EC4899", label: "Tenants", icon: FaUsers },
+  reports: { color: "#10B981", label: "Reports & Analytics", icon: FaChartBar },
+  tools: { color: "#06B6D4", label: "Tools & Settings", icon: FaToolbox },
+  help: { color: "#8B5CF6", label: "Help & Support", icon: FaInfoCircle },
+  "rental-invoicing": { color: "#4F46E5", label: "Rental Invoicing", icon: FaFileInvoice },
+  "rental-receipting": { color: "#10B981", label: "Rental Receipting", icon: FaReceipt },
+  "landlord-payments": { color: "#8B5CF6", label: "Landlord Payments", icon: FaHandHolding },
+  "carwash-operations":         { color: "#0B3B2E", label: "Operations",  icon: FaCar },
+  "carwash-finance":            { color: "#0B3B2E", label: "Finance",     icon: FaMoneyBillWave },
+  "carwash-commissions-group":  { color: "#0B3B2E", label: "Commissions", icon: FaHandshake },
+  "carwash-reporting":          { color: "#0B3B2E", label: "Reports",     icon: FaChartBar },
+  "carwash-setup":              { color: "#0B3B2E", label: "Setup",       icon: FaCog },
+  "sale-operations": { color: "#027333", label: "Operations", icon: FaHandshake },
+  "sale-clients":    { color: "#027333", label: "Clients & Agents", icon: FaUsers },
+  "sale-finance":    { color: "#027333", label: "Finance & Reports", icon: FaMoneyBillWave },
+  "hr-people":      { color: "#0B3B2E", label: "Employees",  icon: FaUsers },
+  "hr-leave":       { color: "#0891b2", label: "Leave",       icon: FaCalendarAlt },
+  "hr-payroll":     { color: "#7c3aed", label: "Payroll",     icon: FaMoneyBillWave },
+  "hr-reports":     { color: "#059669", label: "Reports",     icon: FaChartBar },
+  "hr-appraisals":  { color: "#b45309", label: "Appraisals",  icon: FaChartLine },
+  "hr-config":      { color: "#FF8C00", label: "Setup",       icon: FaCog },
+  "inv-pos":            { color: "#0B3B2E", label: "Point of Sale",    icon: FaCashRegister },
+  "inv-catalog":        { color: "#1a5c3a", label: "Products",          icon: FaBoxes },
+  "inv-stock-ops":      { color: "#0B3B2E", label: "Stock",             icon: FaExchangeAlt },
+  "inv-purchasing":     { color: "#374151", label: "Purchasing",        icon: FaFileInvoice },
+  "inv-tills-sessions": { color: "#0B3B2E", label: "Tills & Sessions",  icon: FaCashRegister },
+  "inv-setup":          { color: "#4B5563", label: "Setup",             icon: FaCog },
+  "acc-ledger":     { color: "#0B3B2E", label: "General Ledger",        icon: FaBook },
+  "acc-payables":   { color: "#b45309", label: "Payables & Expenses",   icon: FaCreditCard },
+  "acc-statements": { color: "#0f766e", label: "Financial Reports",     icon: FaFileAlt },
+  "comm-sms":       { color: "#0d9488", label: "SMS Messaging",         icon: FaSms },
+  "comm-email":     { color: "#1d4ed8", label: "Email Messaging",       icon: FaEnvelope },
+};
+
+const ProfessionalDropdown = ({ menuId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick }) => {
+  const menuInfo = MENU_COLOR_MAP[menuId] || { color: "#0B3B2E", label: menuId.toUpperCase(), icon: FaCog };
+  const MenuIcon = menuInfo.icon;
+  return (
+    <div
+      className={`absolute left-full top-0 w-96 shadow-2xl z-[120] rounded-lg overflow-visible border pointer-events-auto ${
+        darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
+      }`}
+      style={{ marginLeft: "0px" }}
+      onMouseEnter={() => onMenuEnter(menuId)}
+      onMouseLeave={onMenuLeave}
+    >
+      <div style={{ backgroundColor: menuInfo.color }} className="px-5 py-4 text-white flex items-center space-x-3">
+        <MenuIcon size={22} className="flex-shrink-0" />
+        <div>
+          <h3 className="text-sm font-bold leading-tight">{menuInfo.label}</h3>
+          <p className="text-xs opacity-90">Quick Access</p>
+        </div>
+      </div>
+      <div className={`${darkMode ? "bg-gray-800" : "bg-white"} max-h-96 overflow-y-auto`}>
+        {items.map((item, idx) => (
+          <React.Fragment key={item.id || `sep-${idx}`}>
+            {item.type === "separator" ? (
+              <div className={`h-px ${darkMode ? "bg-gray-700" : "bg-gray-200"} mx-3 my-2`} />
+            ) : (
+              <button
+                onClick={() => onItemClick(item.id)}
+                className={`w-full text-left px-5 py-3 text-sm font-medium flex items-center space-x-3 transition-all duration-150 border-l-4 ${
+                  darkMode
+                    ? "text-gray-200 hover:bg-gray-700 hover:text-white border-l-transparent"
+                    : "text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent border-l-transparent"
+                }`}
+              >
+                {item.icon && (
+                  <span className="flex-shrink-0 transition-transform duration-150" style={{ color: "#FF8C00" }}>
+                    <item.icon size={16} />
+                  </span>
+                )}
+                <div className="flex-1">
+                  <span>{item.label}</span>
+                  {item.shortcut && (
+                    <span className={`ml-2 text-xs ${darkMode ? "text-gray-500" : "text-gray-400"}`}>
+                      {item.shortcut}
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs opacity-50 transition-opacity" style={{ color: menuInfo.color }}>&gt;</span>
+              </button>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{ backgroundColor: menuInfo.color }} className="h-1.5" />
+    </div>
+  );
+};
+
+const FinancialDropdown = ({ categoryId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick }) => {
+  const category = MENU_COLOR_MAP[categoryId] || { color: "#0B3B2E", label: "Financial Accounts", icon: FaBook };
+  return (
+    <div
+      className={`absolute left-full top-0 w-96 shadow-2xl z-[120] rounded-lg overflow-visible border pointer-events-auto ${
+        darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
+      }`}
+      style={{ marginLeft: "0px" }}
+      onMouseEnter={() => onMenuEnter(categoryId)}
+      onMouseLeave={onMenuLeave}
+    >
+      <div style={{ backgroundColor: category.color }} className="px-5 py-4 text-white flex items-center space-x-3">
+        <category.icon size={22} className="flex-shrink-0" />
+        <div>
+          <h3 className="text-sm font-bold leading-tight">{category.label}</h3>
+          <p className="text-xs opacity-90">Financial Operations</p>
+        </div>
+      </div>
+      <div className={`${darkMode ? "bg-gray-800" : "bg-white"} max-h-96 overflow-y-auto`}>
+        {items.map((item, idx) => (
+          <React.Fragment key={item.id || `sep-${idx}`}>
+            {item.type === "separator" ? (
+              <div className={`h-px ${darkMode ? "bg-gray-700" : "bg-gray-200"} mx-3 my-2`} />
+            ) : (
+              <button
+                onClick={() => onItemClick(item.id)}
+                className={`w-full text-left px-5 py-3 text-sm font-medium flex items-center space-x-3 transition-all duration-150 border-l-4 ${
+                  darkMode
+                    ? "text-gray-200 hover:bg-gray-700 hover:text-white border-l-transparent"
+                    : "text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent border-l-transparent"
+                }`}
+              >
+                {item.icon && (
+                  <span className="flex-shrink-0 transition-transform duration-150" style={{ color: category.color }}>
+                    <item.icon size={16} />
+                  </span>
+                )}
+                <span>{item.label}</span>
+                <span className="text-xs opacity-50 transition-opacity" style={{ color: category.color }}>&gt;</span>
+              </button>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{ backgroundColor: category.color }} className="h-1.5" />
+    </div>
+  );
+};
+
 const TopToolbar = ({
   darkMode,
   setDarkMode,
@@ -468,25 +612,25 @@ const TopToolbar = ({
   const hoverCloseTimerRef = useRef(null);
   const navigate = useNavigate();
 
-  const clearHoverCloseTimer = () => {
+  const clearHoverCloseTimer = useCallback(() => {
     if (hoverCloseTimerRef.current) {
       window.clearTimeout(hoverCloseTimerRef.current);
       hoverCloseTimerRef.current = null;
     }
-  };
+  }, []);
 
-  const openHoveredFinancialItem = (menuId) => {
+  const openHoveredFinancialItem = useCallback((menuId) => {
     clearHoverCloseTimer();
     setHoveredFinancialItem(menuId);
-  };
+  }, [clearHoverCloseTimer]);
 
-  const closeHoveredFinancialItem = () => {
+  const closeHoveredFinancialItem = useCallback(() => {
     clearHoverCloseTimer();
     hoverCloseTimerRef.current = window.setTimeout(() => {
       setHoveredFinancialItem(null);
       hoverCloseTimerRef.current = null;
     }, 120);
-  };
+  }, [clearHoverCloseTimer]);
 
   const isSystemAdminWorkspace    = currentWorkspace === WORKSPACE_IDS.SYSTEM_ADMIN;
   const isCompanySetupWorkspace   = currentWorkspace === WORKSPACE_IDS.COMPANY_SETUP;
@@ -1367,7 +1511,7 @@ const TopToolbar = ({
     return submenus;
   }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
-  const handleMenuItemClick = (menuId) => {
+  const handleMenuItemClick = useCallback((menuId) => {
     const route = routeConfig[menuId];
     if (!route) return;
     if (route.startsWith("coming-soon:")) {
@@ -1382,189 +1526,7 @@ const TopToolbar = ({
     setActiveMenu(null);
     clearHoverCloseTimer();
     setHoveredFinancialItem(null);
-  };
-
-  const menuColorMap = {
-    properties: { color: "#3B82F6", label: "Properties", icon: FaHome },
-    landlord: { color: "#F59E0B", label: "Landlords", icon: FaUser },
-    units: { color: "#8B5CF6", label: "Units & Spaces", icon: FaSquare },
-    tenants: { color: "#EC4899", label: "Tenants", icon: FaUsers },
-    reports: { color: "#10B981", label: "Reports & Analytics", icon: FaChartBar },
-    tools: { color: "#06B6D4", label: "Tools & Settings", icon: FaToolbox },
-    help: { color: "#8B5CF6", label: "Help & Support", icon: FaInfoCircle },
-    "rental-invoicing": { color: "#4F46E5", label: "Rental Invoicing", icon: FaFileInvoice },
-    "rental-receipting": { color: "#10B981", label: "Rental Receipting", icon: FaReceipt },
-    "landlord-payments": { color: "#8B5CF6", label: "Landlord Payments", icon: FaHandHolding },
-    "carwash-operations":         { color: "#0B3B2E", label: "Operations",  icon: FaCar },
-    "carwash-finance":            { color: "#0B3B2E", label: "Finance",     icon: FaMoneyBillWave },
-    "carwash-commissions-group":  { color: "#0B3B2E", label: "Commissions", icon: FaHandshake },
-    "carwash-reporting":          { color: "#0B3B2E", label: "Reports",     icon: FaChartBar },
-    "carwash-setup":              { color: "#0B3B2E", label: "Setup",       icon: FaCog },
-    "sale-operations": { color: "#027333", label: "Operations", icon: FaHandshake },
-    "sale-clients":    { color: "#027333", label: "Clients & Agents", icon: FaUsers },
-    "sale-finance":    { color: "#027333", label: "Finance & Reports", icon: FaMoneyBillWave },
-    "hr-people":      { color: "#0B3B2E", label: "Employees",  icon: FaUsers },
-    "hr-leave":       { color: "#0891b2", label: "Leave",       icon: FaCalendarAlt },
-    "hr-payroll":     { color: "#7c3aed", label: "Payroll",     icon: FaMoneyBillWave },
-    "hr-reports":     { color: "#059669", label: "Reports",     icon: FaChartBar },
-    "hr-appraisals":  { color: "#b45309", label: "Appraisals",  icon: FaChartLine },
-    "hr-config":      { color: "#FF8C00", label: "Setup",       icon: FaCog },
-    "inv-pos":            { color: "#0B3B2E", label: "Point of Sale",    icon: FaCashRegister },
-    "inv-catalog":        { color: "#1a5c3a", label: "Products",          icon: FaBoxes },
-    "inv-stock-ops":      { color: "#0B3B2E", label: "Stock",             icon: FaExchangeAlt },
-    "inv-purchasing":     { color: "#374151", label: "Purchasing",        icon: FaFileInvoice },
-    "inv-tills-sessions": { color: "#0B3B2E", label: "Tills & Sessions",  icon: FaCashRegister },
-    "inv-setup":          { color: "#4B5563", label: "Setup",             icon: FaCog },
-    "acc-ledger":     { color: "#0B3B2E", label: "General Ledger",        icon: FaBook },
-    "acc-payables":   { color: "#b45309", label: "Payables & Expenses",   icon: FaCreditCard },
-    "acc-statements": { color: "#0f766e", label: "Financial Reports",     icon: FaFileAlt },
-    "comm-sms":       { color: "#0d9488", label: "SMS Messaging",         icon: FaSms },
-    "comm-email":     { color: "#1d4ed8", label: "Email Messaging",       icon: FaEnvelope },
-  };
-
-  const ProfessionalDropdown = ({ menuId, items }) => {
-    const menuInfo = menuColorMap[menuId] || {
-      color: "#0B3B2E",
-      label: menuId.toUpperCase(),
-      icon: FaCog,
-    };
-    const MenuIcon = menuInfo.icon;
-
-    return (
-      <div
-        className={`absolute left-full top-0 w-96 shadow-2xl z-[120] rounded-lg overflow-visible border pointer-events-auto ${
-          darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
-        }`}
-        style={{ marginLeft: "0px" }}
-        onMouseEnter={() => openHoveredFinancialItem(menuId)}
-        onMouseLeave={closeHoveredFinancialItem}
-      >
-        <div
-          style={{ backgroundColor: menuInfo.color }}
-          className="px-5 py-4 text-white flex items-center space-x-3"
-        >
-          <MenuIcon size={22} className="flex-shrink-0" />
-          <div>
-            <h3 className="text-sm font-bold leading-tight">{menuInfo.label}</h3>
-            <p className="text-xs opacity-90">Quick Access</p>
-          </div>
-        </div>
-
-        <div className={`${darkMode ? "bg-gray-800" : "bg-white"} max-h-96 overflow-y-auto`}>
-          {items.map((item, idx) => (
-            <React.Fragment key={item.id || `sep-${idx}`}>
-              {item.type === "separator" ? (
-                <div className={`h-px ${darkMode ? "bg-gray-700" : "bg-gray-200"} mx-3 my-2`} />
-              ) : (
-                <button
-                  onClick={() => {
-                    handleMenuItemClick(item.id);
-                    clearHoverCloseTimer();
-                    setHoveredFinancialItem(null);
-                  }}
-                  className={`w-full text-left px-5 py-3 text-sm font-medium flex items-center space-x-3 transition-all duration-150 border-l-4 ${
-                    darkMode
-                      ? "text-gray-200 hover:bg-gray-700 hover:text-white border-l-transparent"
-                      : "text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent border-l-transparent"
-                  }`}
-                >
-                  {item.icon && (
-                    <span
-                      className="flex-shrink-0 transition-transform duration-150"
-                      style={{ color: "#FF8C00" }}
-                    >
-                      <item.icon size={16} />
-                    </span>
-                  )}
-                  <div className="flex-1">
-                    <span>{item.label}</span>
-                    {item.shortcut && (
-                      <span className={`ml-2 text-xs ${darkMode ? "text-gray-500" : "text-gray-400"}`}>
-                        {item.shortcut}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs opacity-50 transition-opacity" style={{ color: menuInfo.color }}>
-                    &gt;
-                  </span>
-                </button>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-
-        <div style={{ backgroundColor: menuInfo.color }} className="h-1.5" />
-      </div>
-    );
-  };
-
-  const FinancialDropdown = ({ categoryId, items }) => {
-    const category = menuColorMap[categoryId] || {
-      color: "#0B3B2E",
-      label: "Financial Accounts",
-      icon: FaBook,
-    };
-
-    return (
-      <div
-        className={`absolute left-full top-0 w-96 shadow-2xl z-[120] rounded-lg overflow-visible border pointer-events-auto ${
-          darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
-        }`}
-        style={{ marginLeft: "0px" }}
-        onMouseEnter={() => openHoveredFinancialItem(categoryId)}
-        onMouseLeave={closeHoveredFinancialItem}
-      >
-        <div
-          style={{ backgroundColor: category.color }}
-          className="px-5 py-4 text-white flex items-center space-x-3"
-        >
-          <category.icon size={22} className="flex-shrink-0" />
-          <div>
-            <h3 className="text-sm font-bold leading-tight">{category.label}</h3>
-            <p className="text-xs opacity-90">Financial Operations</p>
-          </div>
-        </div>
-
-        <div className={`${darkMode ? "bg-gray-800" : "bg-white"} max-h-96 overflow-y-auto`}>
-          {items.map((item, idx) => (
-            <React.Fragment key={item.id || `sep-${idx}`}>
-              {item.type === "separator" ? (
-                <div className={`h-px ${darkMode ? "bg-gray-700" : "bg-gray-200"} mx-3 my-2`} />
-              ) : (
-                <button
-                  onClick={() => {
-                    handleMenuItemClick(item.id);
-                    clearHoverCloseTimer();
-                    setHoveredFinancialItem(null);
-                  }}
-                  className={`w-full text-left px-5 py-3 text-sm font-medium flex items-center space-x-3 transition-all duration-150 border-l-4 ${
-                    darkMode
-                      ? "text-gray-200 hover:bg-gray-700 hover:text-white border-l-transparent"
-                      : "text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent border-l-transparent"
-                  }`}
-                >
-                  {item.icon && (
-                    <span
-                      className="flex-shrink-0 transition-transform duration-150"
-                      style={{ color: category.color }}
-                    >
-                      <item.icon size={16} />
-                    </span>
-                  )}
-                  <span>{item.label}</span>
-                  <span className="text-xs opacity-50 transition-opacity" style={{ color: category.color }}>
-                    &gt;
-                  </span>
-                </button>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-
-        <div style={{ backgroundColor: category.color }} className="h-1.5" />
-      </div>
-    );
-  };
+  }, [routeConfig, navigate, clearHoverCloseTimer]);
 
   const renderMenuItem = (item, index) => {
     if (item.type === "separator") {
@@ -1619,9 +1581,23 @@ const TopToolbar = ({
 
           {nestedSubmenus[item.id] && hoveredFinancialItem === item.id && (
             activeMenu === "financial" ? (
-              <FinancialDropdown categoryId={item.id} items={nestedSubmenus[item.id]} />
+              <FinancialDropdown
+                categoryId={item.id}
+                items={nestedSubmenus[item.id]}
+                darkMode={darkMode}
+                onMenuEnter={openHoveredFinancialItem}
+                onMenuLeave={closeHoveredFinancialItem}
+                onItemClick={handleMenuItemClick}
+              />
             ) : (
-              <ProfessionalDropdown menuId={item.id} items={nestedSubmenus[item.id]} />
+              <ProfessionalDropdown
+                menuId={item.id}
+                items={nestedSubmenus[item.id]}
+                darkMode={darkMode}
+                onMenuEnter={openHoveredFinancialItem}
+                onMenuLeave={closeHoveredFinancialItem}
+                onItemClick={handleMenuItemClick}
+              />
             )
           )}
         </div>

@@ -638,6 +638,8 @@ export const getLandlords = (query = {}) => async (dispatch, getState) => {
 
     if (query.search) params.append('search', query.search);
     if (query.status) params.append('status', query.status);
+    if (query.page) params.append('page', query.page);
+    if (query.limit) params.append('limit', query.limit);
 
     const companyId = resolveCompanyId(query, getState);
     if (companyId) {
@@ -648,16 +650,20 @@ export const getLandlords = (query = {}) => async (dispatch, getState) => {
     const res = await adminRequests.get(`/landlords${queryString ? `?${queryString}` : ""}`);
 
     let landlords = [];
+    let pagination = null;
     if (Array.isArray(res.data)) {
       landlords = res.data;
     } else if (Array.isArray(res.data?.data)) {
       landlords = res.data.data;
+      pagination = res.data.total != null
+        ? { total: res.data.total, page: res.data.page || 1, pages: res.data.pages || 1, limit: query.limit || 5000 }
+        : null;
     } else if (res.data?.success && !Array.isArray(res.data?.data)) {
       landlords = [];
     }
 
-    dispatch(getLandlordsSuccess(landlords));
-    return landlords;
+    dispatch(getLandlordsSuccess(pagination ? { landlords, pagination } : landlords));
+    return { landlords, pagination };
   } catch (err) {
     dispatch(getLandlordsFailure());
     throw err;

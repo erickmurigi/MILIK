@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaRedoAlt, FaSearch, FaUndo } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -48,7 +48,7 @@ const CarWashCommissions = () => {
   const [reversalNotes, setReversalNotes] = useState("");
   const [isReversing, setIsReversing]     = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [commPayload, staffPayload] = await Promise.all([
@@ -72,9 +72,9 @@ const CarWashCommissions = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [applied, page, staff.length]);
 
-  useEffect(() => { load(); }, [applied, page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]);
 
   const applyFilters = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
   const resetFilters = () => { const d = emptyFilters(); setFilters(d); setPage(1); setApplied(d); };

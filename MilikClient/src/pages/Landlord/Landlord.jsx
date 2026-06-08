@@ -1,5 +1,5 @@
 // pages/Landlord/Landlord.jsx
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -58,6 +58,7 @@ const Landlords = () => {
   // Redux state
   const landlordState = useSelector((state) => state.landlord);
   const landlords = landlordState?.landlords || [];
+  const landlordPagination = useSelector((state) => state.landlord?.pagination ?? { total: 0, page: 1, pages: 1, limit: 50 });
   const isFetching = landlordState?.isFetching || false;
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
@@ -141,16 +142,21 @@ const Landlords = () => {
     []
   );
 
-  // Fetch landlords from backend on mount / company change
+  const buildLandlordParams = useCallback((overridePage) => {
+    const page = overridePage ?? currentPage;
+    const params = { page, limit: pageSize };
+    if (currentCompany?._id) params.company = currentCompany._id;
+    if (appliedFilters.status !== "any") params.status = appliedFilters.status;
+    const textSearch = appliedFilters.name.trim() || appliedFilters.code.trim();
+    if (textSearch) params.search = textSearch;
+    return params;
+  }, [currentPage, pageSize, currentCompany?._id, appliedFilters]);
+
+  // Fetch landlords on mount, company change, page change, or filter apply
   useEffect(() => {
-    dispatch(
-      getLandlords(
-        currentCompany?._id
-          ? { company: currentCompany._id }
-          : {}
-      )
-    );
-  }, [dispatch, currentCompany?._id]);
+    if (!currentCompany?._id) return;
+    dispatch(getLandlords(buildLandlordParams()));
+  }, [dispatch, buildLandlordParams, currentCompany?._id]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -206,14 +212,6 @@ const Landlords = () => {
     setSelectAll(false);
     setCurrentPage(1);
     setActionMenuOpen(false);
-
-    dispatch(
-      getLandlords(
-        currentCompany?._id
-          ? { company: currentCompany._id }
-          : {}
-      )
-    );
   };
 
   const onFilterEnter = (e) => {
@@ -271,7 +269,6 @@ const Landlords = () => {
     return landlords.filter(
       (l) =>
         matchesTypedFields(l) &&
-        matchesStatus(l) &&
         matchesPortal(l) &&
         matchesLocation(l) &&
         matchesPropertiesCount(l)
@@ -279,8 +276,8 @@ const Landlords = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [landlords, appliedFilters]);
 
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredLandlords.length / pageSize));
+  // Pagination — totalPages is driven by server count; client filters may reduce visible rows per page
+  const totalPages = Math.max(1, Math.ceil((landlordPagination.total || filteredLandlords.length) / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
 
   const visiblePages = useMemo(() => {
@@ -297,7 +294,7 @@ const Landlords = () => {
 
   const startIndex = (safeCurrentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
-  const currentLandlords = filteredLandlords.slice(startIndex, endIndex);
+  const currentLandlords = filteredLandlords.slice(0, endIndex - startIndex);
 
   const countLinkedProperties = (landlord = {}) =>
     Number(landlord?.activeProperties || 0) + Number(landlord?.archivedProperties || 0);
@@ -395,7 +392,10 @@ const Landlords = () => {
   };
 
   const goToPage = (page) => {
-    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      dispatch(getLandlords(buildLandlordParams(page)));
+    }
   };
 
   // Delete selected landlords
@@ -441,16 +441,10 @@ const Landlords = () => {
           for (const landlord of selectedDeletableLandlords) {
             await dispatch(deleteLandlord(landlord._id));
           }
-          await dispatch(
-            getLandlords(
-              currentCompany?._id
-                ? { company: currentCompany._id }
-                : {}
-            )
-          );
+          setCurrentPage(1);
+          await dispatch(getLandlords(buildLandlordParams(1)));
           setSelectedLandlords([]);
           setSelectAll(false);
-          setCurrentPage(1);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
 
           if (deleteCount > 0) {
@@ -516,13 +510,8 @@ const Landlords = () => {
           for (const landlord of selectedArchivableLandlords) {
             await dispatch(updateLandlord(landlord._id, { status: "Archived" }));
           }
-          await dispatch(
-            getLandlords(
-              currentCompany?._id
-                ? { company: currentCompany._id }
-                : {}
-            )
-          );
+          setCurrentPage(1);
+          await dispatch(getLandlords(buildLandlordParams(1)));
           setSelectedLandlords([]);
           setSelectAll(false);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
@@ -580,13 +569,8 @@ const Landlords = () => {
           for (const landlord of selectedRestorableLandlords) {
             await dispatch(updateLandlord(landlord._id, { status: "Active" }));
           }
-          await dispatch(
-            getLandlords(
-              currentCompany?._id
-                ? { company: currentCompany._id }
-                : {}
-            )
-          );
+          setCurrentPage(1);
+          await dispatch(getLandlords(buildLandlordParams(1)));
           setSelectedLandlords([]);
           setSelectAll(false);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
@@ -774,8 +758,8 @@ const Landlords = () => {
 
       console.log('Bulk import response:', response.data);
 
-      // Refresh landlords list (getLandlords expects 'company' not 'business')
-      await dispatch(getLandlords({ company: currentCompany._id }));
+      setCurrentPage(1);
+      await dispatch(getLandlords(buildLandlordParams(1)));
 
       console.log('Landlords list refreshed');
 
@@ -788,27 +772,42 @@ const Landlords = () => {
     }
   };
 
-  // Handle export to Excel
-  const handleExport = () => {
-    if (filteredLandlords.length === 0) {
+  const fetchAllForExport = async () => {
+    const exportParams = { ...buildLandlordParams(1), limit: 5000, page: 1 };
+    const qs = new URLSearchParams(exportParams).toString();
+    const res = await adminRequests.get(`/landlords?${qs}`);
+    const raw = res.data;
+    return Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : filteredLandlords);
+  };
+
+  const handleExport = async () => {
+    if (landlordPagination.total === 0 && filteredLandlords.length === 0) {
       toast.warning('No landlords to export');
       return;
     }
-    exportLandlordsToExcel(filteredLandlords);
-    toast.success(`Exported ${filteredLandlords.length} landlords to Excel`);
+    try {
+      const rows = await fetchAllForExport();
+      exportLandlordsToExcel(rows);
+      toast.success(`Exported ${rows.length} landlords to Excel`);
+    } catch {
+      exportLandlordsToExcel(filteredLandlords);
+      toast.success(`Exported ${filteredLandlords.length} landlords to Excel`);
+    }
   };
 
-  const handlePrintList = () => {
-    if (filteredLandlords.length === 0) {
+  const handlePrintList = async () => {
+    if (landlordPagination.total === 0 && filteredLandlords.length === 0) {
       toast.warning("No landlords to print");
       return;
     }
+    let rows = filteredLandlords;
+    try { rows = await fetchAllForExport(); } catch { /* use current page */ }
 
     printTabularList({
       title: "Landlords List",
       subtitle: "Current filtered landlords register",
       company: currentCompany || {},
-      summary: `Records: ${filteredLandlords.length} • Printed on ${new Date().toLocaleString()}`,
+      summary: `Records: ${rows.length} • Printed on ${new Date().toLocaleString()}`,
       columns: [
         { label: "Landlord Code", value: (row) => row?.landlordCode || row?.code || "-" },
         { label: "Landlord Name", value: (row) => row?.fullName || row?.name || row?.landlordName || row?.firstName || "-" },
@@ -817,7 +816,7 @@ const Landlords = () => {
         { label: "Email", value: (row) => row?.email || "-" },
         { label: "Phone", value: (row) => row?.phone || row?.phoneNumber || "-" },
       ],
-      rows: filteredLandlords,
+      rows,
     });
   };
 
@@ -1164,8 +1163,8 @@ const Landlords = () => {
                     <span className="font-bold">
                       Showing{" "}
                       <span className="font-bold">{filteredLandlords.length === 0 ? 0 : startIndex + 1}</span> to{" "}
-                      <span className="font-bold">{Math.min(endIndex, filteredLandlords.length)}</span> of{" "}
-                      <span className="font-bold">{filteredLandlords.length}</span> landlords
+                      <span className="font-bold">{startIndex + filteredLandlords.length}</span> of{" "}
+                      <span className="font-bold">{landlordPagination.total || filteredLandlords.length}</span> landlords
                     </span>
 
                     {selectedLandlords.length > 0 && (

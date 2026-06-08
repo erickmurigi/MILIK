@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { FaEdit, FaPlus, FaPrint, FaSearch, FaTimes, FaTrash, FaUserTie } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -29,7 +29,7 @@ const SaleAgents = () => {
 
   const biz = currentCompany?._id;
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!biz) return;
     setLoading(true);
     try {
@@ -37,9 +37,9 @@ const SaleAgents = () => {
       setAgents(Array.isArray(rows) ? rows : []);
     } catch { toast.error("Failed to load agents"); }
     finally { setLoading(false); }
-  };
+  }, [biz, debouncedSearch]);
 
-  useEffect(() => { load(); }, [biz, debouncedSearch]);
+  useEffect(() => { load(); }, [load]);
 
   const totalPages = Math.max(1, Math.ceil(agents.length / ITEMS_PER_PAGE));
   const safePage = Math.min(page, totalPages);

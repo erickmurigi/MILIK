@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import {
   FaCalendarAlt, FaCheckCircle, FaChevronDown, FaChevronRight,
@@ -316,7 +316,7 @@ const CarWashAccounts = () => {
   const [filterStatus, setFilterStatus] = useState("active");
   const [filterType, setFilterType] = useState("");
 
-  const loadAccounts = async () => {
+  const loadAccounts = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
     try {
@@ -330,7 +330,7 @@ const CarWashAccounts = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [businessId, filterStatus, filterType]);
 
   useEffect(() => {
     if (!businessId) return;
@@ -343,7 +343,7 @@ const CarWashAccounts = () => {
     });
   }, [businessId]);
 
-  useEffect(() => { loadAccounts(); }, [businessId, filterStatus, filterType]);
+  useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
   const toggleExpand = async (acc) => {
     if (expandedId === acc._id) { setExpandedId(null); return; }

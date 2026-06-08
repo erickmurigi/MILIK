@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentUser,
@@ -347,7 +347,7 @@ const InvoiceNotes = () => {
     [properties]
   );
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
@@ -380,11 +380,9 @@ const InvoiceNotes = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCompany?._id, dispatch]);
 
-  useEffect(() => {
-    loadData();
-  }, [currentCompany?._id]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
     const nextType = String(searchParams.get("type") || "").trim().toLowerCase() === "debit"

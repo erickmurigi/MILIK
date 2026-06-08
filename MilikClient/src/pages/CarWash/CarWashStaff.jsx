@@ -261,7 +261,7 @@ const CarWashStaff = () => {
     return { active, inactive };
   }, [rows]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [payload, cbRes] = await Promise.all([
@@ -275,9 +275,9 @@ const CarWashStaff = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [appliedFilters, page, pageSize]);
 
-  useEffect(() => { load().catch(() => toast.error("Failed to load staff")); }, [appliedFilters, page, pageSize]);
+  useEffect(() => { load().catch(() => toast.error("Failed to load staff")); }, [load]);
 
   // Auto-save staff form draft while modal is open
   useEffect(() => {

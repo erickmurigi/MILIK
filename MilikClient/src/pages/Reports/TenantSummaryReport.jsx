@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { FaFileDownload, FaFilter, FaPrint, FaSyncAlt, FaUsers } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -32,7 +32,7 @@ const TenantSummaryReport = () => {
   const [filters, setFilters] = useState({ propertyId: "all", status: "all", search: "" });
   const [currentPage, setCurrentPage] = useState(1);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
     try {
@@ -51,11 +51,9 @@ const TenantSummaryReport = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, [businessId]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const propertyById = useMemo(() => {
     const m = new Map();

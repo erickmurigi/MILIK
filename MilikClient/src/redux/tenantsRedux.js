@@ -70,6 +70,7 @@ export const tenantSlice = createSlice({
     name: "tenant",
     initialState: {
         tenants: [],
+        pagination: { total: 0, page: 1, pages: 1, limit: 50 },
         isFetching: false,
         error: false
     },
@@ -166,6 +167,13 @@ export const tenantSlice = createSlice({
             .addCase(getTenants.fulfilled, (state, action) => {
                 state.isFetching = false;
                 state.tenants = normalizeTenantCollection(action.payload);
+                const p = action.payload;
+                if (p && typeof p === "object" && !Array.isArray(p)) {
+                    const total = p.total ?? p.count ?? state.tenants.length;
+                    const page = p.page ?? 1;
+                    const limit = p.limit ?? 50;
+                    state.pagination = { total, page, pages: p.pages ?? Math.max(1, Math.ceil(total / limit)), limit };
+                }
             })
             .addCase(getTenants.rejected, (state) => {
                 state.isFetching = false;

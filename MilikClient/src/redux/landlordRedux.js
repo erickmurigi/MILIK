@@ -5,6 +5,7 @@ export const landlordSlice = createSlice({
     name: "landlord",
     initialState: {
         landlords: [],
+        pagination: { total: 0, page: 1, pages: 1, limit: 50 },
         isFetching: false,
         error: false
     },
@@ -17,7 +18,12 @@ export const landlordSlice = createSlice({
         getLandlordsSuccess: (state, action) => {
             state.isFetching = false
             state.error = false
-            state.landlords = Array.isArray(action.payload) ? action.payload : []
+            if (action.payload && typeof action.payload === "object" && !Array.isArray(action.payload) && action.payload.landlords) {
+                state.landlords = action.payload.landlords;
+                state.pagination = action.payload.pagination || state.pagination;
+            } else {
+                state.landlords = Array.isArray(action.payload) ? action.payload : []
+            }
         },
         getLandlordsFailure: (state) => {
             state.isFetching = false

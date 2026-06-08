@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaBook, FaCheckSquare, FaEdit, FaEye, FaPlus, FaRedoAlt, FaSearch, FaSquare, FaTimes, FaTrash } from "react-icons/fa";
@@ -84,7 +84,7 @@ const CarWashChartOfAccounts = () => {
   const canUpdate = hasCompanyPermission(currentUser || {}, currentCompany, "chartOfAccounts", "update", "accounts");
   const canDelete = hasCompanyPermission(currentUser || {}, currentCompany, "chartOfAccounts", "delete", "accounts");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
@@ -96,11 +96,9 @@ const CarWashChartOfAccounts = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    load();
   }, [currentCompany?._id]);
+
+  useEffect(() => { load(); }, [load]);
 
   const filteredAccounts = useMemo(() => {
     const search = appliedFilters.search.trim().toLowerCase();

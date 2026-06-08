@@ -76,6 +76,8 @@ export const selectAllTenants = createSelector(
   (tenants) => (Array.isArray(tenants) ? tenants : EMPTY_ARRAY)
 );
 
+export const selectTenantPagination = (state) => state.tenant?.pagination ?? { total: 0, page: 1, pages: 1, limit: 50 };
+
 export const selectActiveTenants = createSelector(
   selectAllTenants,
   (tenants) =>

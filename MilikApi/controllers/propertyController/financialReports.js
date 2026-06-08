@@ -1387,6 +1387,8 @@ export const getCashFlowReport = async (req, res, next) => {
       const inflow = round2(row.debit || 0);
       const outflow = round2(row.credit || 0);
       const net = round2(inflow - outflow);
+      // Skip items where reversals fully cancel the original in the same period — net-zero has no cash flow impact.
+      if (Math.abs(net) < 0.01) continue;
       const label = CASH_FLOW_LABELS[sourceType] || sourceType;
       const item = { sourceType, label, inflow, outflow, net };
 

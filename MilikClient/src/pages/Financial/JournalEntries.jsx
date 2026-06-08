@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AppSelect from "../../components/common/AppSelect";
 import { useLocation } from "react-router-dom";
 import useDebounce from "../../hooks/useDebounce";
@@ -191,7 +191,7 @@ const JournalEntries = () => {
     loadAccounts();
   }, [currentCompany?._id]);
 
-  const loadJournals = async () => {
+  const loadJournals = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
@@ -212,11 +212,9 @@ const JournalEntries = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCompany?._id, isAccountsWorkspace, debouncedSearch, filters.status, filters.journalType, filters.propertyId, currentPage, pageSize]);
 
-  useEffect(() => {
-    loadJournals();
-  }, [currentCompany?._id, debouncedSearch, filters.status, filters.journalType, filters.propertyId, currentPage, pageSize]);
+  useEffect(() => { loadJournals(); }, [loadJournals]);
 
   const totals = useMemo(() => {
     return journals.reduce(

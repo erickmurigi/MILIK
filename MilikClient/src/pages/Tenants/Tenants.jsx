@@ -8,6 +8,7 @@ import {
   selectAllUnits,
   selectAllRentPayments,
   selectAllLeases,
+  selectTenantPagination,
 } from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -212,6 +213,8 @@ const Tenants = ({ listingMode = "active" }) => {
   const rentPayments = useSelector(selectAllRentPayments);
   const leases = useSelector(selectAllLeases);
 
+  const tenantPagination = useSelector(selectTenantPagination);
+
   const canViewTenants = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "view", "propertyManagement");
   const canCreateTenant = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement");
   const canUpdateTenant = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "update", "propertyManagement");
@@ -281,16 +284,44 @@ const Tenants = ({ listingMode = "active" }) => {
   });
 
   // ===== EFFECTS =====
-  useEffect(() => {
-    if (currentCompany?._id) {
-      dispatch(getTenants({ business: currentCompany._id, ...(tenantStatusQuery ? { status: tenantStatusQuery } : {}) }));
-      dispatch(getUnits({ business: currentCompany._id }));
-      dispatch(getProperties({ business: currentCompany._id }));
-      getLeases(dispatch, currentCompany._id).catch((error) => {
-        console.error("Failed to load leases:", error);
-      });
+  const propertyIdByName = useMemo(() => {
+    const m = new Map();
+    for (const p of properties) {
+      const name = p.propertyName || p.name;
+      if (name) m.set(name, String(p._id));
     }
-  }, [dispatch, currentCompany, tenantStatusQuery]);
+    return m;
+  }, [properties]);
+
+  const buildTenantParams = useCallback((overridePage) => {
+    const page = overridePage ?? currentPage;
+    return {
+      business: currentCompany?._id,
+      page,
+      limit: pageSize,
+      ...(tenantStatusQuery ? { status: tenantStatusQuery } : appliedFilters.status !== "any" ? { status: appliedFilters.status } : {}),
+      ...(appliedFilters.search ? { search: appliedFilters.search } : {}),
+      ...(appliedFilters.tenantName ? { tenantName: appliedFilters.tenantName } : {}),
+      ...(appliedFilters.tenantCode ? { tenantCode: appliedFilters.tenantCode } : {}),
+      ...(appliedFilters.property !== "any" && propertyIdByName.get(appliedFilters.property)
+        ? { property: propertyIdByName.get(appliedFilters.property) }
+        : {}),
+    };
+  }, [currentCompany?._id, currentPage, pageSize, tenantStatusQuery, appliedFilters, propertyIdByName]);
+
+  useEffect(() => {
+    if (!currentCompany?._id) return;
+    dispatch(getUnits({ business: currentCompany._id }));
+    dispatch(getProperties({ business: currentCompany._id }));
+    getLeases(dispatch, currentCompany._id).catch((error) => {
+      console.error("Failed to load leases:", error);
+    });
+  }, [dispatch, currentCompany?._id]);
+
+  useEffect(() => {
+    if (!currentCompany?._id) return;
+    dispatch(getTenants(buildTenantParams()));
+  }, [dispatch, buildTenantParams, currentCompany?._id]);
 
   useEffect(() => {
     setSelectAll(false);
@@ -383,34 +414,31 @@ const Tenants = ({ listingMode = "active" }) => {
   };
 
 
-  const leaseByTenantId = useMemo(() => {
-    const map = new Map();
-
-    (Array.isArray(leases) ? leases : []).forEach((lease) => {
+  const { leaseByTenantId, leaseCountByTenant } = useMemo(() => {
+    const byId = new Map();
+    const countById = new Map();
+    for (const lease of (Array.isArray(leases) ? leases : [])) {
       const tenantId = normalizeId(lease?.tenant?._id || lease?.tenant);
-      if (!tenantId) return;
+      if (!tenantId) continue;
 
-      const current = map.get(tenantId);
+      countById.set(tenantId, (countById.get(tenantId) || 0) + 1);
+
+      const current = byId.get(tenantId);
       if (!current) {
-        map.set(tenantId, lease);
-        return;
+        byId.set(tenantId, lease);
+      } else {
+        const currentScore = String(current?.status || "").toLowerCase() === "active" ? 1 : 0;
+        const nextScore    = String(lease?.status    || "").toLowerCase() === "active" ? 1 : 0;
+        if (nextScore > currentScore) {
+          byId.set(tenantId, lease);
+        } else {
+          const currentEnd = new Date(current?.endDate || 0).getTime();
+          const nextEnd    = new Date(lease?.endDate   || 0).getTime();
+          if (nextEnd > currentEnd) byId.set(tenantId, lease);
+        }
       }
-
-      const currentStatusScore = String(current?.status || "").toLowerCase() === "active" ? 1 : 0;
-      const nextStatusScore = String(lease?.status || "").toLowerCase() === "active" ? 1 : 0;
-      if (nextStatusScore > currentStatusScore) {
-        map.set(tenantId, lease);
-        return;
-      }
-
-      const currentEnd = new Date(current?.endDate || 0).getTime();
-      const nextEnd = new Date(lease?.endDate || 0).getTime();
-      if (nextEnd > currentEnd) {
-        map.set(tenantId, lease);
-      }
-    });
-
-    return map;
+    }
+    return { leaseByTenantId: byId, leaseCountByTenant: countById };
   }, [leases]);
 
   const paymentsByTenant = useMemo(() => {
@@ -445,16 +473,6 @@ const Tenants = ({ listingMode = "active" }) => {
     });
     return map;
   }, [tenantInvoiceNotes]);
-
-  const leaseCountByTenant = useMemo(() => {
-    const map = new Map();
-    (Array.isArray(leases) ? leases : []).forEach(lease => {
-      const id = normalizeId(lease?.tenant?._id || lease?.tenant);
-      if (!id) return;
-      map.set(id, (map.get(id) || 0) + 1);
-    });
-    return map;
-  }, [leases]);
 
   const calculateTenantBalance = useCallback(
     (tenantId) => {
@@ -567,52 +585,13 @@ const Tenants = ({ listingMode = "active" }) => {
   }, [tenantsData, units, properties, leaseByTenantId, calculateTenantBalance, paymentsSnapshotReady, leaseCountByTenant, invoicesByTenant, notesByTenant, paymentsByTenant]);
 
   // ===== FILTER TENANTS =====
+  // search/status/tenantName/tenantCode/property are now server-side; only balanceScope remains client-side
   const filteredTenants = useMemo(() => {
     return transformedTenants.filter((t) => {
-      if (isTerminatedView) {
-        if (t.status !== "terminated") return false;
-      } else if (t.status === "terminated") {
-        return false;
-      }
-
-      if (
-        appliedFilters.property !== "any" &&
-        t.propertyName !== appliedFilters.property
-      ) {
-        return false;
-      }
-
-      if (
-        appliedFilters.status !== "any" &&
-        t.status !== appliedFilters.status
-      ) {
-        return false;
-      }
-
-      if (appliedFilters.balanceScope === "with_balance" && !t.hasBalance) {
-        return false;
-      }
-
-      if (appliedFilters.search) {
-        const searchLower = appliedFilters.search.toLowerCase();
-        const matchesName = t.tenantName.toLowerCase().includes(searchLower);
-        const matchesPhone = t.phone.toLowerCase().includes(searchLower);
-        if (!matchesName && !matchesPhone) return false;
-      }
-
-      if (appliedFilters.tenantName) {
-        const nameLower = appliedFilters.tenantName.toLowerCase();
-        if (!t.tenantName.toLowerCase().includes(nameLower)) return false;
-      }
-
-      if (appliedFilters.tenantCode) {
-        const codeLower = appliedFilters.tenantCode.toLowerCase();
-        if (!t.tenantCode.toLowerCase().includes(codeLower)) return false;
-      }
-
+      if (appliedFilters.balanceScope === "with_balance" && !t.hasBalance) return false;
       return true;
     });
-  }, [transformedTenants, appliedFilters, isTerminatedView]);
+  }, [transformedTenants, appliedFilters.balanceScope]);
 
   const sortedFilteredTenants = useMemo(() => {
     const sorted = [...filteredTenants];
@@ -626,11 +605,12 @@ const Tenants = ({ listingMode = "active" }) => {
   }, [filteredTenants]);
 
   // ===== PAGINATION =====
-  const totalPages = Math.max(1, Math.ceil(sortedFilteredTenants.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil((tenantPagination.total || sortedFilteredTenants.length) / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (safeCurrentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
-  const currentTenants = sortedFilteredTenants.slice(startIndex, endIndex);
+  // Tenants from server are already the current page; local sort/filter on the page subset
+  const currentTenants = sortedFilteredTenants.slice(0, endIndex - startIndex);
 
   const selectedPrimaryTenant = useMemo(
     () => transformedTenants.find((tenant) => tenant.id === selectedTenants[0]) || null,
@@ -727,10 +707,10 @@ const Tenants = ({ listingMode = "active" }) => {
   const refreshTenantSettlementData = useCallback(async () => {
     if (!currentCompany?._id) return;
     await Promise.all([
-      dispatch(getTenants({ business: currentCompany._id, ...(tenantStatusQuery ? { status: tenantStatusQuery } : {}) })),
+      dispatch(getTenants(buildTenantParams())),
       loadInvoices(),
     ]);
-  }, [currentCompany?._id, dispatch, tenantStatusQuery, loadInvoices]);
+  }, [currentCompany?._id, dispatch, buildTenantParams, loadInvoices]);
 
   const openDepositSettlementModal = useCallback(async (tenantId) => {
     if (!tenantId) return;
@@ -1201,7 +1181,7 @@ const confirmTransferUnit = async () => {
     });
     toast.success("Tenant unit transferred successfully");
     setShowTransferModal(false);
-    await dispatch(getTenants({ business: currentCompany._id, ...(tenantStatusQuery ? { status: tenantStatusQuery } : {}) }));
+    await dispatch(getTenants(buildTenantParams()));
     await dispatch(getUnits({ business: currentCompany._id }));
     await loadInvoices();
   } catch (error) {
@@ -1292,7 +1272,7 @@ const confirmTransferUnit = async () => {
       setSelectedTenants([]);
       setSelectAll(false);
 
-      await dispatch(getTenants({ business: currentCompany._id, ...(tenantStatusQuery ? { status: tenantStatusQuery } : {}) }));
+      await dispatch(getTenants(buildTenantParams()));
       await dispatch(getUnits({ business: currentCompany._id }));
       await loadInvoices();
     } catch (error) {
@@ -1375,7 +1355,7 @@ const confirmTransferUnit = async () => {
     }
 
     if (currentCompany?._id) {
-      dispatch(getTenants({ business: currentCompany._id, ...(tenantStatusQuery ? { status: tenantStatusQuery } : {}) }));
+      dispatch(getTenants(buildTenantParams()));
       loadInvoices();
     }
   };
@@ -1396,10 +1376,11 @@ const confirmTransferUnit = async () => {
       }, { timeout: 0 });
 
       await Promise.all([
-        dispatch(getTenants({ business: currentCompany._id, ...(tenantStatusQuery ? { status: tenantStatusQuery } : {}) })),
+        dispatch(getTenants(buildTenantParams(1))),
         dispatch(getUnits({ business: currentCompany._id })),
         loadInvoices(),
       ]);
+      setCurrentPage(1);
 
       return response.data;
     } catch (error) {
@@ -1519,7 +1500,7 @@ const confirmTransferUnit = async () => {
 
               <div className="h-4 w-px shrink-0 bg-slate-200" />
 
-              <button onClick={() => setAppliedFilters(draftFilters)} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
+              <button onClick={() => { setAppliedFilters(draftFilters); setCurrentPage(1); }} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
                 <FaSearch size={9} /> Search
               </button>
               <button onClick={handleResetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-gray-500 px-2.5 text-xs font-semibold text-white hover:bg-gray-600">

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { FaChevronDown, FaChevronRight, FaEdit, FaMinus, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -60,7 +60,7 @@ const CarWashServices = () => {
     } catch { setCategories([]); }
   };
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const payload = await carWashApi.listServices({
@@ -73,9 +73,9 @@ const CarWashServices = () => {
       setPagination(payload?.pagination || { page, limit: pageSize, total: services.length, pages: 1 });
       setExpandedIds([]);
     } finally { setLoading(false); }
-  };
+  }, [appliedFilters, page, pageSize]);
 
-  useEffect(() => { load().catch(() => toast.error("Failed to load services")); }, [appliedFilters, page, pageSize]); // eslint-disable-line
+  useEffect(() => { load().catch(() => toast.error("Failed to load services")); }, [load]);
   useEffect(() => { loadCategories(); }, []);
 
   // Auto-save service form draft while modal is open

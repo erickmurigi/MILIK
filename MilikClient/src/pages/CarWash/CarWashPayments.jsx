@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { FaChevronDown, FaChevronRight, FaRedoAlt, FaSearch, FaSms, FaTimes } from "react-icons/fa";
@@ -34,7 +34,7 @@ const CarWashPayments = () => {
   const [smsBody, setSmsBody] = useState("");
   const [smsSending, setSmsSending] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const payload = await carWashApi.listPayments({ ...appliedFilters, limit: pageSize, page });
@@ -47,11 +47,9 @@ const CarWashPayments = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    load();
   }, [appliedFilters, page, pageSize]);
+
+  useEffect(() => { load(); }, [load]);
 
   const loadCashbooks = async () => {
     if (!currentCompany?._id) return;

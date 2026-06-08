@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   FaBook,
@@ -206,7 +206,7 @@ const ChartOfAccounts = () => {
 
   const businessId = currentCompany?._id || "";
 
-  const loadAccounts = async () => {
+  const loadAccounts = useCallback(async () => {
     const requestId = requestSequenceRef.current + 1;
     requestSequenceRef.current = requestId;
 
@@ -242,11 +242,9 @@ const ChartOfAccounts = () => {
         setLoading(false);
       }
     }
-  };
-
-  useEffect(() => {
-    loadAccounts();
   }, [businessId, moduleScope]);
+
+  useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
   useEffect(() => {
     const handleRefresh = () => loadAccounts();

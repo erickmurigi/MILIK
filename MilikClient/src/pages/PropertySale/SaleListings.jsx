@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { FaBuilding, FaCheck, FaEdit, FaPlus, FaPrint, FaSearch, FaSquare, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -45,7 +45,7 @@ const SaleListings = () => {
 
   const biz = currentCompany?._id;
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!biz) return;
     setLoading(true);
     try {
@@ -60,11 +60,11 @@ const SaleListings = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [biz, debouncedSearch, filters.status, filters.propertyType]);
 
-  useEffect(() => { load(); }, [biz, debouncedSearch, filters.status, filters.propertyType]);
+  useEffect(() => { load(); }, [load]);
 
-  const filtered = useMemo(() => listings, [listings]);
+  const filtered = listings;
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);

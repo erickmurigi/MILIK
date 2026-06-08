@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaFileDownload, FaFilter, FaPercent, FaPrint, FaSyncAlt } from "react-icons/fa";
@@ -29,7 +29,7 @@ const RentalInvoiceVATReport = () => {
   const [filters, setFilters] = useState({ propertyId: "all", category: "all", search: "" });
   const [currentPage, setCurrentPage] = useState(1);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
     try {
@@ -57,11 +57,9 @@ const RentalInvoiceVATReport = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, [businessId]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {

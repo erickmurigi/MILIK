@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { FaCheck, FaEdit, FaPlus, FaPrint, FaSearch, FaSquare, FaTimes, FaTrash, FaUsers } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -38,7 +38,7 @@ const SaleBuyers = () => {
 
   const biz = currentCompany?._id;
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!biz) return;
     setLoading(true);
     try {
@@ -46,9 +46,9 @@ const SaleBuyers = () => {
       setBuyers(Array.isArray(rows) ? rows : []);
     } catch { toast.error("Failed to load buyers"); }
     finally { setLoading(false); }
-  };
+  }, [biz, debouncedSearch, kycFilter]);
 
-  useEffect(() => { load(); }, [biz, debouncedSearch, kycFilter]);
+  useEffect(() => { load(); }, [load]);
 
   const totalPages = Math.max(1, Math.ceil(buyers.length / ITEMS_PER_PAGE));
   const safePage = Math.min(page, totalPages);

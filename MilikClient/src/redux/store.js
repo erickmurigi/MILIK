@@ -10,7 +10,6 @@ import {
   PERSIST,
   PURGE,
   REGISTER,
-  createTransform,
   createMigrate,
 } from "redux-persist";
 import storage from "redux-persist/lib/storage";
@@ -18,8 +17,6 @@ import storage from "redux-persist/lib/storage";
 import companiesRedux from "./companiesRedux";
 import printerRedux from "./printerRedux";
 import requestRedux from "./requestServiceRedux";
-import AES from "crypto-js/aes";
-import Utf8 from "crypto-js/enc-utf8";
 
 // property reducers
 import landlordReducer from "./landlordRedux";
@@ -37,24 +34,6 @@ import processedStatementsReducer from "./processedStatementsRedux";
 import statementsReducer from "./statementsRedux";
 import { RESET_COMPANY_SCOPED_STATE } from "./companyContextActions";
 import { normalizeCompanyCollection, normalizeCompanyEntity } from "../utils/companyModules";
-
-// WARNING: Client-side encryption provides minimal security.
-// Sensitive data should never be stored in localStorage.
-// Consider using httpOnly cookies for tokens instead.
-const secretKey = import.meta.env.VITE_STORAGE_KEY || "MilikPropertyManagement2026";
-
-const encrypt = (inboundState) => AES.encrypt(JSON.stringify(inboundState), secretKey).toString();
-
-const decrypt = (outboundState) => {
-  const bytes = AES.decrypt(outboundState, secretKey);
-  const value = bytes.toString(Utf8);
-  return value ? JSON.parse(value) : undefined;
-};
-
-const encryptor = createTransform(
-  (inboundState) => encrypt(inboundState),
-  (outboundState) => decrypt(outboundState)
-);
 
 const normalizePersistedUserCompanyContext = (user = null) => {
   if (!user || typeof user !== "object") return user;
@@ -110,7 +89,6 @@ const persistConfig = {
   key: "root",
   version: 4,
   storage,
-  transforms: [encryptor],
   whitelist: ["auth", "company"],
   migrate: createMigrate(migrations, { debug: false }),
 };

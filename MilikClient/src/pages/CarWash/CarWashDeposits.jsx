@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -54,7 +54,7 @@ const CarWashDeposits = () => {
   const [loading, setLoading] = useState(false);
   const canCreate = useCarWashPermission("carwash-deposits", "create");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const payload = await carWashApi.listDeposits({ ...appliedFilters, limit: pageSize, page });
@@ -68,11 +68,9 @@ const CarWashDeposits = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    load();
   }, [appliedFilters, page, pageSize]);
+
+  useEffect(() => { load(); }, [load]);
 
   const loadCashbooks = async () => {
     if (!currentCompany?._id) return;

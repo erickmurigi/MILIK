@@ -1311,15 +1311,10 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
       try {
         // Your backend chart-of-accounts endpoint appears to require a code.
         // So fetch the known revenue accounts one by one instead of trying to load all income accounts.
-        const account4100 = await getChartOfAccounts({
-          business: currentCompany._id,
-          code: "4100",
-        });
-
-        const account4102 = await getChartOfAccounts({
-          business: currentCompany._id,
-          code: "4102",
-        });
+        const [account4100, account4102] = await Promise.all([
+          getChartOfAccounts({ business: currentCompany._id, code: "4100" }),
+          getChartOfAccounts({ business: currentCompany._id, code: "4102" }),
+        ]);
 
         const normalized = [
           ...(Array.isArray(account4100) ? account4100 : []),
