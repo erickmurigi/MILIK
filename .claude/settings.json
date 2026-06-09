@@ -33,7 +33,11 @@
       "Bash(npx react-scripts *)",
       "Bash(node_modules/.bin/eslint src/hooks/useFormDraft.js src/pages/CarWash/CarWashExpenses.jsx src/pages/CarWash/CarWashDeposits.jsx src/pages/CarWash/CarWashServices.jsx src/pages/CarWash/CarWashStaff.jsx src/pages/CarWash/CarWashJobs.jsx --max-warnings=0)",
       "Bash(node_modules/.bin/eslint src/hooks/useFormDraft.js src/pages/CarWash/CarWashExpenses.jsx src/pages/CarWash/CarWashDeposits.jsx src/pages/CarWash/CarWashServices.jsx src/pages/CarWash/CarWashStaff.jsx src/pages/CarWash/CarWashJobs.jsx --rule '{\"no-unused-vars\": \"off\"}')",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(findstr \"\\\\.js\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\modules\\\\hr\\\\\" -Recurse | Select-Object FullName | head -50)",
+      "Bash(Find \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\" -iname \"*hr*\" -o -iname \"*employee*\" -o -iname \"*payroll*\" -o -iname \"*payslip*\" -o -iname \"*leave*\" -o -iname \"*appraisal*\" -o -iname \"*kpi*\")",
+      "Bash(Find \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\components\\\\HR\" -type f)"
     ]
   }
 }

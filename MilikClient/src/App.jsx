@@ -198,6 +198,9 @@ const HRStatutoryDeductions = lazy(() => import("./pages/HR/StatutoryDeductions"
 const HRKpiLibrary          = lazy(() => import("./pages/HR/KpiLibrary"));
 const HRAppraisalCycles     = lazy(() => import("./pages/HR/AppraisalCycles"));
 const HRAppraisals          = lazy(() => import("./pages/HR/Appraisals"));
+const HRPayrollRegister     = lazy(() => import("./pages/HR/HRPayrollRegister"));
+const HRRemittance          = lazy(() => import("./pages/HR/HRRemittance"));
+const HRLetters             = lazy(() => import("./pages/HR/HRLetters"));
 
 // Property Sale module
 const PropertySaleDashboard = lazy(() => import("./pages/PropertySale/PropertySaleDashboard"));
@@ -635,8 +638,11 @@ function App() {
             <Route path="/hr/statutory"         element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRStatutoryDeductions /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/appraisals/kpis"   element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRKpiLibrary /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/appraisals/cycles" element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAppraisalCycles /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/appraisals"        element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAppraisals /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/financials"        element={<CompanyModuleRoute moduleKey="hr"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><HRFinancials /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/hr/appraisals"            element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAppraisals /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/payroll/register"      element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRPayrollRegister /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/reports/remittance"    element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRRemittance /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/letters"               element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRLetters /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/financials"            element={<CompanyModuleRoute moduleKey="hr"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><HRFinancials /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/hr/chart-of-accounts" element={<CompanyModuleRoute moduleKey="hr"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><ChartOfAccounts /></PermissionRoute></CompanyModuleRoute>} />
 
             {/* ── Property Sale module ──────────────────────────────────── */}
