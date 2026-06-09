@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { FaCalendarCheck, FaRedoAlt, FaPrint, FaFilter, FaUsers } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
@@ -21,39 +22,34 @@ const utilText = (pct) => {
 
 export default function LeaveBalances() {
   const [year, setYear]           = useState(currentYear);
-  const [departments, setDepts]   = useState([]);
-  const [leaveTypes, setLtypes]   = useState([]);
   const [departmentId, setDeptId] = useState('');
   const [leaveTypeId, setLtId]    = useState('');
-  const [rows, setRows]           = useState([]);
-  const [loading, setLoading]     = useState(false);
 
-  useEffect(() => {
-    Promise.all([
-      adminRequests.get('/hr/departments'),
-      adminRequests.get('/hr/leave-types'),
-    ]).then(([d, l]) => {
-      setDepts(d.data || []);
-      setLtypes((l.data || []).filter((t) => t.daysPerYear > 0));
-    }).catch(() => {});
-  }, []);
+  const { data: departments = [] } = useQuery({
+    queryKey: ['hr-departments-ref'],
+    queryFn: () => adminRequests.get('/hr/departments').then((r) => r.data || []),
+    staleTime: 5 * 60_000,
+  });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: allLeaveTypes = [] } = useQuery({
+    queryKey: ['hr-leave-types-ref'],
+    queryFn: () => adminRequests.get('/hr/leave-types').then((r) => r.data || []),
+    staleTime: 5 * 60_000,
+  });
+  const leaveTypes = allLeaveTypes.filter((t) => t.daysPerYear > 0);
+
+  const { data: rows = [], isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['hr-leave-balances', year, departmentId, leaveTypeId],
+    queryFn: async () => {
       const params = { year };
       if (departmentId) params.departmentId = departmentId;
       if (leaveTypeId)  params.leaveTypeId  = leaveTypeId;
       const res = await adminRequests.get('/hr/leave-balances', { params });
-      setRows(res.data || []);
-    } catch {
-      toast.error('Failed to load leave balances');
-    } finally {
-      setLoading(false);
-    }
-  }, [year, departmentId, leaveTypeId]);
+      return res.data || [];
+    },
+  });
 
-  useEffect(() => { load(); }, [load]);
+  React.useEffect(() => { if (error) toast.error('Failed to load leave balances'); }, [error]);
 
   const handlePrint = () => window.print();
 
@@ -77,7 +73,7 @@ export default function LeaveBalances() {
               <h1 className="text-sm font-black text-slate-900 leading-tight">Leave Balances</h1>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={refetch} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} />
               </button>
               {rows.length > 0 && (

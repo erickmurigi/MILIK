@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaCashRegister, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
@@ -23,36 +24,31 @@ const Modal = ({ title, onClose, children, footer }) => (
 const emptyForm = () => ({ location: "", name: "", description: "" });
 
 const InvTills = () => {
-  const [tills,     setTills]     = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [loading,   setLoading]   = useState(true);
+  const queryClient = useQueryClient();
   const [locFilter, setLocFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing,   setEditing]   = useState(null);
   const [form,      setForm]      = useState(emptyForm());
   const [saving,    setSaving]    = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [t, l] = await Promise.all([
-        inventoryApi.listTills(locFilter ? { location: locFilter } : {}),
-        locations.length ? Promise.resolve(locations) : inventoryApi.listLocations({ active: true }),
-      ]);
-      const tList = Array.isArray(t) ? t : (t?.data ?? []);
-      setTills(tList);
-      if (!locations.length) {
-        const lList = Array.isArray(l) ? l : (l?.data ?? []);
-        setLocations(lList);
-      }
-    } catch {
-      toast.error("Failed to load tills");
-    } finally {
-      setLoading(false);
-    }
-  }, [locFilter, locations.length]);
+  const { data: locations = [] } = useQuery({
+    queryKey: ['inv-locations-ref'],
+    queryFn: async () => {
+      const data = await inventoryApi.listLocations({ active: true });
+      return Array.isArray(data) ? data : (data?.data ?? []);
+    },
+    staleTime: 5 * 60_000,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const { data: tills = [], isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['inv-tills', locFilter],
+    queryFn: async () => {
+      const t = await inventoryApi.listTills(locFilter ? { location: locFilter } : {});
+      return Array.isArray(t) ? t : (t?.data ?? []);
+    },
+  });
+
+  useEffect(() => { if (error) toast.error("Failed to load tills"); }, [error]);
 
   const openCreate = () => { setEditing(null); setForm(emptyForm()); setShowModal(true); };
   const openEdit   = (till) => {
@@ -76,7 +72,7 @@ const InvTills = () => {
         toast.success("Till created");
       }
       closeModal();
-      load();
+      queryClient.invalidateQueries({ queryKey: ['inv-tills'] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Save failed");
     } finally {
@@ -88,7 +84,7 @@ const InvTills = () => {
     try {
       await inventoryApi.updateTill(till._id, { isActive: !till.isActive });
       toast.success(till.isActive ? "Till deactivated" : "Till activated");
-      load();
+      queryClient.invalidateQueries({ queryKey: ['inv-tills'] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to update till");
     }
@@ -99,7 +95,7 @@ const InvTills = () => {
     try {
       await inventoryApi.deleteTill(till._id);
       toast.success("Till deleted");
-      load();
+      queryClient.invalidateQueries({ queryKey: ['inv-tills'] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Delete failed");
     }
@@ -114,7 +110,7 @@ const InvTills = () => {
       title="Tills & Registers"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">

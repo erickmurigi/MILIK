@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaCheck, FaFileInvoice, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
@@ -39,15 +40,10 @@ const Modal = ({ title, onClose, children, footer, wide }) => (
 );
 
 const InvPurchaseOrders = () => {
-  const [orders, setOrders] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
@@ -60,33 +56,35 @@ const InvPurchaseOrders = () => {
   const [receiveLines, setReceiveLines] = useState([]);
   const [receiving, setReceiving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [res, sups, locs, prods] = await Promise.all([
-        inventoryApi.listPurchaseOrders({ status: statusFilter || undefined, search: search || undefined, page, limit: 30 }),
-        suppliers.length ? Promise.resolve(suppliers) : inventoryApi.listSuppliers({ active: true, limit: 200 }),
-        locations.length ? Promise.resolve(locations) : inventoryApi.listLocations({ active: true }),
-        products.length ? Promise.resolve(products) : inventoryApi.listProducts({ active: true, limit: 200 }),
-      ]);
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ['inv-suppliers-ref'],
+    queryFn: async () => { const d = await inventoryApi.listSuppliers({ active: true, limit: 200 }); return Array.isArray(d) ? d : (d?.data ?? []); },
+    staleTime: 5 * 60_000,
+  });
+  const { data: locations = [] } = useQuery({
+    queryKey: ['inv-locations-ref'],
+    queryFn: async () => { const d = await inventoryApi.listLocations({ active: true }); return Array.isArray(d) ? d : (d?.data ?? []); },
+    staleTime: 5 * 60_000,
+  });
+  const { data: products = [] } = useQuery({
+    queryKey: ['inv-products-ref'],
+    queryFn: async () => { const d = await inventoryApi.listProducts({ active: true, limit: 200 }); return Array.isArray(d) ? d : (d?.data ?? []); },
+    staleTime: 5 * 60_000,
+  });
+  const { data: poData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['inv-purchase-orders', statusFilter, search, page],
+    queryFn: async () => {
+      const res = await inventoryApi.listPurchaseOrders({ status: statusFilter || undefined, search: search || undefined, page, limit: 30 });
       const list = Array.isArray(res) ? res : (res?.data ?? []);
-      setOrders(list);
-      setTotal(res?.total ?? list.length);
-      if (Array.isArray(sups)) setSuppliers(sups);
-      else if (Array.isArray(sups?.data)) setSuppliers(sups.data);
-      if (Array.isArray(locs)) setLocations(locs);
-      else if (Array.isArray(locs?.data)) setLocations(locs.data);
-      const pl = Array.isArray(prods) ? prods : (prods?.data ?? []);
-      if (pl.length) setProducts(pl);
-    } catch {
-      toast.error("Failed to load purchase orders");
-      setOrders([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, search, page]);
+      return { orders: list, total: res?.total ?? list.length };
+    },
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (error) toast.error("Failed to load purchase orders"); }, [error]);
+
+  const orders = poData?.orders ?? [];
+  const total = poData?.total ?? 0;
 
   // ── Line helpers ──────────────────────────────────────────────────────────
   const addLine = () => setCreateForm((f) => ({ ...f, lines: [...f.lines, emptyLine()] }));
@@ -126,7 +124,7 @@ const InvPurchaseOrders = () => {
         })),
       });
       setShowCreate(false);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-purchase-orders'] });
       toast.success("Purchase order created");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Create failed");
@@ -169,7 +167,7 @@ const InvPurchaseOrders = () => {
         })),
       });
       setShowReceive(false);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-purchase-orders'] });
       toast.success("Goods received and stock updated");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Receive failed");
@@ -183,7 +181,7 @@ const InvPurchaseOrders = () => {
     if (!window.confirm(`Cancel PO ${po.poNumber}? This cannot be undone.`)) return;
     try {
       await inventoryApi.cancelPurchaseOrder(po._id);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-purchase-orders'] });
       toast.success("Purchase order cancelled");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Cancel failed");
@@ -198,7 +196,7 @@ const InvPurchaseOrders = () => {
       title="Purchase Orders"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">

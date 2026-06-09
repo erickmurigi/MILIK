@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaArrowDown, FaArrowUp, FaClipboardCheck, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
@@ -44,46 +45,40 @@ const TypePill = ({ type }) => {
 const emptyForm = () => ({ location: "", product: "", type: "adjustment", qty: "", unitCost: "", notes: "" });
 
 const InvStockAdjustments = () => {
-  const [entries,    setEntries]    = useState([]);
-  const [locations,  setLocations]  = useState([]);
-  const [products,   setProducts]   = useState([]);
-  const [loading,    setLoading]    = useState(true);
+  const queryClient = useQueryClient();
   const [locFilter,  setLocFilter]  = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [page,       setPage]       = useState(1);
-  const [total,      setTotal]      = useState(0);
   const [showModal,  setShowModal]  = useState(false);
   const [form,       setForm]       = useState(emptyForm());
   const [balance,    setBalance]    = useState(null);
   const [loadingBal, setLoadingBal] = useState(false);
   const [saving,     setSaving]     = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [res, locs, prods] = await Promise.all([
-        inventoryApi.listMovements({
-          location: locFilter || undefined,
-          type:     typeFilter || MANUAL_TYPE_CSV,
-          page,
-          limit:    50,
-        }),
-        locations.length ? Promise.resolve(locations) : inventoryApi.listLocations({ active: true }),
-        products.length  ? Promise.resolve(products)  : inventoryApi.listProducts({ active: true, limit: 500 }),
-      ]);
-      setEntries(Array.isArray(res) ? res : (res?.data ?? []));
-      setTotal(res?.total ?? 0);
-      if (!locations.length) setLocations(Array.isArray(locs) ? locs : (locs?.data ?? []));
-      if (!products.length)  setProducts(Array.isArray(prods) ? prods : (prods?.data ?? []));
-    } catch {
-      toast.error("Failed to load adjustments");
-      setEntries([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [locFilter, typeFilter, page]);
+  const { data: locations = [] } = useQuery({
+    queryKey: ['inv-locations-ref'],
+    queryFn: async () => { const d = await inventoryApi.listLocations({ active: true }); return Array.isArray(d) ? d : (d?.data ?? []); },
+    staleTime: 5 * 60_000,
+  });
+  const { data: products = [] } = useQuery({
+    queryKey: ['inv-products-ref'],
+    queryFn: async () => { const d = await inventoryApi.listProducts({ active: true, limit: 500 }); return Array.isArray(d) ? d : (d?.data ?? []); },
+    staleTime: 5 * 60_000,
+  });
+  const { data: adjData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['inv-stock-adjustments', locFilter, typeFilter, page],
+    queryFn: async () => {
+      const res = await inventoryApi.listMovements({ location: locFilter || undefined, type: typeFilter || MANUAL_TYPE_CSV, page, limit: 50 });
+      const list = Array.isArray(res) ? res : (res?.data ?? []);
+      return { entries: list, total: res?.total ?? 0 };
+    },
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (error) toast.error("Failed to load adjustments"); }, [error]);
+
+  const entries = adjData?.entries ?? [];
+  const total = adjData?.total ?? 0;
 
   /* Fetch live balance when both product + location are selected */
   useEffect(() => {
@@ -107,7 +102,7 @@ const InvStockAdjustments = () => {
       await inventoryApi.createManualEntry({ ...form, qty, unitCost: Number(form.unitCost || 0) });
       toast.success("Stock adjustment posted");
       closeModal();
-      load();
+      queryClient.invalidateQueries({ queryKey: ['inv-stock-adjustments'] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to post adjustment");
     } finally {
@@ -125,7 +120,7 @@ const InvStockAdjustments = () => {
       title="Stock Adjustments"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button type="button" onClick={() => setShowModal(true)} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">

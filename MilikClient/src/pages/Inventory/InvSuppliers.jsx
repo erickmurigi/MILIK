@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaTruck } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
@@ -31,32 +32,28 @@ const Modal = ({ title, onClose, children, footer }) => (
 );
 
 const InvSuppliers = () => {
-  const [suppliers, setSuppliers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: suppData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['inv-suppliers', search, page],
+    queryFn: async () => {
       const res = await inventoryApi.listSuppliers({ search, page, limit: 30 });
       const list = Array.isArray(res) ? res : (res?.data ?? []);
-      setSuppliers(list);
-      setTotal(res?.total ?? list.length);
-    } catch {
-      toast.error("Failed to load suppliers");
-      setSuppliers([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, page]);
+      return { suppliers: list, total: res?.total ?? list.length };
+    },
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (error) toast.error("Failed to load suppliers"); }, [error]);
+
+  const suppliers = suppData?.suppliers ?? [];
+  const total = suppData?.total ?? 0;
 
   const openAdd = () => { setEditing(null); setForm(emptyForm()); setShowModal(true); };
   const openEdit = (s) => {
@@ -73,7 +70,8 @@ const InvSuppliers = () => {
       if (editing) await inventoryApi.updateSupplier(editing._id, form);
       else await inventoryApi.createSupplier(form);
       closeModal();
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-suppliers'] });
+      queryClient.invalidateQueries({ queryKey: ['inv-suppliers-ref'] });
       toast.success(`Supplier ${editing ? "updated" : "created"} successfully`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Save failed");
@@ -89,7 +87,7 @@ const InvSuppliers = () => {
       title="Suppliers"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button type="button" onClick={openAdd} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">

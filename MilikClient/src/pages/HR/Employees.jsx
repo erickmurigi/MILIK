@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   FaSearch, FaUserPlus, FaEdit, FaRedoAlt, FaUserTimes,
@@ -39,11 +40,7 @@ const Pagination = ({ page, totalPages, total, onPage }) => (
 
 export default function Employees() {
   const navigate = useNavigate();
-  const [employees, setEmployees] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -51,32 +48,32 @@ export default function Employees() {
   const [page, setPage] = useState(1);
   const [confirm, setConfirm] = useState({ isOpen: false });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: empData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['hr-employees', page, search, deptFilter, statusFilter, typeFilter],
+    queryFn: async () => {
       const params = { page, limit: 25 };
       if (search) params.search = search;
       if (deptFilter !== 'all') params.department = deptFilter;
       if (statusFilter !== 'all') params.status = statusFilter;
       if (typeFilter !== 'all') params.employmentType = typeFilter;
-
       const res = await adminRequests.get('/hr/employees', { params });
-      setEmployees(res.data.employees || []);
-      setTotal(res.data.total || 0);
-      setTotalPages(res.data.totalPages || 1);
-    } catch {
-      toast.error('Failed to load employees');
-    } finally {
-      setLoading(false);
-    }
-  }, [page, search, deptFilter, statusFilter, typeFilter]);
+      return res.data;
+    },
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => {
-    adminRequests.get('/hr/departments').then((r) => setDepartments(r.data || [])).catch(() => {});
-  }, []);
+  const { data: departments = [] } = useQuery({
+    queryKey: ['hr-departments-ref'],
+    queryFn: () => adminRequests.get('/hr/departments').then((r) => r.data || []),
+    staleTime: 5 * 60_000,
+  });
 
+  useEffect(() => { if (error) toast.error('Failed to load employees'); }, [error]);
   useEffect(() => { setPage(1); }, [search, deptFilter, statusFilter, typeFilter]);
-  useEffect(() => { load(); }, [load]);
+
+  const employees = empData?.employees ?? [];
+  const total = empData?.total ?? 0;
+  const totalPages = empData?.totalPages ?? 1;
 
   const handleTerminate = (emp) => {
     setConfirm({
@@ -89,7 +86,7 @@ export default function Employees() {
         try {
           await adminRequests.patch(`/hr/employees/${emp._id}/terminate`, { terminationDate: new Date() });
           toast.success('Employee terminated');
-          load();
+          queryClient.invalidateQueries({ queryKey: ['hr-employees'] });
         } catch (e) {
           toast.error(e?.response?.data?.message || 'Failed to terminate');
         } finally {
@@ -103,7 +100,7 @@ export default function Employees() {
     try {
       await adminRequests.patch(`/hr/employees/${emp._id}/reinstate`);
       toast.success('Employee reinstated');
-      load();
+      queryClient.invalidateQueries({ queryKey: ['hr-employees'] });
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Failed to reinstate');
     }
@@ -121,7 +118,7 @@ export default function Employees() {
               <h1 className="text-sm font-black text-slate-900 leading-tight">Employees</h1>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={refetch} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} /> Refresh
               </button>
               <button onClick={() => navigate('/hr/employees/new')} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-black text-white hover:bg-[#e67e00]">

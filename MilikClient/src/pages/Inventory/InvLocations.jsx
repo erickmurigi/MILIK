@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaEdit, FaMapMarkerAlt, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaWarehouse } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
@@ -45,33 +46,24 @@ const Modal = ({ title, onClose, children, footer }) => (
 );
 
 const InvLocations = () => {
-  const [locations, setLocations] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: locations = [], isLoading: loading, refetch } = useQuery({
+    queryKey: ['inv-locations'],
+    queryFn: async () => {
       const data = await inventoryApi.listLocations();
-      const list = Array.isArray(data) ? data : (data?.data ?? []);
-      setLocations(list);
-    } catch {
-      toast.error("Failed to load locations");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return Array.isArray(data) ? data : (data?.data ?? []);
+    },
+  });
 
-  useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    setFiltered(q ? locations.filter((l) => l.name.toLowerCase().includes(q) || (l.code || "").toLowerCase().includes(q) || (l.address || "").toLowerCase().includes(q)) : locations);
+    return q ? locations.filter((l) => l.name.toLowerCase().includes(q) || (l.code || "").toLowerCase().includes(q) || (l.address || "").toLowerCase().includes(q)) : locations;
   }, [search, locations]);
 
   const openAdd = () => { setEditing(null); setForm(emptyForm()); setShowModal(true); };
@@ -89,7 +81,8 @@ const InvLocations = () => {
       if (editing) await inventoryApi.updateLocation(editing._id, form);
       else await inventoryApi.createLocation(form);
       closeModal();
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-locations'] });
+      queryClient.invalidateQueries({ queryKey: ['inv-locations-ref'] });
       toast.success(`Location ${editing ? "updated" : "created"} successfully`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Save failed");
@@ -101,7 +94,8 @@ const InvLocations = () => {
   const handleToggleActive = async (loc) => {
     try {
       await inventoryApi.updateLocation(loc._id, { active: !loc.active });
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-locations'] });
+      queryClient.invalidateQueries({ queryKey: ['inv-locations-ref'] });
       toast.success(`Location ${loc.active ? "deactivated" : "activated"}`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Update failed");
@@ -115,7 +109,7 @@ const InvLocations = () => {
       title="Locations"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button type="button" onClick={openAdd} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">

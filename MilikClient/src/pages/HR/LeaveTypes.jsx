@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FaTag, FaPlus, FaEdit, FaTrash, FaToggleOn, FaToggleOff,
   FaRedoAlt, FaCheck, FaTimes, FaSearch,
@@ -89,26 +90,24 @@ function LeaveTypeForm({ initial = BLANK, onSave, onCancel, saving }) {
 }
 
 export default function LeaveTypes() {
-  const [types, setTypes]       = useState([]);
+  const queryClient = useQueryClient();
   const [search, setSearch]     = useState('');
   const [showInactive, setShowInactive] = useState(false);
-  const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
-  const [formMode, setFormMode] = useState(null); // null | 'new' | { editing: lt }
+  const [formMode, setFormMode] = useState(null);
   const [confirm, setConfirm]   = useState({ isOpen: false });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: types = [], isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['hr-leave-types', search, showInactive],
+    queryFn: async () => {
       const res = await adminRequests.get('/hr/leave-types', {
         params: { search: search || undefined, includeInactive: showInactive ? 'true' : undefined },
       });
-      setTypes(res.data || []);
-    } catch { toast.error('Failed to load leave types'); }
-    finally  { setLoading(false); }
-  }, [search, showInactive]);
+      return res.data || [];
+    },
+  });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (error) toast.error('Failed to load leave types'); }, [error]);
 
   const save = async (form) => {
     setSaving(true);
@@ -121,7 +120,8 @@ export default function LeaveTypes() {
         toast.success('Leave type created');
       }
       setFormMode(null);
-      load();
+      queryClient.invalidateQueries({ queryKey: ['hr-leave-types'] });
+      queryClient.invalidateQueries({ queryKey: ['hr-leave-types-ref'] });
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Failed to save');
     } finally {
@@ -133,7 +133,8 @@ export default function LeaveTypes() {
     try {
       await adminRequests.put(`/hr/leave-types/${lt._id}`, { isActive: !lt.isActive });
       toast.success(lt.isActive ? 'Deactivated' : 'Activated');
-      load();
+      queryClient.invalidateQueries({ queryKey: ['hr-leave-types'] });
+      queryClient.invalidateQueries({ queryKey: ['hr-leave-types-ref'] });
     } catch (e) { toast.error(e?.response?.data?.message || 'Failed'); }
   };
 
@@ -146,7 +147,8 @@ export default function LeaveTypes() {
         try {
           await adminRequests.delete(`/hr/leave-types/${lt._id}`);
           toast.success('Leave type deleted');
-          load();
+          queryClient.invalidateQueries({ queryKey: ['hr-leave-types'] });
+      queryClient.invalidateQueries({ queryKey: ['hr-leave-types-ref'] });
         } catch (e) { toast.error(e?.response?.data?.message || 'Cannot delete — applications exist for this type'); }
         finally    { setConfirm((p) => ({ ...p, isOpen: false })); }
       },
@@ -169,7 +171,7 @@ export default function LeaveTypes() {
                 {showInactive ? <FaToggleOn size={10} /> : <FaToggleOff size={10} />}
                 {showInactive ? 'Showing Inactive' : 'Active Only'}
               </button>
-              <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={refetch} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} />
               </button>
               <button onClick={() => setFormMode('new')} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-black text-white hover:bg-[#e67e00]">

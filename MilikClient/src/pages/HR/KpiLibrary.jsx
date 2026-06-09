@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FaPlus, FaRedoAlt, FaEdit, FaTrash, FaToggleOn, FaToggleOff,
   FaTimes, FaCheck,
@@ -25,8 +26,7 @@ const F  = 'h-7 rounded border border-slate-200 bg-white px-2.5 text-xs text-sla
 const FW = `${F} w-full`;
 
 export default function KpiLibrary() {
-  const [kpis, setKpis]             = useState([]);
-  const [loading, setLoading]       = useState(false);
+  const queryClient = useQueryClient();
   const [search, setSearch]         = useState('');
   const [catFilter, setCatFilter]   = useState('');
   const [activeOnly, setActiveOnly] = useState(false);
@@ -36,21 +36,20 @@ export default function KpiLibrary() {
   const [saving, setSaving]         = useState(false);
   const [deleting, setDeleting]     = useState(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: kpis = [], isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['hr-kpis', search, catFilter, activeOnly],
+    queryFn: async () => {
       const params = {};
       if (search)     params.search   = search;
       if (catFilter)  params.category = catFilter;
       if (activeOnly) params.isActive = 'true';
       const res = await adminRequests.get('/hr/kpis', { params });
-      setKpis(res.data || []);
-      setPage(1);
-    } catch { toast.error('Failed to load KPIs'); }
-    finally { setLoading(false); }
-  }, [search, catFilter, activeOnly]);
+      return res.data || [];
+    },
+  });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (error) toast.error('Failed to load KPIs'); }, [error]);
+  useEffect(() => { setPage(1); }, [search, catFilter, activeOnly]);
 
   const openCreate = () => { setForm(EMPTY); setModal('create'); };
   const openEdit   = (k)  => { setForm({ ...k }); setModal(k); };
@@ -64,7 +63,9 @@ export default function KpiLibrary() {
         ? await adminRequests.post('/hr/kpis', form)
         : await adminRequests.put(`/hr/kpis/${modal._id}`, form);
       toast.success(modal === 'create' ? 'KPI created' : 'KPI updated');
-      closeModal(); load();
+      closeModal();
+      queryClient.invalidateQueries({ queryKey: ['hr-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['hr-kpis-ref'] });
     } catch (err) { toast.error(err.response?.data?.message || 'Save failed'); }
     finally { setSaving(false); }
   };
@@ -72,7 +73,8 @@ export default function KpiLibrary() {
   const toggleActive = async (kpi) => {
     try {
       await adminRequests.put(`/hr/kpis/${kpi._id}`, { isActive: !kpi.isActive });
-      setKpis((p) => p.map((k) => k._id === kpi._id ? { ...k, isActive: !k.isActive } : k));
+      queryClient.invalidateQueries({ queryKey: ['hr-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['hr-kpis-ref'] });
     } catch { toast.error('Update failed'); }
   };
 
@@ -81,7 +83,8 @@ export default function KpiLibrary() {
     try {
       await adminRequests.delete(`/hr/kpis/${kpi._id}`);
       toast.success('Deleted');
-      setKpis((p) => p.filter((k) => k._id !== kpi._id));
+      queryClient.invalidateQueries({ queryKey: ['hr-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['hr-kpis-ref'] });
     } catch (err) { toast.error(err.response?.data?.message || 'Delete failed'); }
     finally { setDeleting(null); }
   };
@@ -104,7 +107,7 @@ export default function KpiLibrary() {
             <p className="text-[10px] leading-tight text-slate-400">Key performance indicators used across appraisal cycles</p>
           </div>
           <div className="flex items-center gap-1.5">
-            <button onClick={load} className="flex h-7 items-center gap-1 rounded border border-slate-200 px-2.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-50">
+            <button onClick={refetch} className="flex h-7 items-center gap-1 rounded border border-slate-200 px-2.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-50">
               <FaRedoAlt size={9} /> Refresh
             </button>
             <button onClick={openCreate} className="flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0a3127]">

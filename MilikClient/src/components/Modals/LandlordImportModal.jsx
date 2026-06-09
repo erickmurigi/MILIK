@@ -22,7 +22,6 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
     
     if (!selectedFile) return;
     
-    // Validate file type
     if (!selectedFile.name.endsWith('.xlsx') && !selectedFile.name.endsWith('.xls')) {
       toast.error('Please upload a valid Excel file (.xlsx or .xls)');
       return;
@@ -31,7 +30,7 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
     setFile(selectedFile);
     setIsUploading(true);
     setParseResult(null);
-    
+     
     try {
       const result = await parseLandlordsExcel(selectedFile);
       setParseResult(result);

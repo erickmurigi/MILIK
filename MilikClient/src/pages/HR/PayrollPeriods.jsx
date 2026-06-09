@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   FaMoneyBillWave, FaPlus, FaRedoAlt, FaPlay, FaCheck,
@@ -69,32 +70,30 @@ function NewPeriodForm({ onSave, onCancel, saving }) {
   );
 }
 
+const LIMIT = 20;
+
 export default function PayrollPeriods() {
   const navigate = useNavigate();
-  const [periods, setPeriods]   = useState([]);
-  const [total, setTotal]       = useState(0);
-  const [loading, setLoading]   = useState(true);
+  const queryClient = useQueryClient();
   const [saving, setSaving]     = useState(false);
-  const [running, setRunning]   = useState(null); // periodId being run
+  const [running, setRunning]   = useState(null);
   const [showNew, setShowNew]   = useState(false);
   const [confirm, setConfirm]   = useState({ isOpen: false });
   const [page, setPage]         = useState(1);
-  const LIMIT = 20;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: periodsData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['hr-payroll-periods', page],
+    queryFn: async () => {
       const res = await adminRequests.get('/hr/payroll/periods', { params: { page, limit: LIMIT } });
-      setPeriods(res.data.periods || []);
-      setTotal(res.data.total || 0);
-    } catch {
-      toast.error('Failed to load payroll periods');
-    } finally {
-      setLoading(false);
-    }
-  }, [page]);
+      return res.data;
+    },
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const periods = periodsData?.periods ?? [];
+  const total = periodsData?.total ?? 0;
+
+  React.useEffect(() => { if (error) toast.error('Failed to load payroll periods'); }, [error]);
 
   const createPeriod = async (form) => {
     setSaving(true);
@@ -102,7 +101,7 @@ export default function PayrollPeriods() {
       await adminRequests.post('/hr/payroll/periods', form);
       toast.success('Payroll period created');
       setShowNew(false);
-      load();
+      queryClient.invalidateQueries({ queryKey: ['hr-payroll-periods'] });
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Failed to create period');
     } finally {
@@ -115,7 +114,7 @@ export default function PayrollPeriods() {
     try {
       const res = await adminRequests.post(`/hr/payroll/periods/${period._id}/run`);
       toast.success(res.data.message || 'Payroll run complete');
-      load();
+      queryClient.invalidateQueries({ queryKey: ['hr-payroll-periods'] });
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Failed to run payroll');
     } finally {
@@ -132,7 +131,7 @@ export default function PayrollPeriods() {
         try {
           await adminRequests.delete(`/hr/payroll/periods/${period._id}`);
           toast.success('Period deleted');
-          load();
+          queryClient.invalidateQueries({ queryKey: ['hr-payroll-periods'] });
         } catch (e) {
           toast.error(e?.response?.data?.message || 'Cannot delete');
         } finally {
@@ -156,7 +155,7 @@ export default function PayrollPeriods() {
               <h1 className="text-sm font-black text-slate-900 leading-tight">Payroll Periods</h1>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={refetch} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} />
               </button>
               <button onClick={() => setShowNew(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-black text-white hover:bg-[#e67e00]">

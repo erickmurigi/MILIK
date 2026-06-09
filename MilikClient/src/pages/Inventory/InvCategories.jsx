@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTags, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
@@ -31,33 +32,24 @@ const Modal = ({ title, onClose, children, footer }) => (
 );
 
 const InvCategories = () => {
-  const [categories, setCategories] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: categories = [], isLoading: loading, refetch } = useQuery({
+    queryKey: ['inv-categories'],
+    queryFn: async () => {
       const data = await inventoryApi.listCategories();
-      const list = Array.isArray(data) ? data : (data?.data ?? []);
-      setCategories(list);
-    } catch {
-      toast.error("Failed to load categories");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return Array.isArray(data) ? data : (data?.data ?? []);
+    },
+  });
 
-  useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    setFiltered(q ? categories.filter((c) => c.name.toLowerCase().includes(q) || (c.description || "").toLowerCase().includes(q)) : categories);
+    return q ? categories.filter((c) => c.name.toLowerCase().includes(q) || (c.description || "").toLowerCase().includes(q)) : categories;
   }, [search, categories]);
 
   const openAdd = () => { setEditing(null); setForm(emptyForm()); setShowModal(true); };
@@ -75,7 +67,8 @@ const InvCategories = () => {
       if (editing) await inventoryApi.updateCategory(editing._id, form);
       else await inventoryApi.createCategory(form);
       closeModal();
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['inv-categories-ref'] });
       toast.success(`Category ${editing ? "updated" : "created"} successfully`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Save failed");
@@ -87,7 +80,8 @@ const InvCategories = () => {
   const handleToggleActive = async (cat) => {
     try {
       await inventoryApi.updateCategory(cat._id, { active: !cat.active });
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['inv-categories-ref'] });
       toast.success(`Category ${cat.active ? "deactivated" : "activated"}`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Update failed");
@@ -101,7 +95,7 @@ const InvCategories = () => {
       title="Product Categories"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button type="button" onClick={openAdd} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">

@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FaPlus, FaRedoAlt, FaEdit, FaTrash, FaLock, FaUnlock,
   FaTimes, FaCheck, FaCalendarAlt,
@@ -38,9 +39,7 @@ function WeightBar({ total }) {
 }
 
 export default function AppraisalCycles() {
-  const [cycles, setCycles]         = useState([]);
-  const [kpiLib, setKpiLib]         = useState([]);
-  const [loading, setLoading]       = useState(false);
+  const queryClient = useQueryClient();
   const [yearFilter, setYearFilter] = useState('');
   const [statusFilter, setStatus]   = useState('');
   const [pageSize, setPageSize]      = useState(DEFAULT_PAGE_SIZE);
@@ -50,24 +49,25 @@ export default function AppraisalCycles() {
   const [saving, setSaving]         = useState(false);
   const [acting, setActing]         = useState(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: cycles = [], isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['hr-appraisal-cycles', yearFilter, statusFilter],
+    queryFn: async () => {
       const params = {};
       if (yearFilter)   params.year   = yearFilter;
       if (statusFilter) params.status = statusFilter;
       const res = await adminRequests.get('/hr/appraisal-cycles', { params });
-      setCycles(res.data || []);
-    } catch { toast.error('Failed to load cycles'); }
-    finally { setLoading(false); }
-  }, [yearFilter, statusFilter]);
+      return res.data || [];
+    },
+  });
 
+  const { data: kpiLib = [] } = useQuery({
+    queryKey: ['hr-kpis-ref'],
+    queryFn: () => adminRequests.get('/hr/kpis', { params: { isActive: 'true' } }).then((r) => r.data || []),
+    staleTime: 5 * 60_000,
+  });
+
+  useEffect(() => { if (error) toast.error('Failed to load cycles'); }, [error]);
   useEffect(() => { setPage(1); }, [yearFilter, statusFilter, pageSize]);
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    adminRequests.get('/hr/kpis', { params: { isActive: 'true' } })
-      .then((r) => setKpiLib(r.data || [])).catch(() => {});
-  }, []);
 
   const openCreate = () => { setForm(EMPTY); setModal('create'); };
   const openEdit   = (c) => {
@@ -96,7 +96,7 @@ export default function AppraisalCycles() {
         ? await adminRequests.post('/hr/appraisal-cycles', form)
         : await adminRequests.put(`/hr/appraisal-cycles/${modal._id}`, form);
       toast.success(modal === 'create' ? 'Cycle created' : 'Cycle updated');
-      closeModal(); load();
+      closeModal(); queryClient.invalidateQueries({ queryKey: ['hr-appraisal-cycles'] });
     } catch (err) { toast.error(err.response?.data?.message || 'Save failed'); }
     finally { setSaving(false); }
   };
@@ -104,14 +104,14 @@ export default function AppraisalCycles() {
   const doOpen = async (c) => {
     if (!window.confirm(`Open "${c.name}"? Appraisals will be generated for all active employees.`)) return;
     setActing(c._id);
-    try { const r = await adminRequests.post(`/hr/appraisal-cycles/${c._id}/open`); toast.success(r.data.message); load(); }
+    try { const r = await adminRequests.post(`/hr/appraisal-cycles/${c._id}/open`); toast.success(r.data.message); queryClient.invalidateQueries({ queryKey: ['hr-appraisal-cycles'] }); }
     catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
     finally { setActing(null); }
   };
   const doClose = async (c) => {
     if (!window.confirm(`Close "${c.name}"? Further scoring will be locked.`)) return;
     setActing(c._id);
-    try { await adminRequests.post(`/hr/appraisal-cycles/${c._id}/close`); toast.success('Cycle closed'); load(); }
+    try { await adminRequests.post(`/hr/appraisal-cycles/${c._id}/close`); toast.success('Cycle closed'); queryClient.invalidateQueries({ queryKey: ['hr-appraisal-cycles'] }); }
     catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
     finally { setActing(null); }
   };
@@ -143,7 +143,7 @@ export default function AppraisalCycles() {
             <p className="text-[10px] text-slate-400 leading-tight">Manage performance review periods, assign KPIs and generate employee appraisals</p>
           </div>
           <div className="flex items-center gap-1.5">
-            <button onClick={load} className="flex h-7 items-center gap-1 rounded border border-slate-200 px-2.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-50">
+            <button onClick={refetch} className="flex h-7 items-center gap-1 rounded border border-slate-200 px-2.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-50">
               <FaRedoAlt size={9} /> Refresh
             </button>
             <button onClick={openCreate} className="flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0a3127]">

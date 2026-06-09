@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaBarcode, FaBoxOpen, FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
@@ -45,39 +46,38 @@ const Modal = ({ title, onClose, children, footer }) => (
 );
 
 const InvProducts = () => {
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [res, cats] = await Promise.all([
-        inventoryApi.listProducts({ search, category: categoryFilter || undefined, page, limit: 50 }),
-        categories.length ? Promise.resolve(categories) : inventoryApi.listCategories({ active: true }),
-      ]);
-      const list = Array.isArray(res) ? res : (res?.data ?? []);
-      setProducts(list);
-      setTotal(res?.total ?? list.length);
-      if (Array.isArray(cats)) setCategories(cats);
-      else if (Array.isArray(cats?.data)) setCategories(cats.data);
-    } catch {
-      toast.error("Failed to load products");
-      setProducts([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, categoryFilter, page]);
+  const { data: categories = [] } = useQuery({
+    queryKey: ['inv-categories-ref'],
+    queryFn: async () => {
+      const data = await inventoryApi.listCategories({ active: true });
+      return Array.isArray(data) ? data : (data?.data ?? []);
+    },
+    staleTime: 5 * 60_000,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const { data: prodData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['inv-products', search, categoryFilter, page],
+    queryFn: async () => {
+      const res = await inventoryApi.listProducts({ search, category: categoryFilter || undefined, page, limit: 50 });
+      const list = Array.isArray(res) ? res : (res?.data ?? []);
+      return { products: list, total: res?.total ?? list.length };
+    },
+    placeholderData: (prev) => prev,
+  });
+
+  useEffect(() => { if (error) toast.error("Failed to load products"); }, [error]);
+
+  const products = prodData?.products ?? [];
+  const total = prodData?.total ?? 0;
 
   const openAdd = () => { setEditing(null); setForm(emptyForm()); setShowModal(true); };
   const openEdit = (p) => {
@@ -113,7 +113,8 @@ const InvProducts = () => {
       if (editing) await inventoryApi.updateProduct(editing._id, payload);
       else await inventoryApi.createProduct(payload);
       closeModal();
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-products'] });
+      queryClient.invalidateQueries({ queryKey: ['inv-products-ref'] });
       toast.success(`Product ${editing ? "updated" : "created"} successfully`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Save failed");
@@ -125,7 +126,8 @@ const InvProducts = () => {
   const handleToggleActive = async (p) => {
     try {
       await inventoryApi.updateProduct(p._id, { active: !p.active });
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-products'] });
+      queryClient.invalidateQueries({ queryKey: ['inv-products-ref'] });
       toast.success(`Product ${p.active ? "deactivated" : "activated"}`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Update failed");
@@ -143,7 +145,7 @@ const InvProducts = () => {
       title="Product Catalog"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button type="button" onClick={openAdd} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">

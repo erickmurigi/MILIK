@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaReceipt, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
@@ -32,61 +33,42 @@ const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-8
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const POSSalesHistory = () => {
-  const [sales, setSales] = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [locationFilter, setLocationFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [date, setDate] = useState(todayISO());
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [summary, setSummary] = useState(null);
   const [selected, setSelected] = useState(null);
   const [showVoid, setShowVoid] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [res, locs] = await Promise.allSettled([
-        inventoryApi.listSales({
-          location: locationFilter || undefined,
-          status: statusFilter || undefined,
-          date: date || undefined,
-          receiptNumber: search || undefined,
-          page,
-          limit: 30,
-        }),
-        locations.length ? Promise.resolve(locations) : inventoryApi.listLocations({ active: true }),
-      ]);
-      if (res.status === "fulfilled") {
-        const d = res.value;
-        const list = Array.isArray(d) ? d : (d?.data ?? []);
-        setSales(list);
-        setTotal(d?.total ?? list.length);
-      } else {
-        setSales([]);
-      }
-      if (locs.status === "fulfilled") {
-        const d = locs.value;
-        if (Array.isArray(d)) setLocations(d);
-        else if (Array.isArray(d?.data)) setLocations(d.data);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [locationFilter, statusFilter, date, search, page]);
+  const { data: locations = [] } = useQuery({
+    queryKey: ['inv-locations-ref'],
+    queryFn: async () => { const d = await inventoryApi.listLocations({ active: true }); return Array.isArray(d) ? d : (d?.data ?? []); },
+    staleTime: 5 * 60_000,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const { data: salesData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['inv-pos-sales', locationFilter, statusFilter, date, search, page],
+    queryFn: async () => {
+      const res = await inventoryApi.listSales({ location: locationFilter || undefined, status: statusFilter || undefined, date: date || undefined, receiptNumber: search || undefined, page, limit: 30 });
+      const list = Array.isArray(res) ? res : (res?.data ?? []);
+      return { sales: list, total: res?.total ?? list.length };
+    },
+    placeholderData: (prev) => prev,
+  });
 
-  // Summary only depends on location+date, not page — fetch independently to avoid churn
-  useEffect(() => {
-    inventoryApi.getSalesSummary({ location: locationFilter || undefined, date: date || undefined })
-      .then((r) => setSummary(r?.data ?? r))
-      .catch(() => {});
-  }, [locationFilter, date]);
+  const { data: summary = null } = useQuery({
+    queryKey: ['inv-pos-sales-summary', locationFilter, date],
+    queryFn: () => inventoryApi.getSalesSummary({ location: locationFilter || undefined, date: date || undefined }).then((r) => r?.data ?? r),
+  });
+
+  useEffect(() => { if (error) toast.error("Failed to load sales"); }, [error]);
+
+  const sales = salesData?.sales ?? [];
+  const total = salesData?.total ?? 0;
 
   const openVoid = (sale) => { setSelected(sale); setVoidReason(""); setShowVoid(true); };
 
@@ -97,7 +79,8 @@ const POSSalesHistory = () => {
       await inventoryApi.voidSale(selected._id, { voidReason });
       setShowVoid(false);
       toast.success(`Sale ${selected.receiptNumber} voided`);
-      load();
+      queryClient.invalidateQueries({ queryKey: ['inv-pos-sales'] });
+      queryClient.invalidateQueries({ queryKey: ['inv-pos-sales-summary'] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Void failed");
     } finally {
@@ -117,7 +100,7 @@ const POSSalesHistory = () => {
     <InventoryShell
       title="Sales History"
       action={
-        <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+        <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
           <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
         </button>
       }

@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FaRedoAlt, FaChevronRight, FaTimes, FaCheck,
   FaClipboardCheck, FaUser, FaBuilding, FaUserTie,
@@ -31,13 +32,10 @@ function MiniBar({ score, maxScore }) {
 }
 
 export default function Appraisals() {
-  const [cycles, setCycles]         = useState([]);
+  const queryClient = useQueryClient();
   const [cycleId, setCycleId]       = useState('');
   const [statusFilter, setStatus]   = useState('');
   const [search, setSearch]         = useState('');
-  const [appraisals, setAppraisals] = useState([]);
-  const [total, setTotal]           = useState(0);
-  const [loading, setLoading]       = useState(false);
   const [page, setPage]             = useState(1);
 
   const [selected, setSelected]       = useState(null);
@@ -47,27 +45,30 @@ export default function Appraisals() {
   const [saving, setSaving]           = useState(false);
   const [submitting, setSubmitting]   = useState(false);
 
-  useEffect(() => {
-    adminRequests.get('/hr/appraisal-cycles')
-      .then((r) => setCycles(r.data || [])).catch(() => {});
-  }, []);
+  const { data: cycles = [] } = useQuery({
+    queryKey: ['hr-appraisal-cycles-ref'],
+    queryFn: () => adminRequests.get('/hr/appraisal-cycles').then((r) => r.data || []),
+    staleTime: 5 * 60_000,
+  });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: apprData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['hr-appraisals', cycleId, statusFilter, search, page],
+    queryFn: async () => {
       const params = { page, limit: PAGE_SIZE };
       if (cycleId)      params.cycleId = cycleId;
       if (statusFilter) params.status  = statusFilter;
       if (search)       params.search  = search;
       const res = await adminRequests.get('/hr/appraisals', { params });
-      setAppraisals(res.data.appraisals || []);
-      setTotal(res.data.total || 0);
-    } catch { toast.error('Failed to load appraisals'); }
-    finally { setLoading(false); }
-  }, [cycleId, statusFilter, search, page]);
+      return res.data;
+    },
+    placeholderData: (prev) => prev,
+  });
 
+  useEffect(() => { if (error) toast.error('Failed to load appraisals'); }, [error]);
   useEffect(() => { setPage(1); }, [cycleId, statusFilter, search]);
-  useEffect(() => { load(); }, [load]);
+
+  const appraisals = apprData?.appraisals ?? [];
+  const total = apprData?.total ?? 0;
 
   const openScoring = async (a) => {
     try {
@@ -89,7 +90,9 @@ export default function Appraisals() {
     setSaving(true);
     try {
       await adminRequests.put(`/hr/appraisals/${selected._id}`, { ratings: scores, reviewerNotes: notes, employeeComments: empComments });
-      toast.success('Scores saved'); load(); closeDrawer();
+      toast.success('Scores saved');
+      queryClient.invalidateQueries({ queryKey: ['hr-appraisals'] });
+      closeDrawer();
     } catch (err) { toast.error(err.response?.data?.message || 'Save failed'); }
     finally { setSaving(false); }
   };
@@ -100,7 +103,9 @@ export default function Appraisals() {
     try {
       await adminRequests.put(`/hr/appraisals/${selected._id}`, { ratings: scores, reviewerNotes: notes, employeeComments: empComments });
       await adminRequests.post(`/hr/appraisals/${selected._id}/submit`);
-      toast.success('Submitted'); load(); closeDrawer();
+      toast.success('Submitted');
+      queryClient.invalidateQueries({ queryKey: ['hr-appraisals'] });
+      closeDrawer();
     } catch (err) { toast.error(err.response?.data?.message || 'Submit failed'); }
     finally { setSubmitting(false); }
   };
@@ -123,7 +128,7 @@ export default function Appraisals() {
             <h1 className="text-[11px] font-extrabold uppercase tracking-widest text-[#0B3B2E]">Employee Appraisals</h1>
             <p className="text-[10px] text-slate-400 leading-tight">Score and submit performance appraisals per review cycle</p>
           </div>
-          <button onClick={load} className="flex h-7 items-center gap-1 rounded border border-slate-200 px-2.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-50">
+          <button onClick={refetch} className="flex h-7 items-center gap-1 rounded border border-slate-200 px-2.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-50">
             <FaRedoAlt size={9} /> Refresh
           </button>
         </div>

@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   FaPlus, FaRedoAlt, FaFilter, FaSearch, FaCheck, FaTimes, FaBan,
@@ -139,37 +140,37 @@ function ApplyLeaveModal({ onClose, onSaved }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function LeaveApplications() {
   const navigate = useNavigate();
-  const [applications, setApplications] = useState([]);
-  const [leaveTypes, setLeaveTypes]     = useState([]);
-  const [total, setTotal]       = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
+  const queryClient = useQueryClient();
   const [page, setPage]         = useState(1);
-  const [loading, setLoading]   = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter]     = useState('all');
   const [showApply, setShowApply] = useState(false);
   const [confirm, setConfirm]   = useState({ isOpen: false });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: appData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['hr-leave-applications', page, statusFilter, typeFilter],
+    queryFn: async () => {
       const params = { page, limit: 25 };
       if (statusFilter !== 'all') params.status = statusFilter;
       if (typeFilter   !== 'all') params.leaveType = typeFilter;
       const res = await adminRequests.get('/hr/leave-applications', { params });
-      setApplications(res.data.applications || []);
-      setTotal(res.data.total || 0);
-      setTotalPages(res.data.totalPages || 1);
-    } catch { toast.error('Failed to load leave applications'); }
-    finally  { setLoading(false); }
-  }, [page, statusFilter, typeFilter]);
+      return res.data;
+    },
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => {
-    adminRequests.get('/hr/leave-types').then((r) => setLeaveTypes(r.data || [])).catch(() => {});
-  }, []);
+  const { data: leaveTypes = [] } = useQuery({
+    queryKey: ['hr-leave-types-ref'],
+    queryFn: () => adminRequests.get('/hr/leave-types').then((r) => r.data || []),
+    staleTime: 5 * 60_000,
+  });
 
+  useEffect(() => { if (error) toast.error('Failed to load leave applications'); }, [error]);
   useEffect(() => { setPage(1); }, [statusFilter, typeFilter]);
-  useEffect(() => { load(); }, [load]);
+
+  const applications = appData?.applications ?? [];
+  const total = appData?.total ?? 0;
+  const totalPages = appData?.totalPages ?? 1;
 
   const handleApprove = (app) => {
     setConfirm({
@@ -182,7 +183,7 @@ export default function LeaveApplications() {
         try {
           await adminRequests.patch(`/hr/leave-applications/${app._id}/approve`);
           toast.success('Leave approved');
-          load();
+          queryClient.invalidateQueries({ queryKey: ['hr-leave-applications'] });
         } catch (e) { toast.error(e?.response?.data?.message || 'Failed'); }
         finally     { setConfirm((p) => ({ ...p, isOpen: false })); }
       },
@@ -200,7 +201,7 @@ export default function LeaveApplications() {
         try {
           await adminRequests.patch(`/hr/leave-applications/${app._id}/reject`);
           toast.success('Leave rejected');
-          load();
+          queryClient.invalidateQueries({ queryKey: ['hr-leave-applications'] });
         } catch (e) { toast.error(e?.response?.data?.message || 'Failed'); }
         finally     { setConfirm((p) => ({ ...p, isOpen: false })); }
       },
@@ -218,7 +219,7 @@ export default function LeaveApplications() {
         try {
           await adminRequests.patch(`/hr/leave-applications/${app._id}/cancel`);
           toast.success('Application cancelled');
-          load();
+          queryClient.invalidateQueries({ queryKey: ['hr-leave-applications'] });
         } catch (e) { toast.error(e?.response?.data?.message || 'Failed'); }
         finally     { setConfirm((p) => ({ ...p, isOpen: false })); }
       },
@@ -237,7 +238,7 @@ export default function LeaveApplications() {
               <h1 className="text-sm font-black text-slate-900 leading-tight">Leave Applications</h1>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+              <button onClick={refetch} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} /> Refresh
               </button>
               <button onClick={() => setShowApply(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-black text-white hover:bg-[#e67e00]">
@@ -340,7 +341,7 @@ export default function LeaveApplications() {
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
 
-      {showApply && <ApplyLeaveModal onClose={() => setShowApply(false)} onSaved={() => { setShowApply(false); load(); }} />}
+      {showApply && <ApplyLeaveModal onClose={() => setShowApply(false)} onSaved={() => { setShowApply(false); queryClient.invalidateQueries({ queryKey: ['hr-leave-applications'] }); }} />}
       <MilikConfirmDialog {...confirm} onClose={() => setConfirm((p) => ({ ...p, isOpen: false }))} />
     </DashboardLayout>
   );

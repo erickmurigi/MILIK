@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaCashRegister, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
@@ -19,48 +20,34 @@ const fmtDateTime = (iso) =>
   iso ? new Date(iso).toLocaleString("en-KE", { dateStyle: "short", timeStyle: "short" }) : "—";
 
 const POSSessions = () => {
-  const [sessions, setSessions] = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [locationFilter, setLocationFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const [closing, setClosing] = useState(null);
   const [closingFloat, setClosingFloat] = useState("");
   const [showClose, setShowClose] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [res, locs] = await Promise.allSettled([
-        inventoryApi.listSessions({
-          location: locationFilter || undefined,
-          status: statusFilter || undefined,
-          page,
-          limit: 30,
-        }),
-        locations.length ? Promise.resolve(locations) : inventoryApi.listLocations({ active: true }),
-      ]);
-      if (res.status === "fulfilled") {
-        const d = res.value;
-        const list = Array.isArray(d) ? d : (d?.data ?? []);
-        setSessions(list);
-        setTotal(d?.total ?? list.length);
-      } else {
-        setSessions([]);
-      }
-      if (locs.status === "fulfilled") {
-        const d = locs.value;
-        if (Array.isArray(d)) setLocations(d);
-        else if (Array.isArray(d?.data)) setLocations(d.data);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [locationFilter, statusFilter, page]);
+  const { data: locations = [] } = useQuery({
+    queryKey: ['inv-locations-ref'],
+    queryFn: async () => { const d = await inventoryApi.listLocations({ active: true }); return Array.isArray(d) ? d : (d?.data ?? []); },
+    staleTime: 5 * 60_000,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const { data: sessData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['inv-sessions', locationFilter, statusFilter, page],
+    queryFn: async () => {
+      const res = await inventoryApi.listSessions({ location: locationFilter || undefined, status: statusFilter || undefined, page, limit: 30 });
+      const list = Array.isArray(res) ? res : (res?.data ?? []);
+      return { sessions: list, total: res?.total ?? list.length };
+    },
+    placeholderData: (prev) => prev,
+  });
+
+  useEffect(() => { if (error) toast.error("Failed to load sessions"); }, [error]);
+
+  const sessions = sessData?.sessions ?? [];
+  const total = sessData?.total ?? 0;
 
   const openClose = (session) => {
     setClosing(session);
@@ -73,7 +60,7 @@ const POSSessions = () => {
     try {
       await inventoryApi.closeSession(closing._id, { closingFloat: Number(closingFloat || 0) });
       toast.success(`Session ${closing.sessionNumber} closed`);
-      load();
+      queryClient.invalidateQueries({ queryKey: ['inv-sessions'] });
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to close session");
     } finally {
@@ -88,7 +75,7 @@ const POSSessions = () => {
     <InventoryShell
       title="POS Sessions"
       action={
-        <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+        <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
           <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
         </button>
       }

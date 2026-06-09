@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaCheck, FaExchangeAlt, FaPlus, FaRedoAlt, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
@@ -39,13 +40,9 @@ const Modal = ({ title, onClose, children, footer, wide }) => (
 );
 
 const InvStockTransfers = () => {
-  const [transfers, setTransfers] = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
@@ -58,30 +55,30 @@ const InvStockTransfers = () => {
   const [receiveLines, setReceiveLines] = useState([]);
   const [receiving, setReceiving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [res, locs, prods] = await Promise.all([
-        inventoryApi.listTransfers({ status: statusFilter || undefined, page, limit: 30 }),
-        locations.length ? Promise.resolve(locations) : inventoryApi.listLocations({ active: true }),
-        products.length ? Promise.resolve(products) : inventoryApi.listProducts({ active: true, limit: 200 }),
-      ]);
+  const { data: locations = [] } = useQuery({
+    queryKey: ['inv-locations-ref'],
+    queryFn: async () => { const d = await inventoryApi.listLocations({ active: true }); return Array.isArray(d) ? d : (d?.data ?? []); },
+    staleTime: 5 * 60_000,
+  });
+  const { data: products = [] } = useQuery({
+    queryKey: ['inv-products-ref'],
+    queryFn: async () => { const d = await inventoryApi.listProducts({ active: true, limit: 200 }); return Array.isArray(d) ? d : (d?.data ?? []); },
+    staleTime: 5 * 60_000,
+  });
+  const { data: transData, isLoading: loading, error, refetch } = useQuery({
+    queryKey: ['inv-transfers', statusFilter, page],
+    queryFn: async () => {
+      const res = await inventoryApi.listTransfers({ status: statusFilter || undefined, page, limit: 30 });
       const list = Array.isArray(res) ? res : (res?.data ?? []);
-      setTransfers(list);
-      setTotal(res?.total ?? list.length);
-      if (Array.isArray(locs)) setLocations(locs);
-      else if (Array.isArray(locs?.data)) setLocations(locs.data);
-      const pl = Array.isArray(prods) ? prods : (prods?.data ?? []);
-      if (pl.length) setProducts(pl);
-    } catch {
-      toast.error("Failed to load transfers");
-      setTransfers([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, page]);
+      return { transfers: list, total: res?.total ?? list.length };
+    },
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (error) toast.error("Failed to load transfers"); }, [error]);
+
+  const transfers = transData?.transfers ?? [];
+  const total = transData?.total ?? 0;
 
   // ── Line helpers ──────────────────────────────────────────────────────────
   const addLine = () => setCreateForm((f) => ({ ...f, lines: [...f.lines, emptyLine()] }));
@@ -118,7 +115,7 @@ const InvStockTransfers = () => {
         })),
       });
       setShowCreate(false);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-transfers'] });
       toast.success("Transfer created as draft");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Create failed");
@@ -132,7 +129,7 @@ const InvStockTransfers = () => {
     if (!window.confirm(`Dispatch transfer ${t.transferNumber}?\nThis will deduct stock from "${t.fromLocation?.name}".`)) return;
     try {
       await inventoryApi.dispatchTransfer(t._id);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-transfers'] });
       toast.success("Transfer dispatched — stock deducted");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Dispatch failed");
@@ -166,7 +163,7 @@ const InvStockTransfers = () => {
         lines: receiveLines.map((l) => ({ lineId: l.lineId, qtyReceived: Number(l.toReceive || 0) })),
       });
       setShowReceive(false);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-transfers'] });
       toast.success("Transfer received — stock updated");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Receive failed");
@@ -180,7 +177,7 @@ const InvStockTransfers = () => {
     if (!window.confirm(`Cancel transfer ${t.transferNumber}?`)) return;
     try {
       await inventoryApi.cancelTransfer(t._id);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['inv-transfers'] });
       toast.success("Transfer cancelled");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Cancel failed");
@@ -194,7 +191,7 @@ const InvStockTransfers = () => {
       title="Stock Transfers"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">

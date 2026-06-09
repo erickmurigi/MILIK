@@ -1,35 +1,33 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { FaBoxes, FaRedoAlt } from "react-icons/fa";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
 
 const InvStockValuation = () => {
-  const [rows,       setRows]       = useState([]);
-  const [locations,  setLocations]  = useState([]);
-  const [grandTotal, setGrandTotal] = useState(0);
-  const [loading,    setLoading]    = useState(true);
-  const [locFilter,  setLocFilter]  = useState("");
+  const [locFilter, setLocFilter] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [res, locs] = await Promise.all([
-        inventoryApi.getValuation({ location: locFilter || undefined }),
-        locations.length ? Promise.resolve(locations) : inventoryApi.listLocations({ active: true }),
-      ]);
-      const data = Array.isArray(res) ? res : (res?.data ?? []);
-      setRows(data);
-      setGrandTotal(res?.grandTotal ?? data.reduce((s, r) => s + (r.totalValue || 0), 0));
-      if (!locations.length) setLocations(Array.isArray(locs) ? locs : (locs?.data ?? []));
-    } catch {
-      setRows([]);
-      setGrandTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [locFilter]);
+  const { data: locations = [] } = useQuery({
+    queryKey: ['inv-locations-ref'],
+    queryFn: async () => {
+      const data = await inventoryApi.listLocations({ active: true });
+      return Array.isArray(data) ? data : (data?.data ?? []);
+    },
+    staleTime: 5 * 60_000,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const { data: valuationData, isLoading: loading, refetch } = useQuery({
+    queryKey: ['inv-stock-valuation', locFilter],
+    queryFn: async () => {
+      const res = await inventoryApi.getValuation({ location: locFilter || undefined });
+      const rows = Array.isArray(res) ? res : (res?.data ?? []);
+      const grandTotal = res?.grandTotal ?? rows.reduce((s, r) => s + (r.totalValue || 0), 0);
+      return { rows, grandTotal };
+    },
+  });
+
+  const rows = valuationData?.rows ?? [];
+  const grandTotal = valuationData?.grandTotal ?? 0;
 
   /* Group rows by location for cleaner presentation */
   const grouped = rows.reduce((acc, row) => {
@@ -44,7 +42,7 @@ const InvStockValuation = () => {
     <InventoryShell
       title="Stock Valuation"
       action={
-        <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+        <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
           <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
         </button>
       }
