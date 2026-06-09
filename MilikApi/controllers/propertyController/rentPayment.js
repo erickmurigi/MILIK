@@ -310,7 +310,27 @@ const generateReceiptNumber = async (businessId) => {
     { $inc: { sequence: 1 } },
     { upsert: true, new: true }
   ).lean();
-  return `REC${String(counter.sequence).padStart(5, "0")}`;
+  const candidate = `REC${String(counter.sequence).padStart(5, "0")}`;
+
+  const conflict = await RentPayment.exists({ business: businessId, receiptNumber: candidate });
+  if (!conflict) return candidate;
+
+  // Counter is behind existing data (e.g. after a partial DB reset) — find the true max and jump past it
+  const [agg] = await RentPayment.aggregate([
+    {
+      $match: {
+        business: new mongoose.Types.ObjectId(String(businessId)),
+        receiptNumber: { $regex: /^REC\d+$/ },
+      },
+    },
+    { $group: { _id: null, maxSeq: { $max: { $toInt: { $substr: ["$receiptNumber", 3, -1] } } } } },
+  ]);
+  const nextSeq = (agg?.maxSeq ?? counter.sequence) + 1;
+  await SequenceCounter.updateOne(
+    { business: String(businessId), key: "rent_receipt" },
+    { $max: { sequence: nextSeq } }
+  );
+  return `REC${String(nextSeq).padStart(5, "0")}`;
 };
 
 const getStatementPeriodFromPayment = (payment) => {

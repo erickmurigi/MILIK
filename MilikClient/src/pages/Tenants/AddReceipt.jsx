@@ -574,6 +574,7 @@ const AddReceipt = () => {
       cashbook: isDirectToLandlord ? "" : formData.cashbook,
       paidDirectToLandlord: isDirectToLandlord,
       paymentDate: formData.paymentDate,
+      dueDate: new Date(paymentDateObj.getFullYear(), paymentDateObj.getMonth(), 1).toISOString().slice(0, 10),
       referenceNumber: String(formData.referenceNumber || "").trim(),
       bankingDate: isCompanyLandlordMode ? undefined : (formData.bankingDate || formData.paymentDate || undefined),
       description: formData.description,

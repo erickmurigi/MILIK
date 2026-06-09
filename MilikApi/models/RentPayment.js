@@ -39,7 +39,7 @@ const RentPaymentSchema = new mongoose.Schema(
     },
     dueDate: {
       type: Date,
-      required: true,
+      default: null,
     },
     referenceNumber: {
       type: String,

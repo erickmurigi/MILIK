@@ -978,7 +978,16 @@ export const getTenants = async (req, res, next) => {
 
     const filter = { business: businessId };
 
-    if (status) filter.status = status;
+    if (status) {
+      if (status === "active") {
+        // "active" is a computed status — any tenant not explicitly terminated/inactive maps to active
+        filter.status = { $nin: ["terminated", "moved_out", "inactive", "evicted"] };
+      } else if (status === "terminated") {
+        filter.status = { $in: ["terminated", "moved_out"] };
+      } else {
+        filter.status = status;
+      }
+    }
 
     if (unit) {
       const unitDoc = await Unit.findOne({ _id: unit, business: businessId }).select("_id");

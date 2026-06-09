@@ -214,6 +214,7 @@ const Tenants = ({ listingMode = "active" }) => {
   const leases = useSelector(selectAllLeases);
 
   const tenantPagination = useSelector(selectTenantPagination);
+  const isFetchingTenants = useSelector((state) => state.tenant?.isFetching ?? false);
 
   const canViewTenants = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "view", "propertyManagement");
   const canCreateTenant = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement");
@@ -2009,8 +2010,15 @@ const confirmTransferUnit = async () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="12" className="px-3 py-4 text-center text-gray-600 font-semibold text-xs">
-                    {isTerminatedView ? "No terminated tenants found. Try adjusting filters." : "No tenants found. Try adjusting filters or create a new tenant."}
+                  <td colSpan="12" className="px-3 py-8 text-center text-gray-600 font-semibold text-xs">
+                    {isFetchingTenants ? (
+                      <div className="flex items-center justify-center gap-2 text-gray-400">
+                        <FaSpinner className="animate-spin" size={14} />
+                        <span>Loading tenants…</span>
+                      </div>
+                    ) : (
+                      isTerminatedView ? "No terminated tenants found. Try adjusting filters." : "No tenants found. Try adjusting filters or create a new tenant."
+                    )}
                   </td>
                 </tr>
               )}
