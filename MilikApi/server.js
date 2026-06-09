@@ -775,7 +775,7 @@ async function startServer() {
     try {
       const cron = await import("node-cron");
       const { runDailySavingsCron } = await import("./modules/carwash/services/savingsService.js");
-      cron.default.schedule("59 20 * * *", async () => {
+      cron.default.schedule("59 23 * * *", async () => {
         console.log("[CW Savings Cron] Running daily savings for", new Date().toISOString().slice(0, 10));
         try {
           await runDailySavingsCron(new Date());
