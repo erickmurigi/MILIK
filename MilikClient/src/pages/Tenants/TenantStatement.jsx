@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -1644,11 +1644,63 @@ const TenantStatement = () => {
     { id: "reviews", label: "Rent Reviews / Escalations", icon: <FaChartBar /> },
   ];
 
-  const handlePrint = () => {
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => window.print());
+  const handlePrint = useCallback(() => {
+    const co = currentCompany || {};
+    const name = co.companyName || co.name || co.businessName || 'Milik';
+    const logo = co.logo || '';
+    const tenantName = tenant?.tenantName || tenant?.name || 'Tenant';
+    const unit = tenant?.unit?.unitNumber || '—';
+    const property = tenant?.unit?.property?.propertyName || tenant?.property?.propertyName || '—';
+    const txns = (statementData?.transactions || []).filter((t) => {
+      if (transactionType !== 'ALL' && t.type !== transactionType) return false;
+      const d = new Date(t.date);
+      const fromOk = startDate ? d >= new Date(`${startDate}T00:00:00`) : true;
+      const toOk = endDate ? d <= new Date(`${endDate}T23:59:59`) : true;
+      return fromOk && toOk;
     });
-  };
+    const win = window.open('', '_blank', 'width=900,height=1100');
+    if (!win) { window.print(); return; }
+    win.document.write(`<!DOCTYPE html><html><head><title>Tenant Statement — ${tenantName}</title><style>
+      @page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
+      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
+      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
+      .logo{max-height:44px;max-width:120px;object-fit:contain;margin-bottom:4px}
+      .info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+      .box{border:1px solid #dbe2ea;border-radius:6px;padding:7px 10px;font-size:8.5px;line-height:1.7}
+      .box-label{font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:800;margin-bottom:4px}
+      table{width:100%;border-collapse:collapse;font-size:8.5px}
+      thead th{background:#0B3B2E;color:#fff;padding:4px 8px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
+      thead th.r{text-align:right}thead th.c{text-align:center}
+      tbody td{border-bottom:1px solid #f1f5f9;padding:3.5px 8px}tbody td.r{text-align:right}tbody td.c{text-align:center}
+      tbody tr:nth-child(even){background:#f8fafc}
+      .totals{margin-top:10px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+      .t-card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
+      .t-cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
+      .t-cv{font-size:12px;font-weight:900;margin-top:3px}
+      .chg{color:#dc2626}.pay{color:#047857}.amb{color:#b45309}
+      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    </style></head><body>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Tenant Statement</div><div class="sub">Period: ${startDate || 'All'} to ${endDate || 'All'}</div></div>
+    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div></div></div>
+    <div class="info">
+      <div class="box"><div class="box-label">Tenant</div><strong>${tenantName}</strong></div>
+      <div class="box"><div class="box-label">Unit / Property</div><strong>${unit}</strong> · ${property}</div>
+    </div>
+    <table><thead><tr><th>Date</th><th>Description</th><th class="c">Type</th><th>Code</th><th class="r">Amount</th><th class="r">Balance</th></tr></thead>
+    <tbody>${txns.map((t) => `<tr><td>${new Date(t.date).toLocaleDateString()}</td><td>${t.description || '—'}</td><td class="c"><span style="padding:1px 5px;border-radius:3px;font-size:7.5px;font-weight:800;background:${['CHARGE','DEBIT_NOTE'].includes(t.type) ? '#fee2e2' : '#d1fae5'};color:${['CHARGE','DEBIT_NOTE'].includes(t.type) ? '#b91c1c' : '#065f46'}">${t.type}</span></td><td>${t.transactionCode || '—'}</td><td class="r ${['CHARGE','DEBIT_NOTE'].includes(t.type) ? 'chg' : 'pay'}"><strong>${['CHARGE','DEBIT_NOTE'].includes(t.type) ? '+' : '-'}Ksh ${Math.abs(t.amount || 0).toLocaleString()}</strong></td><td class="r">Ksh ${(t.balance || 0).toLocaleString()}</td></tr>`).join('')}
+    ${txns.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8">No transactions for the selected filters.</td></tr>' : ''}
+    </tbody></table>
+    <div class="totals">
+      <div class="t-card"><div class="t-cl">Charges</div><div class="t-cv chg">Ksh ${(statementData?.totalCharges || 0).toLocaleString()}</div></div>
+      <div class="t-card"><div class="t-cl">Payments</div><div class="t-cv pay">Ksh ${(statementData?.totalPayments || 0).toLocaleString()}</div></div>
+      <div class="t-card"><div class="t-cl">Outstanding</div><div class="t-cv amb">Ksh ${Math.abs(statementData?.operationalOutstanding || 0).toLocaleString()}</div></div>
+      <div class="t-card"><div class="t-cl">Balance</div><div class="t-cv" style="color:${(statementData?.currentBalance || 0) >= 0 ? '#047857' : '#dc2626'}">Ksh ${Math.abs(statementData?.currentBalance || 0).toLocaleString()}</div></div>
+    </div>
+    </body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [currentCompany, tenant, statementData, startDate, endDate, transactionType]);
 
   const handleDownload = () => {
     handlePrint();

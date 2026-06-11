@@ -753,17 +753,20 @@ const TopToolbar = ({
         "hr-run-payroll":           "/hr/payroll",
         "hr-payroll-history":       "/hr/payroll",
         "hr-payslips":              "/hr/payroll",
+        "hr-payroll-register":      "/hr/payroll/register",
         "hr-statutory":             "/hr/statutory",
         // Reports — Phase 4 (live)
         "hr-report-headcount":      "/hr/reports/headcount",
         "hr-report-p9":             "/hr/reports/p9",
         "hr-report-payroll":        "/hr/reports/payroll",
         "hr-report-leave":          "/hr/reports/leave",
+        "hr-remittance":            "/hr/reports/remittance",
         // Appraisals — Phase 5 (live)
         "hr-appraisal-cycles":      "/hr/appraisals/cycles",
         "hr-appraisals":            "/hr/appraisals",
         "hr-kpis":                  "/hr/appraisals/kpis",
-        // Financials — Phase 6 (live)
+        // Documents (live)
+        "hr-letters":               "/hr/letters",
         // Setup — Phase 1 + 2 (live)
         "hr-setup":                 "/hr/setup",
         "hr-setup-leave-types":     "/hr/leave/types",
@@ -988,11 +991,12 @@ const TopToolbar = ({
           label: "Payroll",
           icon: FaMoneyBillWave,
           submenu: [
-            { id: "hr-run-payroll",     label: "Run Payroll",           icon: FaMoneyBillWave },
-            { id: "hr-payroll-history", label: "Payroll History",       icon: FaBook },
-            { id: "hr-payslips",        label: "Payslips",              icon: FaFileAlt },
+            { id: "hr-run-payroll",       label: "Run Payroll",           icon: FaMoneyBillWave },
+            { id: "hr-payroll-history",   label: "Payroll History",       icon: FaBook },
+            { id: "hr-payslips",          label: "Payslips",              icon: FaFileAlt },
+            { id: "hr-payroll-register",  label: "Payroll Register",      icon: FaClipboard },
             { type: "separator" },
-            { id: "hr-statutory",       label: "Statutory Deductions",  icon: FaCalculator },
+            { id: "hr-statutory",         label: "Statutory Deductions",  icon: FaCalculator },
           ],
         },
         {
@@ -1000,11 +1004,12 @@ const TopToolbar = ({
           label: "Reports",
           icon: FaChartBar,
           submenu: [
-            { id: "hr-report-headcount", label: "Headcount Report",  icon: FaUsers },
-            { id: "hr-report-payroll",   label: "Payroll Summary",   icon: FaMoneyBillWave },
-            { id: "hr-report-leave",     label: "Leave Summary",     icon: FaCalendarAlt },
+            { id: "hr-report-headcount", label: "Headcount Report",       icon: FaUsers },
+            { id: "hr-report-payroll",   label: "Payroll Summary",        icon: FaMoneyBillWave },
+            { id: "hr-report-leave",     label: "Leave Summary",          icon: FaCalendarAlt },
             { type: "separator" },
-            { id: "hr-report-p9",        label: "P9 Form (Annual)",  icon: FaFileAlt },
+            { id: "hr-remittance",       label: "Statutory Remittance",   icon: FaCalculator },
+            { id: "hr-report-p9",        label: "P9 Form (Annual)",       icon: FaFileAlt },
           ],
         },
         {
@@ -1019,12 +1024,20 @@ const TopToolbar = ({
           ],
         },
         {
+          id: "hr-documents",
+          label: "Documents",
+          icon: FaFileAlt,
+          submenu: [
+            { id: "hr-letters", label: "HR Letters", icon: FaFileAlt },
+          ],
+        },
+        {
           id: "hr-config",
           label: "Setup",
           icon: FaCog,
           submenu: [
-            { id: "hr-setup",            label: "Departments & Designations", icon: FaBuilding },
-            { id: "hr-setup-leave-types", label: "Leave Types",               icon: FaTag },
+            { id: "hr-setup",             label: "Departments & Designations", icon: FaBuilding },
+            { id: "hr-setup-leave-types", label: "Leave Types",                icon: FaTag },
           ],
         },
         {

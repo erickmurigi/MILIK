@@ -7,6 +7,9 @@ import HRPayslip from '../models/HRPayslip.js';
 import HRLeaveApplication from '../models/HRLeaveApplication.js';
 import { resolveCompanyId } from '../services/hrScope.js';
 
+const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
 const router = express.Router();
 router.use(verifyUser);
 
@@ -83,9 +86,6 @@ router.get('/payroll-summary', async (req, res) => {
     const periods = await HRPayrollPeriod.find({ company: oid, year, status: { $ne: 'Draft' } })
       .sort({ month: 1 })
       .lean();
-
-    const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'];
 
     const totals = periods.reduce((acc, p) => ({
       gross:      acc.gross      + (p.totalGross || 0),
@@ -194,17 +194,14 @@ router.get('/p9', async (req, res) => {
         .populate('designation', 'name')
         .lean(),
       HRPayslip.find({ employee: employeeId, company: oid })
-        .populate('payrollPeriod', 'month year label status')
+        .populate({ path: 'payrollPeriod', match: { year: yr }, select: 'month year label status' })
         .lean(),
     ]);
 
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
-    const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'];
-
     const filtered = payslips
-      .filter((ps) => ps.payrollPeriod && ps.payrollPeriod.year === yr)
+      .filter((ps) => ps.payrollPeriod)
       .sort((a, b) => a.payrollPeriod.month - b.payrollPeriod.month);
 
     const months = filtered.map((ps) => ({
@@ -266,8 +263,6 @@ router.get('/payroll-register', async (req, res) => {
         .lean(),
     ]);
     if (!period) return res.status(404).json({ message: 'Payroll period not found' });
-
-    const MONTHS = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
 
     const rows = payslips.map((ps) => {
       const s = ps.snapshot || {};
@@ -342,81 +337,64 @@ const remittanceHandler = (type) => async (req, res) => {
     ]);
     if (!period) return res.status(404).json({ message: 'Payroll period not found' });
 
-    const MONTHS = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
     const label = period.label || `${MONTHS[period.month] || ''} ${period.year}`;
+    const sum = (arr, k) => arr.reduce((a, r) => a + r[k], 0);
 
     let rows = [];
     let totals = {};
 
     if (type === 'paye') {
-      rows = payslips.map((ps) => {
-        const s = ps.snapshot || {};
-        return {
-          employeeNumber: s.employeeNumber || '',
-          name: s.name || '',
-          kraPin: s.kraPin || '',
-          grossSalary: ps.grossSalary || 0,
-          paye: ps.paye || 0,
-        };
-      });
-      const sum = (k) => rows.reduce((a, r) => a + r[k], 0);
-      totals = { grossSalary: sum('grossSalary'), paye: sum('paye') };
+      rows = payslips.map(({ snapshot: s = {}, grossSalary = 0, paye = 0 }) => ({
+        employeeNumber: s.employeeNumber || '',
+        name:           s.name           || '',
+        kraPin:         s.kraPin         || '',
+        grossSalary,
+        paye,
+      }));
+      totals = { grossSalary: sum(rows, 'grossSalary'), paye: sum(rows, 'paye') };
 
     } else if (type === 'nhif') {
-      rows = payslips.map((ps) => {
-        const s = ps.snapshot || {};
-        return {
-          employeeNumber: s.employeeNumber || '',
-          name: s.name || '',
-          nhifNo: s.nhifNo || '',
-          grossSalary: ps.grossSalary || 0,
-          employeeContribution: ps.nhif || 0,
-        };
-      });
-      const sum = (k) => rows.reduce((a, r) => a + r[k], 0);
-      totals = { grossSalary: sum('grossSalary'), employeeContribution: sum('employeeContribution') };
+      rows = payslips.map(({ snapshot: s = {}, grossSalary = 0, nhif = 0 }) => ({
+        employeeNumber:       s.employeeNumber || '',
+        name:                 s.name           || '',
+        nhifNo:               s.nhifNo         || '',
+        grossSalary,
+        employeeContribution: nhif,
+      }));
+      totals = { grossSalary: sum(rows, 'grossSalary'), employeeContribution: sum(rows, 'employeeContribution') };
 
     } else if (type === 'nssf') {
-      rows = payslips.map((ps) => {
-        const s = ps.snapshot || {};
-        // NSSF: employer matches employee contribution
-        return {
-          employeeNumber: s.employeeNumber || '',
-          name: s.name || '',
-          nssfNo: s.nssfNo || '',
-          grossSalary: ps.grossSalary || 0,
-          employeeContribution: ps.nssf || 0,
-          employerContribution: ps.nssf || 0,
-          totalContribution: (ps.nssf || 0) * 2,
-        };
-      });
-      const sum = (k) => rows.reduce((a, r) => a + r[k], 0);
+      rows = payslips.map(({ snapshot: s = {}, grossSalary = 0, nssf = 0 }) => ({
+        employeeNumber:       s.employeeNumber || '',
+        name:                 s.name           || '',
+        nssfNo:               s.nssfNo         || '',
+        grossSalary,
+        employeeContribution: nssf,
+        employerContribution: nssf,
+        totalContribution:    nssf * 2,
+      }));
       totals = {
-        grossSalary: sum('grossSalary'),
-        employeeContribution: sum('employeeContribution'),
-        employerContribution: sum('employerContribution'),
-        totalContribution: sum('totalContribution'),
+        grossSalary:          sum(rows, 'grossSalary'),
+        employeeContribution: sum(rows, 'employeeContribution'),
+        employerContribution: sum(rows, 'employerContribution'),
+        totalContribution:    sum(rows, 'totalContribution'),
       };
 
     } else if (type === 'ahl') {
-      rows = payslips.map((ps) => {
-        const s = ps.snapshot || {};
-        return {
-          employeeNumber: s.employeeNumber || '',
-          name: s.name || '',
-          kraPin: s.kraPin || '',
-          grossSalary: ps.grossSalary || 0,
-          employeeLevy: ps.ahl || 0,
-          employerLevy: ps.ahl || 0,
-          totalLevy: (ps.ahl || 0) * 2,
-        };
-      });
-      const sum = (k) => rows.reduce((a, r) => a + r[k], 0);
+      rows = payslips.map(({ snapshot: s = {}, grossSalary = 0, ahl = 0 }) => ({
+        employeeNumber: s.employeeNumber || '',
+        name:           s.name           || '',
+        kraPin:         s.kraPin         || '',
+        grossSalary,
+        employeeLevy:   ahl,
+        employerLevy:   ahl,
+        totalLevy:      ahl * 2,
+      }));
       totals = {
-        grossSalary: sum('grossSalary'),
-        employeeLevy: sum('employeeLevy'),
-        employerLevy: sum('employerLevy'),
-        totalLevy: sum('totalLevy'),
+        grossSalary:  sum(rows, 'grossSalary'),
+        employeeLevy: sum(rows, 'employeeLevy'),
+        employerLevy: sum(rows, 'employerLevy'),
+        totalLevy:    sum(rows, 'totalLevy'),
       };
 
     } else if (type === 'bank') {
@@ -455,10 +433,9 @@ router.get('/periods', async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req);
     const oid = new mongoose.Types.ObjectId(companyId);
-    const MONTHS = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
     const periods = await HRPayrollPeriod.find({ company: oid })
       .sort({ year: -1, month: -1 })
-      .select('month year label status employeeCount totalNet')
+      .select('month year label status employeeCount totalBasic totalGross totalPAYE totalNHIF totalNSSF totalAHL totalOtherDeductions totalDeductions totalNet')
       .lean();
     res.json(periods.map((p) => ({
       ...p,

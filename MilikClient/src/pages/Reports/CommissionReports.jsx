@@ -246,6 +246,50 @@ const CommissionReports = () => {
     reversedStatements: filteredRows.filter((row) => row.status === "Reversed").length,
   }), [filteredRows]);
 
+  const handlePrint = useCallback(() => {
+    if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; }
+    const co = currentCompany || {};
+    const name = co.companyName || co.name || co.businessName || 'Milik';
+    const logo = co.logo || '';
+    const by = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || '';
+    const win = window.open('', '_blank', 'width=1120,height=800');
+    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
+    const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+    win.document.write(`<!DOCTYPE html><html><head><title>Commission Report</title><style>
+      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
+      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
+      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
+      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
+      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
+      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
+      .cv{font-size:13px;font-weight:900;color:#0f172a;margin-top:3px}
+      table{width:100%;border-collapse:collapse;font-size:8.5px}
+      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
+      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
+      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
+      tfoot td{border-top:2px solid #0B3B2E;padding:4px 6px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
+      .badge-r{display:inline-block;padding:1px 6px;border-radius:99px;font-size:8px;font-weight:800;background:#fee2e2;color:#b91c1c}
+      .badge-g{display:inline-block;padding:1px 6px;border-radius:99px;font-size:8px;font-weight:800;background:#d1fae5;color:#065f46}
+      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    </style></head><body>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Commission Report</div><div class="sub">Period: ${toMonthLabel(appliedFilters.monthFrom)} — ${toMonthLabel(appliedFilters.monthTo)}</div></div>
+    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div><div>Records: ${filteredRows.length}</div></div></div>
+    <div class="cards">
+      <div class="card"><div class="cl">Recognized Commission</div><div class="cv" style="color:#0B3B2E">${fmt(totals.recognizedCommission)}</div></div>
+      <div class="card"><div class="cl">Reversed Commission</div><div class="cv" style="color:#b91c1c">${fmt(totals.reversedCommission)}</div></div>
+      <div class="card"><div class="cl">Statements / Months</div><div class="cv">${totals.statements} / ${totals.months}</div></div>
+      <div class="card"><div class="cl">Reversed Statements</div><div class="cv" style="color:#FF8C00">${totals.reversedStatements}</div></div>
+    </div>
+    <table><thead><tr><th>Recognition Date</th><th>Statement No.</th><th>Property</th><th>Landlord</th><th>Basis</th><th>Structure</th><th class="r">Recognized</th><th class="r">Reversed</th><th>Status</th></tr></thead>
+    <tbody>${filteredRows.map((row) => `<tr><td>${formatDate(row.recognitionDate)}</td><td>${row.statementNumber}</td><td>${row.propertyName}</td><td>${row.landlordName}</td><td>${row.recognitionBasis}</td><td>${row.structureLabel}</td><td class="r"><strong>${fmt(row.recognizedAmount)}</strong></td><td class="r" style="color:#b91c1c">${fmt(row.reversedAmount)}</td><td><span class="${row.status === 'Reversed' ? 'badge-r' : 'badge-g'}">${row.status}</span></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="6"><strong>TOTALS</strong></td><td class="r"><strong>${fmt(totals.recognizedCommission)}</strong></td><td class="r" style="color:#b91c1c"><strong>${fmt(totals.reversedCommission)}</strong></td><td></td></tr></tfoot>
+    </table></body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [canExportReports, currentCompany, currentUser, filteredRows, totals, appliedFilters.monthFrom, appliedFilters.monthTo]);
+
   const applySearch = () => setAppliedFilters({ ...draftFilters, search: draftFilters.search.trim() });
 
   const resetFilters = () => {
@@ -441,7 +485,7 @@ const CommissionReports = () => {
               </button>
 
               <button
-                onClick={() => { if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"}
+                onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"}
                 className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
               >
                 <FaPrint className="text-xs" /> Print

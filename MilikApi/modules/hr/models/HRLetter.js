@@ -16,9 +16,12 @@ const hrLetterSchema = new mongoose.Schema({
   subject:    { type: String, required: true, trim: true },
   body:       { type: String, required: true },     // rendered HTML stored after generation
   metadata:   { type: mongoose.Schema.Types.Mixed, default: {} },
-  status:     { type: String, enum: ['draft', 'issued'], default: 'draft', index: true },
+  status:     { type: String, enum: ['draft', 'issued', 'revoked'], default: 'draft', index: true },
   issuedDate: { type: Date, default: null },
   issuedBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  revokedBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  revokedAt:  { type: Date, default: null },
+  revokedReason: { type: String, default: '' },
   createdBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   updatedBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true });

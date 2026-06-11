@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FaPlus, FaRedoAlt, FaEdit, FaTrash, FaLock, FaUnlock,
@@ -78,7 +78,10 @@ export default function AppraisalCycles() {
   };
   const closeModal = () => { setModal(null); setSaving(false); };
 
-  const weightTotal = form.kpis.reduce((s, k) => s + (Number(k.weight) || 0), 0);
+  const weightTotal = useMemo(
+    () => form.kpis.reduce((s, k) => s + (Number(k.weight) || 0), 0),
+    [form.kpis]
+  );
   const toggleKpi   = (id) => setForm((f) => {
     const has = f.kpis.find((k) => k.kpi === id);
     return { ...f, kpis: has ? f.kpis.filter((k) => k.kpi !== id) : [...f.kpis, { kpi: id, weight: 0 }] };
@@ -118,19 +121,19 @@ export default function AppraisalCycles() {
   const doDelete = async (c) => {
     if (!window.confirm(`Delete "${c.name}"? All related appraisals will be removed.`)) return;
     setActing(c._id);
-    try { await adminRequests.delete(`/hr/appraisal-cycles/${c._id}`); toast.success('Cycle deleted'); setCycles((p) => p.filter((x) => x._id !== c._id)); }
+    try { await adminRequests.delete(`/hr/appraisal-cycles/${c._id}`); toast.success('Cycle deleted'); queryClient.invalidateQueries({ queryKey: ['hr-appraisal-cycles'] }); }
     catch (err) { toast.error(err.response?.data?.message || 'Delete failed'); }
     finally { setActing(null); }
   };
 
-  const nDraft = cycles.filter((c) => c.status === 'Draft').length;
-  const nOpen  = cycles.filter((c) => c.status === 'Open').length;
-  const nClosed= cycles.filter((c) => c.status === 'Closed').length;
+  const nDraft = useMemo(() => cycles.filter((c) => c.status === 'Draft').length, [cycles]);
+  const nOpen  = useMemo(() => cycles.filter((c) => c.status === 'Open').length,  [cycles]);
+  const nClosed= useMemo(() => cycles.filter((c) => c.status === 'Closed').length,[cycles]);
 
-  const totalPages   = Math.ceil(cycles.length / pageSize) || 1;
-  const pagedCycles  = cycles.slice((page - 1) * pageSize, page * pageSize);
-  const fromRow      = cycles.length ? (page - 1) * pageSize + 1 : 0;
-  const toRow        = Math.min(page * pageSize, cycles.length);
+  const totalPages  = useMemo(() => Math.ceil(cycles.length / pageSize) || 1, [cycles.length, pageSize]);
+  const pagedCycles = useMemo(() => cycles.slice((page - 1) * pageSize, page * pageSize), [cycles, page, pageSize]);
+  const fromRow     = useMemo(() => (cycles.length ? (page - 1) * pageSize + 1 : 0), [cycles.length, page, pageSize]);
+  const toRow       = useMemo(() => Math.min(page * pageSize, cycles.length), [cycles.length, page, pageSize]);
 
   return (
     <DashboardLayout lockContentScroll>

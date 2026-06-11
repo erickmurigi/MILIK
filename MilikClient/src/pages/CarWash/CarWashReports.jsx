@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { FaExternalLinkAlt, FaPrint, FaRedoAlt, FaSearch } from "react-icons/fa";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
+import { selectCurrentCompany } from "../../redux/selectors";
 import CarWashShell from "./CarWashShell";
 
 // ── module-level constants ──────────────────────────────────────────────────
@@ -87,6 +89,7 @@ const NavBtn = ({ onClick, children }) => (
 // ── main component ──────────────────────────────────────────────────────────
 const CarWashReports = () => {
   const navigate = useNavigate();
+  const currentCompany = useSelector(selectCurrentCompany);
   const today = todayISO();
 
   // draft filters (controlled inputs, not yet applied)
@@ -275,6 +278,48 @@ const CarWashReports = () => {
 
   const modeLabel = MODES.find((m) => m.key === applied.mode)?.label || "Daily";
 
+  const handlePrint = useCallback(() => {
+    const co = currentCompany || {};
+    const name = co.companyName || co.name || co.businessName || 'Milik';
+    const logo = co.logo || '';
+    const win = window.open('', '_blank', 'width=1120,height=800');
+    if (!win) return;
+    const fmt = (v) => `KES ${Number(v || 0).toLocaleString()}`;
+    const isCustom = applied.mode === 'custom';
+    win.document.write(`<!DOCTYPE html><html><head><title>Car Wash Report</title><style>
+      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
+      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
+      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
+      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
+      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
+      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
+      .cv{font-size:12px;font-weight:900;color:#0f172a;margin-top:3px}
+      h3{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;font-weight:900;margin:12px 0 5px}
+      table{width:100%;border-collapse:collapse;font-size:9px;margin-bottom:10px}
+      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
+      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
+      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
+      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    </style></head><body>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Car Wash ${modeLabel} Report</div><div class="sub">Period: ${periodLabel}</div></div>
+    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div></div></div>
+    <div class="cards">
+      <div class="card"><div class="cl">Total Revenue</div><div class="cv" style="color:#0B3B2E">${fmt(isCustom ? customRevenue : totalRevenue)}</div></div>
+      <div class="card"><div class="cl">Total Jobs</div><div class="cv">${isCustom ? customJobs : jobsCount}</div></div>
+      <div class="card"><div class="cl">Paid Expenses</div><div class="cv" style="color:#c2410c">${fmt(totalExpenses)}</div></div>
+      <div class="card"><div class="cl">Net Position</div><div class="cv" style="color:${netPosition >= 0 ? '#047857' : '#b91c1c'}">${fmt(netPosition)}</div></div>
+    </div>
+    ${!isCustom && opsRows.length > 0 ? `<h3>Operations Position</h3><table><thead><tr><th>Metric</th><th class="r">Value</th><th>Notes</th></tr></thead><tbody>${opsRows.map(([l, v, n]) => `<tr><td>${l}</td><td class="r"><strong>${v}</strong></td><td>${n}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${!isCustom && serviceRows.length > 0 ? `<h3>By Service</h3><table><thead><tr><th>Service</th><th class="r">Jobs</th><th class="r">Revenue</th></tr></thead><tbody>${serviceRows.map((r) => `<tr><td>${r.serviceType || r.name || '—'}</td><td class="r">${r.jobs || r.count || 0}</td><td class="r">${fmt(r.revenue || r.amount)}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${isCustom && customServiceRows.length > 0 ? `<h3>By Service</h3><table><thead><tr><th>Service</th><th class="r">Jobs</th><th class="r">Revenue</th></tr></thead><tbody>${customServiceRows.map((r) => `<tr><td>${r.serviceType || r.name || '—'}</td><td class="r">${r.jobs || 0}</td><td class="r">${fmt(r.revenue)}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${isCustom && customStaffRows.length > 0 ? `<h3>By Staff</h3><table><thead><tr><th>Staff</th><th class="r">Jobs</th><th class="r">Revenue</th><th class="r">Commission</th></tr></thead><tbody>${customStaffRows.map((r) => `<tr><td>${r.staff}</td><td class="r">${r.jobs}</td><td class="r">${fmt(r.revenue)}</td><td class="r">${fmt(r.commission)}</td></tr>`).join('')}</tbody></table>` : ''}
+    </body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [currentCompany, applied, modeLabel, periodLabel, totalRevenue, totalExpenses, netPosition, jobsCount, customRevenue, customJobs, opsRows, serviceRows, customServiceRows, customStaffRows]);
+
   const submit = (event) => {
     event.preventDefault();
     setApplied({ mode, date, month, fromDate, toDate, branch });
@@ -294,7 +339,7 @@ const CarWashReports = () => {
             <FaRedoAlt className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
-          <button type="button" onClick={() => window.print()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={handlePrint} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaPrint />
             Print
           </button>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -84,9 +84,46 @@ const SaleMonthlyDetail = () => {
     { key: "commissions", label: "Commissions", count: commissions.length },
   ];
 
-  const printReport = () => {
-    window.print();
-  };
+  const printReport = useCallback(() => {
+    const co = currentCompany || {};
+    const name = co.companyName || co.name || co.businessName || 'Milik';
+    const logo = co.logo || '';
+    const win = window.open('', '_blank', 'width=1120,height=800');
+    if (!win) return;
+    const fmt = (v) => `KES ${Number(v || 0).toLocaleString()}`;
+    const fmtDate = (v) => (v ? new Date(v).toLocaleDateString() : '—');
+    win.document.write(`<!DOCTYPE html><html><head><title>${monthName} ${year} Report</title><style>
+      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
+      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
+      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
+      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
+      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
+      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
+      .cv{font-size:12px;font-weight:900;color:#0f172a;margin-top:3px}
+      h3{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;font-weight:900;margin:12px 0 5px;border-top:1px solid #dbe2ea;padding-top:8px}
+      table{width:100%;border-collapse:collapse;font-size:8.5px;margin-bottom:8px}
+      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
+      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
+      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
+      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    </style></head><body>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">${monthName} ${year} — Monthly Detail</div><div class="sub">Property Sales Report</div></div>
+    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div></div></div>
+    <div class="cards">
+      <div class="card"><div class="cl">Payments</div><div class="cv">${payments.length}</div></div>
+      <div class="card"><div class="cl">Revenue</div><div class="cv" style="color:#0B3B2E">${fmt(summary.totalRevenue)}</div></div>
+      <div class="card"><div class="cl">Deals</div><div class="cv">${deals.length}</div></div>
+      <div class="card"><div class="cl">Commissions</div><div class="cv" style="color:#FF8C00">${fmt(summary.totalCommission)}</div></div>
+    </div>
+    ${payments.length > 0 ? `<h3>Payments (${payments.length})</h3><table><thead><tr><th>Payment #</th><th>Deal</th><th>Type</th><th>Method</th><th class="r">Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>${payments.map((p) => `<tr><td>${p.paymentNumber || '—'}</td><td>${p.deal?.dealNumber || p.deal || '—'}</td><td>${fmtLabel(p.paymentType || p.type)}</td><td>${fmtLabel(p.method || p.paymentMethod)}</td><td class="r"><strong>${fmt(p.amount)}</strong></td><td>${fmtDate(p.paymentDate || p.date)}</td><td>${fmtLabel(p.status)}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${deals.length > 0 ? `<h3>Deals (${deals.length})</h3><table><thead><tr><th>Deal #</th><th>Property</th><th>Buyer</th><th>Agent</th><th class="r">Value</th><th>Date</th><th>Status</th></tr></thead><tbody>${deals.map((d) => `<tr><td>${d.dealNumber || '—'}</td><td>${d.listing?.property?.propertyName || d.propertyName || '—'}</td><td>${d.buyer?.name || '—'}</td><td>${d.agent?.name || '—'}</td><td class="r">${fmt(d.agreedPrice || d.dealValue)}</td><td>${fmtDate(d.closedAt || d.createdAt)}</td><td>${fmtLabel(d.status)}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${commissions.length > 0 ? `<h3>Commissions (${commissions.length})</h3><table><thead><tr><th>Deal</th><th>Agent</th><th class="r">Commission</th><th>Date</th><th>Status</th></tr></thead><tbody>${commissions.map((c) => `<tr><td>${c.deal?.dealNumber || '—'}</td><td>${c.agent?.name || '—'}</td><td class="r">${fmt(c.amount || c.commissionAmount)}</td><td>${fmtDate(c.createdAt)}</td><td>${fmtLabel(c.status)}</td></tr>`).join('')}</tbody></table>` : ''}
+    </body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [currentCompany, monthName, year, payments, deals, commissions, summary]);
 
   return (
     <PropertySaleShell

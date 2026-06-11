@@ -98,16 +98,16 @@ button:focus {
 /* ── Print styles ─────────────────────────────────────────────── */
 @media print {
   @page {
-    margin: 10mm 12mm;
+    margin: 12mm 14mm;
     size: A4;
   }
 
-  /* White foundation — prevents colored layout backgrounds bleeding through */
+  /* White foundation */
   html, body {
     background: white !important;
   }
 
-  /* Hide everything; backgrounds vanish with visibility:hidden */
+  /* Hide everything by default */
   body * {
     visibility: hidden !important;
   }
@@ -120,11 +120,7 @@ button:focus {
     visibility: visible !important;
   }
 
-  /*
-   * Cover the full printed page.
-   * max-width / margin overrides neutralise Tailwind classes that may be on
-   * the same element (e.g. mx-auto max-w-2xl on the Payslip wrapper).
-   */
+  /* Cover the full printed page */
   .employee-print-area {
     position: fixed;
     inset: 0;
@@ -136,12 +132,12 @@ button:focus {
     background: #ffffff !important;
     padding: 0;
     overflow: visible;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
     font-size: 11px;
     color: #1e293b;
   }
 
-  /* Report print areas — cover the full printed page */
+  /* Report print areas */
   .print-only-wrapper {
     display: block !important;
     position: fixed;
@@ -149,10 +145,25 @@ button:focus {
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
-    padding: 10mm 12mm;
+    padding: 10mm 14mm;
     background: #ffffff !important;
     overflow: visible;
     z-index: 9999;
+  }
+
+  /* Remove shadows and rounded corners — they look poor on paper */
+  .employee-print-area *,
+  .print-only-wrapper * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Soften border-radius to a max of 4px so cards still look intentional */
+  .employee-print-area .rounded-2xl,
+  .employee-print-area .rounded-xl,
+  .print-only-wrapper .rounded-2xl,
+  .print-only-wrapper .rounded-xl {
+    border-radius: 4px !important;
   }
 
   /* Prevent page breaks inside cards */
@@ -176,24 +187,39 @@ button:focus {
   tfoot { display: table-footer-group !important; }
   table { width: 100% !important; }
 
-  /* Compact table rows for dense reports (payroll register, P9) */
+  /* Compact table rows for dense reports */
   .employee-print-area th,
   .employee-print-area td {
-    padding-top: 3px !important;
-    padding-bottom: 3px !important;
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
   }
 
-  /* Hide camera / hover overlays */
+  /* Hide hover overlays */
   .group .absolute {
     display: none !important;
   }
 
-  /* Preserve background colours inside print areas */
+  /* Preserve all background colours (logos, dark headers, coloured badges) */
   .employee-print-area,
   .employee-print-area *,
   .print-only-wrapper,
   .print-only-wrapper * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  /* Printed document footer — shown only on print */
+  .print-footer {
+    display: block !important;
+    position: fixed;
+    bottom: 8mm;
+    left: 14mm;
+    right: 14mm;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 4px;
+    font-size: 8px;
+    color: #94a3b8;
+    display: flex;
+    justify-content: space-between;
   }
 }

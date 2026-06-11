@@ -54,6 +54,7 @@ export default function AddEmployee() {
   const [departments, setDepartments] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [payComponents, setPayComponents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -62,12 +63,14 @@ export default function AddEmployee() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [deptRes, empRes] = await Promise.all([
+      const [deptRes, empRes, compRes] = await Promise.all([
         adminRequests.get('/hr/departments'),
         adminRequests.get('/hr/employees', { params: { limit: 200 } }),
+        adminRequests.get('/hr/pay-components', { params: { active: true } }),
       ]);
       setDepartments(deptRes.data || []);
       setEmployees((empRes.data?.employees || []).filter((e) => e._id !== id));
+      setPayComponents(compRes.data || []);
 
       if (isEditing) {
         const res = await adminRequests.get(`/hr/employees/${id}`);
@@ -92,7 +95,7 @@ export default function AddEmployee() {
           basicSalary: e.basicSalary ?? '', paymentMethod: e.paymentMethod || 'Bank Transfer',
           bankName: e.bankName || '', bankAccountNumber: e.bankAccountNumber || '',
           bankBranch: e.bankBranch || '', mpesaNumber: e.mpesaNumber || '',
-          salaryComponents: e.salaryComponents || [],
+          salaryComponents: (e.salaryComponents || []).map((c) => ({ ...c, _isCustom: false })),
         });
       }
     } catch (err) {
@@ -112,7 +115,7 @@ export default function AddEmployee() {
   }, [form.department]);
 
   const addComponent = () => setForm((p) => ({
-    ...p, salaryComponents: [...p.salaryComponents, { name: '', type: 'Allowance', amount: '', isPercentage: false, percentageBase: 'Basic' }],
+    ...p, salaryComponents: [...p.salaryComponents, { name: '', type: 'Allowance', amount: '', isPercentage: false, percentageBase: 'Basic', _isCustom: false }],
   }));
 
   const updateComponent = (idx, field, value) => setForm((p) => ({
@@ -135,7 +138,7 @@ export default function AddEmployee() {
     const payload = {
       ...form,
       basicSalary: form.basicSalary !== '' ? Number(form.basicSalary) : 0,
-      salaryComponents: form.salaryComponents.map((c) => ({ ...c, amount: Number(c.amount) || 0 })),
+      salaryComponents: form.salaryComponents.map(({ _isCustom: _, ...c }) => ({ ...c, amount: Number(c.amount) || 0 })),
       department: form.department || null,
       designation: form.designation || null,
       reportsTo: form.reportsTo || null,
@@ -327,11 +330,59 @@ export default function AddEmployee() {
                       <p className="text-xs text-slate-400">No additional components. Basic salary only.</p>
                     ) : (
                       <div className="space-y-2">
-                        {form.salaryComponents.map((comp, idx) => (
+                        {form.salaryComponents.map((comp, idx) => {
+                          const allowances = payComponents.filter((c) => c.type === 'allowance');
+                          const deductions = payComponents.filter((c) => c.type === 'deduction');
+                          return (
                           <div key={idx} className="grid gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-5">
                             <div className="sm:col-span-2">
                               <label className="mb-0.5 block text-[10px] font-semibold text-slate-500">Name</label>
-                              <Input value={comp.name} onChange={(e) => updateComponent(idx, 'name', e.target.value)} placeholder="e.g. House Allowance" />
+                              {!comp._isCustom ? (
+                                <Select
+                                  value={comp.name}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '__custom__') {
+                                      updateComponent(idx, '_isCustom', true);
+                                      updateComponent(idx, 'name', '');
+                                    } else {
+                                      const found = payComponents.find((c) => c.name === val);
+                                      updateComponent(idx, 'name', val);
+                                      if (found) updateComponent(idx, 'type', found.type === 'allowance' ? 'Allowance' : 'Deduction');
+                                    }
+                                  }}
+                                >
+                                  <option value="">— Select component —</option>
+                                  {allowances.length > 0 && (
+                                    <optgroup label="Allowances">
+                                      {allowances.map((c) => <option key={c._id} value={c.name}>{c.name}</option>)}
+                                    </optgroup>
+                                  )}
+                                  {deductions.length > 0 && (
+                                    <optgroup label="Deductions">
+                                      {deductions.map((c) => <option key={c._id} value={c.name}>{c.name}</option>)}
+                                    </optgroup>
+                                  )}
+                                  <optgroup label="">
+                                    <option value="__custom__">Other (custom name…)</option>
+                                  </optgroup>
+                                </Select>
+                              ) : (
+                                <div className="flex gap-1">
+                                  <Input
+                                    value={comp.name}
+                                    onChange={(e) => updateComponent(idx, 'name', e.target.value)}
+                                    placeholder="Enter component name"
+                                    autoFocus
+                                  />
+                                  <button
+                                    type="button"
+                                    title="Back to list"
+                                    onClick={() => { updateComponent(idx, '_isCustom', false); updateComponent(idx, 'name', ''); }}
+                                    className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 text-[10px] text-slate-500 hover:bg-slate-100"
+                                  >↩</button>
+                                </div>
+                              )}
                             </div>
                             <div>
                               <label className="mb-0.5 block text-[10px] font-semibold text-slate-500">Type</label>
@@ -359,7 +410,8 @@ export default function AddEmployee() {
                               </button>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

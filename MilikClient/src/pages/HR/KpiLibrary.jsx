@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FaPlus, FaRedoAlt, FaEdit, FaTrash, FaToggleOn, FaToggleOff,
@@ -89,11 +89,11 @@ export default function KpiLibrary() {
     finally { setDeleting(null); }
   };
 
-  const totalPages = Math.max(1, Math.ceil(kpis.length / PAGE_SIZE));
-  const pageKpis   = kpis.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const nActive    = kpis.filter((k) => k.isActive).length;
-  const from       = kpis.length ? (page - 1) * PAGE_SIZE + 1 : 0;
-  const to         = Math.min(page * PAGE_SIZE, kpis.length);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(kpis.length / PAGE_SIZE)), [kpis.length]);
+  const pageKpis   = useMemo(() => kpis.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [kpis, page]);
+  const nActive    = useMemo(() => kpis.filter((k) => k.isActive).length, [kpis]);
+  const from       = useMemo(() => (kpis.length ? (page - 1) * PAGE_SIZE + 1 : 0), [kpis.length, page]);
+  const to         = useMemo(() => Math.min(page * PAGE_SIZE, kpis.length), [kpis.length, page]);
 
   return (
     <DashboardLayout lockContentScroll>

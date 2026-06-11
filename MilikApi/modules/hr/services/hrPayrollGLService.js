@@ -97,7 +97,8 @@ export const postPayrollGLJournals = async (period, companyId, postedByUserId) =
 
   const accounts = await resolvePayrollAccounts(businessId);
 
-  const periodDate = new Date(period.year, period.month - 1, 28);
+  // Day 0 of the following month = last day of the payroll month
+  const periodDate = new Date(period.year, period.month, 0);
   const { start, end } = dayRange(periodDate);
 
   const components = [
@@ -141,4 +142,65 @@ export const postPayrollGLJournals = async (period, companyId, postedByUserId) =
   }
 
   return { entryCount, alreadyPosted: false };
+};
+
+// ─── Reversal function ────────────────────────────────────────────────────────
+
+/**
+ * Reverses all active GL entries posted for a payroll period by creating
+ * offsetting debit/credit pairs and marking the originals as 'reversed'.
+ *
+ * @returns {{ reversedCount: number }}
+ */
+export const reversePayrollGLJournals = async (period, companyId, reversedByUserId) => {
+  const businessId = new mongoose.Types.ObjectId(String(companyId));
+  const reversedById = reversedByUserId ? new mongoose.Types.ObjectId(String(reversedByUserId)) : null;
+
+  const originals = await FinancialLedgerEntry.find({
+    business: businessId,
+    sourceTransactionType: 'payroll_period',
+    sourceTransactionId: String(period._id),
+    status: { $ne: 'reversed' },
+  }).lean();
+
+  if (originals.length === 0) return { reversedCount: 0 };
+
+  const reversalDate = new Date();
+  const { start, end } = dayRange(reversalDate);
+
+  for (const entry of originals) {
+    const reversalGroupId = new mongoose.Types.ObjectId();
+    await Promise.all([
+      // Offsetting entry — flips direction to zero out the original
+      postEntry({
+        business: businessId,
+        accountId: entry.accountId,
+        direction: entry.direction === 'debit' ? 'credit' : 'debit',
+        amount: entry.amount,
+        transactionDate: reversalDate,
+        statementPeriodStart: start,
+        statementPeriodEnd: end,
+        journalGroupId: reversalGroupId,
+        sourceTransactionType: 'payroll_reversal',
+        sourceTransactionId: String(period._id),
+        category: 'PAYROLL_REVERSAL',
+        notes: `REVERSAL: ${entry.notes || period.label}`,
+        createdBy: reversedById,
+        allowUnscoped: true,
+      }),
+    ]);
+  }
+
+  // Mark all originals as reversed
+  await FinancialLedgerEntry.updateMany(
+    {
+      business: businessId,
+      sourceTransactionType: 'payroll_period',
+      sourceTransactionId: String(period._id),
+      status: { $ne: 'reversed' },
+    },
+    { $set: { status: 'reversed' } }
+  );
+
+  return { reversedCount: originals.length };
 };

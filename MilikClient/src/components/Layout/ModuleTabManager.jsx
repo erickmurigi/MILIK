@@ -203,41 +203,43 @@ const ModuleTabManager = ({ darkMode }) => {
   return (
     <div
       className={`fixed bottom-0 left-0 right-0 z-50 border-t shadow-lg ${
-        darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#1a472a] border-gray-400'
-      } flex items-center px-3 py-1.5 gap-2 overflow-x-auto`}
+        darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#1a472a] border-[#0d3320]'
+      } flex items-center px-3 py-1 gap-1.5 overflow-x-auto`}
+      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
-      {visibleModules.map((module) => (
-        <div
-          key={module.id}
-          className={`flex items-center gap-2 px-2.5 py-1 rounded cursor-pointer whitespace-nowrap transition text-sm font-medium ${
-            activeModule === module.id
-              ? darkMode
-                ? 'bg-gray-700 text-white'
-                : 'bg-[#0f766e] text-white'
-              : darkMode
-              ? 'bg-gray-900 text-gray-400 hover:bg-gray-800'
-              : 'bg-[#2d5a4a] text-gray-200 hover:bg-[#3a6d58]'
-          }`}
-          onClick={() => switchModule(module.id)}
-        >
-          <span className="flex-shrink-0 text-xs">{module.icon}</span>
-          <span className="max-w-[150px] truncate uppercase" style={{ textTransform: 'uppercase' }}>{module.title}</span>
-          {module.closable && (
-            <button
-              onClick={(event) => {
-                event.stopPropagation();
-                closeModule(module.id);
-              }}
-              className={`ml-1 p-0.5 rounded hover:bg-red-600 ${
-                darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-300 hover:text-white'
-              }`}
-              title="Close module"
-            >
-              <FaTimes className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      ))}
+      {visibleModules.map((module) => {
+        const isActive = activeModule === module.id;
+        return (
+          <div
+            key={module.id}
+            onClick={() => switchModule(module.id)}
+            title={module.title}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded cursor-pointer whitespace-nowrap transition-all duration-150 text-sm font-medium border-t-2 ${
+              isActive
+                ? darkMode
+                  ? 'bg-gray-700 text-white border-orange-400 shadow-md'
+                  : 'bg-[#2d5a4a] text-white border-[#E85C0D] shadow-md'
+                : darkMode
+                  ? 'bg-gray-900 text-gray-400 border-transparent hover:bg-gray-800 hover:text-gray-200'
+                  : 'bg-[#163d26] text-gray-400 border-transparent hover:bg-[#2d5a4a] hover:text-gray-200'
+            }`}
+          >
+            <span className={`flex-shrink-0 ${isActive ? 'text-current' : 'opacity-60'}`}>
+              {module.icon}
+            </span>
+            <span className="text-xs uppercase truncate max-w-[130px]">{module.title}</span>
+            {module.closable && (
+              <button
+                onClick={(e) => { e.stopPropagation(); closeModule(module.id); }}
+                className="ml-0.5 p-0.5 rounded-full flex-shrink-0 text-gray-500 hover:bg-red-600 hover:text-white transition-colors duration-150"
+                title="Close module"
+              >
+                <FaTimes className="w-2.5 h-2.5" />
+              </button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };

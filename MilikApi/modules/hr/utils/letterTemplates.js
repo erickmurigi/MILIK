@@ -25,12 +25,12 @@ const CSS = `
 
 const salutation = (emp) => `Dear ${emp.surname} ${emp.otherNames},`;
 
-const signBlock = (company) => `
+const signBlock = (company, signatory = null) => `
   <div class="sign-block">
     <p>Yours faithfully,<br><br>
     <span class="sign-line"></span><br>
-    <strong>${company.companyName || 'The Company'}</strong><br>
-    <em>Human Resources</em></p>
+    <strong>${signatory?.name || company.companyName || 'The Company'}</strong><br>
+    <em>${signatory?.title || 'Human Resources'}</em></p>
     <br>
     <p><strong>Acknowledged &amp; Accepted:</strong><br><br>
     <span class="sign-line"></span><br>
@@ -174,9 +174,47 @@ export const LETTER_META = {
   },
 };
 
+// ── Wrap a pre-rendered body with standard header + footer ───────────────────
+export function renderWithCustomBody(employee, company, signatory, renderedBody, letterType = 'custom') {
+  const emp = employee || {};
+  const co  = company  || {};
+  const refCode = (letterType || 'custom').toUpperCase().replace(/_/g, '');
+  const header = `${CSS}<div class="letter-body">
+<p>${fmtDate(new Date())}</p>
+<p class="ref-line">Ref: HR/${refCode}/${emp.employeeNumber || '000'}</p>
+<p>${emp.surname} ${emp.otherNames}<br>
+${emp.designation?.name || ''}${emp.designation ? ' — ' : ''}${emp.department?.name || ''}<br>
+${emp.physicalAddress || ''}</p>`;
+  const footer = `${signBlock(co, signatory)}</div>`;
+  return `${header}${renderedBody}${footer}`;
+}
+
+// ── Custom template placeholder substitution ──────────────────────────────────
+
+export function applyCustomTemplate(bodyHtml, employee, meta, company) {
+  const emp = employee || {};
+  const m   = meta    || {};
+  const co  = company || {};
+  return bodyHtml
+    .replace(/\{\{salutation\}\}/g,            `Dear ${emp.surname || ''} ${emp.otherNames || ''},`.trim())
+    .replace(/\{\{employee\.surname\}\}/g,     emp.surname     || '')
+    .replace(/\{\{employee\.otherNames\}\}/g,  emp.otherNames  || '')
+    .replace(/\{\{employee\.fullName\}\}/g,    `${emp.surname || ''} ${emp.otherNames || ''}`.trim())
+    .replace(/\{\{employee\.number\}\}/g,      emp.employeeNumber || '')
+    .replace(/\{\{employee\.designation\}\}/g, emp.designation?.name || emp.designation || '')
+    .replace(/\{\{employee\.department\}\}/g,  emp.department?.name  || emp.department  || '')
+    .replace(/\{\{employee\.email\}\}/g,       emp.email       || '')
+    .replace(/\{\{employee\.phone\}\}/g,       emp.phoneNumber || '')
+    .replace(/\{\{employee\.address\}\}/g,     emp.physicalAddress || '')
+    .replace(/\{\{employee\.kraPin\}\}/g,      emp.kraPin      || '')
+    .replace(/\{\{company\.name\}\}/g,         co.companyName  || '')
+    .replace(/\{\{today\}\}/g,                 fmtDate(new Date()))
+    .replace(/\{\{meta\.(\w+)\}\}/g,           (_, key) => m[key] != null ? String(m[key]) : '');
+}
+
 // ── Template renderers ────────────────────────────────────────────────────────
 
-export function renderLetterBody(letterType, employee, meta, company) {
+export function renderLetterBody(letterType, employee, meta, company, signatory = null) {
   const emp = employee;
   const m   = meta || {};
   const co  = company || {};
@@ -188,7 +226,7 @@ export function renderLetterBody(letterType, employee, meta, company) {
 ${emp.designation?.name || ''}${emp.designation ? ' — ' : ''}${emp.department?.name || ''}<br>
 ${emp.physicalAddress || ''}</p>`;
 
-  const footer = `${signBlock(co)}</div>`;
+  const footer = `${signBlock(co, signatory)}</div>`;
 
   switch (letterType) {
     case 'offer':
@@ -371,5 +409,123 @@ ${footer}`;
 
     default:
       return `${header}<p>${salutation(emp)}</p><p>${m.body || ''}</p>${footer}`;
+  }
+}
+
+// ── Default body HTML for template editor (placeholder form) ─────────────────
+// Returns the body section only — header/footer are always system-generated.
+// Uses {{placeholders}} so companies see the available variables.
+
+export function getDefaultBodyHtml(letterType) {
+  switch (letterType) {
+    case 'offer': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: OFFER OF EMPLOYMENT — {{meta.position}}</p>
+<p>Following your successful interview, {{company.name}} is pleased to offer you employment as
+<span class="highlight">{{meta.position}}</span> in the
+<span class="highlight">{{meta.department}}</span> department, subject to the terms and conditions outlined below.</p>
+<table class="terms-table">
+  <tr><td>Position</td><td>{{meta.position}}</td></tr>
+  <tr><td>Department</td><td>{{meta.department}}</td></tr>
+  <tr><td>Start Date</td><td>{{meta.startDate}}</td></tr>
+  <tr><td>Monthly Gross Salary</td><td><strong>{{meta.salary}}</strong></td></tr>
+  <tr><td>Probation Period</td><td>{{meta.probationMonths}} months</td></tr>
+</table>
+<p>Your employment will be subject to the Company's terms of service, policies, and procedures in force from time to time. The appointment is also subject to satisfactory reference checks and medical examination if required.</p>
+<p>Please confirm your acceptance of this offer by signing and returning one copy of this letter at your earliest convenience.</p>
+<p>We look forward to welcoming you to our team.</p>`;
+
+    case 'appointment': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: LETTER OF APPOINTMENT — {{meta.position}}</p>
+<p>This is to confirm your appointment to the position of <span class="highlight">{{meta.position}}</span> in the <span class="highlight">{{meta.department}}</span> department with effect from <span class="highlight">{{meta.startDate}}</span>.</p>
+<table class="terms-table">
+  <tr><td>Position</td><td>{{meta.position}}</td></tr>
+  <tr><td>Department</td><td>{{meta.department}}</td></tr>
+  <tr><td>Start Date</td><td>{{meta.startDate}}</td></tr>
+  <tr><td>Monthly Gross Salary</td><td><strong>{{meta.salary}}</strong></td></tr>
+  <tr><td>Probation Period</td><td>{{meta.probationMonths}} months</td></tr>
+</table>
+<p>During the probation period, your performance and conduct will be evaluated. Upon successful completion, your employment will be confirmed as a permanent member of staff.</p>
+<p>You are required to abide by the Company's policies, code of conduct, and any other regulations communicated to you from time to time.</p>
+<p>Kindly sign and return a copy of this letter as acknowledgment of your acceptance of the terms herein.</p>`;
+
+    case 'confirmation': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: CONFIRMATION OF EMPLOYMENT</p>
+<p>We are pleased to confirm that your employment with {{company.name}} has been confirmed as a <strong>Permanent Employee</strong> with effect from <span class="highlight">{{meta.effectiveDate}}</span>.</p>
+<p>Your performance during the probation period has been found satisfactory, and we look forward to your continued contribution to the organisation.</p>
+<p>Your terms and conditions of employment as outlined in your letter of appointment remain unchanged except where specifically revised herein.</p>`;
+
+    case 'increment': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: SALARY REVIEW / INCREMENT NOTIFICATION</p>
+<p>We are pleased to inform you that following a review of your performance and contribution, the Company has approved a revision of your salary as follows:</p>
+<table class="terms-table">
+  <tr><td>Current Monthly Gross Salary</td><td>{{meta.currentSalary}}</td></tr>
+  <tr><td>New Monthly Gross Salary</td><td><strong>{{meta.newSalary}}</strong></td></tr>
+  <tr><td>Effective Date</td><td>{{meta.effectiveDate}}</td></tr>
+</table>
+<p>All other terms and conditions of your employment remain unchanged. We appreciate your dedication and look forward to your continued growth with the organisation.</p>`;
+
+    case 'promotion': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: PROMOTION — {{meta.newPosition}}</p>
+<p>Following a review of your performance and contribution to {{company.name}}, we are pleased to inform you of your promotion from <span class="highlight">{{meta.currentPosition}}</span> to <span class="highlight">{{meta.newPosition}}</span>, effective <span class="highlight">{{meta.effectiveDate}}</span>.</p>
+<p>We recognise your hard work and commitment, and are confident that you will excel in your new role. Congratulations on this well-deserved promotion.</p>`;
+
+    case 'warning_1': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: FIRST WRITTEN WARNING</p>
+<p>This letter serves as a <strong>First Written Warning</strong> in accordance with the Company's disciplinary policy.</p>
+<p>It has come to the attention of Management that on or around <strong>{{meta.incidentDate}}</strong>, you were found to have engaged in the following conduct:</p>
+<p><em>{{meta.offence}}</em></p>
+<p>This conduct is considered a violation of the Company's standards of conduct and is not acceptable. You are hereby formally warned that a repeat of such conduct may result in more severe disciplinary action, up to and including dismissal.</p>
+<p>This warning will remain on your personnel file. Please sign below to acknowledge receipt of this letter.</p>`;
+
+    case 'warning_2': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: SECOND WRITTEN WARNING</p>
+<p>This letter serves as a <strong>Second Written Warning</strong>.</p>
+<p>On or around <strong>{{meta.incidentDate}}</strong>, you were found to have engaged in the following conduct:</p>
+<p><em>{{meta.offence}}</em></p>
+<p>Despite the previous warning, your conduct continues to fall below the required standard. You are hereby placed on formal notice that any further misconduct may result in a <strong>Final Written Warning or Summary Dismissal</strong>.</p>
+<p>Please sign below to acknowledge receipt of this letter.</p>`;
+
+    case 'final_warning': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: FINAL WRITTEN WARNING</p>
+<p>This letter constitutes a <strong>Final Written Warning</strong> — the most severe warning short of dismissal.</p>
+<p>On or around <strong>{{meta.incidentDate}}</strong>, you were found to have engaged in the following conduct:</p>
+<p><em>{{meta.offence}}</em></p>
+<p>The Company views this matter with the utmost seriousness. You are hereby placed on final notice that <strong>any further act of misconduct will result in immediate termination of your employment</strong> without further warning.</p>
+<p>Please sign below to acknowledge receipt of this letter.</p>`;
+
+    case 'termination': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: TERMINATION OF EMPLOYMENT</p>
+<p>This letter formally notifies you that your employment with {{company.name}} has been terminated effective <span class="highlight">{{meta.terminationDate}}</span>.</p>
+<p><strong>Reason for Termination:</strong><br><em>{{meta.reason}}</em></p>
+<p>You are required to return all company property, including identification cards, keys, equipment, and confidential documents, on or before your last working day.</p>
+<p>All confidentiality obligations under your contract of employment continue to apply following the termination of your employment.</p>`;
+
+    case 'reference': return `<p>To Whom It May Concern:</p>
+<p class="subject-line">RE: REFERENCE LETTER — {{employee.fullName}}</p>
+<p>This is to confirm that <strong>{{employee.fullName}}</strong> was employed by {{company.name}} as <strong>{{meta.position}}</strong> for the period <strong>{{meta.tenure}}</strong>.</p>
+<p>During their tenure, {{employee.surname}} demonstrated professionalism, commitment, and a strong work ethic. They performed their duties diligently and were a valued member of our team.</p>
+<p>We wish {{employee.surname}} every success in their future endeavours and recommend them without reservation.</p>`;
+
+    case 'suspension': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: SUSPENSION FROM DUTY</p>
+<p>You are hereby informed that you are suspended from duty with effect from <span class="highlight">{{meta.suspensionDate}}</span>, pending a disciplinary investigation.</p>
+<p><strong>Reason for Suspension:</strong><br><em>{{meta.reason}}</em></p>
+<p>The suspension is <strong>{{meta.withPay}}</strong>.</p>
+<p>During the suspension period, you are required to remain available to assist with the investigation, refrain from contacting witnesses, and surrender all company property and access credentials immediately.</p>
+<p>Please note that this suspension does not imply any finding of guilt.</p>`;
+
+    case 'reinstatement': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: REINSTATEMENT TO DUTY</p>
+<p>Following the conclusion of the disciplinary investigation, we are pleased to inform you that you have been reinstated to active duty with effect from <span class="highlight">{{meta.reinstatementDate}}</span>.</p>
+<p>Please report to your line manager on the above date. All terms and conditions of your original employment remain in effect.</p>`;
+
+    case 'redundancy': return `<p>{{salutation}}</p>
+<p class="subject-line">RE: NOTICE OF REDUNDANCY</p>
+<p>This letter formally notifies you that your position has been declared redundant by {{company.name}}, effective <span class="highlight">{{meta.redundancyDate}}</span>.</p>
+<p><strong>Reason for Redundancy:</strong><br><em>{{meta.reason}}</em></p>
+<p>This decision was not a reflection of your performance or conduct. You have been a valued member of our team and we regret that circumstances have necessitated this action.</p>
+<p>Please return all company property and assist with handing over your duties before your last working day.</p>`;
+
+    default: return `<p>{{salutation}}</p>\n<p>{{meta.body}}</p>`;
   }
 }

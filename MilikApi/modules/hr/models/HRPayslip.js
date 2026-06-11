@@ -50,7 +50,7 @@ const payslipSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ['Draft', 'Approved', 'Paid'],
+    enum: ['Draft', 'Approved', 'Paid', 'Reversed'],
     default: 'Draft',
     index: true,
   },

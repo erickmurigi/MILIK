@@ -1,12 +1,14 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import {
   FaSearch, FaUserPlus, FaEdit, FaRedoAlt, FaUserTimes,
-  FaUserCheck, FaEye, FaFilter,
+  FaUserCheck, FaEye, FaFilter, FaPrint,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
+import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 
@@ -106,6 +108,144 @@ export default function Employees() {
     }
   };
 
+  const company = useSelector(selectCurrentCompany) || {};
+
+  const printAllEmployees = useCallback(async () => {
+    const toastId = toast.loading('Preparing employee list…');
+    try {
+      const params = {};
+      if (search) params.search = search;
+      if (deptFilter  !== 'all') params.department     = deptFilter;
+      if (statusFilter !== 'all') params.status         = statusFilter;
+      if (typeFilter   !== 'all') params.employmentType = typeFilter;
+
+      const res = await adminRequests.get('/hr/employees/directory', { params });
+      const emps = res.data?.employees || [];
+      toast.dismiss(toastId);
+
+      const { companyName = '', logo = '', roadStreet = '', town = '', phoneNo = '', email: coEmail = '', taxPIN = '' } = company;
+      const addr = [roadStreet, town].filter(Boolean).join(', ');
+
+      const filterDesc = [
+        statusFilter !== 'all' ? `Status: ${statusFilter}` : '',
+        typeFilter   !== 'all' ? `Type: ${typeFilter}` : '',
+        search ? `Search: "${search}"` : '',
+      ].filter(Boolean).join(' · ') || 'All Employees';
+
+      const STATUS_COLOR = {
+        Active:     '#059669',
+        Probation:  '#d97706',
+        Suspended:  '#ea580c',
+        Terminated: '#dc2626',
+      };
+
+      const rows = emps.map((e, i) => `
+        <tr class="${i % 2 === 0 ? 'even' : 'odd'}">
+          <td class="num">${i + 1}</td>
+          <td class="name">${e.surname} ${e.otherNames}</td>
+          <td class="mono">${e.employeeNumber || '—'}</td>
+          <td>${e.department?.name || '—'}</td>
+          <td>${e.designation?.name || '—'}</td>
+          <td>${e.employmentType || '—'}</td>
+          <td>${fmtDate(e.dateJoined)}</td>
+          <td><span class="badge" style="color:${STATUS_COLOR[e.status] || '#64748b'}">${e.status}</span></td>
+        </tr>`).join('');
+
+      const win = window.open('', '_blank', 'width=1050,height=1200');
+      if (!win) { toast.error('Allow pop-ups to print'); return; }
+
+      win.document.write(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<title>Employee Directory</title>
+<style>
+  @page { size:A4 landscape; margin:12mm 14mm; }
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  html,body { background:#fff; font-family:Arial,Helvetica,sans-serif; font-size:9pt; color:#1a1a1a; }
+
+  .lh { display:flex; align-items:flex-start; justify-content:space-between; padding-bottom:8px; border-bottom:2.5px solid #027333; margin-bottom:12px; }
+  .lh-logo { height:40px; width:auto; border-radius:3px; }
+  .lh-company { font-size:15pt; font-weight:900; color:#0f172a; }
+  .lh-addr { font-size:7.5pt; color:#64748b; margin-top:2px; }
+  .lh-meta { text-align:right; font-size:7.5pt; color:#64748b; line-height:1.6; }
+
+  .doc-bar { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:1.5px solid #0f172a; padding-bottom:5px; margin-bottom:10px; }
+  .doc-label { font-size:7pt; font-weight:700; text-transform:uppercase; letter-spacing:0.18em; color:#64748b; }
+  .doc-title { font-size:13pt; font-weight:900; color:#0f172a; margin-top:2px; }
+  .doc-sub { font-size:8pt; color:#64748b; }
+
+  table { width:100%; border-collapse:collapse; }
+  thead tr { background:#1B3D2F; color:#fff; }
+  th { padding:5px 6px; text-align:left; font-size:7pt; font-weight:900; text-transform:uppercase; letter-spacing:0.14em; white-space:nowrap; }
+  th.num { width:28px; text-align:center; }
+  td { padding:4px 6px; font-size:8.5pt; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+  td.num { text-align:center; color:#94a3b8; font-size:7.5pt; }
+  td.mono { font-family:monospace; font-size:8pt; }
+  td.name { font-weight:700; color:#0f172a; }
+  tr.even { background:#fff; }
+  tr.odd  { background:#f8fafc; }
+  .badge { font-weight:900; font-size:7.5pt; }
+
+  tfoot td { padding:6px; font-size:8pt; font-weight:900; color:#64748b; border-top:2px solid #e2e8f0; }
+
+  .footer { margin-top:10px; display:flex; justify-content:space-between; font-size:7pt; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:5px; }
+  @media print { html,body { background:#fff; } }
+</style></head><body>
+
+<div class="lh">
+  <div>
+    ${logo ? `<img src="${logo}" class="lh-logo" alt="${companyName}">` : ''}
+    <div class="lh-company">${companyName}</div>
+    ${addr ? `<div class="lh-addr">${addr}</div>` : ''}
+  </div>
+  <div class="lh-meta">
+    ${coEmail ? coEmail + '<br>' : ''}${phoneNo ? phoneNo + '<br>' : ''}${taxPIN ? 'KRA PIN: ' + taxPIN : ''}
+  </div>
+</div>
+
+<div class="doc-bar">
+  <div>
+    <div class="doc-label">Human Resource · Staff Directory</div>
+    <div class="doc-title">Employee List</div>
+    <div class="doc-sub">${filterDesc}</div>
+  </div>
+  <div class="doc-sub">Printed: ${new Date().toLocaleDateString('en-KE',{day:'numeric',month:'long',year:'numeric'})} &nbsp;·&nbsp; ${emps.length} employee${emps.length !== 1 ? 's' : ''}</div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th class="num">#</th>
+      <th>Employee Name</th>
+      <th>Emp. No.</th>
+      <th>Department</th>
+      <th>Designation</th>
+      <th>Type</th>
+      <th>Date Joined</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+  <tfoot>
+    <tr>
+      <td colspan="8">Total: ${emps.length} employee${emps.length !== 1 ? 's' : ''} &nbsp;·&nbsp; ${filterDesc} &nbsp;·&nbsp; Generated by ${companyName}</td>
+    </tr>
+  </tfoot>
+</table>
+
+<div class="footer">
+  <span>This is a computer-generated staff directory.</span>
+  <span>${companyName}</span>
+</div>
+
+</body></html>`);
+      win.document.close();
+      win.onload = () => { win.focus(); win.print(); };
+    } catch (e) {
+      toast.dismiss(toastId);
+      toast.error('Failed to load employees for printing');
+    }
+  }, [search, deptFilter, statusFilter, typeFilter, company]);
+
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
@@ -120,6 +260,9 @@ export default function Employees() {
             <div className="flex items-center gap-2">
               <button onClick={refetch} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={10} /> Refresh
+              </button>
+              <button onClick={printAllEmployees} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                <FaPrint size={10} /> Print List
               </button>
               <button onClick={() => navigate('/hr/employees/new')} className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 py-1.5 text-xs font-black text-white hover:bg-[#e67e00]">
                 <FaUserPlus size={10} /> Add Employee

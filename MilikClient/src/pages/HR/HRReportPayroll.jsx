@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { FaMoneyBillWave, FaRedoAlt, FaPrint, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
+import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 
@@ -38,14 +40,101 @@ export default function HRReportPayroll() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handlePrint = () => {
-    const style = document.createElement('style');
-    style.id = 'payroll-summary-print-landscape';
-    style.textContent = '@page { size: A4 landscape; margin: 10mm 12mm; }';
-    document.head.appendChild(style);
-    window.print();
-    setTimeout(() => document.getElementById('payroll-summary-print-landscape')?.remove(), 1500);
-  };
+  const company = useSelector(selectCurrentCompany) || {};
+
+  const handlePrint = useCallback(() => {
+    if (!months.length) return;
+    const { companyName = '', logo = '', roadStreet = '', town = '', phoneNo = '', email: coEmail = '', taxPIN = '' } = company;
+    const addr = [roadStreet, town].filter(Boolean).join(', ');
+
+    const tbody = months.map((m, i) => `<tr class="${i%2===0?'even':'odd'}">
+      <td class="bold">${m.label}</td>
+      <td class="r">${m.employeeCount}</td>
+      <td class="r bold">${fmtKES(m.totalGross)}</td>
+      <td class="r red">${fmtKES(m.totalPAYE)}</td>
+      <td class="r red">${fmtKES(m.totalNHIF)}</td>
+      <td class="r red">${fmtKES(m.totalNSSF)}</td>
+      <td class="r red">${fmtKES(m.totalAHL)}</td>
+      <td class="r green bold">${fmtKES(m.totalNet)}</td>
+      <td style="font-size:7.5pt;font-weight:700;color:#64748b">${m.status}</td>
+    </tr>`).join('');
+
+    const win = window.open('', '_blank', 'width=1050,height=1200');
+    if (!win) { toast.error('Allow pop-ups to print'); return; }
+    win.document.write(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Payroll Summary — ${year}</title>
+<style>
+  @page{size:A4 landscape;margin:12mm 14mm;}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1a1a1a;}
+  .lh{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:8px;border-bottom:2.5px solid #027333;margin-bottom:12px;}
+  .lh-logo{height:40px;width:auto;border-radius:3px;}
+  .lh-company{font-size:15pt;font-weight:900;color:#0f172a;}
+  .lh-addr{font-size:7.5pt;color:#64748b;margin-top:2px;}
+  .lh-meta{text-align:right;font-size:7.5pt;color:#64748b;line-height:1.7;}
+  .doc-bar{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1.5px solid #0f172a;padding-bottom:5px;margin-bottom:10px;}
+  .doc-label{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:#64748b;}
+  .doc-title{font-size:13pt;font-weight:900;color:#0f172a;margin-top:2px;}
+  .doc-sub{font-size:8pt;color:#64748b;}
+  .summary{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+  .scard{flex:1;min-width:80px;border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;}
+  .sc-label{font-size:6pt;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;}
+  .sc-value{font-size:11pt;font-weight:900;margin-top:1px;}
+  table{width:100%;border-collapse:collapse;}
+  thead tr{background:#1B3D2F;color:#fff;}
+  th{padding:5px 6px;text-align:left;font-size:7pt;font-weight:900;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;}
+  th.r{text-align:right;}
+  td{padding:4px 6px;font-size:8.5pt;border-bottom:1px solid #f1f5f9;vertical-align:top;}
+  tr.even td{background:#fff;} tr.odd td{background:#f8fafc;}
+  td.bold{font-weight:700;color:#0f172a;}
+  td.r{text-align:right;font-family:monospace;}
+  td.red{color:#dc2626;} td.green{color:#059669;}
+  tfoot tr td{font-weight:900;border-top:2px solid #e2e8f0;padding-top:5px;}
+  .footer{margin-top:10px;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:5px;}
+  @media print{html,body{background:#fff;}}
+</style></head><body>
+<div class="lh">
+  <div>${logo?`<img src="${logo}" class="lh-logo" alt="${companyName}"><br>`:''}
+    <div class="lh-company">${companyName}</div>${addr?`<div class="lh-addr">${addr}</div>`:''}
+  </div>
+  <div class="lh-meta">${coEmail?coEmail+'<br>':''}${phoneNo?phoneNo+'<br>':''}${taxPIN?'KRA PIN: '+taxPIN:''}</div>
+</div>
+<div class="doc-bar">
+  <div><div class="doc-label">Human Resource · Payroll Summary</div><div class="doc-title">Payroll Summary — ${year}</div></div>
+  <div class="doc-sub">Printed: ${new Date().toLocaleDateString('en-KE',{day:'numeric',month:'long',year:'numeric'})}</div>
+</div>
+<div class="summary">
+  <div class="scard"><div class="sc-label">Total Gross</div><div class="sc-value">${fmtKES(t.gross)}</div></div>
+  <div class="scard"><div class="sc-label">PAYE</div><div class="sc-value" style="color:#dc2626">${fmtKES(t.paye)}</div></div>
+  <div class="scard"><div class="sc-label">SHA</div><div class="sc-value" style="color:#dc2626">${fmtKES(t.nhif)}</div></div>
+  <div class="scard"><div class="sc-label">NSSF</div><div class="sc-value" style="color:#dc2626">${fmtKES(t.nssf)}</div></div>
+  <div class="scard"><div class="sc-label">AHL</div><div class="sc-value" style="color:#dc2626">${fmtKES(t.ahl)}</div></div>
+  <div class="scard"><div class="sc-label">Total Deductions</div><div class="sc-value" style="color:#dc2626">${fmtKES(t.deductions)}</div></div>
+  <div class="scard"><div class="sc-label">Net Pay</div><div class="sc-value" style="color:#059669">${fmtKES(t.net)}</div></div>
+</div>
+<table>
+  <thead><tr>
+    <th>Month</th><th class="r">Employees</th><th class="r">Gross</th>
+    <th class="r">PAYE</th><th class="r">SHA</th><th class="r">NSSF</th><th class="r">AHL</th>
+    <th class="r">Net Pay</th><th>Status</th>
+  </tr></thead>
+  <tbody>${tbody}</tbody>
+  <tfoot><tr>
+    <td>Totals</td><td class="r">—</td>
+    <td class="r">${fmtKES(t.gross)}</td>
+    <td class="r red">${fmtKES(t.paye)}</td>
+    <td class="r red">${fmtKES(t.nhif)}</td>
+    <td class="r red">${fmtKES(t.nssf)}</td>
+    <td class="r red">${fmtKES(t.ahl)}</td>
+    <td class="r green">${fmtKES(t.net)}</td>
+    <td></td>
+  </tr></tfoot>
+</table>
+<div class="footer"><span>Computer-generated payroll summary.</span><span>${companyName}</span></div>
+</body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [months, t, year, company]);
 
   const t = data?.totals || {};
   const months = data?.months || [];

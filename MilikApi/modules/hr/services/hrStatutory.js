@@ -66,7 +66,7 @@ export function computeNSSF(grossSalary, cfg = DEFAULT_CONFIG) {
   const { nssfLower, nssfUpper, nssfRate } = cfg;
   const tier1 = nssfLower * nssfRate;
   const tier2 = grossSalary > nssfLower
-    ? (Math.min(grossSalary, nssfUpper) - nssfLower) * nssfRate
+    ? Math.max(0, Math.min(grossSalary, nssfUpper) - nssfLower) * nssfRate
     : 0;
   return Math.round(tier1 + tier2);
 }

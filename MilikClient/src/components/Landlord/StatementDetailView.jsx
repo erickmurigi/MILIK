@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from "react";
+import React, { useCallback, useMemo, useState, useRef } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -125,9 +125,56 @@ const StatementDetailView = ({
     return "Draft";
   };
 
-  const handlePrintAdvice = () => {
-    window.print();
-  };
+  const handlePrintAdvice = useCallback(() => {
+    const co = company || {};
+    const coName = co.companyName || co.name || co.businessName || 'Milik';
+    const logo = co.logo || '';
+    const win = window.open('', '_blank', 'width=870,height=1100');
+    if (!win) { window.print(); return; }
+    const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+    const stmtNum = statement?.statementNumber || statement?.sourceStatementNumber || '—';
+    const period = [statement?.periodStart, statement?.periodEnd].filter(Boolean).map(d => new Date(d).toLocaleDateString()).join(' — ') || '—';
+    win.document.write(`<!DOCTYPE html><html><head><title>Landlord Statement ${stmtNum}</title><style>
+      @page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
+      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
+      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
+      .logo{max-height:44px;max-width:120px;object-fit:contain;margin-bottom:4px}
+      .info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+      .box{border:1px solid #dbe2ea;border-radius:6px;padding:7px 10px;font-size:8.5px;line-height:1.7}
+      .box-label{font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:800;margin-bottom:4px}
+      table{width:100%;border-collapse:collapse;font-size:8.5px;margin-bottom:10px}
+      thead th{background:#0B3B2E;color:#fff;padding:4px 8px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
+      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 8px}
+      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
+      tfoot td{border-top:2px solid #0B3B2E;padding:4px 8px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
+      .settle{margin-top:12px;border:2px solid #0B3B2E;border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
+      .settle-label{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#0B3B2E}
+      .settle-amount{font-size:18px;font-weight:900;color:${settlement.isNegative ? '#b91c1c' : '#0B3B2E'}}
+      h3{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;font-weight:900;margin:12px 0 5px}
+      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    </style></head><body>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${coName}</div><div class="ttl">Landlord Statement</div><div class="sub">Stmt #${stmtNum} · ${period} · ${statementTypeLabel}</div></div>
+    <div class="meta"><div>${coName}</div>${companyAddress ? `<div>${companyAddress}</div>` : ''}${companyPhone ? `<div>Tel: ${companyPhone}</div>` : ''}<div>Generated: ${new Date().toLocaleString()}</div></div></div>
+    <div class="info">
+      <div class="box"><div class="box-label">Landlord</div><strong>${landlordName}</strong>${landlordEmail ? `<br>${landlordEmail}` : ''}</div>
+      <div class="box"><div class="box-label">Property</div><strong>${propertyName}</strong>${propertyAddress ? `<br>${propertyAddress}` : ''}</div>
+    </div>
+    ${tenantRows.length > 0 ? `<h3>Tenant Collection Summary</h3>
+    <table><thead><tr><th>Tenant</th><th>Unit</th><th class="r">Rent Invoiced</th><th class="r">Rent Collected</th><th class="r">Utility Invoiced</th><th class="r">Utility Collected</th></tr></thead>
+    <tbody>${tenantRows.map((row) => `<tr><td>${row.tenantName || '—'}</td><td>${row.unit || '—'}</td><td class="r">${fmt(row.invoicedRent || row.rent)}</td><td class="r">${fmt(row.paidRent || row.collected)}</td><td class="r">${fmt(row.invoicedUtility || row.utilityCharges)}</td><td class="r">${fmt(row.paidUtility || row.utilitiesCollected)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="2"><strong>TOTAL</strong></td><td class="r"><strong>${fmt(totalRentInvoiced)}</strong></td><td class="r"><strong>${fmt(totalRentReceived)}</strong></td><td class="r"></td><td class="r"></td></tr></tfoot></table>` : ''}
+    ${expenseLines.length > 0 ? `<h3>Deductions / Expenses</h3>
+    <table><thead><tr><th>Description</th><th>Category</th><th class="r">Amount</th></tr></thead>
+    <tbody>${expenseLines.map((line) => `<tr><td>${line.description || '—'}</td><td>${line.category || '—'}</td><td class="r" style="color:#b91c1c">${fmt(line.amount)}</td></tr>`).join('')}</tbody></table>` : ''}
+    <div class="settle">
+      <div class="settle-label">${settlement.label}</div>
+      <div class="settle-amount">${fmt(settlement.amount)}</div>
+    </div>
+    </body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [company, statement, tenantRows, summary, expenseLines, settlement, statementTypeLabel, companyAddress, companyPhone, landlordName, landlordEmail, propertyName, propertyAddress, totalRentInvoiced, totalRentReceived]);
 
   const handleDownloadPdf = () => {
     if (onDownloadPdf) onDownloadPdf(statement);

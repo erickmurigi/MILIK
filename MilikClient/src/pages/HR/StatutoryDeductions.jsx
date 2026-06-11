@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FaCalculator, FaRedoAlt, FaSave, FaPlus, FaTrash, FaUndo } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
@@ -151,7 +151,7 @@ export default function StatutoryDeductions() {
     });
   };
 
-  const calc = cfg ? computeClientAll(preview, cfg) : null;
+  const calc = useMemo(() => (cfg ? computeClientAll(preview, cfg) : null), [cfg, preview]);
 
   const cardCls = 'rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden';
   const sectionHead = (label, color = 'bg-[#0B3B2E]') =>

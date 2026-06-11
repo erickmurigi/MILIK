@@ -5,6 +5,9 @@ import { v2 as cloudinary } from 'cloudinary';
 import { verifyUser } from '../../../controllers/verifyToken.js';
 import HREmployee from '../models/HREmployee.js';
 import HRDepartment from '../models/HRDepartment.js';
+import HRLeaveApplication from '../models/HRLeaveApplication.js';
+import HRPayrollPeriod from '../models/HRPayrollPeriod.js';
+import HRPayslip from '../models/HRPayslip.js';
 import { resolveCompanyId, currentUserId, parsePage, parseLimit } from '../services/hrScope.js';
 
 cloudinary.config({
@@ -44,9 +47,17 @@ router.get('/stats', verifyUser, async (req, res) => {
   try {
     const companyId = resolveCompanyId(req);
     const oid = new mongoose.Types.ObjectId(companyId);
-    const yearStart = new Date(new Date().getFullYear(), 0, 1);
+    const now = new Date();
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const in30Days = new Date(now.getTime() + 30 * 86400000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [statusCounts, typeCounts, deptCounts, recentJoiners, terminatedYTD] = await Promise.all([
+    const [
+      statusCounts, typeCounts, deptCounts, recentJoiners, terminatedYTD,
+      genderCounts, probationEndingSoon,
+      pendingLeave, onLeaveToday,
+      latestPeriod,
+    ] = await Promise.all([
       HREmployee.aggregate([
         { $match: { company: oid } },
         { $group: { _id: '$status', count: { $sum: 1 } } },
@@ -68,13 +79,49 @@ router.get('/stats', verifyUser, async (req, res) => {
         .limit(5)
         .populate('department', 'name')
         .populate('designation', 'name')
-        .select('surname otherNames employeeNumber dateJoined department designation')
+        .select('surname otherNames employeeNumber dateJoined department designation gender')
         .lean(),
       HREmployee.countDocuments({ company: companyId, status: 'Terminated', terminationDate: { $gte: yearStart } }),
+      // gender breakdown
+      HREmployee.aggregate([
+        { $match: { company: oid, status: { $ne: 'Terminated' } } },
+        { $group: { _id: '$gender', count: { $sum: 1 } } },
+      ]),
+      // probation ending within 30 days
+      HREmployee.find({
+        company: companyId, status: 'Probation',
+        probationEndDate: { $gte: now, $lte: in30Days },
+      }).select('surname otherNames probationEndDate department').populate('department', 'name').lean(),
+      // pending leave approvals
+      HRLeaveApplication.countDocuments({ company: companyId, status: 'Pending' }),
+      // on leave today
+      HRLeaveApplication.countDocuments({
+        company: companyId, status: 'Approved',
+        startDate: { $lte: now }, endDate: { $gte: now },
+      }),
+      // latest payroll period with summary
+      HRPayrollPeriod.findOne({ company: companyId }).sort({ year: -1, month: -1 }).lean(),
     ]);
 
     const byStatus = Object.fromEntries(statusCounts.map((s) => [s._id, s.count]));
-    const byType = Object.fromEntries(typeCounts.map((t) => [t._id, t.count]));
+    const byType   = Object.fromEntries(typeCounts.map((t)   => [t._id, t.count]));
+    const byGender = Object.fromEntries(genderCounts.map((g) => [g._id || 'Unknown', g.count]));
+
+    // payroll summary for latest period
+    let payrollSummary = null;
+    if (latestPeriod) {
+      const payslipAgg = await HRPayslip.aggregate([
+        { $match: { company: oid, payrollPeriod: latestPeriod._id } },
+        { $group: { _id: null, grossTotal: { $sum: '$grossSalary' }, netTotal: { $sum: '$netSalary' }, count: { $sum: 1 } } },
+      ]);
+      payrollSummary = {
+        periodName: latestPeriod.label,
+        status:     latestPeriod.status,
+        grossTotal: payslipAgg[0]?.grossTotal || latestPeriod.totalGross || 0,
+        netTotal:   payslipAgg[0]?.netTotal   || latestPeriod.totalNet   || 0,
+        count:      payslipAgg[0]?.count      || latestPeriod.employeeCount || 0,
+      };
+    }
 
     res.json({
       total: Object.values(byStatus).reduce((a, b) => a + b, 0),
@@ -84,9 +131,42 @@ router.get('/stats', verifyUser, async (req, res) => {
       terminated: byStatus.Terminated || 0,
       terminatedYTD,
       byType,
+      byGender,
       byDepartment: deptCounts,
       recentJoiners,
+      probationEndingSoon,
+      pendingLeave,
+      onLeaveToday,
+      payrollSummary,
     });
+  } catch (err) {
+    res.status(err.status || 500).json({ message: err.message });
+  }
+});
+
+// GET /api/hr/employees/directory  — unpaginated, for printing
+router.get('/directory', verifyUser, async (req, res) => {
+  try {
+    const companyId = resolveCompanyId(req);
+    const { search, department, status, employmentType } = req.query;
+
+    const query = { company: companyId };
+    if (status && status !== 'all') query.status = status;
+    if (department && department !== 'all') query.department = department;
+    if (employmentType && employmentType !== 'all') query.employmentType = employmentType;
+    if (search) query.$text = { $search: search };
+
+    const employees = await HREmployee.find(query)
+      .populate([
+        { path: 'department',  select: 'name' },
+        { path: 'designation', select: 'name' },
+      ])
+      .select('surname otherNames employeeNumber department designation employmentType status dateJoined gender phoneNumber email')
+      .sort({ department: 1, surname: 1, otherNames: 1 })
+      .limit(1000)
+      .lean();
+
+    res.json({ employees, total: employees.length });
   } catch (err) {
     res.status(err.status || 500).json({ message: err.message });
   }

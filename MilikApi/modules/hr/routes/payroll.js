@@ -6,7 +6,8 @@ import HREmployee from '../models/HREmployee.js';
 import { resolveCompanyId, currentUserId, parsePage, parseLimit } from '../services/hrScope.js';
 import { computeStatutory, cfgFromDoc } from '../services/hrStatutory.js';
 import HRStatutoryConfig from '../models/HRStatutoryConfig.js';
-import { postPayrollGLJournals, resolvePayrollAccounts } from '../services/hrPayrollGLService.js';
+import { postPayrollGLJournals, resolvePayrollAccounts, reversePayrollGLJournals } from '../services/hrPayrollGLService.js';
+import { isSystemAdminUser } from '../../../utils/permissionControl.js';
 
 const router = express.Router();
 
@@ -14,21 +15,40 @@ const router = express.Router();
 function buildPayslip(emp, periodId, companyId, userId, cfg) {
   const basic = Math.max(0, Number(emp.basicSalary) || 0);
 
-  const allowances = (emp.salaryComponents || [])
+  const components = emp.salaryComponents || [];
+
+  // Pass 1: resolve fixed allowances + percentage-of-basic allowances
+  const allowances = components
     .filter((c) => c.type === 'Allowance')
     .map((c) => ({
       name: c.name,
-      amount: c.isPercentage ? Math.round((basic * Number(c.amount)) / 100) : Math.round(Number(c.amount)),
+      amount: c.isPercentage && c.percentageBase !== 'Gross'
+        ? Math.round((basic * Number(c.amount)) / 100)
+        : c.isPercentage ? null  // percentage-of-gross: resolved in pass 2
+        : Math.round(Number(c.amount)),
+      _raw: Number(c.amount),
+      _pctGross: c.isPercentage && c.percentageBase === 'Gross',
     }));
 
-  const gross = basic + allowances.reduce((s, a) => s + a.amount, 0);
+  // Preliminary gross from non-pending allowances (for resolving % of gross)
+  const grossPrelim = basic + allowances.reduce((s, a) => s + (a.amount ?? 0), 0);
+
+  const allowancesResolved = allowances.map(({ name, amount, _raw, _pctGross }) => ({
+    name,
+    amount: _pctGross ? Math.round((grossPrelim * _raw) / 100) : amount,
+  }));
+
+  const gross = basic + allowancesResolved.reduce((s, a) => s + a.amount, 0);
+
   const { paye, nhif, nssf, ahl } = computeStatutory(gross, cfg);
 
-  const otherDeductions = (emp.salaryComponents || [])
+  const otherDeductions = components
     .filter((c) => c.type === 'Deduction')
     .map((c) => ({
       name: c.name,
-      amount: c.isPercentage ? Math.round((gross * Number(c.amount)) / 100) : Math.round(Number(c.amount)),
+      amount: c.isPercentage
+        ? Math.round(((c.percentageBase === 'Basic' ? basic : gross) * Number(c.amount)) / 100)
+        : Math.round(Number(c.amount)),
     }));
 
   const totalDeductions = paye + nhif + nssf + ahl + otherDeductions.reduce((s, d) => s + d.amount, 0);
@@ -53,7 +73,7 @@ function buildPayslip(emp, periodId, companyId, userId, cfg) {
       mpesaNumber: emp.mpesaNumber || '',
     },
     basicSalary: basic,
-    allowances,
+    allowances: allowancesResolved,
     grossSalary: gross,
     paye,
     nhif,
@@ -91,17 +111,21 @@ function sumPayslips(slips) {
 router.get('/periods', verifyUser, async (req, res) => {
   try {
     const companyId = resolveCompanyId(req);
-    const { page, limit } = req.query;
+    const { page, limit, year, status } = req.query;
     const safePage  = parsePage(page);
     const safeLimit = parseLimit(limit, 20);
 
+    const filter = { company: companyId };
+    if (year)   filter.year   = Number(year);
+    if (status) filter.status = status;
+
     const [periods, total] = await Promise.all([
-      HRPayrollPeriod.find({ company: companyId })
+      HRPayrollPeriod.find(filter)
         .sort({ year: -1, month: -1 })
         .skip((safePage - 1) * safeLimit)
         .limit(safeLimit)
         .lean(),
-      HRPayrollPeriod.countDocuments({ company: companyId }),
+      HRPayrollPeriod.countDocuments(filter),
     ]);
 
     res.json({ periods, total, totalPages: Math.ceil(total / safeLimit), currentPage: safePage });
@@ -176,8 +200,9 @@ router.post('/periods/:id/run', verifyUser, async (req, res) => {
       await HRPayslip.insertMany(payslipDocs, { ordered: false });
     }
 
-    // Update period totals
-    const totals = sumPayslips(payslipDocs);
+    // Compute totals from DB to account for any partial insertMany failures
+    const inserted = await HRPayslip.find({ payrollPeriod: period._id, company: companyId }).lean();
+    const totals = sumPayslips(inserted);
     Object.assign(period, totals, { status: 'Draft', updatedBy: userId });
     await period.save();
 
@@ -288,6 +313,56 @@ router.patch('/periods/:id/mark-paid', verifyUser, async (req, res) => {
   }
 });
 
+// PATCH /api/hr/payroll/periods/:id/reverse  — reverse an Approved or Paid period (admin only)
+router.patch('/periods/:id/reverse', verifyUser, async (req, res) => {
+  try {
+    if (!req.user?.adminAccess && !isSystemAdminUser(req.user)) {
+      return res.status(403).json({ message: 'Only administrators can reverse a payroll period' });
+    }
+    const companyId = resolveCompanyId(req);
+    const userId    = currentUserId(req);
+    const { reason } = req.body || {};
+
+    const period = await HRPayrollPeriod.findOne({ _id: req.params.id, company: companyId });
+    if (!period) return res.status(404).json({ message: 'Payroll period not found' });
+    if (!['Approved', 'Paid'].includes(period.status)) {
+      return res.status(400).json({ message: `Only Approved or Paid periods can be reversed (current status: ${period.status})` });
+    }
+
+    // Reverse GL entries first
+    let glReversalResult = { reversedCount: 0 };
+    if (period.glPosted) {
+      try {
+        glReversalResult = await reversePayrollGLJournals(period, companyId, userId);
+        period.glReversed   = true;
+        period.glReversedAt = new Date();
+      } catch (glErr) {
+        return res.status(500).json({ message: `GL reversal failed: ${glErr.message}. Period not reversed.` });
+      }
+    }
+
+    // Reverse all payslips
+    await HRPayslip.updateMany(
+      { payrollPeriod: period._id, status: { $in: ['Approved', 'Paid'] } },
+      { $set: { status: 'Reversed', updatedBy: userId } }
+    );
+
+    period.status         = 'Reversed';
+    period.reversedBy     = userId;
+    period.reversedAt     = new Date();
+    period.reversalReason = reason || '';
+    period.updatedBy      = userId;
+    await period.save();
+
+    res.json({
+      message: `Payroll period reversed. ${glReversalResult.reversedCount} GL entries reversed.`,
+      period,
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ message: err.message });
+  }
+});
+
 // DELETE /api/hr/payroll/periods/:id  — only Draft periods
 router.delete('/periods/:id', verifyUser, async (req, res) => {
   try {
@@ -329,7 +404,7 @@ router.get('/payslips/:id', verifyUser, async (req, res) => {
     const companyId = resolveCompanyId(req);
     const payslip = await HRPayslip.findOne({ _id: req.params.id, company: companyId })
       .populate('payrollPeriod', 'label month year status')
-      .populate('employee', 'surname otherNames employeeNumber profilePicture')
+      .populate('employee', 'surname otherNames employeeNumber email profilePicture')
       .lean();
     if (!payslip) return res.status(404).json({ message: 'Payslip not found' });
     res.json(payslip);

@@ -171,13 +171,49 @@ const RentalAgedAnalysisReport = () => {
 
   const printGeneratedAt = useMemo(() => new Date().toLocaleString(), []);
 
-  const handlePrint = () => {
-    if (!canExportReports) {
-      toast.warning("You do not have permission to print reports");
-      return;
-    }
-    window.requestAnimationFrame(() => window.print());
-  };
+  const handlePrint = useCallback(() => {
+    if (!canExportReports) { toast.warning("You do not have permission to print reports"); return; }
+    const co = currentCompany || {};
+    const name = co.companyName || co.name || co.businessName || 'Milik';
+    const logo = co.logo || '';
+    const by = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || '';
+    const win = window.open('', '_blank', 'width=1120,height=800');
+    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
+    const fmt = (v) => `KES ${Number(v || 0).toLocaleString()}`;
+    win.document.write(`<!DOCTYPE html><html><head><title>Rental Aged Analysis</title><style>
+      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
+      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
+      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
+      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
+      .cards{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:10px}
+      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
+      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
+      .cv{font-size:12px;font-weight:900;color:#0f172a;margin-top:3px}
+      table{width:100%;border-collapse:collapse;font-size:8.5px}
+      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
+      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
+      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
+      tfoot td{border-top:2px solid #0B3B2E;padding:4px 6px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
+      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    </style></head><body>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Rental Aged Analysis Report</div><div class="sub">As at ${new Date().toLocaleDateString()}</div></div>
+    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div><div>Tenants: ${filteredRows.length}</div></div></div>
+    <div class="cards">
+      <div class="card"><div class="cl">Current</div><div class="cv">${fmt(totals.current)}</div></div>
+      <div class="card"><div class="cl">1-30 Days</div><div class="cv" style="color:#b45309">${fmt(totals.days30)}</div></div>
+      <div class="card"><div class="cl">31-60 Days</div><div class="cv" style="color:#c2410c">${fmt(totals.days60)}</div></div>
+      <div class="card"><div class="cl">61-90 Days</div><div class="cv" style="color:#b91c1c">${fmt(totals.days90)}</div></div>
+      <div class="card"><div class="cl">90+ Days</div><div class="cv" style="color:#7f1d1d">${fmt(totals.days90Plus)}</div></div>
+      <div class="card"><div class="cl">Total Outstanding</div><div class="cv" style="color:#b91c1c"><strong>${fmt(totals.total)}</strong></div></div>
+    </div>
+    <table><thead><tr><th>Tenant</th><th>Property</th><th>Unit</th><th class="r">Current</th><th class="r">1-30d</th><th class="r">31-60d</th><th class="r">61-90d</th><th class="r">90+ d</th><th class="r">Total</th><th>Oldest Due</th></tr></thead>
+    <tbody>${filteredRows.map((row) => `<tr><td><strong>${row.tenantName}</strong></td><td>${row.propertyName}</td><td>${row.unitNumber}</td><td class="r">${fmt(row.current)}</td><td class="r">${fmt(row.days30)}</td><td class="r">${fmt(row.days60)}</td><td class="r">${fmt(row.days90)}</td><td class="r" style="color:#b91c1c"><strong>${fmt(row.days90Plus)}</strong></td><td class="r"><strong>${fmt(row.total)}</strong></td><td>${row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '—'}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="3"><strong>TOTALS</strong></td><td class="r">${fmt(totals.current)}</td><td class="r">${fmt(totals.days30)}</td><td class="r">${fmt(totals.days60)}</td><td class="r">${fmt(totals.days90)}</td><td class="r">${fmt(totals.days90Plus)}</td><td class="r"><strong>${fmt(totals.total)}</strong></td><td></td></tr></tfoot>
+    </table></body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [canExportReports, currentCompany, currentUser, filteredRows, totals]);
 
   const exportCsv = () => {
     if (!canExportReports) {

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import { FaPrint, FaRedoAlt, FaSearch } from "react-icons/fa";
 import { carWashApi, formatMoney, getActiveBranchId, todayISO } from "../../services/carWashApi";
+import { selectCurrentCompany } from "../../redux/selectors";
 import CarWashShell from "./CarWashShell";
 
 const startOfMonthISO = () => {
@@ -11,6 +13,7 @@ const startOfMonthISO = () => {
 const pct = (value) => `${Number(value || 0).toFixed(1)}%`;
 
 const CarWashStaffReport = () => {
+  const currentCompany = useSelector(selectCurrentCompany);
   const [from, setFrom] = useState(startOfMonthISO());
   const [to, setTo] = useState(todayISO());
   const [search, setSearch] = useState("");
@@ -78,6 +81,47 @@ const CarWashStaffReport = () => {
     setApplied({ from: f, to: t });
   };
 
+  const handlePrint = useCallback(() => {
+    const co = currentCompany || {};
+    const name = co.companyName || co.name || co.businessName || 'Milik';
+    const logo = co.logo || '';
+    const win = window.open('', '_blank', 'width=1120,height=800');
+    if (!win) return;
+    const fmt = (v) => `KES ${Number(v || 0).toLocaleString()}`;
+    win.document.write(`<!DOCTYPE html><html><head><title>Car Wash Staff Report</title><style>
+      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
+      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
+      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
+      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
+      .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px}
+      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
+      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
+      .cv{font-size:12px;font-weight:900;color:#0f172a;margin-top:3px}
+      table{width:100%;border-collapse:collapse;font-size:8.5px}
+      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
+      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
+      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
+      tfoot td{border-top:2px solid #0B3B2E;padding:4px 6px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
+      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    </style></head><body>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Staff Performance Report</div><div class="sub">Period: ${applied.from} to ${applied.to}</div></div>
+    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Staff: ${staffCount}</div></div></div>
+    <div class="cards">
+      <div class="card"><div class="cl">Staff</div><div class="cv">${staffCount}</div></div>
+      <div class="card"><div class="cl">Total Jobs</div><div class="cv">${totalJobs}</div></div>
+      <div class="card"><div class="cl">Total Revenue</div><div class="cv" style="color:#0B3B2E">${fmt(totalRevenue)}</div></div>
+      <div class="card"><div class="cl">Commission</div><div class="cv" style="color:#FF8C00">${fmt(totalCommission)}</div></div>
+      <div class="card"><div class="cl">Net Revenue</div><div class="cv" style="color:${totalRevenue - totalCommission >= 0 ? '#047857' : '#b91c1c'}">${fmt(totalRevenue - totalCommission)}</div></div>
+    </div>
+    <table><thead><tr><th>#</th><th>Staff</th><th class="r">Jobs</th><th class="r">Paid</th><th class="r">Revenue</th><th class="r">Commission</th><th class="r">Net</th><th class="r">Cash</th><th class="r">M-Pesa</th><th class="r">Avg/Job</th><th class="r">% Rev</th></tr></thead>
+    <tbody>${rows.map((row, i) => `<tr><td>${i + 1}</td><td><strong>${row.staff}</strong></td><td class="r">${row.jobs}</td><td class="r">${row.paidJobs}</td><td class="r">${fmt(row.revenue)}</td><td class="r" style="color:#FF8C00">${fmt(row.commission)}</td><td class="r" style="color:${Number(row.netRevenue || 0) >= 0 ? '#047857' : '#b91c1c'}">${fmt(row.netRevenue)}</td><td class="r">${fmt(row.cash)}</td><td class="r">${fmt(row.mpesa)}</td><td class="r">${totalJobs > 0 ? fmt(Number(row.revenue || 0) / Math.max(Number(row.jobs || 1), 1)) : '—'}</td><td class="r">${totalRevenue > 0 ? `${((Number(row.revenue || 0) / totalRevenue) * 100).toFixed(1)}%` : '0%'}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="2"><strong>TOTALS</strong></td><td class="r">${totals.jobs}</td><td class="r">${totals.paidJobs}</td><td class="r">${fmt(totals.revenue)}</td><td class="r">${fmt(totals.commission)}</td><td class="r">${fmt(totals.netRevenue)}</td><td class="r">${fmt(totals.cash)}</td><td class="r">${fmt(totals.mpesa)}</td><td class="r"></td><td class="r">100%</td></tr></tfoot>
+    </table></body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [currentCompany, rows, totals, totalJobs, totalRevenue, totalCommission, staffCount, applied]);
+
   return (
     <CarWashShell
       title="Staff Performance Report"
@@ -87,7 +131,7 @@ const CarWashStaffReport = () => {
             <FaRedoAlt className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
-          <button type="button" onClick={() => window.print()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={handlePrint} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaPrint />
             Print
           </button>

@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { FaArrowLeft, FaPrint, FaRedoAlt, FaFileAlt } from 'react-icons/fa';
+import { FaArrowLeft, FaPrint, FaRedoAlt, FaFileAlt, FaEnvelope } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
+import EmailSendModal from '../../components/HR/EmailSendModal';
+import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 
@@ -32,6 +35,7 @@ export default function HRRemittance() {
   const [reportType, setReportType] = useState('paye');
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(false);
+  const [showEmail, setShowEmail] = useState(false);
 
   useEffect(() => {
     adminRequests.get('/hr/reports/periods')
@@ -65,6 +69,88 @@ export default function HRRemittance() {
   const rt     = REPORT_TYPES.find((r) => r.key === reportType) || REPORT_TYPES[0];
   const c      = COLOR[rt.color];
 
+  const company = useSelector(selectCurrentCompany) || {};
+
+  const printRemittance = useCallback(() => {
+    if (!rows.length) return;
+    const { companyName = '', logo = '', roadStreet = '', town = '', phoneNo = '', email: coEmail = '', taxPIN = '' } = company;
+    const addr = [roadStreet, town].filter(Boolean).join(', ');
+
+    let thead = '', tbody = '', tfoot = '';
+
+    if (reportType === 'paye') {
+      thead = `<tr><th>Emp No.</th><th>Employee Name</th><th>KRA PIN</th><th class="r">Gross Salary</th><th class="r red">PAYE Deducted</th></tr>`;
+      tbody = rows.map((r) => `<tr><td class="mono">${r.employeeNumber}</td><td class="bold">${r.name}</td><td class="mono">${r.kraPin||'—'}</td><td class="r">${fmtKES(r.grossSalary)}</td><td class="r red bold">${fmtKES(r.paye)}</td></tr>`).join('');
+      tfoot = `<tr class="tot"><td colspan="3">Total</td><td class="r">${fmtKES(totals.grossSalary)}</td><td class="r red">${fmtKES(totals.paye)}</td></tr>`;
+    } else if (reportType === 'nhif') {
+      thead = `<tr><th>Emp No.</th><th>Employee Name</th><th>SHA / NHIF No.</th><th class="r">Gross Salary</th><th class="r blue">SHA Contribution</th></tr>`;
+      tbody = rows.map((r) => `<tr><td class="mono">${r.employeeNumber}</td><td class="bold">${r.name}</td><td class="mono">${r.nhifNo||'—'}</td><td class="r">${fmtKES(r.grossSalary)}</td><td class="r blue bold">${fmtKES(r.employeeContribution)}</td></tr>`).join('');
+      tfoot = `<tr class="tot"><td colspan="3">Total</td><td class="r">${fmtKES(totals.grossSalary)}</td><td class="r blue">${fmtKES(totals.employeeContribution)}</td></tr>`;
+    } else if (reportType === 'nssf') {
+      thead = `<tr><th>Emp No.</th><th>Employee Name</th><th>NSSF No.</th><th class="r">Gross</th><th class="r purple">Employee</th><th class="r purple">Employer</th><th class="r purple">Total</th></tr>`;
+      tbody = rows.map((r) => `<tr><td class="mono">${r.employeeNumber}</td><td class="bold">${r.name}</td><td class="mono">${r.nssfNo||'—'}</td><td class="r">${fmtKES(r.grossSalary)}</td><td class="r purple">${fmtKES(r.employeeContribution)}</td><td class="r purple">${fmtKES(r.employerContribution)}</td><td class="r purple bold">${fmtKES(r.totalContribution)}</td></tr>`).join('');
+      tfoot = `<tr class="tot"><td colspan="3">Total</td><td class="r">${fmtKES(totals.grossSalary)}</td><td class="r purple">${fmtKES(totals.employeeContribution)}</td><td class="r purple">${fmtKES(totals.employerContribution)}</td><td class="r purple">${fmtKES(totals.totalContribution)}</td></tr>`;
+    } else if (reportType === 'ahl') {
+      thead = `<tr><th>Emp No.</th><th>Employee Name</th><th>KRA PIN</th><th class="r">Gross</th><th class="r amber">Emp Levy</th><th class="r amber">Empr Levy</th><th class="r amber">Total Levy</th></tr>`;
+      tbody = rows.map((r) => `<tr><td class="mono">${r.employeeNumber}</td><td class="bold">${r.name}</td><td class="mono">${r.kraPin||'—'}</td><td class="r">${fmtKES(r.grossSalary)}</td><td class="r amber">${fmtKES(r.employeeLevy)}</td><td class="r amber">${fmtKES(r.employerLevy)}</td><td class="r amber bold">${fmtKES(r.totalLevy)}</td></tr>`).join('');
+      tfoot = `<tr class="tot"><td colspan="3">Total</td><td class="r">${fmtKES(totals.grossSalary)}</td><td class="r amber">${fmtKES(totals.employeeLevy)}</td><td class="r amber">${fmtKES(totals.employerLevy)}</td><td class="r amber">${fmtKES(totals.totalLevy)}</td></tr>`;
+    } else {
+      thead = `<tr><th>Emp No.</th><th>Employee Name</th><th>Method</th><th>Bank / Provider</th><th>Account / Number</th><th>Branch</th><th class="r green">Net Pay</th></tr>`;
+      tbody = rows.map((r) => `<tr><td class="mono">${r.employeeNumber}</td><td class="bold">${r.name}</td><td>${r.paymentMethod||'—'}</td><td>${r.bankName||(r.mpesaNumber?'M-Pesa':'—')}</td><td class="mono">${r.bankAccountNumber||r.mpesaNumber||'—'}</td><td>${r.bankBranch||'—'}</td><td class="r green bold">${fmtKES(r.netSalary)}</td></tr>`).join('');
+      tfoot = `<tr class="tot"><td colspan="6">Total Net Pay</td><td class="r green">${fmtKES(totals.netSalary)}</td></tr>`;
+    }
+
+    const win = window.open('', '_blank', 'width=1000,height=1120');
+    if (!win) { toast.error('Allow pop-ups to print'); return; }
+    win.document.write(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>${rt.label} Remittance — ${period?.label||''}</title>
+<style>
+  @page{size:A4 landscape;margin:12mm 14mm;}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1a1a1a;}
+  .lh{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:8px;border-bottom:2.5px solid #027333;margin-bottom:12px;}
+  .lh-logo{height:40px;width:auto;border-radius:3px;}
+  .lh-company{font-size:15pt;font-weight:900;color:#0f172a;}
+  .lh-addr{font-size:7.5pt;color:#64748b;margin-top:2px;}
+  .lh-meta{text-align:right;font-size:7.5pt;color:#64748b;line-height:1.7;}
+  .doc-bar{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1.5px solid #0f172a;padding-bottom:5px;margin-bottom:10px;}
+  .doc-label{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:#64748b;}
+  .doc-title{font-size:13pt;font-weight:900;color:#0f172a;margin-top:2px;}
+  .doc-sub{font-size:8pt;color:#64748b;}
+  table{width:100%;border-collapse:collapse;}
+  thead tr{background:#1B3D2F;color:#fff;}
+  th{padding:5px 6px;text-align:left;font-size:7pt;font-weight:900;text-transform:uppercase;letter-spacing:.12em;white-space:nowrap;}
+  td{padding:4px 6px;font-size:8.5pt;border-bottom:1px solid #f1f5f9;vertical-align:middle;}
+  tr:nth-child(even) td{background:#f8fafc;}
+  td.mono{font-family:monospace;font-size:8pt;}
+  td.bold{font-weight:700;color:#0f172a;}
+  td.r{text-align:right;font-family:monospace;}
+  td.red{color:#dc2626;} td.blue{color:#2563eb;} td.purple{color:#7c3aed;} td.amber{color:#d97706;} td.green{color:#059669;}
+  tr.tot td{font-weight:900;border-top:2px solid #e2e8f0;padding-top:6px;font-size:8.5pt;color:#0f172a;}
+  .footer{margin-top:10px;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:5px;}
+  @media print{html,body{background:#fff;}}
+</style></head><body>
+<div class="lh">
+  <div>${logo?`<img src="${logo}" class="lh-logo" alt="${companyName}"><br>`:''}
+    <div class="lh-company">${companyName}</div>${addr?`<div class="lh-addr">${addr}</div>`:''}
+  </div>
+  <div class="lh-meta">${coEmail?coEmail+'<br>':''}${phoneNo?phoneNo+'<br>':''}${taxPIN?'KRA PIN: '+taxPIN:''}</div>
+</div>
+<div class="doc-bar">
+  <div>
+    <div class="doc-label">Human Resource · ${rt.label} Remittance</div>
+    <div class="doc-title">${rt.label} — ${period?.label||''}</div>
+    <div class="doc-sub">${rt.desc}</div>
+  </div>
+  <div class="doc-sub">Printed: ${new Date().toLocaleDateString('en-KE',{day:'numeric',month:'long',year:'numeric'})} &nbsp;·&nbsp; ${rows.length} employees</div>
+</div>
+<table><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table>
+<div class="footer"><span>Computer-generated statutory remittance — verify before submission.</span><span>${companyName}</span></div>
+</body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [rows, totals, period, rt, reportType, company]);
+
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
@@ -96,9 +182,14 @@ export default function HRRemittance() {
                 <FaRedoAlt size={9} />
               </button>
               {data && rows.length > 0 && (
-                <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23]">
-                  <FaPrint size={9} /> Print
-                </button>
+                <>
+                  <button onClick={() => setShowEmail(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                    <FaEnvelope size={9} /> Email
+                  </button>
+                  <button onClick={printRemittance} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23]">
+                    <FaPrint size={9} /> Print
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -329,6 +420,23 @@ export default function HRRemittance() {
           )}
         </div>
       </div>
+      {showEmail && (
+        <EmailSendModal
+          title={`Email ${rt?.label || 'Remittance'} Report`}
+          defaultEmail=""
+          onSend={async (email) => {
+            try {
+              const res = await adminRequests.post('/hr/emails/payroll-register', { periodId, email });
+              toast.success(`Report emailed to ${res.data.to}`);
+              return res.data;
+            } catch (e) {
+              toast.error(e?.response?.data?.message || 'Failed to send email');
+              throw e;
+            }
+          }}
+          onClose={() => setShowEmail(false)}
+        />
+      )}
     </DashboardLayout>
   );
 }

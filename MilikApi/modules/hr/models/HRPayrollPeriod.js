@@ -13,7 +13,7 @@ const periodSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ['Draft', 'Processing', 'Approved', 'Paid', 'Closed'],
+    enum: ['Draft', 'Processing', 'Approved', 'Paid', 'Closed', 'Reversed'],
     default: 'Draft',
     index: true,
   },
@@ -38,6 +38,12 @@ const periodSchema = new mongoose.Schema({
   glJournalGroupId: { type: mongoose.Schema.Types.ObjectId, default: null },
   glPostedAt:       { type: Date, default: null },
   glError:          { type: String, default: '' },
+  glReversed:       { type: Boolean, default: false },
+  glReversedAt:     { type: Date, default: null },
+
+  reversedBy:      { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  reversedAt:      { type: Date, default: null },
+  reversalReason:  { type: String, default: '' },
 
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

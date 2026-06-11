@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllTenants, selectAllLandlords } from '../../redux/selectors';
@@ -209,17 +209,46 @@ const RentalCollectionReport = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handlePrint = () => {
-    if (!canExportReports) {
-      toast.warning ? toast.warning("You do not have permission to print reports") : toast.error("You do not have permission to print reports");
-      return;
-    }
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        window.print();
-      });
-    });
-  };
+  const handlePrint = useCallback(() => {
+    if (!canExportReports) { toast.error("You do not have permission to print reports"); return; }
+    const co = currentCompany || {};
+    const name = co.companyName || co.name || co.businessName || 'Milik';
+    const logo = co.logo || '';
+    const by = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || '';
+    const win = window.open('', '_blank', 'width=1120,height=800');
+    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
+    const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+    const rows = Array.isArray(report.rows) ? report.rows : [];
+    win.document.write(`<!DOCTYPE html><html><head><title>Rental Collection Report</title><style>
+      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
+      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
+      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
+      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
+      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
+      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
+      .cv{font-size:12px;font-weight:900;color:#0f172a;margin-top:3px}
+      table{width:100%;border-collapse:collapse;font-size:8px}
+      thead th{background:#0B3B2E;color:#fff;padding:4px 5px;text-align:left;font-size:7.5px;text-transform:uppercase;letter-spacing:.1em}
+      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3px 5px}
+      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
+      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    </style></head><body>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Rental Collection Report</div><div class="sub">Period: ${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}</div></div>
+    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div><div>Receipts: ${rows.length}</div></div></div>
+    <div class="cards">
+      <div class="card"><div class="cl">Total Collected</div><div class="cv" style="color:#0B3B2E">${fmt(summary.totalCollected)}</div></div>
+      <div class="card"><div class="cl">Allocated</div><div class="cv">${fmt(summary.allocatedAmount)}</div></div>
+      <div class="card"><div class="cl">Unapplied</div><div class="cv" style="color:#b45309">${fmt(summary.unappliedAmount)}</div></div>
+      <div class="card"><div class="cl">Payments</div><div class="cv">${Number(summary.totalPayments || rows.length)}</div></div>
+    </div>
+    <table><thead><tr><th>Date</th><th>Receipt #</th><th>Tenant</th><th>Property</th><th>Unit</th><th>Method</th><th class="r">Collected</th><th class="r">Allocated</th><th class="r">Rent</th><th class="r">Utility</th><th class="r">Unapplied</th></tr></thead>
+    <tbody>${rows.map((row) => `<tr><td>${row.paymentDate ? new Date(row.paymentDate).toLocaleDateString() : '—'}</td><td>${row.receiptNumber || '—'}</td><td>${row.tenantName || '—'}</td><td>${row.propertyName || '—'}</td><td>${row.unitNumber || '—'}</td><td>${row.paymentMethod || '—'}</td><td class="r"><strong>${fmt(row.amount)}</strong></td><td class="r">${fmt(row.allocatedAmount)}</td><td class="r">${fmt(row.rentApplied)}</td><td class="r">${fmt(row.utilityApplied)}</td><td class="r" style="color:${Number(row.unappliedAmount || 0) > 0 ? '#b45309' : 'inherit'}">${fmt(row.unappliedAmount)}</td></tr>`).join('')}
+    </tbody></table></body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [canExportReports, currentCompany, currentUser, report.rows, summary, filters.startDate, filters.endDate]);
 
   return (
     <DashboardLayout lockContentScroll>

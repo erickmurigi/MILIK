@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSelector } from 'react-redux';
 import { FaCalendarCheck, FaRedoAlt, FaPrint, FaFilter, FaUsers } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
+import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 
@@ -51,7 +53,94 @@ export default function LeaveBalances() {
 
   React.useEffect(() => { if (error) toast.error('Failed to load leave balances'); }, [error]);
 
-  const handlePrint = () => window.print();
+  const company = useSelector(selectCurrentCompany) || {};
+
+  const handlePrint = useCallback(() => {
+    if (!rows.length) return;
+    const { companyName = '', logo = '', roadStreet = '', town = '', phoneNo = '', email: coEmail = '', taxPIN = '' } = company;
+    const addr = [roadStreet, town].filter(Boolean).join(', ');
+    const deptName = departmentId ? departments.find((d) => d._id === departmentId)?.name : 'All Departments';
+
+    const tbody = rows.map((r, i) => {
+      const pct = r.entitlement > 0 ? Math.round((r.used / r.entitlement) * 100) : 0;
+      const color = pct >= 90 ? '#dc2626' : pct >= 70 ? '#d97706' : '#059669';
+      return `<tr class="${i%2===0?'even':'odd'}">
+        <td class="bold">${r.employeeName}<br><span class="sub">${r.employeeNumber}</span></td>
+        <td>${r.department||'—'}</td>
+        <td>${r.leaveTypeName} <span style="font-size:7.5pt;color:${r.isPaid?'#059669':'#dc2626'}">${r.isPaid?'(Paid)':'(Unpaid)'}</span></td>
+        <td class="r">${r.entitlement}</td>
+        <td class="r" style="color:${color};font-weight:700">${r.used}</td>
+        <td class="r" style="color:#d97706">${r.pending||'—'}</td>
+        <td class="r" style="color:${r.remaining===0?'#dc2626':'#059669'};font-weight:700">${r.remaining}</td>
+        <td class="r">${pct}%</td>
+      </tr>`;
+    }).join('');
+
+    const win = window.open('', '_blank', 'width=1000,height=1120');
+    if (!win) { toast.error('Allow pop-ups to print'); return; }
+    win.document.write(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Leave Balances — ${year}</title>
+<style>
+  @page{size:A4 landscape;margin:12mm 14mm;}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1a1a1a;}
+  .lh{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:8px;border-bottom:2.5px solid #027333;margin-bottom:12px;}
+  .lh-logo{height:40px;width:auto;border-radius:3px;}
+  .lh-company{font-size:15pt;font-weight:900;color:#0f172a;}
+  .lh-addr{font-size:7.5pt;color:#64748b;margin-top:2px;}
+  .lh-meta{text-align:right;font-size:7.5pt;color:#64748b;line-height:1.7;}
+  .doc-bar{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1.5px solid #0f172a;padding-bottom:5px;margin-bottom:10px;}
+  .doc-label{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:#64748b;}
+  .doc-title{font-size:13pt;font-weight:900;color:#0f172a;margin-top:2px;}
+  .doc-sub{font-size:8pt;color:#64748b;}
+  .summary{display:flex;gap:12px;margin-bottom:10px;}
+  .scard{flex:1;border:1px solid #e2e8f0;border-radius:4px;padding:6px 10px;}
+  .sc-label{font-size:6.5pt;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#94a3b8;}
+  .sc-value{font-size:14pt;font-weight:900;margin-top:1px;}
+  table{width:100%;border-collapse:collapse;}
+  thead tr{background:#1B3D2F;color:#fff;}
+  th{padding:5px 6px;text-align:left;font-size:7pt;font-weight:900;text-transform:uppercase;letter-spacing:.1em;}
+  th.r{text-align:right;}
+  td{padding:4px 6px;font-size:8.5pt;border-bottom:1px solid #f1f5f9;vertical-align:top;}
+  tr.even td{background:#fff;} tr.odd td{background:#f8fafc;}
+  td.bold{font-weight:700;color:#0f172a;}
+  td.r{text-align:right;font-family:monospace;}
+  .sub{font-size:7pt;color:#94a3b8;font-weight:400;}
+  .footer{margin-top:10px;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:5px;}
+  @media print{html,body{background:#fff;}}
+</style></head><body>
+<div class="lh">
+  <div>${logo?`<img src="${logo}" class="lh-logo" alt="${companyName}"><br>`:''}
+    <div class="lh-company">${companyName}</div>${addr?`<div class="lh-addr">${addr}</div>`:''}
+  </div>
+  <div class="lh-meta">${coEmail?coEmail+'<br>':''}${phoneNo?phoneNo+'<br>':''}${taxPIN?'KRA PIN: '+taxPIN:''}</div>
+</div>
+<div class="doc-bar">
+  <div>
+    <div class="doc-label">Human Resource · Leave Balances</div>
+    <div class="doc-title">Leave Balances — ${year}</div>
+    <div class="doc-sub">${deptName||'All Departments'}</div>
+  </div>
+  <div class="doc-sub">Printed: ${new Date().toLocaleDateString('en-KE',{day:'numeric',month:'long',year:'numeric'})}</div>
+</div>
+<div class="summary">
+  <div class="scard"><div class="sc-label">Entitlement</div><div class="sc-value">${totalEntitled} days</div></div>
+  <div class="scard"><div class="sc-label">Days Used</div><div class="sc-value" style="color:#dc2626">${totalUsed} days</div></div>
+  <div class="scard"><div class="sc-label">Remaining</div><div class="sc-value" style="color:#059669">${totalRemaining} days</div></div>
+  <div class="scard"><div class="sc-label">Avg Utilisation</div><div class="sc-value" style="color:#d97706">${avgUtil}%</div></div>
+</div>
+<table>
+  <thead><tr>
+    <th>Employee</th><th>Department</th><th>Leave Type</th>
+    <th class="r">Entitlement</th><th class="r">Used</th><th class="r">Pending</th><th class="r">Remaining</th><th class="r">Util%</th>
+  </tr></thead>
+  <tbody>${tbody}</tbody>
+</table>
+<div class="footer"><span>Computer-generated leave balance report.</span><span>${companyName}</span></div>
+</body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [rows, year, departmentId, departments, totalEntitled, totalUsed, totalRemaining, avgUtil, company]);
 
   const inputCls = 'h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
 

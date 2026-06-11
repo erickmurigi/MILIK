@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
 import { FaFileDownload, FaFilter, FaPrint, FaReceipt } from 'react-icons/fa';
@@ -222,6 +222,46 @@ const TaxReports = () => {
   const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || "Milik";
   const preparedBy = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(" ") || currentUser?.email || "Milik Admin";
 
+  const handlePrint = useCallback(() => {
+    if (!canExportReports) { toast.error("You do not have permission to print reports"); return; }
+    const co = currentCompany || {};
+    const name = co.companyName || co.name || co.businessName || 'Milik';
+    const logo = co.logo || '';
+    const win = window.open('', '_blank', 'width=1120,height=800');
+    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
+    const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+    win.document.write(`<!DOCTYPE html><html><head><title>Tax Report</title><style>
+      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
+      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
+      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
+      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
+      .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
+      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
+      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
+      .cv{font-size:13px;font-weight:900;color:#0f172a;margin-top:3px}
+      table{width:100%;border-collapse:collapse;font-size:8.5px}
+      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
+      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
+      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
+      tfoot td{border-top:2px solid #0B3B2E;padding:4px 6px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
+      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    </style></head><body>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Tax Report</div><div class="sub">Period: ${filters.startDate} to ${filters.endDate}</div></div>
+    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${preparedBy}</div><div>Total records: ${rows.length}</div></div></div>
+    <div class="cards">
+      <div class="card"><div class="cl">Taxable Net Amount</div><div class="cv">${fmt(totals.netAmount)}</div></div>
+      <div class="card"><div class="cl">Output VAT / Tax</div><div class="cv" style="color:#c2410c">${fmt(totals.taxAmount)}</div></div>
+      <div class="card"><div class="cl">Gross Value</div><div class="cv" style="color:#047857">${fmt(totals.grossAmount)}</div></div>
+    </div>
+    <table><thead><tr><th>Date</th><th>Source</th><th>Reference</th><th>Property</th><th>Party</th><th>Tax Code</th><th class="r">Rate</th><th class="r">Net</th><th class="r">Tax</th><th class="r">Gross</th></tr></thead>
+    <tbody>${rows.map((row) => `<tr><td>${row.date ? new Date(row.date).toLocaleDateString() : '—'}</td><td>${row.source || ''}</td><td>${row.reference || ''}</td><td>${row.propertyName || ''}</td><td>${row.partyName || ''}</td><td>${row.taxCode || ''}</td><td class="r">${row.taxRate || 0}%</td><td class="r">${fmt(row.netAmount)}</td><td class="r">${fmt(row.taxAmount)}</td><td class="r"><strong>${fmt(row.grossAmount)}</strong></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="7"><strong>TOTALS (${rows.length} records)</strong></td><td class="r">${fmt(totals.netAmount)}</td><td class="r">${fmt(totals.taxAmount)}</td><td class="r"><strong>${fmt(totals.grossAmount)}</strong></td></tr></tfoot>
+    </table></body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [canExportReports, currentCompany, rows, totals, filters.startDate, filters.endDate, preparedBy]);
+
   return (
     <DashboardLayout lockContentScroll>
       <div className="print-only-wrapper">
@@ -318,7 +358,7 @@ const TaxReports = () => {
             </div>
             <div className="mt-2 flex flex-wrap justify-end gap-2">
               <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"><FaFileDownload /> Export CSV</button>
-              <button onClick={() => { if (!canExportReports) { toast.error("You do not have permission to print reports"); return; } window.print(); }} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:opacity-50 ${GREEN_BG} hover:bg-[#0A3127]`}><FaPrint /> Print</button>
+              <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[11px] font-bold text-white disabled:opacity-50 ${GREEN_BG} hover:bg-[#0A3127]`}><FaPrint /> Print</button>
             </div>
           </div>
 

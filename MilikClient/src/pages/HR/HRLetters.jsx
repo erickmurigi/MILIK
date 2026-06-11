@@ -1,16 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useSelector } from 'react-redux';
 import {
   FaPlus, FaSearch, FaPrint, FaTrash, FaCheck, FaFileAlt,
-  FaRedoAlt, FaChevronRight, FaTimes, FaArrowLeft,
+  FaRedoAlt, FaChevronRight, FaTimes, FaArrowLeft, FaEnvelope, FaBan,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
+import EmailSendModal from '../../components/HR/EmailSendModal';
+import { selectCurrentUser } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 
 const STATUS_STYLE = {
-  draft:  'bg-slate-100 text-slate-600',
-  issued: 'bg-emerald-100 text-emerald-700',
+  draft:   'bg-slate-100 text-slate-600',
+  issued:  'bg-emerald-100 text-emerald-700',
+  revoked: 'bg-rose-100 text-rose-700',
 };
 
 const TYPE_LABELS = {
@@ -238,27 +242,162 @@ export default function HRLetters() {
   const [search, setSearch]         = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [page, setPage]             = useState(1);
+  const [total, setTotal]           = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const LIMIT = 25;
   const [showCompose, setShowCompose] = useState(false);
   const [issuing, setIssuing]       = useState(false);
   const [deleting, setDeleting]     = useState(false);
+  const [showEmail, setShowEmail]   = useState(false);
+  const [revokeDialog, setRevokeDialog] = useState({ isOpen: false, reason: '', busy: false });
+  const currentUser = useSelector(selectCurrentUser);
   const printRef = useRef();
+
+  const printLetter = useCallback(() => {
+    if (!selected) return;
+    const emp = selected.employee;
+    const empName = emp ? `${emp.surname} ${emp.otherNames}` : 'Employee';
+    const type = TYPE_LABELS[selected.letterType] || selected.letterType;
+    const isIssued = selected.status === 'issued';
+    const issuedOn = isIssued
+      ? new Date(selected.issuedDate).toLocaleDateString('en-KE', { day: 'numeric', month: 'long', year: 'numeric' })
+      : '';
+
+    const win = window.open('', '_blank', 'width=840,height=1080');
+    if (!win) { toast.error('Allow pop-ups to print letters'); return; }
+
+    win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${type} — ${empName}</title>
+  <style>
+    @page { size: A4; margin: 16mm 22mm 20mm; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #fff; }
+
+    /* ── Print header ── */
+    .ph-bar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding-bottom: 10px;
+      margin-bottom: 24px;
+      border-bottom: 2.5px solid #027333;
+    }
+    .ph-badge {
+      display: inline-block;
+      background: #027333;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      font-size: 7pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 2px 9px;
+      border-radius: 20px;
+      margin-bottom: 4px;
+    }
+    .ph-title {
+      font-family: Arial, sans-serif;
+      font-size: 13pt;
+      font-weight: 900;
+      color: #0f172a;
+      letter-spacing: -0.2px;
+      line-height: 1.2;
+    }
+    .ph-status {
+      text-align: right;
+      font-family: Arial, sans-serif;
+      font-size: 8pt;
+      line-height: 1.5;
+    }
+    .ph-issued {
+      display: inline-block;
+      border: 1.5px solid #027333;
+      color: #027333;
+      font-size: 7pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+    .ph-draft {
+      display: inline-block;
+      border: 1.5px solid #d97706;
+      color: #d97706;
+      font-size: 7pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+
+    /* ── Footer ── */
+    .pf-bar {
+      margin-top: 32px;
+      padding-top: 8px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      font-family: Arial, sans-serif;
+      font-size: 7pt;
+      color: #94a3b8;
+    }
+
+    @media print {
+      html, body { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ph-bar">
+    <div>
+      <div class="ph-badge">${type}</div>
+      <div class="ph-title">${selected.subject || empName}</div>
+    </div>
+    <div class="ph-status">
+      ${isIssued
+        ? `<span class="ph-issued">Issued</span><br><span style="color:#64748b">${issuedOn}</span>`
+        : '<span class="ph-draft">Draft — Not Issued</span>'}
+    </div>
+  </div>
+
+  ${selected.body || ''}
+
+  <div class="pf-bar">
+    <span>Private &amp; Confidential</span>
+    <span>${empName}</span>
+    <span>Printed ${new Date().toLocaleDateString('en-KE', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+  </div>
+</body>
+</html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [selected]);
 
   const loadLetters = useCallback(async () => {
     setLoading(true);
     try {
-      const params = {};
+      const params = { page, limit: LIMIT };
       if (filterType)   params.letterType = filterType;
       if (filterStatus) params.status     = filterStatus;
       const res = await adminRequests.get('/hr/letters', { params });
       setLetters(res.data.letters || []);
+      setTotal(res.data.total || 0);
+      setTotalPages(res.data.pages || 1);
     } catch (e) {
       toast.error('Failed to load letters');
     } finally {
       setLoading(false);
     }
-  }, [filterType, filterStatus]);
+  }, [filterType, filterStatus, page, LIMIT]);
 
   useEffect(() => { loadLetters(); }, [loadLetters]);
+  useEffect(() => { setPage(1); }, [filterType, filterStatus]);
 
   useEffect(() => {
     Promise.all([
@@ -291,6 +430,20 @@ export default function HRLetters() {
       toast.error(e?.response?.data?.message || 'Failed to issue letter');
     } finally {
       setIssuing(false);
+    }
+  };
+
+  const doRevoke = async () => {
+    setRevokeDialog((d) => ({ ...d, busy: true }));
+    try {
+      const res = await adminRequests.patch(`/hr/letters/${selected._id}/revoke`, { reason: revokeDialog.reason });
+      setSelected(res.data);
+      setLetters((prev) => prev.map((l) => l._id === res.data._id ? { ...l, status: 'revoked' } : l));
+      toast.success('Letter revoked');
+      setRevokeDialog({ isOpen: false, reason: '', busy: false });
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Failed to revoke letter');
+      setRevokeDialog((d) => ({ ...d, busy: false }));
     }
   };
 
@@ -368,6 +521,7 @@ export default function HRLetters() {
                   <option value="">All</option>
                   <option value="draft">Draft</option>
                   <option value="issued">Issued</option>
+                  <option value="revoked">Revoked</option>
                 </select>
               </div>
             </div>
@@ -410,6 +564,16 @@ export default function HRLetters() {
                 })
               )}
             </div>
+
+            {/* Pagination */}
+            <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5">
+              <span className="text-[10px] text-slate-500">{total} letter{total !== 1 ? 's' : ''}</span>
+              <div className="flex items-center gap-1">
+                <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-bold disabled:opacity-40 hover:bg-slate-50">‹</button>
+                <span className="px-1.5 text-[10px] font-semibold text-slate-600">{page}/{Math.max(1, totalPages)}</span>
+                <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-bold disabled:opacity-40 hover:bg-slate-50">›</button>
+              </div>
+            </div>
           </div>
 
           {/* Main — letter preview */}
@@ -449,8 +613,22 @@ export default function HRLetters() {
                         </button>
                       </>
                     )}
+                    {selected.status === 'issued' && currentUser?.adminAccess && (
+                      <button
+                        onClick={() => setRevokeDialog({ isOpen: true, reason: '', busy: false })}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700 hover:bg-rose-100"
+                      >
+                        <FaBan size={9} /> Revoke
+                      </button>
+                    )}
                     <button
-                      onClick={() => window.print()}
+                      onClick={() => setShowEmail(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                      <FaEnvelope size={9} /> Email
+                    </button>
+                    <button
+                      onClick={printLetter}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0a2e23]"
                     >
                       <FaPrint size={9} /> Print
@@ -472,8 +650,13 @@ export default function HRLetters() {
                             <div className="text-lg font-black mt-0.5">{selected.subject}</div>
                           </div>
                           <div className="text-right text-emerald-200 text-xs space-y-0.5">
-                            <div className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${selected.status === 'issued' ? 'bg-emerald-400/30 text-emerald-200' : 'bg-white/10 text-white/70'}`}>
-                              {selected.status === 'issued' ? `Issued ${new Date(selected.issuedDate).toLocaleDateString('en-KE')}` : 'Draft'}
+                            <div className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${
+                              selected.status === 'issued'  ? 'bg-emerald-400/30 text-emerald-200' :
+                              selected.status === 'revoked' ? 'bg-rose-400/30 text-rose-200' :
+                              'bg-white/10 text-white/70'
+                            }`}>
+                              {selected.status === 'issued'  ? `Issued ${new Date(selected.issuedDate).toLocaleDateString('en-KE')}` :
+                               selected.status === 'revoked' ? `Revoked` : 'Draft'}
                             </div>
                           </div>
                         </div>
@@ -492,6 +675,23 @@ export default function HRLetters() {
         </div>
       </div>
 
+      {showEmail && selected && (
+        <EmailSendModal
+          title="Email Letter"
+          defaultEmail={selected.employee?.email || selected.employee?.workEmail || ''}
+          onSend={async (email) => {
+            try {
+              const res = await adminRequests.post(`/hr/emails/letter/${selected._id}`, { email });
+              toast.success(`Letter emailed to ${res.data.to}`);
+              return res.data;
+            } catch (e) {
+              toast.error(e?.response?.data?.message || 'Failed to send email');
+              throw e;
+            }
+          }}
+          onClose={() => setShowEmail(false)}
+        />
+      )}
       {showCompose && (
         <ComposeModal
           employees={employees}
@@ -503,6 +703,51 @@ export default function HRLetters() {
             toast.success('Letter created as draft');
           }}
         />
+      )}
+
+      {revokeDialog.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-rose-200 overflow-hidden">
+            <div className="flex items-start gap-3 border-b border-rose-100 bg-rose-50 px-5 py-4">
+              <FaBan className="mt-0.5 shrink-0 text-rose-600" size={15} />
+              <div>
+                <div className="text-sm font-black text-rose-800">Revoke Letter</div>
+                <div className="text-xs text-rose-600 mt-0.5">
+                  This will mark the issued letter as revoked. The record will be retained for audit purposes.
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="text-xs font-black text-slate-700 truncate">{selected?.subject}</div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Reason (optional)</label>
+                <textarea
+                  rows={3}
+                  autoFocus
+                  value={revokeDialog.reason}
+                  onChange={(e) => setRevokeDialog((d) => ({ ...d, reason: e.target.value }))}
+                  placeholder="State the reason for revoking…"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-400 resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3">
+              <button
+                onClick={() => setRevokeDialog({ isOpen: false, reason: '', busy: false })}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doRevoke}
+                disabled={revokeDialog.busy}
+                className="px-4 py-2 text-xs font-black text-white bg-rose-600 rounded-lg hover:bg-rose-700 disabled:opacity-50"
+              >
+                {revokeDialog.busy ? 'Revoking…' : 'Confirm Revoke'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </DashboardLayout>
   );

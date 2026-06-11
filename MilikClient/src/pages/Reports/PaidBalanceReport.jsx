@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '../../redux/selectors';
@@ -195,17 +195,50 @@ const PaidBalanceReport = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handlePrint = () => {
-    if (!canExportReports) {
-      toast.warning ? toast.warning("You do not have permission to print reports") : toast.error("You do not have permission to print reports");
-      return;
-    }
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        window.print();
-      });
-    });
-  };
+  const handlePrint = useCallback(() => {
+    if (!canExportReports) { toast.error("You do not have permission to print reports"); return; }
+    const co = currentCompany || {};
+    const name = co.companyName || co.name || co.businessName || 'Milik';
+    const logo = co.logo || '';
+    const by = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || '';
+    const win = window.open('', '_blank', 'width=1120,height=800');
+    if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
+    const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+    const rows = searchFilteredRows;
+    const summ = report.summary || {};
+    win.document.write(`<!DOCTYPE html><html><head><title>Paid & Balance Report</title><style>
+      @page{size:A4 landscape;margin:12mm 14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
+      .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
+      .sub{font-size:10px;color:#475569;margin-top:2px}.meta{text-align:right;color:#64748b;font-size:8.5px;line-height:1.6}
+      .logo{max-height:40px;max-width:110px;object-fit:contain;margin-bottom:4px}
+      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+      .card{border:1px solid #dbe2ea;border-radius:6px;background:#f8fafc;padding:6px 8px}
+      .cl{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:800}
+      .cv{font-size:12px;font-weight:900;color:#0f172a;margin-top:3px}
+      table{width:100%;border-collapse:collapse;font-size:8.5px}
+      thead th{background:#0B3B2E;color:#fff;padding:4px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
+      thead th.r{text-align:right}tbody td{border-bottom:1px solid #dbe2ea;padding:3.5px 6px}
+      tbody td.r{text-align:right}tbody tr:nth-child(even){background:#f8fafc}
+      tfoot td{border-top:2px solid #0B3B2E;padding:4px 6px;font-weight:900;background:#EDF5F1}tfoot td.r{text-align:right}
+      .ba{display:inline-block;padding:1px 6px;border-radius:99px;font-size:7.5px;font-weight:800}
+      .owing{background:#fee2e2;color:#b91c1c}.credit{background:#d1fae5;color:#065f46}.settled{background:#f1f5f9;color:#475569}
+      *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    </style></head><body>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Paid &amp; Balance Report</div><div class="sub">As at ${formatDate(filters.asOfDate)}</div></div>
+    <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div><div>Tenants: ${rows.length}</div></div></div>
+    <div class="cards">
+      <div class="card"><div class="cl">Tenants</div><div class="cv">${Number(summ.tenantCount || rows.length)}</div></div>
+      <div class="card"><div class="cl">Total Invoiced</div><div class="cv">${fmt(summ.totalInvoiced)}</div></div>
+      <div class="card"><div class="cl">Total Outstanding</div><div class="cv" style="color:#b91c1c">${fmt(summ.totalOutstanding)}</div></div>
+      <div class="card"><div class="cl">Total Credit</div><div class="cv" style="color:#047857">${fmt(summ.totalCredit)}</div></div>
+    </div>
+    <table><thead><tr><th>Tenant</th><th>Property</th><th>Unit</th><th class="r">Invoiced</th><th class="r">Paid Applied</th><th class="r">Outstanding</th><th class="r">Unapplied</th><th class="r">Net Balance</th><th>Oldest Due</th><th>Status</th></tr></thead>
+    <tbody>${rows.map((row) => `<tr><td><strong>${row.tenantName}</strong></td><td>${row.propertyName}</td><td>${row.unitNumber}</td><td class="r">${fmt(row.totalInvoiced)}</td><td class="r">${fmt(row.totalPaidApplied)}</td><td class="r" style="color:${row.outstanding > 0 ? '#b91c1c' : 'inherit'}">${fmt(row.outstanding)}</td><td class="r">${fmt(row.unappliedCredit)}</td><td class="r" style="color:${row.netBalance > 0 ? '#b91c1c' : row.netBalance < 0 ? '#047857' : 'inherit'}"><strong>${fmt(row.netBalance)}</strong></td><td>${row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '—'}</td><td><span class="ba ${row.status}">${row.status}</span></td></tr>`).join('')}</tbody>
+    </table></body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [canExportReports, currentCompany, currentUser, searchFilteredRows, report.summary, filters.asOfDate]);
 
   return (
     <DashboardLayout lockContentScroll>

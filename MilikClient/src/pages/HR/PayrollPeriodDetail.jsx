@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import {
   FaArrowLeft, FaRedoAlt, FaPlay, FaCheck, FaHandHolding,
-  FaMoneyBillWave, FaUsers, FaFileAlt, FaPrint,
+  FaMoneyBillWave, FaUsers, FaFileAlt, FaPrint, FaUndo,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
+import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 
@@ -16,6 +18,7 @@ const STATUS_STYLE = {
   Approved:   'border-blue-200 bg-blue-50 text-blue-700',
   Paid:       'border-emerald-200 bg-emerald-50 text-emerald-700',
   Closed:     'border-rose-200 bg-rose-50 text-rose-600',
+  Reversed:   'border-rose-300 bg-rose-50 text-rose-700',
 };
 
 const fmtKES = (n) =>
@@ -39,6 +42,7 @@ export default function PayrollPeriodDetail() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [confirm, setConfirm] = useState({ isOpen: false });
+  const [reverseDialog, setReverseDialog] = useState({ isOpen: false, reason: '', busy: false });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -106,17 +110,124 @@ export default function PayrollPeriodDetail() {
     });
   };
 
+  const doReverse = async () => {
+    setReverseDialog((d) => ({ ...d, busy: true }));
+    try {
+      await adminRequests.patch(`/hr/payroll/periods/${periodId}/reverse`, { reason: reverseDialog.reason });
+      toast.success('Payroll period reversed');
+      setReverseDialog({ isOpen: false, reason: '', busy: false });
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Failed to reverse payroll');
+      setReverseDialog((d) => ({ ...d, busy: false }));
+    }
+  };
+
   const isDraft    = period?.status === 'Draft' || period?.status === 'Processing';
   const isApproved = period?.status === 'Approved';
+  const canReverse = (isApproved || period?.status === 'Paid') && period?.status !== 'Reversed';
 
-  const handlePrint = () => {
-    const style = document.createElement('style');
-    style.id = 'payroll-print-landscape';
-    style.textContent = '@page { size: A4 landscape; margin: 10mm 12mm; }';
-    document.head.appendChild(style);
-    window.print();
-    setTimeout(() => document.getElementById('payroll-print-landscape')?.remove(), 1500);
-  };
+  const company     = useSelector(selectCurrentCompany) || {};
+  const currentUser = useSelector(selectCurrentUser);
+
+  const handlePrint = useCallback(() => {
+    if (!payslips.length || !period) return;
+    const { companyName = '', logo = '', roadStreet = '', town = '', phoneNo = '', email: coEmail = '', taxPIN = '' } = company;
+    const addr = [roadStreet, town].filter(Boolean).join(', ');
+
+    const tbody = payslips.map((ps, i) => `<tr class="${i%2===0?'even':'odd'}">
+      <td class="bold">${ps.snapshot.name}<br><span class="sub">${ps.snapshot.employeeNumber} · ${ps.snapshot.department||'—'}</span></td>
+      <td class="r">${fmtKES(ps.basicSalary)}</td>
+      <td class="r bold">${fmtKES(ps.grossSalary)}</td>
+      <td class="r red">${fmtKES(ps.paye)}</td>
+      <td class="r red">${fmtKES(ps.nhif)}</td>
+      <td class="r red">${fmtKES(ps.nssf)}</td>
+      <td class="r red">${fmtKES(ps.ahl)}</td>
+      <td class="r green bold">${fmtKES(ps.netSalary)}</td>
+      <td class="status">${ps.status}</td>
+    </tr>`).join('');
+
+    const win = window.open('', '_blank', 'width=1050,height=1200');
+    if (!win) { toast.error('Allow pop-ups to print'); return; }
+    win.document.write(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Payroll Register — ${period.label}</title>
+<style>
+  @page{size:A4 landscape;margin:12mm 14mm;}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1a1a1a;}
+  .lh{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:8px;border-bottom:2.5px solid #027333;margin-bottom:12px;}
+  .lh-logo{height:40px;width:auto;border-radius:3px;}
+  .lh-company{font-size:15pt;font-weight:900;color:#0f172a;}
+  .lh-addr{font-size:7.5pt;color:#64748b;margin-top:2px;}
+  .lh-meta{text-align:right;font-size:7.5pt;color:#64748b;line-height:1.7;}
+  .doc-bar{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1.5px solid #0f172a;padding-bottom:5px;margin-bottom:10px;}
+  .doc-label{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:#64748b;}
+  .doc-title{font-size:13pt;font-weight:900;color:#0f172a;margin-top:2px;}
+  .doc-sub{font-size:8pt;color:#64748b;}
+  .summary{display:flex;gap:12px;margin-bottom:10px;}
+  .scard{flex:1;border:1px solid #e2e8f0;border-radius:4px;padding:6px 10px;}
+  .sc-label{font-size:6.5pt;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#94a3b8;}
+  .sc-value{font-size:13pt;font-weight:900;margin-top:1px;}
+  table{width:100%;border-collapse:collapse;}
+  thead tr{background:#1B3D2F;color:#fff;}
+  th{padding:5px 6px;text-align:left;font-size:7pt;font-weight:900;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;}
+  th.r{text-align:right;}
+  td{padding:4px 6px;font-size:8.5pt;border-bottom:1px solid #f1f5f9;vertical-align:top;}
+  tr.even td{background:#fff;} tr.odd td{background:#f8fafc;}
+  td.bold{font-weight:700;color:#0f172a;}
+  td.r{text-align:right;font-family:monospace;}
+  td.red{color:#dc2626;} td.green{color:#059669;}
+  td.status{font-size:7.5pt;font-weight:700;color:#64748b;}
+  .sub{font-size:7pt;color:#94a3b8;font-weight:400;}
+  tfoot tr td{font-weight:900;border-top:2px solid #e2e8f0;padding-top:5px;}
+  .footer{margin-top:10px;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:5px;}
+  @media print{html,body{background:#fff;}}
+</style></head><body>
+<div class="lh">
+  <div>${logo?`<img src="${logo}" class="lh-logo" alt="${companyName}"><br>`:''}
+    <div class="lh-company">${companyName}</div>${addr?`<div class="lh-addr">${addr}</div>`:''}
+  </div>
+  <div class="lh-meta">${coEmail?coEmail+'<br>':''}${phoneNo?phoneNo+'<br>':''}${taxPIN?'KRA PIN: '+taxPIN:''}</div>
+</div>
+<div class="doc-bar">
+  <div>
+    <div class="doc-label">Human Resource · Payroll Period</div>
+    <div class="doc-title">${period.label} &nbsp;<span style="font-size:9pt;color:#64748b">${period.status}</span></div>
+  </div>
+  <div class="doc-sub">Printed: ${new Date().toLocaleDateString('en-KE',{day:'numeric',month:'long',year:'numeric'})} &nbsp;·&nbsp; ${payslips.length} employees</div>
+</div>
+<div class="summary">
+  <div class="scard"><div class="sc-label">Gross Pay</div><div class="sc-value">${fmtKES(period.totalGross)}</div></div>
+  <div class="scard"><div class="sc-label">PAYE</div><div class="sc-value" style="color:#dc2626">${fmtKES(period.totalPAYE)}</div></div>
+  <div class="scard"><div class="sc-label">SHA</div><div class="sc-value" style="color:#dc2626">${fmtKES(period.totalNHIF)}</div></div>
+  <div class="scard"><div class="sc-label">NSSF</div><div class="sc-value" style="color:#dc2626">${fmtKES(period.totalNSSF)}</div></div>
+  <div class="scard"><div class="sc-label">Housing Levy</div><div class="sc-value" style="color:#dc2626">${fmtKES(period.totalAHL)}</div></div>
+  <div class="scard"><div class="sc-label">Net Pay</div><div class="sc-value" style="color:#059669">${fmtKES(period.totalNet)}</div></div>
+</div>
+<table>
+  <thead><tr>
+    <th>Employee</th><th class="r">Basic</th><th class="r">Gross</th>
+    <th class="r">PAYE</th><th class="r">SHA</th><th class="r">NSSF</th><th class="r">AHL</th>
+    <th class="r">Net Pay</th><th>Status</th>
+  </tr></thead>
+  <tbody>${tbody}</tbody>
+  <tfoot><tr>
+    <td>Totals</td>
+    <td class="r">${fmtKES(period.totalBasic)}</td>
+    <td class="r">${fmtKES(period.totalGross)}</td>
+    <td class="r red">${fmtKES(period.totalPAYE)}</td>
+    <td class="r red">${fmtKES(period.totalNHIF)}</td>
+    <td class="r red">${fmtKES(period.totalNSSF)}</td>
+    <td class="r red">${fmtKES(period.totalAHL)}</td>
+    <td class="r green">${fmtKES(period.totalNet)}</td>
+    <td></td>
+  </tr></tfoot>
+</table>
+<div class="footer"><span>Computer-generated payroll register.</span><span>${companyName}</span></div>
+</body></html>`);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }, [payslips, period, company]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -161,6 +272,14 @@ export default function PayrollPeriodDetail() {
                 {isApproved && (
                   <button onClick={markPaid} className="print-hide inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-black text-white hover:bg-emerald-700">
                     <FaHandHolding size={9} /> Mark Paid
+                  </button>
+                )}
+                {canReverse && currentUser?.adminAccess && (
+                  <button
+                    onClick={() => setReverseDialog({ isOpen: true, reason: '', busy: false })}
+                    className="print-hide inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700 hover:bg-rose-100"
+                  >
+                    <FaUndo size={9} /> Reverse
                   </button>
                 )}
               </div>
@@ -290,6 +409,53 @@ export default function PayrollPeriodDetail() {
       </div>
 
       <MilikConfirmDialog {...confirm} onClose={() => setConfirm((p) => ({ ...p, isOpen: false }))} />
+
+      {reverseDialog.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-rose-200 overflow-hidden">
+            <div className="flex items-start gap-3 border-b border-rose-100 bg-rose-50 px-5 py-4">
+              <FaUndo className="mt-0.5 shrink-0 text-rose-600" size={16} />
+              <div>
+                <div className="text-sm font-black text-rose-800">Reverse Payroll</div>
+                <div className="text-xs text-rose-600 mt-0.5">
+                  This will reverse all GL entries and mark all payslips as Reversed. This cannot be undone.
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="text-xs font-black uppercase tracking-widest text-slate-500">
+                {period?.label}
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Reason (optional)</label>
+                <textarea
+                  rows={3}
+                  autoFocus
+                  value={reverseDialog.reason}
+                  onChange={(e) => setReverseDialog((d) => ({ ...d, reason: e.target.value }))}
+                  placeholder="State the reason for reversal…"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-400 resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3">
+              <button
+                onClick={() => setReverseDialog({ isOpen: false, reason: '', busy: false })}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doReverse}
+                disabled={reverseDialog.busy}
+                className="px-4 py-2 text-xs font-black text-white bg-rose-600 rounded-lg hover:bg-rose-700 disabled:opacity-50"
+              >
+                {reverseDialog.busy ? 'Reversing…' : 'Confirm Reverse'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

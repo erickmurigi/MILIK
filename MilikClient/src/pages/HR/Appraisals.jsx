@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FaRedoAlt, FaChevronRight, FaTimes, FaCheck,
@@ -81,10 +81,13 @@ export default function Appraisals() {
   };
   const closeDrawer = () => { setSelected(null); setScores([]); setNotes(''); setEmpComments(''); };
 
-  const overallPreview = scores.reduce((sum, r) => {
-    const pct = r.maxScore > 0 ? (r.score / r.maxScore) * 100 : 0;
-    return sum + pct * (r.weight / 100);
-  }, 0);
+  const overallPreview = useMemo(
+    () => scores.reduce((sum, r) => {
+      const pct = r.maxScore > 0 ? (r.score / r.maxScore) * 100 : 0;
+      return sum + pct * (r.weight / 100);
+    }, 0),
+    [scores]
+  );
 
   const handleSave = async () => {
     setSaving(true);
@@ -110,13 +113,13 @@ export default function Appraisals() {
     finally { setSubmitting(false); }
   };
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-  const nPending   = appraisals.filter((a) => a.status === 'Pending').length;
-  const nInProg    = appraisals.filter((a) => a.status === 'InProgress').length;
-  const nSubmitted = appraisals.filter((a) => a.status === 'Submitted').length;
-  const disabled   = selected?.status === 'Submitted';
-  const barOk      = overallPreview >= 80 ? 'bg-emerald-500' : overallPreview >= 60 ? 'bg-amber-400' : 'bg-rose-400';
-  const scoreOk    = overallPreview >= 80 ? 'text-emerald-600' : overallPreview >= 60 ? 'text-amber-600' : 'text-rose-500';
+  const totalPages = useMemo(() => Math.ceil(total / PAGE_SIZE), [total]);
+  const nPending   = useMemo(() => appraisals.filter((a) => a.status === 'Pending').length,    [appraisals]);
+  const nInProg    = useMemo(() => appraisals.filter((a) => a.status === 'InProgress').length, [appraisals]);
+  const nSubmitted = useMemo(() => appraisals.filter((a) => a.status === 'Submitted').length,  [appraisals]);
+  const disabled   = useMemo(() => selected?.status === 'Submitted', [selected]);
+  const barOk      = useMemo(() => overallPreview >= 80 ? 'bg-emerald-500' : overallPreview >= 60 ? 'bg-amber-400' : 'bg-rose-400',   [overallPreview]);
+  const scoreOk    = useMemo(() => overallPreview >= 80 ? 'text-emerald-600' : overallPreview >= 60 ? 'text-amber-600' : 'text-rose-500', [overallPreview]);
 
   return (
     <DashboardLayout lockContentScroll>
