@@ -5,6 +5,8 @@ import {
   FaHome,
   FaChartPie,
   FaMoneyBillWave,
+  FaReceipt,
+  FaChartLine,
 } from 'react-icons/fa';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 import {
@@ -13,12 +15,14 @@ import {
   selectAllProperties,
   selectAllUnits,
   selectAllRentPayments,
+  selectAllExpenseProperties,
 } from '../../redux/selectors';
 
 const MetricsGrid = ({ darkMode }) => {
   const properties = useSelector(selectAllProperties);
   const units = useSelector(selectAllUnits);
   const rentPayments = useSelector(selectAllRentPayments);
+  const expenseProperties = useSelector(selectAllExpenseProperties);
   const propertiesLoading = useSelector((state) => state.property?.isFetching);
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
@@ -59,13 +63,24 @@ const MetricsGrid = ({ darkMode }) => {
     0
   );
 
+  const monthlyExpenses = useMemo(() => {
+    if (!isLandlordMode) return 0;
+    return expenseProperties.reduce((sum, exp) => {
+      const d = new Date(exp?.date || exp?.createdAt || 0);
+      if (d.getMonth() !== currentMonth || d.getFullYear() !== currentYear) return sum;
+      return sum + Math.abs(Number(exp?.amount || 0));
+    }, 0);
+  }, [isLandlordMode, expenseProperties, currentMonth, currentYear]);
+
+  const netIncome = monthlyCollected - monthlyExpenses;
+
   const formatCurrency = (value) => {
     if (value >= 1000000) return `KSh ${(value / 1000000).toFixed(1)}M`;
     if (value >= 1000) return `KSh ${(value / 1000).toFixed(1)}K`;
     return `KSh ${Number(value || 0).toLocaleString()}`;
   };
 
-  const metrics = useMemo(
+  const baseMetrics = useMemo(
     () => [
       {
         id: 1,
@@ -107,8 +122,38 @@ const MetricsGrid = ({ darkMode }) => {
     [isLandlordMode, monthlyCollected, occupancyRate, propertiesLoading, totalProperties, totalUnits]
   );
 
+  const landlordExtraMetrics = useMemo(() => {
+    if (!isLandlordMode) return [];
+    return [
+      {
+        id: 5,
+        label: 'Expenses This Month',
+        value: formatCurrency(monthlyExpenses),
+        icon: <FaReceipt />,
+        color: 'from-[#6b21a8] to-[#4c1d95]',
+        iconBg: 'bg-[#6b21a8]/25',
+        loading: propertiesLoading,
+      },
+      {
+        id: 6,
+        label: 'Net Income This Month',
+        value: formatCurrency(Math.max(0, netIncome)),
+        icon: <FaChartLine />,
+        color: netIncome >= 0 ? 'from-[#065f46] to-[#064e3b]' : 'from-[#991b1b] to-[#7f1d1d]',
+        iconBg: 'bg-white/20',
+        loading: propertiesLoading,
+      },
+    ];
+  }, [isLandlordMode, monthlyExpenses, netIncome, propertiesLoading]);
+
+  const metrics = [...baseMetrics, ...landlordExtraMetrics];
+
   return (
-    <div className="sticky top-0 z-20 grid grid-cols-1 gap-2 border-b border-gray-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur sm:grid-cols-2 lg:grid-cols-4">
+    <div className={`sticky top-0 z-20 grid gap-2 border-b border-gray-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur ${
+      isLandlordMode
+        ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
+        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+    }`}>
       {metrics.map((metric) => (
         <div
           key={metric.id}

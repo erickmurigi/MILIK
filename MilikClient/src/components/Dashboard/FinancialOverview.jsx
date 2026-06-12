@@ -14,6 +14,7 @@ import {
   selectCurrentUser,
   selectCurrentCompany,
   selectAllRentPayments,
+  selectAllExpenseProperties,
 } from '../../redux/selectors';
 
 const SNAPSHOT_CATEGORIES = new Set(['RENT_CHARGE', 'UTILITY_CHARGE']);
@@ -30,9 +31,10 @@ const getInvoiceRecognitionDate = (invoice) =>
   parseDate(invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt);
 
 const FinancialOverview = ({ darkMode, invoices = [] }) => {
-  const currentCompany  = useSelector(selectCurrentCompany);
-  const currentUser     = useSelector(selectCurrentUser);
-  const rentPayments    = useSelector(selectAllRentPayments);
+  const currentCompany      = useSelector(selectCurrentCompany);
+  const currentUser         = useSelector(selectCurrentUser);
+  const rentPayments        = useSelector(selectAllRentPayments);
+  const expenseProperties   = useSelector(selectAllExpenseProperties);
 
   const chartRef = useRef(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
@@ -153,12 +155,32 @@ const FinancialOverview = ({ darkMode, invoices = [] }) => {
 
   const collectionRate = currentMonthExpected > 0 ? (currentMonthCollected / currentMonthExpected) * 100 : 0;
 
-  const cards = [
-    { label: isLandlordMode ? 'Billed' : 'Expected', value: formatMoney(currentMonthExpected) },
-    { label: 'Collected', value: formatMoney(currentMonthCollected) },
-    { label: isLandlordMode ? 'Live arrears' : 'Arrears', value: formatMoney(outstandingArrears) },
-    { label: 'Collection rate', value: `${collectionRate.toFixed(1)}%` },
-  ];
+  const currentMonthExpenses = useMemo(() => {
+    if (!isLandlordMode) return 0;
+    return expenseProperties.reduce((sum, exp) => {
+      const d = parseDate(exp?.date || exp?.createdAt);
+      if (!d || d.getFullYear() !== currentYear || d.getMonth() !== currentMonthIndex) return sum;
+      return sum + Math.abs(Number(exp?.amount || 0));
+    }, 0);
+  }, [isLandlordMode, expenseProperties, currentYear, currentMonthIndex]);
+
+  const currentMonthNet = currentMonthCollected - currentMonthExpenses;
+
+  const cards = isLandlordMode
+    ? [
+        { label: 'Billed', value: formatMoney(currentMonthExpected) },
+        { label: 'Collected', value: formatMoney(currentMonthCollected) },
+        { label: 'Expenses', value: formatMoney(currentMonthExpenses) },
+        { label: 'Net income', value: formatMoney(currentMonthNet), accent: currentMonthNet >= 0 ? 'green' : 'red' },
+        { label: 'Live arrears', value: formatMoney(outstandingArrears) },
+        { label: 'Collection rate', value: `${collectionRate.toFixed(1)}%` },
+      ]
+    : [
+        { label: 'Expected', value: formatMoney(currentMonthExpected) },
+        { label: 'Collected', value: formatMoney(currentMonthCollected) },
+        { label: 'Arrears', value: formatMoney(outstandingArrears) },
+        { label: 'Collection rate', value: `${collectionRate.toFixed(1)}%` },
+      ];
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
@@ -207,18 +229,34 @@ const FinancialOverview = ({ darkMode, invoices = [] }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        {cards.map((card) => (
-          <div
-            key={card.label}
-            className={`rounded-xl border p-3 ${darkMode ? 'border-gray-700 bg-gray-700/30' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}
-          >
-            <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'}`}>
-              {card.label}
+      <div className={`grid gap-3 mb-4 ${isLandlordMode ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        {cards.map((card) => {
+          const accentGreen = card.accent === 'green';
+          const accentRed = card.accent === 'red';
+          return (
+            <div
+              key={card.label}
+              className={`rounded-xl border p-3 ${
+                accentGreen
+                  ? 'border-emerald-200 bg-emerald-50/60'
+                  : accentRed
+                  ? 'border-red-200 bg-red-50/60'
+                  : darkMode
+                  ? 'border-gray-700 bg-gray-700/30'
+                  : 'border-[#dce9e1] bg-[#fbfdfc]'
+              }`}
+            >
+              <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${
+                accentGreen ? 'text-emerald-700' : accentRed ? 'text-red-700' : darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'
+              }`}>
+                {card.label}
+              </div>
+              <div className={`mt-2 text-base font-extrabold ${
+                accentGreen ? 'text-emerald-800' : accentRed ? 'text-red-800' : darkMode ? 'text-white' : 'text-slate-900'
+              }`}>{card.value}</div>
             </div>
-            <div className={`mt-2 text-base font-extrabold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{card.value}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div ref={chartRef} className="h-[265px] min-h-[265px] min-w-0 w-full">

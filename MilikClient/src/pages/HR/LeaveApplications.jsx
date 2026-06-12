@@ -57,6 +57,7 @@ function ApplyLeaveModal({ onClose, onSaved }) {
     if (!form.leaveType)  { toast.error('Select a leave type'); return; }
     if (!form.startDate)  { toast.error('Start date is required'); return; }
     if (!form.endDate)    { toast.error('End date is required'); return; }
+    if (form.endDate < form.startDate) { toast.error('End date must be on or after start date'); return; }
 
     setSaving(true);
     try {

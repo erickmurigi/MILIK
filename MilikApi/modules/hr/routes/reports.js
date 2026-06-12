@@ -5,7 +5,8 @@ import HREmployee from '../models/HREmployee.js';
 import HRPayrollPeriod from '../models/HRPayrollPeriod.js';
 import HRPayslip from '../models/HRPayslip.js';
 import HRLeaveApplication from '../models/HRLeaveApplication.js';
-import { resolveCompanyId } from '../services/hrScope.js';
+import HRAttendance from '../models/HRAttendance.js';
+import { resolveCompanyId, toOid } from '../services/hrScope.js';
 
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -449,6 +450,104 @@ router.get('/periods', async (req, res) => {
       ...p,
       label: p.label || `${MONTHS[p.month] || ''} ${p.year}`,
     })));
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+// ── Attendance Summary Report ─────────────────────────────────────────────────
+// GET /api/hr/reports/attendance?month=&year=&employee=
+router.get('/attendance', async (req, res) => {
+  try {
+    const companyId = resolveCompanyId(req);
+    const oid = new mongoose.Types.ObjectId(companyId);
+    const { month, year, employee } = req.query;
+
+    if (!month || !year) return res.status(400).json({ message: 'month and year are required' });
+    const y = Number(year);
+    const m = Number(month) - 1;
+    if (isNaN(y) || isNaN(m) || m < 0 || m > 11) return res.status(400).json({ message: 'Invalid month or year' });
+
+    const from = new Date(y, m, 1);
+    const to   = new Date(y, m + 1, 0, 23, 59, 59);
+
+    const matchStage = { company: oid, checkIn: { $gte: from, $lte: to } };
+    const empOid = toOid(employee);
+    if (empOid) matchStage.employee = empOid;
+
+    const [rows, employees] = await Promise.all([
+      HRAttendance.aggregate([
+        { $match: matchStage },
+        { $group: {
+          _id:            '$employee',
+          daysPresent:    { $sum: 1 },
+          totalMinutes:   { $sum: { $ifNull: ['$duration', 0] } },
+          daysCheckedOut: { $sum: { $cond: [{ $ne: ['$checkOut', null] }, 1, 0] } },
+          daysOpen:       { $sum: { $cond: [{ $eq: ['$checkOut', null] }, 1, 0] } },
+          firstCheckIn:   { $min: '$checkIn' },
+          lastCheckIn:    { $max: '$checkIn' },
+        }},
+        { $sort: { _id: 1 } },
+      ]),
+      HREmployee.find({ company: oid, status: { $ne: 'Terminated' } })
+        .select('surname otherNames employeeNumber department')
+        .populate('department', 'name')
+        .lean(),
+    ]);
+
+    const empMap = Object.fromEntries(employees.map((e) => [String(e._id), e]));
+    const totalWorkingDays = (() => {
+      let count = 0;
+      const cur = new Date(from);
+      while (cur <= to) {
+        const d = cur.getDay();
+        if (d !== 0 && d !== 6) count++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      return count;
+    })();
+
+    const data = rows.map((r) => {
+      const emp = empMap[String(r._id)] || {};
+      const avgMinutes = r.daysCheckedOut > 0 ? Math.round(r.totalMinutes / r.daysCheckedOut) : 0;
+      return {
+        employee: { _id: r._id, ...emp },
+        daysPresent:    r.daysPresent,
+        daysAbsent:     Math.max(0, totalWorkingDays - r.daysPresent),
+        daysCheckedOut: r.daysCheckedOut,
+        daysOpen:       r.daysOpen,
+        totalMinutes:   r.totalMinutes,
+        avgMinutes,
+        totalHours:     +(r.totalMinutes / 60).toFixed(1),
+        avgHours:       +(avgMinutes / 60).toFixed(1),
+        attendancePct:  totalWorkingDays > 0 ? Math.round((r.daysPresent / totalWorkingDays) * 100) : 0,
+      };
+    });
+
+    // Include employees with zero attendance if no employee filter
+    if (!empOid) {
+      const presentIds = new Set(rows.map((r) => String(r._id)));
+      for (const emp of employees) {
+        if (!presentIds.has(String(emp._id))) {
+          data.push({
+            employee: emp,
+            daysPresent: 0, daysAbsent: totalWorkingDays,
+            daysCheckedOut: 0, daysOpen: 0,
+            totalMinutes: 0, avgMinutes: 0,
+            totalHours: 0, avgHours: 0,
+            attendancePct: 0,
+          });
+        }
+      }
+      data.sort((a, b) => (a.employee.surname || '').localeCompare(b.employee.surname || ''));
+    }
+
+    res.json({
+      month: Number(month), year: y,
+      monthLabel: `${MONTHS[Number(month)]} ${y}`,
+      totalWorkingDays,
+      data,
+    });
   } catch (e) {
     res.status(500).json({ message: e.message });
   }

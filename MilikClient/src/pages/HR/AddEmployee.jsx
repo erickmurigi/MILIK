@@ -132,8 +132,19 @@ export default function AddEmployee() {
     if (!form.surname.trim()) { toast.error('Surname is required'); setTab('personal'); return; }
     if (!form.otherNames.trim()) { toast.error('Other names are required'); setTab('personal'); return; }
     if (!form.phoneNumber.trim()) { toast.error('Phone number is required'); setTab('personal'); return; }
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      toast.error('Enter a valid email address'); setTab('personal'); return;
+    }
+    if (form.dateOfBirth && new Date(form.dateOfBirth) > new Date()) {
+      toast.error('Date of birth cannot be in the future'); setTab('personal'); return;
+    }
     if (!form.employmentType) { toast.error('Employment type is required'); setTab('employment'); return; }
     if (!form.dateJoined) { toast.error('Date joined is required'); setTab('employment'); return; }
+    if (form.basicSalary !== '' && (isNaN(Number(form.basicSalary)) || Number(form.basicSalary) < 0)) {
+      toast.error('Basic salary must be a positive number'); setTab('compensation'); return;
+    }
+    const badComp = form.salaryComponents.find((c) => !c.name?.trim());
+    if (badComp) { toast.error('All salary components must have a name'); setTab('compensation'); return; }
 
     const payload = {
       ...form,

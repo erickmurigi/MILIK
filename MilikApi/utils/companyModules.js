@@ -314,8 +314,8 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     sendMode: 'manual',
     enabled: false,
     messageBody:
-      'Dear {tenantName} ({tenantCode}), invoice {invoiceNumber} ({category}) for {propertyName} Unit {unitNumber}: {amountDue} due {dueDate}. - {companyName}',
-    placeholders: ['tenantName', 'tenantCode', 'invoiceNumber', 'category', 'propertyName', 'unitNumber', 'amountDue', 'dueDate', 'invoiceDate', 'invoiceStatus', 'rentAmount', 'description', 'companyName', 'companyPhone'],
+      'Dear {tenantName} ({tenantCode}), invoice {invoiceNumber} for {propertyName} Unit {unitNumber}: {particulars}. Amount due: {amountDue} by {dueDate}. - {companyName}',
+    placeholders: ['tenantName', 'tenantCode', 'invoiceNumber', 'category', 'propertyName', 'unitNumber', 'amountDue', 'dueDate', 'invoiceDate', 'invoiceStatus', 'rentAmount', 'description', 'particulars', 'companyName', 'companyPhone'],
   },
   {
     key: 'overdue_reminder_tenant',

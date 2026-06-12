@@ -1,7 +1,7 @@
 import express from 'express';
 import { verifyUser } from '../../../controllers/verifyToken.js';
 import HRAppraisal from '../models/HRAppraisal.js';
-import { resolveCompanyId, currentUserId, escapeRegex, parsePage, parseLimit } from '../services/hrScope.js';
+import { resolveCompanyId, currentUserId, escapeRegex, parsePage, parseLimit, requireOid, toOid } from '../services/hrScope.js';
 
 const router = express.Router();
 router.use(verifyUser);
@@ -36,13 +36,14 @@ router.get('/', async (req, res) => {
     ]);
     res.json({ appraisals, total, totalPages: Math.ceil(total / safeLimit), currentPage: safePage });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
   }
 });
 
 // GET /api/hr/appraisals/:id
 router.get('/:id', async (req, res) => {
   try {
+    requireOid(req.params.id, 'appraisal ID');
     const companyId = resolveCompanyId(req);
     const appraisal = await HRAppraisal.findOne({ _id: req.params.id, company: companyId })
       .populate('cycle',    'name year periodType status startDate endDate')
@@ -52,13 +53,14 @@ router.get('/:id', async (req, res) => {
     if (!appraisal) return res.status(404).json({ message: 'Appraisal not found' });
     res.json(appraisal);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
   }
 });
 
 // PUT /api/hr/appraisals/:id  — save scores & notes
 router.put('/:id', async (req, res) => {
   try {
+    requireOid(req.params.id, 'appraisal ID');
     const companyId = resolveCompanyId(req);
     const appraisal = await HRAppraisal.findOne({ _id: req.params.id, company: companyId });
     if (!appraisal) return res.status(404).json({ message: 'Appraisal not found' });
@@ -80,13 +82,14 @@ router.put('/:id', async (req, res) => {
     await appraisal.save();
     res.json(appraisal);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
   }
 });
 
 // POST /api/hr/appraisals/:id/submit
 router.post('/:id/submit', async (req, res) => {
   try {
+    requireOid(req.params.id, 'appraisal ID');
     const companyId = resolveCompanyId(req);
     const appraisal = await HRAppraisal.findOne({ _id: req.params.id, company: companyId });
     if (!appraisal) return res.status(404).json({ message: 'Appraisal not found' });
@@ -97,7 +100,7 @@ router.post('/:id/submit', async (req, res) => {
     await appraisal.save();
     res.json(appraisal);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
   }
 });
 

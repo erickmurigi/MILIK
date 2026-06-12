@@ -8,6 +8,7 @@ import HRLeaveApplication from '../models/HRLeaveApplication.js';
 import HRLeaveType from '../models/HRLeaveType.js';
 import HRLetter from '../models/HRLetter.js';
 import HRAttendance from '../models/HRAttendance.js';
+import HRAppraisal from '../models/HRAppraisal.js';
 import { parsePage, parseLimit } from '../services/hrScope.js';
 
 const router = express.Router();
@@ -416,6 +417,32 @@ router.get('/my/leave-types', async (req, res) => {
       .select('name code isPaid requiresApproval maxDaysPerYear')
       .lean();
     res.json({ types });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+// ── GET /api/hr/ess/my/appraisals ─────────────────────────────────────────────
+router.get('/my/appraisals', async (req, res) => {
+  try {
+    const { id, companyId } = req.essEmployee;
+    const empOid = new mongoose.Types.ObjectId(id);
+    const { page, limit } = req.query;
+    const safePage  = parsePage(page);
+    const safeLimit = parseLimit(limit, 20);
+
+    const [appraisals, total] = await Promise.all([
+      HRAppraisal.find({ company: companyId, employee: empOid })
+        .sort({ createdAt: -1 })
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit)
+        .populate('cycle', 'name year periodType startDate endDate status')
+        .populate('ratings.kpi', 'name category unit')
+        .lean(),
+      HRAppraisal.countDocuments({ company: companyId, employee: empOid }),
+    ]);
+
+    res.json({ appraisals, total, totalPages: Math.ceil(total / safeLimit), currentPage: safePage });
   } catch (e) {
     res.status(500).json({ message: e.message });
   }

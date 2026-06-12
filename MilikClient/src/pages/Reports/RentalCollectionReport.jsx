@@ -8,6 +8,7 @@ import { getTenants } from '../../redux/tenantsRedux';
 import { FaChartBar, FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
+import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
 const MILIK_GREEN = '#0B3B2E';
 const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
@@ -21,12 +22,13 @@ const RentalCollectionReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
-  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
+  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", ["accounts", "propertyManagement"]);
   const properties = useSelector(selectAllProperties);
   const tenants = useSelector(selectAllTenants);
   const landlords = useSelector(selectAllLandlords);
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
+  const isLandlordMode = isSelfManagingLandlordCompany(currentCompany || currentUser?.company);
   const companyName = currentCompany?.name
     || currentCompany?.companyName
     || currentCompany?.businessName
@@ -54,8 +56,8 @@ const RentalCollectionReport = () => {
     if (!businessId) return;
     dispatch(getProperties({ business: businessId }));
     dispatch(getTenants({ business: businessId }));
-    dispatch(getLandlords({ company: businessId }));
-  }, [businessId, dispatch]);
+    if (!isLandlordMode) dispatch(getLandlords({ company: businessId }));
+  }, [businessId, dispatch, isLandlordMode]);
 
   const loadReport = async (signal) => {
     if (!businessId) return;
@@ -110,15 +112,20 @@ const RentalCollectionReport = () => {
   const landlordNameMap = useMemo(() => new Map(landlords.map((landlord) => [String(landlord?._id), landlord?.landlordName || landlord?.name || 'Unnamed Landlord'])), [landlords]);
   const unitNameMap = useMemo(() => new Map(units.map((unit) => [String(unit?._id), unit?.unitNumber || unit?.name || 'Unit'])), [units]);
 
-  const filterSummary = useMemo(() => ([
-    { label: 'Period', value: `${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}` },
-    { label: 'Property', value: filters.propertyId ? propertyNameMap.get(String(filters.propertyId)) || 'Selected property' : 'All properties' },
-    { label: 'Tenant', value: filters.tenantId ? tenantNameMap.get(String(filters.tenantId)) || 'Selected tenant' : 'All tenants' },
-    { label: 'Unit', value: filters.unitId ? unitNameMap.get(String(filters.unitId)) || 'Selected unit' : 'All units' },
-    { label: 'Landlord', value: filters.landlordId ? landlordNameMap.get(String(filters.landlordId)) || 'Selected landlord' : 'All landlords' },
-    { label: 'Method', value: filters.paymentMethod ? formatMethod(filters.paymentMethod) : 'All methods' },
-    { label: 'Cashbook', value: filters.cashbook || 'All cashbooks' },
-  ]), [filters, propertyNameMap, tenantNameMap, unitNameMap, landlordNameMap]);
+  const filterSummary = useMemo(() => {
+    const base = [
+      { label: 'Period', value: `${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}` },
+      { label: 'Property', value: filters.propertyId ? propertyNameMap.get(String(filters.propertyId)) || 'Selected property' : 'All properties' },
+      { label: 'Tenant', value: filters.tenantId ? tenantNameMap.get(String(filters.tenantId)) || 'Selected tenant' : 'All tenants' },
+      { label: 'Unit', value: filters.unitId ? unitNameMap.get(String(filters.unitId)) || 'Selected unit' : 'All units' },
+      { label: 'Method', value: filters.paymentMethod ? formatMethod(filters.paymentMethod) : 'All methods' },
+      { label: 'Cashbook', value: filters.cashbook || 'All cashbooks' },
+    ];
+    if (!isLandlordMode) {
+      base.splice(4, 0, { label: 'Landlord', value: filters.landlordId ? landlordNameMap.get(String(filters.landlordId)) || 'Selected landlord' : 'All landlords' });
+    }
+    return base;
+  }, [filters, isLandlordMode, propertyNameMap, tenantNameMap, unitNameMap, landlordNameMap]);
 
   const paginatedRows = useMemo(() => {
     const rows = Array.isArray(report.rows) ? report.rows : [];
@@ -428,10 +435,12 @@ const RentalCollectionReport = () => {
                   <option value="">All units</option>
                   {units.map((unit) => <option key={unit._id} value={unit._id}>{unit.unitNumber}</option>)}
                 </select>
-                <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
-                  <option value="">All landlords</option>
-                  {landlords.map((landlord) => <option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.name}</option>)}
-                </select>
+                {!isLandlordMode && (
+                  <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                    <option value="">All landlords</option>
+                    {landlords.map((landlord) => <option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.name}</option>)}
+                  </select>
+                )}
                 <input value={filters.cashbook} onChange={(e) => setFilters((prev) => ({ ...prev, cashbook: e.target.value }))} placeholder="Cashbook contains..." className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
               </div>
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">

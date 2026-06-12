@@ -3095,14 +3095,6 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     }
   }
 
-  if (normalizedCategory === "RENT_CHARGE" && isLegacyCombinedInvoiceMetadata(normalizedMetadata)) {
-    const error = new Error(
-      "Combined rent + utility storage is disabled. Create separate rent and utility invoices under the same booking group instead."
-    );
-    error.statusCode = 400;
-    throw error;
-  }
-
   const normalizedInvoiceNumber = await resolveInvoiceNumber(businessId, invoiceNumber, normalizedCategory);
 
   const hasManualInvoiceNumber = Boolean(String(invoiceNumber || "").trim());

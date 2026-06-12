@@ -5,6 +5,7 @@ import {
   FaClipboardCheck, FaUser, FaBuilding, FaUserTie,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
 
@@ -44,6 +45,7 @@ export default function Appraisals() {
   const [empComments, setEmpComments] = useState('');
   const [saving, setSaving]           = useState(false);
   const [submitting, setSubmitting]   = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { data: cycles = [] } = useQuery({
     queryKey: ['hr-appraisal-cycles-ref'],
@@ -100,13 +102,15 @@ export default function Appraisals() {
     finally { setSaving(false); }
   };
 
-  const handleSubmit = async () => {
-    if (!window.confirm('Submit this appraisal? It will be locked.')) return;
+  const handleSubmit = () => setConfirmOpen(true);
+
+  const doSubmit = async () => {
+    setConfirmOpen(false);
     setSubmitting(true);
     try {
       await adminRequests.put(`/hr/appraisals/${selected._id}`, { ratings: scores, reviewerNotes: notes, employeeComments: empComments });
       await adminRequests.post(`/hr/appraisals/${selected._id}/submit`);
-      toast.success('Submitted');
+      toast.success('Appraisal submitted');
       queryClient.invalidateQueries({ queryKey: ['hr-appraisals'] });
       closeDrawer();
     } catch (err) { toast.error(err.response?.data?.message || 'Submit failed'); }
@@ -342,6 +346,17 @@ export default function Appraisals() {
           </div>
         </div>
       )}
+
+      <MilikConfirmDialog
+        isOpen={confirmOpen}
+        title="Submit Appraisal"
+        message="Once submitted, this appraisal will be locked and cannot be edited. Continue?"
+        confirmText="Submit"
+        cancelText="Cancel"
+        isDangerous={false}
+        onConfirm={doSubmit}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </DashboardLayout>
   );
 }

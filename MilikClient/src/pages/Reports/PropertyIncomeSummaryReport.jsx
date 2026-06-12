@@ -7,6 +7,7 @@ import { getProperties } from '../../redux/propertyRedux';
 import { FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
+import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
 const MILIK_GREEN = '#0B3B2E';
 const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
@@ -21,9 +22,10 @@ const PropertyIncomeSummaryReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
-  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
+  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", ["accounts", "propertyManagement"]);
   const properties = useSelector(selectAllProperties);
   const landlords = useSelector(selectAllLandlords);
+  const isLandlordMode = isSelfManagingLandlordCompany(currentCompany || currentUser?.company);
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
   const companyName = currentCompany?.name
@@ -47,8 +49,8 @@ const PropertyIncomeSummaryReport = () => {
   useEffect(() => {
     if (!businessId) return;
     dispatch(getProperties({ business: businessId }));
-    dispatch(getLandlords({ company: businessId }));
-  }, [businessId, dispatch]);
+    if (!isLandlordMode) dispatch(getLandlords({ company: businessId }));
+  }, [businessId, dispatch, isLandlordMode]);
 
   const loadReport = async () => {
     if (!businessId) return;
@@ -81,11 +83,16 @@ const PropertyIncomeSummaryReport = () => {
   const propertyNameMap = useMemo(() => new Map(properties.map((p) => [String(p?._id), p?.propertyName || p?.name || 'Unnamed Property'])), [properties]);
   const landlordNameMap = useMemo(() => new Map(landlords.map((l) => [String(l?._id), l?.landlordName || l?.name || 'Unnamed Landlord'])), [landlords]);
 
-  const filterSummary = useMemo(() => ([
-    { label: 'Period', value: `${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}` },
-    { label: 'Property', value: filters.propertyId ? propertyNameMap.get(String(filters.propertyId)) || 'Selected property' : 'All properties' },
-    { label: 'Landlord', value: filters.landlordId ? landlordNameMap.get(String(filters.landlordId)) || 'Selected landlord' : 'All landlords' },
-  ]), [filters, propertyNameMap, landlordNameMap]);
+  const filterSummary = useMemo(() => {
+    const rows = [
+      { label: 'Period', value: `${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}` },
+      { label: 'Property', value: filters.propertyId ? propertyNameMap.get(String(filters.propertyId)) || 'Selected property' : 'All properties' },
+    ];
+    if (!isLandlordMode) {
+      rows.push({ label: 'Landlord', value: filters.landlordId ? landlordNameMap.get(String(filters.landlordId)) || 'Selected landlord' : 'All landlords' });
+    }
+    return rows;
+  }, [filters, propertyNameMap, landlordNameMap, isLandlordMode]);
 
   const insights = useMemo(() => {
     const byProperty = Array.isArray(report.byProperty) ? report.byProperty : [];
@@ -342,17 +349,19 @@ const PropertyIncomeSummaryReport = () => {
 
             {/* Filter bar */}
             <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
-              <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-4">
+              <div className={`grid gap-1.5 md:grid-cols-2 ${isLandlordMode ? 'xl:grid-cols-3' : 'xl:grid-cols-4'}`}>
                 <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
                 <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
                 <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
                   <option value="">All properties</option>
                   {properties.map((p) => <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>)}
                 </select>
-                <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
-                  <option value="">All landlords</option>
-                  {landlords.map((l) => <option key={l._id} value={l._id}>{l.landlordName || l.name}</option>)}
-                </select>
+                {!isLandlordMode && (
+                  <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                    <option value="">All landlords</option>
+                    {landlords.map((l) => <option key={l._id} value={l._id}>{l.landlordName || l.name}</option>)}
+                  </select>
+                )}
               </div>
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
                 <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? 'Export CSV' : 'No export permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>

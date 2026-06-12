@@ -300,8 +300,12 @@ router.patch('/periods/:id/mark-paid', verifyUser, async (req, res) => {
     if (!period) return res.status(404).json({ message: 'Payroll period not found' });
     if (period.status !== 'Approved') return res.status(400).json({ message: 'Period must be Approved before marking as Paid' });
 
+    const parsedPaidAt = req.body.paidAt ? new Date(req.body.paidAt) : null;
+    if (parsedPaidAt && isNaN(parsedPaidAt.getTime())) {
+      return res.status(400).json({ message: 'Invalid paidAt date' });
+    }
     period.status    = 'Paid';
-    period.paidAt    = req.body.paidAt ? new Date(req.body.paidAt) : new Date();
+    period.paidAt    = parsedPaidAt || new Date();
     period.updatedBy = userId;
     await period.save();
 
@@ -408,6 +412,90 @@ router.get('/payslips/:id', verifyUser, async (req, res) => {
       .lean();
     if (!payslip) return res.status(404).json({ message: 'Payslip not found' });
     res.json(payslip);
+  } catch (err) {
+    res.status(err.status || 500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/hr/payroll/payslips/:id/adjust  — manually add bonuses / penalty deductions
+router.patch('/payslips/:id/adjust', verifyUser, async (req, res) => {
+  try {
+    const companyId = resolveCompanyId(req);
+    const userId    = currentUserId(req);
+
+    const payslip = await HRPayslip.findOne({ _id: req.params.id, company: companyId });
+    if (!payslip) return res.status(404).json({ message: 'Payslip not found' });
+    if (payslip.status !== 'Draft') {
+      return res.status(400).json({ message: `Cannot adjust a ${payslip.status} payslip — only Draft payslips can be adjusted` });
+    }
+
+    const { adjustmentAllowances = [], adjustmentDeductions = [], adjustmentNote = '' } = req.body;
+
+    // Validate each row
+    const parseLines = (lines, label) => lines.map((l, i) => {
+      const name   = String(l.name  || '').trim();
+      const amount = Math.round(Number(l.amount) || 0);
+      if (!name)    throw Object.assign(new Error(`${label} row ${i + 1}: name is required`),    { status: 400 });
+      if (amount < 0) throw Object.assign(new Error(`${label} row ${i + 1}: amount cannot be negative`), { status: 400 });
+      return { name, amount };
+    });
+
+    const adjAllowances  = parseLines(adjustmentAllowances, 'Allowance');
+    const adjDeductions  = parseLines(adjustmentDeductions,  'Deduction');
+
+    // Recompute based on original computed values + new adjustments
+    const adjAllowTotal = adjAllowances.reduce((s, r) => s + r.amount, 0);
+    const adjDedTotal   = adjDeductions.reduce((s,  r) => s + r.amount, 0);
+
+    // Effective gross = original computed gross + adjustment allowances
+    const effectiveGross = payslip.grossSalary + adjAllowTotal;
+
+    // Recalculate statutory on new gross
+    const cfgDoc = await HRStatutoryConfig.findOne({ company: companyId }).lean();
+    const cfg    = cfgFromDoc(cfgDoc);
+    const { paye, nhif, nssf, ahl } = computeStatutory(effectiveGross, cfg);
+
+    const baseDedTotal   = payslip.otherDeductions.reduce((s, d) => s + d.amount, 0);
+    const totalDeductions = paye + nhif + nssf + ahl + baseDedTotal + adjDedTotal;
+    const netSalary       = Math.max(0, effectiveGross - totalDeductions);
+
+    // Persist
+    payslip.adjustmentAllowances = adjAllowances;
+    payslip.adjustmentDeductions = adjDeductions;
+    payslip.adjustmentNote       = String(adjustmentNote).trim();
+    payslip.paye             = paye;
+    payslip.nhif             = nhif;
+    payslip.nssf             = nssf;
+    payslip.ahl              = ahl;
+    payslip.totalDeductions  = totalDeductions;
+    payslip.netSalary        = netSalary;
+    payslip.updatedBy        = userId;
+    await payslip.save();
+
+    // Recompute period totals from all payslips for this period
+    const allSlips = await HRPayslip.find({ payrollPeriod: payslip.payrollPeriod, company: companyId }).lean();
+    const totals   = allSlips.reduce(
+      (acc, p) => {
+        const effGross = p.grossSalary + (p.adjustmentAllowances || []).reduce((s, a) => s + a.amount, 0);
+        return {
+          employeeCount:        acc.employeeCount + 1,
+          totalBasic:           acc.totalBasic    + p.basicSalary,
+          totalGross:           acc.totalGross    + effGross,
+          totalPAYE:            acc.totalPAYE     + p.paye,
+          totalNHIF:            acc.totalNHIF     + p.nhif,
+          totalNSSF:            acc.totalNSSF     + p.nssf,
+          totalAHL:             acc.totalAHL      + p.ahl,
+          totalOtherDeductions: acc.totalOtherDeductions + (p.otherDeductions || []).reduce((s, d) => s + d.amount, 0) + (p.adjustmentDeductions || []).reduce((s, d) => s + d.amount, 0),
+          totalDeductions:      acc.totalDeductions + p.totalDeductions,
+          totalNet:             acc.totalNet      + p.netSalary,
+        };
+      },
+      { employeeCount: 0, totalBasic: 0, totalGross: 0, totalPAYE: 0, totalNHIF: 0, totalNSSF: 0, totalAHL: 0, totalOtherDeductions: 0, totalDeductions: 0, totalNet: 0 }
+    );
+
+    await HRPayrollPeriod.updateOne({ _id: payslip.payrollPeriod }, { $set: { ...totals, updatedBy: userId } });
+
+    res.json({ message: 'Payslip adjusted', payslip });
   } catch (err) {
     res.status(err.status || 500).json({ message: err.message });
   }

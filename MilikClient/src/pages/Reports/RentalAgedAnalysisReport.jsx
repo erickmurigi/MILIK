@@ -39,7 +39,7 @@ const bucketOutstanding = (dueDate, amount) => {
 const RentalAgedAnalysisReport = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
-  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
+  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", ["accounts", "propertyManagement"]);
   const businessId = currentCompany?._id || "";
   const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || "Milik";
 

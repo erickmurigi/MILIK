@@ -17,7 +17,7 @@ import {
   FaToolbox, FaDatabase, FaWrench, FaHeadset, FaInfoCircle, FaList,
   FaBuilding, FaKey, FaUserSlash, FaRedoAlt, FaCar, FaUserPlus, FaUserCheck,
   FaLayerGroup, FaStar, FaCodeBranch,
-  FaBoxes, FaWarehouse, FaCashRegister, FaEnvelope, FaSms,
+  FaBoxes, FaWarehouse, FaCashRegister, FaEnvelope, FaSms, FaUserClock,
 } from "react-icons/fa";
 import "./dashboard.css";
 import TabManager from "../../components/Layout/TabManager";
@@ -64,12 +64,13 @@ const MENU_PERMISSION_MAP = {
   journals: { resource: "journals", action: "view", moduleKey: "accounts" },
   "landlord-statements": { resource: "statements", action: "view", moduleKey: "propertyManagement" },
   "processed-statements": { resource: "processedStatements", action: "view", moduleKey: "accounts" },
-  "rental-collection": { resource: "financialReports", action: "view", moduleKey: "accounts" },
-  "paid-balance": { resource: "financialReports", action: "view", moduleKey: "accounts" },
-  "aged-analysis": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "rental-collection": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
+  "paid-balance": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
+  "aged-analysis": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
   "commission-reports": { resource: "financialReports", action: "view", moduleKey: "accounts" },
-  "property-income-summary": { resource: "financialReports", action: "view", moduleKey: "accounts" },
-  "mri-tax-summary": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "property-income-summary": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
+  "mri-tax-summary": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
+  "property-expenses": { resource: "expenses", action: "view", moduleKey: "propertyManagement" },
   "trial-balance": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "income-statement": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "balance-sheet": { resource: "financialReports", action: "view", moduleKey: "accounts" },
@@ -478,6 +479,7 @@ const MENU_COLOR_MAP = {
   "hr-payroll":     { color: "#7c3aed", label: "Payroll",     icon: FaMoneyBillWave },
   "hr-reports":     { color: "#059669", label: "Reports",     icon: FaChartBar },
   "hr-appraisals":  { color: "#b45309", label: "Appraisals",  icon: FaChartLine },
+  "hr-attendance":  { color: "#0891b2", label: "Attendance",  icon: FaUserClock },
   "hr-config":      { color: "#FF8C00", label: "Setup",       icon: FaCog },
   "inv-pos":            { color: "#0B3B2E", label: "Point of Sale",    icon: FaCashRegister },
   "inv-catalog":        { color: "#1a5c3a", label: "Products",          icon: FaBoxes },
@@ -761,10 +763,13 @@ const TopToolbar = ({
         "hr-report-payroll":        "/hr/reports/payroll",
         "hr-report-leave":          "/hr/reports/leave",
         "hr-remittance":            "/hr/reports/remittance",
+        "hr-report-attendance":     "/hr/reports/attendance",
         // Appraisals — Phase 5 (live)
         "hr-appraisal-cycles":      "/hr/appraisals/cycles",
         "hr-appraisals":            "/hr/appraisals",
         "hr-kpis":                  "/hr/appraisals/kpis",
+        // Attendance (live)
+        "hr-attendance":            "/hr/attendance",
         // Documents (live)
         "hr-letters":               "/hr/letters",
         // Setup — Phase 1 + 2 (live)
@@ -861,6 +866,8 @@ const TopToolbar = ({
       "commission-reports": "/reports/commissions",
       "property-income-summary": "/reports/property-income-summary",
       "mri-tax-summary": "/reports/mri-tax-summary",
+      "income-statement": "/reports/income-statement",
+      "property-expenses": "/property-expenses",
       settings: "/settings",
       users: "/users",
       backup: "/tools/backup",
@@ -1006,7 +1013,8 @@ const TopToolbar = ({
           submenu: [
             { id: "hr-report-headcount", label: "Headcount Report",       icon: FaUsers },
             { id: "hr-report-payroll",   label: "Payroll Summary",        icon: FaMoneyBillWave },
-            { id: "hr-report-leave",     label: "Leave Summary",          icon: FaCalendarAlt },
+            { id: "hr-report-leave",       label: "Leave Summary",          icon: FaCalendarAlt },
+            { id: "hr-report-attendance",  label: "Attendance Report",      icon: FaUserClock },
             { type: "separator" },
             { id: "hr-remittance",       label: "Statutory Remittance",   icon: FaCalculator },
             { id: "hr-report-p9",        label: "P9 Form (Annual)",       icon: FaFileAlt },
@@ -1021,6 +1029,14 @@ const TopToolbar = ({
             { id: "hr-appraisals",       label: "Employee Appraisals",  icon: FaClipboard },
             { type: "separator" },
             { id: "hr-kpis",             label: "KPI Library",          icon: FaTag },
+          ],
+        },
+        {
+          id: "hr-attendance",
+          label: "Attendance",
+          icon: FaUserClock,
+          submenu: [
+            { id: "hr-attendance", label: "Attendance Records", icon: FaUserClock },
           ],
         },
         {
@@ -1429,7 +1445,17 @@ const TopToolbar = ({
         if (item.id === "financial") {
           return {
             ...item,
-            submenu: item.submenu.filter((subItem) => subItem.id !== "landlord-payments"),
+            label: "Income & Expenses",
+            submenu: [
+              ...item.submenu
+                .filter((subItem) => subItem.id !== "landlord-payments")
+                .map((subItem) => {
+                  if (subItem.id === "rental-invoicing") return { ...subItem, label: "Tenant Invoicing" };
+                  if (subItem.id === "rental-receipting") return { ...subItem, label: "Rent Collections" };
+                  return subItem;
+                }),
+              { id: "property-expenses", label: "Property Expenses", icon: FaMoneyBillWave },
+            ],
           };
         }
 
@@ -1438,8 +1464,11 @@ const TopToolbar = ({
             ...item,
             label: "Portfolio Reports",
             submenu: item.submenu
-              .filter((subItem) => subItem.id !== "commission-reports")
+              .filter((subItem) => !["commission-reports"].includes(subItem.id))
               .map((subItem) => {
+                if (subItem.id === "rental-collection") return { ...subItem, label: "Rent Collection Report" };
+                if (subItem.id === "property-income-summary") return { ...subItem, label: "Income & Expense Summary" };
+                if (subItem.id === "mri-tax-summary") return { ...subItem, label: "Rental Income Tax (MRI)" };
                 if (subItem.id === "paid-balance") return { ...subItem, label: "Collections & Balances" };
                 if (subItem.id === "aged-analysis") return { ...subItem, label: "Arrears Analysis" };
                 return subItem;
@@ -1504,6 +1533,7 @@ const TopToolbar = ({
           return item;
         });
       delete submenus["landlord-payments"];
+      // property-expenses links directly — no nested submenu needed
     }
 
     Object.keys(submenus).forEach((key) => {

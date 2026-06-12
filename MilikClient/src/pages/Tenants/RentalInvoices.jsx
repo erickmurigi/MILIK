@@ -298,10 +298,7 @@ const clampBillingPeriod = (month, year) => {
 
 const normalizeBillingMode = (value = "separate") => {
   const normalized = String(value || "separate").trim().toLowerCase();
-  // "combined" is no longer a valid creation mode. Any call that passes
-  // "combined" (legacy callers, URL params, old form state) is silently
-  // coerced to "separate" so rent and utility are always separate invoices.
-  if (["rent", "utility"].includes(normalized)) return normalized;
+  if (["rent", "utility", "combined"].includes(normalized)) return normalized;
   return "separate";
 };
 
@@ -309,6 +306,7 @@ const getBillingModeLabel = (value = "separate") => {
   const normalized = normalizeBillingMode(value);
   if (normalized === "rent") return "Rent only";
   if (normalized === "utility") return "Utility only";
+  if (normalized === "combined") return "Rent + Utility (combined invoice)";
   return "Rent + Utility (separate invoices)";
 };
 
@@ -333,6 +331,25 @@ const createBookingGroupId = () => {
   }
 
   return `booking_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+};
+
+// Scale each utility row proportionally to the resolved booking amount and round to 2dp.
+const buildScaledBreakdown = (rows = [], utilityAmount = 0) => {
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  const scale = total > 0 ? utilityAmount / total : 1;
+  return rows
+    .map((r) => ({ label: r.label, amount: Math.round(r.amount * scale * 100) / 100 }))
+    .filter((r) => r.amount > 0);
+};
+
+const buildCombinedInvoiceMetadata = (rows = [], utilityAmount = 0, utilityLabel = "") => {
+  const breakdown = buildScaledBreakdown(rows, utilityAmount);
+  return {
+    billItemKey: "rent_utility:combined",
+    utilityBreakdown: breakdown.length > 0 ? breakdown : [{ label: utilityLabel || "Utility", amount: utilityAmount }],
+    utilityAmount,
+    utilityLabel,
+  };
 };
 
 const buildBookingMetadata = ({ metadata = undefined, bookingGroupId = "", billingMode = "separate" } = {}) => {
@@ -1496,22 +1513,25 @@ const getTenantPricing = (tenant) => {
       return sum + (Number(utility?.unitCharge || utility?.amount || 0) || 0);
     }, 0);
 
-    const utilitiesFromUnit = context.utilityRows.reduce((sum, utility) => {
-      if (utility?.isIncluded === true) return sum;
-      return sum + (Number(utility?.unitCharge || utility?.amount || 0) || 0);
-    }, 0);
-
     const useTenantUtilities = utilitiesFromTenant > 0 && assignedUnitContexts.length === 1;
-    const billableUtilityLabels = (useTenantUtilities ? tenantUtilities : context.utilityRows)
-      .filter((item) => item?.isIncluded !== true)
-      .map((item) => extractUtilityLabel(item))
-      .filter(Boolean);
+    const sourceRows = useTenantUtilities ? tenantUtilities : context.utilityRows;
+    let utilitiesFromUnit = 0;
+    const billableUtilityRows = sourceRows.reduce((acc, item) => {
+      if (item?.isIncluded === true) return acc;
+      const amount = Number(item?.unitCharge || item?.amount || 0);
+      utilitiesFromUnit += amount;
+      const label = extractUtilityLabel(item);
+      if (label && amount > 0) acc.push({ label, amount });
+      return acc;
+    }, []);
+    const billableUtilityLabels = billableUtilityRows.map((r) => r.label);
 
     return {
       ...context,
       utilityAmount: useTenantUtilities ? utilitiesFromTenant : utilitiesFromUnit,
       utilityLabel:
         billableUtilityLabels.length > 0 ? billableUtilityLabels.join(", ") : "",
+      billableUtilityRows,
     };
   });
 
@@ -2654,73 +2674,66 @@ const createInvoiceForTenant = async (
       continue;
     }
 
-    const rentBlocked =
-      rentAmount > 0 &&
-      hasBlockingInvoiceForRequest({
-        invoices: tenantInvoicesFromApi,
-        tenantId: targetTenant._id,
-        unitId: unitContext.unitId,
-        month,
-        year,
-        category: "RENT_CHARGE",
-        periodKey: bookingPeriodContext.periodKey,
-      });
+    const billableRows = unitContext.billableUtilityRows || [];
+    const rentDesc = buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` });
+    const sharedArgs = { targetTenant: targetTenantForUnit, month, year, dueDay, taxSelection, bookingDateOverride, bookingGroupId: effectiveBookingGroupId, billingMode: normalizedBillingMode };
 
-    const utilityBlocked =
-      utilityAmount > 0 &&
-      hasBlockingInvoiceForRequest({
-        invoices: tenantInvoicesFromApi,
-        tenantId: targetTenant._id,
-        unitId: unitContext.unitId,
-        month,
-        year,
-        category: "UTILITY_CHARGE",
-        metadata: utilityMetadata,
-        periodKey: bookingPeriodContext.periodKey,
+    if (normalizedBillingMode === "combined" && rentAmount > 0 && utilityAmount > 0) {
+      const combinedBlocked = hasBlockingInvoiceForRequest({
+        invoices: tenantInvoicesFromApi, tenantId: targetTenant._id, unitId: unitContext.unitId,
+        month, year, category: "RENT_CHARGE", periodKey: bookingPeriodContext.periodKey,
       });
+      if (combinedBlocked) { encounteredBlockingInvoice = true; continue; }
+      const created = await createBackendInvoiceEntry({
+        ...sharedArgs, amount: rentAmount + utilityAmount, paymentType: "rent",
+        description: rentDesc, metadata: buildCombinedInvoiceMetadata(billableRows, utilityAmount, utilityLabel),
+      });
+      createdInvoiceIds.push(created?.invoiceNumber || "AUTO");
+      continue;
+    }
 
-    if (rentBlocked || utilityBlocked) {
-      encounteredBlockingInvoice = true;
+    const rentBlocked = rentAmount > 0 && hasBlockingInvoiceForRequest({
+      invoices: tenantInvoicesFromApi, tenantId: targetTenant._id, unitId: unitContext.unitId,
+      month, year, category: "RENT_CHARGE", periodKey: bookingPeriodContext.periodKey,
+    });
+
+    if (billableRows.length > 1) {
+      if (rentBlocked) encounteredBlockingInvoice = true;
+      for (const row of buildScaledBreakdown(billableRows, utilityAmount)) {
+        const rowMeta = buildUtilityInvoiceMetadata(row.label);
+        const rowBlocked = hasBlockingInvoiceForRequest({
+          invoices: tenantInvoicesFromApi, tenantId: targetTenant._id, unitId: unitContext.unitId,
+          month, year, category: "UTILITY_CHARGE", metadata: rowMeta, periodKey: bookingPeriodContext.periodKey,
+        });
+        if (rowBlocked) { encounteredBlockingInvoice = true; continue; }
+        const inv = await createBackendInvoiceEntry({
+          ...sharedArgs, amount: row.amount, paymentType: "utility",
+          description: buildUtilityChargeDescription({ utilityLabel: row.label, month, year }),
+          metadata: rowMeta,
+        });
+        createdInvoiceIds.push(inv?.invoiceNumber || "AUTO");
+      }
+    } else {
+      const utilityBlocked = utilityAmount > 0 && hasBlockingInvoiceForRequest({
+        invoices: tenantInvoicesFromApi, tenantId: targetTenant._id, unitId: unitContext.unitId,
+        month, year, category: "UTILITY_CHARGE", metadata: utilityMetadata, periodKey: bookingPeriodContext.periodKey,
+      });
+      if (rentBlocked || utilityBlocked) encounteredBlockingInvoice = true;
+      if (utilityAmount > 0 && !utilityBlocked) {
+        const inv = await createBackendInvoiceEntry({
+          ...sharedArgs, amount: utilityAmount, paymentType: "utility",
+          description: buildUtilityChargeDescription({ utilityLabel: utilityLabel || "Utility", month, year }),
+          metadata: utilityMetadata,
+        });
+        createdInvoiceIds.push(inv?.invoiceNumber || "AUTO");
+      }
     }
 
     if (rentAmount > 0 && !rentBlocked) {
-      const createdInvoice = await createBackendInvoiceEntry({
-        targetTenant: targetTenantForUnit,
-        amount: rentAmount,
-        paymentType: "rent",
-        month,
-        year,
-        dueDay,
-        description: buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` }),
-        taxSelection,
-        bookingDateOverride,
-        bookingGroupId: effectiveBookingGroupId,
-        billingMode: normalizedBillingMode,
+      const inv = await createBackendInvoiceEntry({
+        ...sharedArgs, amount: rentAmount, paymentType: "rent", description: rentDesc,
       });
-      createdInvoiceIds.push(createdInvoice?.invoiceNumber || "AUTO");
-    }
-
-    if (utilityAmount > 0 && !utilityBlocked) {
-      const resolvedUtilityDescription = buildUtilityChargeDescription({
-        utilityLabel: utilityLabel || "Utility",
-        month,
-        year,
-      });
-      const createdInvoice = await createBackendInvoiceEntry({
-        targetTenant: targetTenantForUnit,
-        amount: utilityAmount,
-        paymentType: "utility",
-        month,
-        year,
-        dueDay,
-        description: resolvedUtilityDescription,
-        metadata: utilityMetadata,
-        taxSelection,
-        bookingDateOverride,
-        bookingGroupId: effectiveBookingGroupId,
-        billingMode: normalizedBillingMode,
-      });
-      createdInvoiceIds.push(createdInvoice?.invoiceNumber || "AUTO");
+      createdInvoiceIds.push(inv?.invoiceNumber || "AUTO");
     }
   }
 
@@ -2983,72 +2996,63 @@ const createInvoiceForTenant = async (
             continue;
           }
 
-          const shouldCreateRent =
-            rentAmount > 0 &&
-            !hasBlockingInvoiceForRequest({
-              invoices: tenantInvoicesFromApi,
-              tenantId: tenant._id,
-              unitId: unitContext.unitId,
-              month,
-              year,
-              category: "RENT_CHARGE",
-              periodKey: bookingPeriodContext.periodKey,
-            });
+          const billableRows = unitContext.billableUtilityRows || [];
+          const rentDesc = buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` });
+          const batchArgs = { targetTenant: targetTenantForUnit, month, year, dueDay, taxSelection: selectedTaxSelection, bookingDateOverride: batchBookingDateOverride, bookingGroupId: batchBookingGroupId, billingMode: normalizedBatchBillingMode };
 
-          const shouldCreateUtility =
-            utilityAmount > 0 &&
-            !hasBlockingInvoiceForRequest({
-              invoices: tenantInvoicesFromApi,
-              tenantId: tenant._id,
-              unitId: unitContext.unitId,
-              month,
-              year,
-              category: "UTILITY_CHARGE",
-              metadata: utilityMetadata,
-              periodKey: bookingPeriodContext.periodKey,
+          if (normalizedBatchBillingMode === "combined" && rentAmount > 0 && utilityAmount > 0) {
+            const combinedBlocked = hasBlockingInvoiceForRequest({
+              invoices: tenantInvoicesFromApi, tenantId: tenant._id, unitId: unitContext.unitId,
+              month, year, category: "RENT_CHARGE", periodKey: bookingPeriodContext.periodKey,
             });
+            if (!combinedBlocked) {
+              batchItems.push(buildInvoicePayloadForTenant({
+                ...batchArgs, amount: rentAmount + utilityAmount, paymentType: "rent",
+                description: rentDesc, metadata: buildCombinedInvoiceMetadata(billableRows, utilityAmount, utilityLabel),
+              }));
+              tenantHasBatchItems = true;
+            }
+            continue;
+          }
+
+          const shouldCreateRent = rentAmount > 0 && !hasBlockingInvoiceForRequest({
+            invoices: tenantInvoicesFromApi, tenantId: tenant._id, unitId: unitContext.unitId,
+            month, year, category: "RENT_CHARGE", periodKey: bookingPeriodContext.periodKey,
+          });
 
           if (shouldCreateRent) {
-            batchItems.push(
-              buildInvoicePayloadForTenant({
-                targetTenant: targetTenantForUnit,
-                amount: rentAmount,
-                paymentType: "rent",
-                month,
-                year,
-                dueDay,
-                description: buildRecurringInvoiceDescription({ month, year, label: `Rent - ${unitContext.unitName}` }),
-                taxSelection: selectedTaxSelection,
-                bookingDateOverride: batchBookingDateOverride,
-                bookingGroupId: batchBookingGroupId,
-                billingMode: normalizedBatchBillingMode,
-              })
-            );
+            batchItems.push(buildInvoicePayloadForTenant({ ...batchArgs, amount: rentAmount, paymentType: "rent", description: rentDesc }));
             tenantHasBatchItems = true;
           }
 
-          if (shouldCreateUtility) {
-            batchItems.push(
-              buildInvoicePayloadForTenant({
-                targetTenant: targetTenantForUnit,
-                amount: utilityAmount,
-                paymentType: "utility",
-                month,
-                year,
-                dueDay,
-                description: buildUtilityChargeDescription({
-                  utilityLabel: utilityLabel || "Utility",
-                  month,
-                  year,
-                }),
+          if (utilityAmount > 0 && billableRows.length > 1) {
+            for (const row of buildScaledBreakdown(billableRows, utilityAmount)) {
+              const rowMeta = buildUtilityInvoiceMetadata(row.label);
+              const rowBlocked = hasBlockingInvoiceForRequest({
+                invoices: tenantInvoicesFromApi, tenantId: tenant._id, unitId: unitContext.unitId,
+                month, year, category: "UTILITY_CHARGE", metadata: rowMeta, periodKey: bookingPeriodContext.periodKey,
+              });
+              if (rowBlocked) continue;
+              batchItems.push(buildInvoicePayloadForTenant({
+                ...batchArgs, amount: row.amount, paymentType: "utility",
+                description: buildUtilityChargeDescription({ utilityLabel: row.label, month, year }),
+                metadata: rowMeta,
+              }));
+              tenantHasBatchItems = true;
+            }
+          } else if (utilityAmount > 0) {
+            const shouldCreateUtility = !hasBlockingInvoiceForRequest({
+              invoices: tenantInvoicesFromApi, tenantId: tenant._id, unitId: unitContext.unitId,
+              month, year, category: "UTILITY_CHARGE", metadata: utilityMetadata, periodKey: bookingPeriodContext.periodKey,
+            });
+            if (shouldCreateUtility) {
+              batchItems.push(buildInvoicePayloadForTenant({
+                ...batchArgs, amount: utilityAmount, paymentType: "utility",
+                description: buildUtilityChargeDescription({ utilityLabel: utilityLabel || "Utility", month, year }),
                 metadata: utilityMetadata,
-                taxSelection: selectedTaxSelection,
-                bookingDateOverride: batchBookingDateOverride,
-                bookingGroupId: batchBookingGroupId,
-                billingMode: normalizedBatchBillingMode,
-              })
-            );
-            tenantHasBatchItems = true;
+              }));
+              tenantHasBatchItems = true;
+            }
           }
         }
 
@@ -3652,6 +3656,7 @@ const createInvoiceForTenant = async (
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
                   >
                     <option value="separate">Rent + Utility (separate)</option>
+                    <option value="combined">Rent + Utility (combined)</option>
                     <option value="rent">Rent only</option>
                     <option value="utility">Utility only</option>
                   </select>
@@ -3939,6 +3944,7 @@ const createInvoiceForTenant = async (
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
                   >
                     <option value="separate">Rent + Utility (separate)</option>
+                    <option value="combined">Rent + Utility (combined)</option>
                     <option value="rent">Rent only</option>
                     <option value="utility">Utility only</option>
                   </select>

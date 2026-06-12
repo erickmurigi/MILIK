@@ -4,7 +4,7 @@ import { verifyUser } from '../../../controllers/verifyToken.js';
 import HRLeaveApplication from '../models/HRLeaveApplication.js';
 import HRLeaveType from '../models/HRLeaveType.js';
 import HREmployee from '../models/HREmployee.js';
-import { resolveCompanyId, currentUserId, escapeRegex, parsePage, parseLimit } from '../services/hrScope.js';
+import { resolveCompanyId, currentUserId, escapeRegex, parsePage, parseLimit, requireOid, toOid } from '../services/hrScope.js';
 
 const router = express.Router();
 
@@ -85,6 +85,7 @@ router.get('/', verifyUser, async (req, res) => {
 // GET /api/hr/leave-applications/:id
 router.get('/:id', verifyUser, async (req, res) => {
   try {
+    requireOid(req.params.id, 'application ID');
     const companyId = resolveCompanyId(req);
     const app = await HRLeaveApplication.findOne({ _id: req.params.id, company: companyId })
       .populate(POPULATE).lean();
@@ -105,6 +106,8 @@ router.post('/', verifyUser, async (req, res) => {
     if (!leaveType) return res.status(400).json({ message: 'Leave type is required' });
     if (!startDate) return res.status(400).json({ message: 'Start date is required' });
     if (!endDate)   return res.status(400).json({ message: 'End date is required' });
+    if (!toOid(employee))  return res.status(400).json({ message: 'Invalid employee ID' });
+    if (!toOid(leaveType)) return res.status(400).json({ message: 'Invalid leave type ID' });
 
     const start = new Date(startDate);
     const end   = new Date(endDate);
@@ -152,6 +155,7 @@ router.post('/', verifyUser, async (req, res) => {
 // PATCH /api/hr/leave-applications/:id/approve
 router.patch('/:id/approve', verifyUser, async (req, res) => {
   try {
+    requireOid(req.params.id, 'application ID');
     const companyId = resolveCompanyId(req);
     const app = await HRLeaveApplication.findOne({ _id: req.params.id, company: companyId });
     if (!app) return res.status(404).json({ message: 'Application not found' });
@@ -172,6 +176,7 @@ router.patch('/:id/approve', verifyUser, async (req, res) => {
 // PATCH /api/hr/leave-applications/:id/reject
 router.patch('/:id/reject', verifyUser, async (req, res) => {
   try {
+    requireOid(req.params.id, 'application ID');
     const companyId = resolveCompanyId(req);
     const app = await HRLeaveApplication.findOne({ _id: req.params.id, company: companyId });
     if (!app) return res.status(404).json({ message: 'Application not found' });
@@ -192,6 +197,7 @@ router.patch('/:id/reject', verifyUser, async (req, res) => {
 // PATCH /api/hr/leave-applications/:id/cancel
 router.patch('/:id/cancel', verifyUser, async (req, res) => {
   try {
+    requireOid(req.params.id, 'application ID');
     const companyId = resolveCompanyId(req);
     const app = await HRLeaveApplication.findOne({ _id: req.params.id, company: companyId });
     if (!app) return res.status(404).json({ message: 'Application not found' });
@@ -213,6 +219,7 @@ router.patch('/:id/cancel', verifyUser, async (req, res) => {
 // DELETE /api/hr/leave-applications/:id (draft/pending only)
 router.delete('/:id', verifyUser, async (req, res) => {
   try {
+    requireOid(req.params.id, 'application ID');
     const companyId = resolveCompanyId(req);
     const app = await HRLeaveApplication.findOne({ _id: req.params.id, company: companyId });
     if (!app) return res.status(404).json({ message: 'Application not found' });

@@ -48,6 +48,11 @@ const payslipSchema = new mongoose.Schema({
   totalDeductions: { type: Number, default: 0 },
   netSalary:       { type: Number, default: 0 },
 
+  // Manual HR adjustments applied on top of computed values (e.g. bonuses, penalties)
+  adjustmentAllowances: { type: [earningLineSchema],   default: [] },
+  adjustmentDeductions: { type: [deductionLineSchema],  default: [] },
+  adjustmentNote:       { type: String, default: '' },
+
   status: {
     type: String,
     enum: ['Draft', 'Approved', 'Paid', 'Reversed'],

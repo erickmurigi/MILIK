@@ -47,7 +47,8 @@ const ESSPayslips   = lazy(() => import("./pages/ESS/ESSPayslips"));
 const ESSLeave      = lazy(() => import("./pages/ESS/ESSLeave"));
 const ESSAttendance = lazy(() => import("./pages/ESS/ESSAttendance"));
 const ESSLetters    = lazy(() => import("./pages/ESS/ESSLetters"));
-const ESSProfile    = lazy(() => import("./pages/ESS/ESSProfile"));
+const ESSProfile      = lazy(() => import("./pages/ESS/ESSProfile"));
+const ESSAppraisals   = lazy(() => import("./pages/ESS/ESSAppraisals"));
 
 // Core
 const ModulesDashboard  = lazy(() => import("./pages/moduleDashboard/ModulesDashboard"));
@@ -77,6 +78,7 @@ const ProcessedStatements            = lazy(() => import("./pages/Landlord/Proce
 const Properties                  = lazy(() => import("./pages/Properties/Properties"));
 const PropertyCommissionSettings  = lazy(() => import("./pages/Properties/PropertyCommissionSettings"));
 const CommissionsList             = lazy(() => import("./pages/Properties/CommissionsList"));
+const PropertyExpenses            = lazy(() => import("./pages/Properties/PropertyExpenses"));
 const Units                       = lazy(() => import("./pages/Units/Units"));
 const AddUnit                     = lazy(() => import("./components/Units/AddUnit"));
 const AddProperty                 = lazy(() => import("./components/Properties/AddProperties"));
@@ -212,6 +214,8 @@ const HRAppraisals          = lazy(() => import("./pages/HR/Appraisals"));
 const HRPayrollRegister     = lazy(() => import("./pages/HR/HRPayrollRegister"));
 const HRRemittance          = lazy(() => import("./pages/HR/HRRemittance"));
 const HRLetters             = lazy(() => import("./pages/HR/HRLetters"));
+const HRAttendance          = lazy(() => import("./pages/HR/HRAttendance"));
+const HRReportAttendance    = lazy(() => import("./pages/HR/HRReportAttendance"));
 
 // Property Sale module
 const PropertySaleDashboard = lazy(() => import("./pages/PropertySale/PropertySaleDashboard"));
@@ -652,6 +656,7 @@ function App() {
             <Route path="/hr/reports/payroll"   element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportPayroll /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/reports/leave"     element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportLeave /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/reports/p9"        element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportP9 /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/reports/attendance" element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportAttendance /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/leave/balances"    element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRLeaveBalances /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/statutory"         element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRStatutoryDeductions /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/appraisals/kpis"   element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRKpiLibrary /></ProtectedRoute></CompanyModuleRoute>} />
@@ -660,6 +665,7 @@ function App() {
             <Route path="/hr/payroll/register"      element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRPayrollRegister /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/reports/remittance"    element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRRemittance /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/letters"               element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRLetters /></ProtectedRoute></CompanyModuleRoute>} />
+            <Route path="/hr/attendance"            element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAttendance /></ProtectedRoute></CompanyModuleRoute>} />
             <Route path="/hr/financials"            element={<CompanyModuleRoute moduleKey="hr"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><HRFinancials /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/hr/chart-of-accounts" element={<CompanyModuleRoute moduleKey="hr"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><ChartOfAccounts /></PermissionRoute></CompanyModuleRoute>} />
 
@@ -716,6 +722,7 @@ function App() {
             <Route path="/properties/edit/:id"           element={<ProtectedRoute><EditProperty /></ProtectedRoute>} />
             <Route path="/properties/commission-settings"element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><PropertyCommissionSettings /></ProtectedRoute></CompanyModeRoute>} />
             <Route path="/properties/commissions-list"   element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><CommissionsList /></ProtectedRoute></CompanyModeRoute>} />
+            <Route path="/property-expenses"             element={<ProtectedRoute><PropertyExpenses /></ProtectedRoute>} />
             <Route path="/units"                         element={<PermissionRoute resource="units" moduleKey="propertyManagement"><Units /></PermissionRoute>} />
             <Route path="/units/new"                     element={<ProtectedRoute><AddUnit /></ProtectedRoute>} />
             <Route path="/units/:id"                     element={<ProtectedRoute><AddUnit /></ProtectedRoute>} />
@@ -773,8 +780,8 @@ function App() {
             {/* ── Reports ───────────────────────────────────────────────── */}
             <Route path="/reports/rental-collection"      element={<ProtectedRoute><RentalCollectionReport /></ProtectedRoute>} />
             <Route path="/reports/export"                 element={<ProtectedRoute><RentalCollectionReport /></ProtectedRoute>} />
-            <Route path="/reports/property-income-summary"element={<PermissionRoute resource="financialReports" moduleKey="accounts"><PropertyIncomeSummaryReport /></PermissionRoute>} />
-            <Route path="/reports/mri-tax-summary"        element={<PermissionRoute resource="financialReports" moduleKey="accounts"><MRITaxSummaryReport /></PermissionRoute>} />
+            <Route path="/reports/property-income-summary"element={<ProtectedRoute><PropertyIncomeSummaryReport /></ProtectedRoute>} />
+            <Route path="/reports/mri-tax-summary"        element={<ProtectedRoute><MRITaxSummaryReport /></ProtectedRoute>} />
             <Route path="/reports/paid-balance"           element={<ProtectedRoute><PaidBalanceReport /></ProtectedRoute>} />
             <Route path="/reports/aged-analysis"          element={<ProtectedRoute><AgedAnalysisReport /></ProtectedRoute>} />
             <Route path="/reports/rental-aged-analysis"   element={<ProtectedRoute><RentalAgedAnalysisReport /></ProtectedRoute>} />
@@ -801,7 +808,8 @@ function App() {
               <Route path="payslips"   element={<ESSPayslips />} />
               <Route path="leave"      element={<ESSLeave />} />
               <Route path="attendance" element={<ESSAttendance />} />
-              <Route path="letters"    element={<ESSLetters />} />
+              <Route path="letters"     element={<ESSLetters />} />
+              <Route path="appraisals" element={<ESSAppraisals />} />
               <Route path="profile"    element={<ESSProfile />} />
             </Route>
 

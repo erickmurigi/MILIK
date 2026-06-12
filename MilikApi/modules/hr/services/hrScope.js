@@ -26,3 +26,16 @@ export const escapeRegex = (v = '') => String(v || '').replace(/[.*+?^${}()|[\]\
 
 export const parsePage = (v, def = 1) => Math.max(parseInt(v) || def, 1);
 export const parseLimit = (v, def = 25) => Math.min(Math.max(parseInt(v) || def, 1), 200);
+
+// Throws 400 if `id` is not a valid ObjectId string
+export const requireOid = (id, label = 'ID') => {
+  if (!mongoose.Types.ObjectId.isValid(String(id || ''))) {
+    const err = new Error(`Invalid ${label}`);
+    err.status = 400;
+    throw err;
+  }
+};
+
+// Guards an optional ObjectId query param — converts to OID or returns undefined
+export const toOid = (v) =>
+  v && mongoose.Types.ObjectId.isValid(String(v)) ? new mongoose.Types.ObjectId(String(v)) : undefined;

@@ -8,6 +8,7 @@ import {
   FaFileAlt,
   FaFileInvoiceDollar,
   FaHome,
+  FaMoneyBillWave,
   FaReceipt,
   FaTools,
 } from 'react-icons/fa';
@@ -20,6 +21,7 @@ import {
   selectAllLeases,
   selectAllMaintenances,
   selectAllRentPayments,
+  selectAllExpenseProperties,
 } from '../../redux/selectors';
 
 const normalizeArray = (value) => {
@@ -72,6 +74,7 @@ const QuickActions = ({
   const leases = useSelector(selectAllLeases);
   const maintenances = useSelector(selectAllMaintenances);
   const rentPayments = useSelector(selectAllRentPayments);
+  const expenseProperties = useSelector(selectAllExpenseProperties);
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
@@ -215,6 +218,17 @@ const QuickActions = ({
     [paymentVouchers]
   );
 
+  const thisMonthExpenseCount = useMemo(() => {
+    if (!isLandlordMode) return 0;
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    return expenseProperties.filter((exp) => {
+      const d = parseDate(exp?.date || exp?.createdAt);
+      return d && d.getFullYear() === y && d.getMonth() === m;
+    }).length;
+  }, [isLandlordMode, expenseProperties]);
+
   const items = useMemo(() => {
     const baseItems = [
       {
@@ -285,7 +299,18 @@ const QuickActions = ({
       },
     ];
 
-    if (!isLandlordMode) {
+    if (isLandlordMode) {
+      baseItems.splice(5, 0, {
+        id: 'monthly-expenses',
+        label: 'Property expenses logged this month',
+        value: thisMonthExpenseCount,
+        icon: <FaMoneyBillWave />,
+        tone: 'purple',
+        helper: 'Open Property Expenses to review and record costs for your portfolio this month.',
+        route: '/property-expenses',
+        tabTitle: 'Property Expenses',
+      });
+    } else {
       baseItems.splice(5, 0, {
         id: 'pending-statements',
         label: 'Landlord statements pending settlement',
@@ -299,7 +324,7 @@ const QuickActions = ({
     }
 
     return baseItems;
-  }, [isLandlordMode, leasesExpiringSoon, overdueInvoices, pendingMaintenance, pendingStatements, pendingVoucherApprovals, unpostedReceipts, vacantUnits]);
+  }, [isLandlordMode, leasesExpiringSoon, overdueInvoices, pendingMaintenance, pendingStatements, pendingVoucherApprovals, thisMonthExpenseCount, unpostedReceipts, vacantUnits]);
 
   const getToneClasses = (tone) => {
     const tones = {

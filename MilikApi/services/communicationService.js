@@ -99,7 +99,7 @@ const EMAIL_TEMPLATE_DEFINITIONS = [
     description: 'Send a rental invoice email to the tenant.',
     subject: 'Invoice {invoiceNumber} – {category} for {propertyName} Unit {unitNumber}',
     body:
-      'Hello {tenantName} ({tenantCode}),\n\nPlease find below your invoice details for {propertyName} Unit {unitNumber}.\n\nInvoice Number: {invoiceNumber}\nInvoice Type: {category}\nInvoice Date: {invoiceDate}\nDue Date: {dueDate}\nAmount Due: {amountDue}\nStatus: {invoiceStatus}\n\nPlease ensure payment is made by {dueDate} to avoid late penalties.\n\nRegards,\n{companyName}\n{companyPhone}',
+      'Hello {tenantName} ({tenantCode}),\n\nPlease find below your invoice details for {propertyName} Unit {unitNumber}.\n\nInvoice Number: {invoiceNumber}\nInvoice Type: {category}\nInvoice Date: {invoiceDate}\nDue Date: {dueDate}\nAmount Due: {amountDue}\nParticulars: {particulars}\nStatus: {invoiceStatus}\n\nPlease ensure payment is made by {dueDate} to avoid late penalties.\n\nRegards,\n{companyName}\n{companyPhone}',
   },
   {
     key: 'landlord_statement_ready_email',
@@ -340,6 +340,19 @@ const buildInvoicePayload = ({ invoice, tenant, property, unit, company, channel
   description: normalizeText(invoice?.description || ''),
   rentAmount: formatCurrency(tenant?.rent || 0, company?.baseCurrency || 'KES'),
   sourceInvoiceNumber: invoice?.metadata?.penaltySourceInvoiceNumber || invoice?.sourceInvoiceNumber || '',
+  particulars: (() => {
+    const meta = invoice?.metadata || {};
+    const currency = company?.baseCurrency || 'KES';
+    if (meta.billItemKey === 'rent_utility:combined' && Array.isArray(meta.utilityBreakdown) && meta.utilityBreakdown.length > 0) {
+      const rentAmt = (invoice?.amount ?? 0) - (meta.utilityAmount ?? 0);
+      const lines = rentAmt > 0 ? [`Rent: ${formatCurrency(rentAmt, currency)}`] : [];
+      meta.utilityBreakdown.forEach((item) => {
+        if (item?.label && item?.amount > 0) lines.push(`${item.label}: ${formatCurrency(item.amount, currency)}`);
+      });
+      return lines.join(' | ');
+    }
+    return normalizeText(invoice?.description || '');
+  })(),
   email: tenant?.email || '',
   phoneNumber: tenant?.phone || '',
 });
@@ -1129,7 +1142,11 @@ export const sendCommunication = async ({ businessId, contextType, channel, temp
     ? await preBuildAttachments({ contextType, items: preview.previews, businessId })
     : new Map();
 
-  // Deduplicate recipients to avoid double-sending
+  // Bulk contexts send one message per contact regardless of how many records they have.
+  // Per-record contexts (invoice, receipt, etc.) intentionally send one message per record
+  // even if the same tenant appears multiple times — each message has unique content.
+  const BULK_CONTEXTS = new Set(['tenant_bulk', 'landlord_bulk']);
+  const deduplicateByAddress = BULK_CONTEXTS.has(contextType);
   const seenAddresses = new Set();
 
   // Process in parallel batches to avoid sequential SMTP delays
@@ -1144,14 +1161,13 @@ export const sendCommunication = async ({ businessId, contextType, channel, temp
         return;
       }
 
-      // Deduplicate by destination address
       const dest = channel === 'sms' ? (item.recipientPhone || '') : (item.recipientEmail || '');
-      if (!dest || seenAddresses.has(dest)) {
+      if (!dest || (deduplicateByAddress && seenAddresses.has(dest))) {
         results.push({ recordId: item.recordId, recipientName: item.recipientName, status: 'failed', messageId: '', cost: '', message: !dest ? 'No recipient address.' : 'Duplicate recipient — skipped.' });
         SmsLog.create(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'failed', error: !dest ? 'No address' : 'Duplicate' })).catch(() => {});
         return;
       }
-      seenAddresses.add(dest);
+      if (deduplicateByAddress) seenAddresses.add(dest);
 
       try {
         let providerResult = { messageId: '', status: '', cost: '' };

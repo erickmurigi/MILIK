@@ -6,7 +6,7 @@ import HREmployee from '../models/HREmployee.js';
 import HRSignatory from '../models/HRSignatory.js';
 import HRLetterTemplate from '../models/HRLetterTemplate.js';
 import Company from '../../../models/Company.js';
-import { resolveCompanyId, currentUserId, escapeRegex } from '../services/hrScope.js';
+import { resolveCompanyId, currentUserId, escapeRegex, requireOid, toOid } from '../services/hrScope.js';
 import { isSystemAdminUser } from '../../../utils/permissionControl.js';
 import { LETTER_META, renderLetterBody, applyCustomTemplate, renderWithCustomBody } from '../utils/letterTemplates.js';
 
@@ -63,7 +63,9 @@ router.get('/', async (req, res) => {
     const { employeeId, letterType, status, page = 1, limit = 25, search } = req.query;
 
     const filter = { company: oid };
-    if (employeeId)  filter.employee   = new mongoose.Types.ObjectId(employeeId);
+    const empOid = toOid(employeeId);
+    if (empOid)      filter.employee   = empOid;
+    else if (employeeId) return res.status(400).json({ message: 'Invalid employeeId' });
     if (letterType)  filter.letterType = letterType;
     if (status)      filter.status     = status;
 
@@ -100,6 +102,7 @@ router.get('/', async (req, res) => {
 // ── Get single letter ────────────────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
   try {
+    requireOid(req.params.id, 'letter ID');
     const companyId = await resolveCompanyId(req);
     const oid = new mongoose.Types.ObjectId(companyId);
 
@@ -131,6 +134,9 @@ router.post('/', async (req, res) => {
 
     if (!employeeId || !letterType) {
       return res.status(400).json({ message: 'employeeId and letterType are required' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(String(employeeId))) {
+      return res.status(400).json({ message: 'Invalid employeeId' });
     }
     if (!LETTER_META[letterType]) {
       return res.status(400).json({ message: `Unknown letter type: ${letterType}` });
@@ -164,6 +170,7 @@ router.post('/', async (req, res) => {
 // ── Update draft letter (edit body/subject/metadata) ─────────────────────────
 router.put('/:id', async (req, res) => {
   try {
+    requireOid(req.params.id, 'letter ID');
     const companyId = await resolveCompanyId(req);
     const oid = new mongoose.Types.ObjectId(companyId);
     const userId = currentUserId(req);
@@ -188,6 +195,7 @@ router.put('/:id', async (req, res) => {
 // ── Regenerate body from template (if metadata changed) ───────────────────────
 router.post('/:id/regenerate', async (req, res) => {
   try {
+    requireOid(req.params.id, 'letter ID');
     const companyId = await resolveCompanyId(req);
     const oid = new mongoose.Types.ObjectId(companyId);
     const userId = currentUserId(req);
@@ -214,6 +222,7 @@ router.post('/:id/regenerate', async (req, res) => {
 // ── Issue letter ──────────────────────────────────────────────────────────────
 router.patch('/:id/issue', async (req, res) => {
   try {
+    requireOid(req.params.id, 'letter ID');
     const companyId = await resolveCompanyId(req);
     const oid = new mongoose.Types.ObjectId(companyId);
     const userId = currentUserId(req);
@@ -238,6 +247,7 @@ router.patch('/:id/issue', async (req, res) => {
 // ── Revoke issued letter (admin only) ────────────────────────────────────────
 router.patch('/:id/revoke', async (req, res) => {
   try {
+    requireOid(req.params.id, 'letter ID');
     if (!req.user?.adminAccess && !isSystemAdminUser(req.user)) {
       return res.status(403).json({ message: 'Only administrators can revoke an issued letter' });
     }
@@ -267,6 +277,7 @@ router.patch('/:id/revoke', async (req, res) => {
 // ── Delete draft letter ───────────────────────────────────────────────────────
 router.delete('/:id', async (req, res) => {
   try {
+    requireOid(req.params.id, 'letter ID');
     const companyId = await resolveCompanyId(req);
     const oid = new mongoose.Types.ObjectId(companyId);
 

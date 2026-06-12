@@ -39,7 +39,9 @@
       "Bash(Find \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\" -iname \"*hr*\" -o -iname \"*employee*\" -o -iname \"*payroll*\" -o -iname \"*payslip*\" -o -iname \"*leave*\" -o -iname \"*appraisal*\" -o -iname \"*kpi*\")",
       "Bash(Find \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\components\\\\HR\" -type f)",
       "Bash(xargs grep -l \"printTabularList\\\\|printPettyCash\")",
-      "Bash(xargs grep -l \"verifyEmployee\\\\|isEmployee\\\\|employeePortal\\\\|ess\\\\|ESS\")"
+      "Bash(xargs grep -l \"verifyEmployee\\\\|isEmployee\\\\|employeePortal\\\\|ess\\\\|ESS\")",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\modules\" | Where-Object {$_.PSIsContainer} | Select-Object Name)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('API port env check:'\\); require\\('fs'\\).existsSync\\('.env'\\) && console.log\\('.env exists'\\) || console.log\\('NO .env'\\);\")"
     ]
   }
 }

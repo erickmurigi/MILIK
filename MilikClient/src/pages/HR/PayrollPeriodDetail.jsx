@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import {
   FaArrowLeft, FaRedoAlt, FaPlay, FaCheck, FaHandHolding,
   FaMoneyBillWave, FaUsers, FaFileAlt, FaPrint, FaUndo,
+  FaSlidersH, FaPlus, FaTrash,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
@@ -34,6 +35,128 @@ function StatCard({ label, value, sub, color = 'text-slate-900', border = 'borde
   );
 }
 
+const fmtNum = (n) => Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 });
+const EMPTY_LINE = { name: '', amount: '' };
+
+function AdjustModal({ payslip, onClose, onSaved }) {
+  const [allowances,  setAllowances]  = useState(payslip.adjustmentAllowances?.length ? payslip.adjustmentAllowances.map((r) => ({ ...r, amount: String(r.amount) })) : []);
+  const [deductions,  setDeductions]  = useState(payslip.adjustmentDeductions?.length ? payslip.adjustmentDeductions.map((r) => ({ ...r, amount: String(r.amount) })) : []);
+  const [note,        setNote]        = useState(payslip.adjustmentNote || '');
+  const [saving,      setSaving]      = useState(false);
+
+  const setLine = (arr, setArr, idx, field, val) =>
+    setArr(arr.map((r, i) => i === idx ? { ...r, [field]: val } : r));
+
+  const removeLine = (arr, setArr, idx) => setArr(arr.filter((_, i) => i !== idx));
+
+  const effGross = (payslip.grossSalary || 0)
+    + allowances.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const adjDedTotal = deductions.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const estimatedNet = Math.max(0, effGross - (payslip.paye || 0) - (payslip.nhif || 0) - (payslip.nssf || 0) - (payslip.ahl || 0)
+    - (payslip.otherDeductions || []).reduce((s, d) => s + d.amount, 0) - adjDedTotal);
+
+  const handleSave = async () => {
+    for (const r of allowances) {
+      if (!r.name.trim()) { return; }
+      if (isNaN(Number(r.amount)) || Number(r.amount) < 0) { return; }
+    }
+    for (const r of deductions) {
+      if (!r.name.trim()) { return; }
+      if (isNaN(Number(r.amount)) || Number(r.amount) < 0) { return; }
+    }
+    setSaving(true);
+    try {
+      await adminRequests.patch(`/hr/payroll/payslips/${payslip._id}/adjust`, {
+        adjustmentAllowances: allowances.map((r) => ({ name: r.name.trim(), amount: Number(r.amount) || 0 })),
+        adjustmentDeductions: deductions.map((r) => ({ name: r.name.trim(), amount: Number(r.amount) || 0 })),
+        adjustmentNote: note,
+      });
+      onSaved();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to save adjustments');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputCls = 'h-7 rounded border border-slate-200 px-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
+
+  const LineTable = ({ rows, setRows, label, color }) => (
+    <div className="mb-4">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className={`text-[10px] font-black uppercase tracking-widest ${color}`}>{label}</span>
+        <button onClick={() => setRows([...rows, { ...EMPTY_LINE }])} className="flex items-center gap-1 rounded border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50">
+          <FaPlus size={8} /> Add
+        </button>
+      </div>
+      {rows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-200 py-2 text-center text-[10px] text-slate-400">No {label.toLowerCase()} added</div>
+      ) : (
+        <div className="space-y-1.5">
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input value={r.name} onChange={(e) => setLine(rows, setRows, i, 'name', e.target.value)}
+                placeholder="Description" className={`${inputCls} flex-1`} />
+              <input type="number" min="0" value={r.amount} onChange={(e) => setLine(rows, setRows, i, 'amount', e.target.value)}
+                placeholder="0" className={`${inputCls} w-28 text-right font-mono`} />
+              <button onClick={() => removeLine(rows, setRows, i)} className="text-slate-300 hover:text-rose-500"><FaTrash size={10} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Payslip Adjustment</div>
+            <h2 className="text-sm font-black text-slate-900">{payslip.snapshot?.name}</h2>
+            <p className="text-[10px] text-slate-400">{payslip.snapshot?.employeeNumber} · Base gross: {fmtKES(payslip.grossSalary)}</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">✕</button>
+        </div>
+
+        <div className="max-h-[60vh] overflow-y-auto px-5 py-4">
+          <LineTable rows={allowances} setRows={setAllowances} label="Extra Allowances / Bonuses" color="text-emerald-700" />
+          <LineTable rows={deductions} setRows={setDeductions} label="Extra Deductions / Penalties" color="text-rose-600" />
+
+          <div className="mb-3">
+            <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Adjustment Note</label>
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Performance bonus for Q2" className={`${inputCls} w-full`} />
+          </div>
+
+          {/* Preview */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+            <div className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400">Estimated Net Pay After Adjustment</div>
+            <div className="flex justify-between">
+              <span className="text-slate-600">Effective Gross</span>
+              <span className="font-mono font-semibold text-slate-800">KES {fmtNum(effGross)}</span>
+            </div>
+            <div className="flex justify-between text-rose-600">
+              <span>Total Deductions (incl. statutory)</span>
+              <span className="font-mono">≈ KES {fmtNum(effGross - estimatedNet)}</span>
+            </div>
+            <div className="mt-1.5 flex justify-between border-t border-slate-200 pt-1.5 font-black text-emerald-700">
+              <span>Estimated Net Pay</span>
+              <span className="font-mono">KES {fmtNum(estimatedNet)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3">
+          <button onClick={onClose} className="h-7 rounded border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="h-7 rounded bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0a2e23] disabled:opacity-60">
+            {saving ? 'Saving…' : 'Save Adjustment'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PayrollPeriodDetail() {
   const { periodId } = useParams();
   const navigate = useNavigate();
@@ -43,6 +166,7 @@ export default function PayrollPeriodDetail() {
   const [running, setRunning] = useState(false);
   const [confirm, setConfirm] = useState({ isOpen: false });
   const [reverseDialog, setReverseDialog] = useState({ isOpen: false, reason: '', busy: false });
+  const [adjustTarget, setAdjustTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -355,6 +479,7 @@ export default function PayrollPeriodDetail() {
                         <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Net Pay</th>
                         <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Status</th>
                         <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Payslip</th>
+                        {isDraft && <th className="px-3 py-2.5 print-hide" />}
                       </tr>
                     </thead>
                     <tbody>
@@ -384,6 +509,17 @@ export default function PayrollPeriodDetail() {
                               <FaFileAlt size={8} /> View
                             </button>
                           </td>
+                          {isDraft && (
+                            <td className="px-2 py-2.5 print-hide">
+                              <button
+                                onClick={() => setAdjustTarget(ps)}
+                                title="Add bonus / manual adjustment"
+                                className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-black hover:bg-amber-50 ${ps.adjustmentAllowances?.length || ps.adjustmentDeductions?.length ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-600'}`}
+                              >
+                                <FaSlidersH size={8} /> {ps.adjustmentAllowances?.length || ps.adjustmentDeductions?.length ? 'Adjusted' : 'Adjust'}
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -397,7 +533,7 @@ export default function PayrollPeriodDetail() {
                         <td className="px-3 py-2.5 text-right text-[11px] font-black text-rose-700">{fmtKES(period.totalNSSF)}</td>
                         <td className="px-3 py-2.5 text-right text-[11px] font-black text-rose-700">{fmtKES(period.totalAHL)}</td>
                         <td className="px-3 py-2.5 text-right text-[11px] font-black text-emerald-700">{fmtKES(period.totalNet)}</td>
-                        <td colSpan={2} />
+                        <td colSpan={isDraft ? 3 : 2} />
                       </tr>
                     </tfoot>
                   </table>
@@ -407,6 +543,14 @@ export default function PayrollPeriodDetail() {
           )}
         </div>
       </div>
+
+      {adjustTarget && (
+        <AdjustModal
+          payslip={adjustTarget}
+          onClose={() => setAdjustTarget(null)}
+          onSaved={() => { setAdjustTarget(null); load(); toast.success('Payslip adjusted'); }}
+        />
+      )}
 
       <MilikConfirmDialog {...confirm} onClose={() => setConfirm((p) => ({ ...p, isOpen: false }))} />
 

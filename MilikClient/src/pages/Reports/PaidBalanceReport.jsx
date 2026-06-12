@@ -18,7 +18,7 @@ const PaidBalanceReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
-  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
+  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", ["accounts", "propertyManagement"]);
   const properties = useSelector(selectAllProperties);
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';

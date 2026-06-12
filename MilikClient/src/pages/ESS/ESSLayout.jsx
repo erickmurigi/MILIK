@@ -11,6 +11,7 @@ import {
   FaBars,
   FaTimes,
   FaRegClock,
+  FaClipboardCheck,
 } from 'react-icons/fa';
 import './ESS.css';
 
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { to: '/ess/payslips',    label: 'Payslips',     icon: <FaFileInvoiceDollar /> },
   { to: '/ess/leave',       label: 'Leave',        icon: <FaCalendarAlt /> },
   { to: '/ess/attendance',  label: 'Attendance',   icon: <FaRegClock /> },
+  { to: '/ess/appraisals',  label: 'Appraisals',   icon: <FaClipboardCheck /> },
   { to: '/ess/letters',     label: 'Letters',      icon: <FaEnvelopeOpenText /> },
   { to: '/ess/profile',     label: 'My Profile',   icon: <FaUserCircle /> },
 ];

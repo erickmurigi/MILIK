@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FaCheckCircle,
   FaChevronDown,
+  FaChevronLeft,
+  FaChevronRight,
   FaEnvelope,
   FaExclamationTriangle,
   FaHistory,
@@ -103,6 +105,7 @@ const CommunicationComposerModal = ({
   const [customBody,          setCustomBody]          = useState('');
   const [preview,             setPreview]             = useState(null);
   const [expandedPreviewId,   setExpandedPreviewId]   = useState(null);
+  const [sampleIndex,         setSampleIndex]         = useState(0);
 
   const [testPhone,     setTestPhone]     = useState('');
   const [testMessage,   setTestMessage]   = useState('');
@@ -123,6 +126,7 @@ const CommunicationComposerModal = ({
     setCustomBody('');
     setPreview(null);
     setExpandedPreviewId(null);
+    setSampleIndex(0);
     setShowTestPanel(false);
   }, [open, defaultChannel]);
 
@@ -644,8 +648,14 @@ const CommunicationComposerModal = ({
                 {!previewLoading && previews.length > 0 && (
                   <div>
                     {/* sample message at top for SMS */}
-                    {activeChannel === 'sms' && previews[0] && (
-                      <SampleMessagePanel item={previews[0]} />
+                    {activeChannel === 'sms' && previews.length > 0 && (
+                      <SampleMessagePanel
+                        item={previews[Math.min(sampleIndex, previews.length - 1)]}
+                        index={Math.min(sampleIndex, previews.length - 1)}
+                        total={previews.length}
+                        onPrev={() => setSampleIndex((p) => Math.max(0, p - 1))}
+                        onNext={() => setSampleIndex((p) => Math.min(previews.length - 1, p + 1))}
+                      />
                     )}
 
                     {/* recipient table header */}
@@ -796,82 +806,108 @@ const StatBox = ({ label, value, icon, color }) => {
   );
 };
 
-const SampleMessagePanel = ({ item }) => {
-  const info = countSmsInfo(item?.body);
+const SampleMessagePanel = ({ item, index, total, onPrev, onNext }) => {
+  const info   = countSmsInfo(item?.body);
+  const hasNav = total > 1;
+  const initials = String(item?.recipientName || '—')
+    .split(' ').slice(0, 2).map((w) => w[0] || '').join('').toUpperCase();
+
   return (
-    <div className="border-b border-slate-200 bg-gradient-to-br from-slate-50 to-white px-5 py-4">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Sample Message Preview</p>
-        <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[10px] font-bold ${
-          item?.canSend ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'
+    <div className="border-b border-slate-200 bg-white">
+
+      {/* ── top bar: label + nav + status ── */}
+      <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-2.5">
+        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 flex-1">
+          Message Preview
+        </span>
+        {hasNav && (
+          <div className="flex items-center gap-1">
+            <button onClick={onPrev} disabled={index === 0}
+              className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-400 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30">
+              <FaChevronLeft size={8} />
+            </button>
+            <span className="min-w-[44px] text-center text-[11px] font-bold tabular-nums text-slate-600">
+              {index + 1} / {total}
+            </span>
+            <button onClick={onNext} disabled={index === total - 1}
+              className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-400 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30">
+              <FaChevronRight size={8} />
+            </button>
+          </div>
+        )}
+        <span className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[10px] font-bold ${
+          item?.canSend
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            : 'border-red-200 bg-red-50 text-red-700'
         }`}>
+          {item?.canSend ? <FaCheckCircle size={8} /> : <FaTimesCircle size={8} />}
           {item?.canSend ? 'Ready to Send' : 'Blocked'}
         </span>
       </div>
-      <div className="flex items-start gap-5">
-        {/* phone mockup */}
-        <div className="shrink-0">
-          <div className="relative w-[110px] rounded-[22px] border-[3.5px] border-slate-700 bg-slate-900 px-1.5 pb-3 pt-2 shadow-2xl">
-            {/* camera notch */}
-            <div className="mx-auto mb-1.5 flex items-center justify-center gap-1">
-              <div className="h-[2.5px] w-5 rounded-full bg-slate-700" />
-              <div className="h-[4px] w-[4px] rounded-full bg-slate-600" />
-            </div>
-            <div className="overflow-hidden rounded-[14px] bg-white">
-              {/* message header */}
-              <div className="bg-gradient-to-r from-[#0B3B2E] to-emerald-700 px-2 py-2 text-center">
-                <p className="truncate text-[7px] font-bold text-white">{item?.recipientName || 'Recipient'}</p>
-                <p className="text-[6px] text-emerald-200">{item?.recipientPhone || 'No phone'}</p>
-              </div>
-              {/* message bubble area */}
-              <div className="min-h-[130px] bg-[#f5f5f5] p-2 pb-3">
-                <div className="flex justify-start pt-1">
-                  <div className="relative max-w-[98%]">
-                    <div className="rounded-2xl rounded-tl-none bg-white px-2 py-1.5 shadow-sm">
-                      <p className="text-[6.5px] leading-[1.5] text-slate-800">{item?.body || '…'}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {/* sms counter */}
-              <div className="border-t border-slate-100 bg-white px-2 py-1 text-center">
-                <span className={`text-[6px] font-bold ${info.segments > 1 ? 'text-amber-600' : 'text-slate-400'}`}>
-                  {info.chars} chars · {info.segments} SMS
-                </span>
-              </div>
-            </div>
-            <div className="mx-auto mt-1.5 h-3 w-3 rounded-full border-2 border-slate-600" />
-          </div>
+
+      {/* ── recipient strip ── */}
+      <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-5 py-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[#0B3B2E] text-[11px] font-black text-white">
+          {initials || '?'}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-bold text-slate-900 truncate">{item?.recipientName || '—'}</p>
+          {item?.recipientPhone
+            ? <p className="flex items-center gap-1 text-[10px] text-slate-500"><FaPhone size={8} />{item.recipientPhone}</p>
+            : <p className="text-[10px] text-red-500">No phone number</p>
+          }
+        </div>
+        {/* sms tech specs */}
+        <div className="flex shrink-0 items-center divide-x divide-slate-200 rounded border border-slate-200 bg-white text-[10px]">
+          <span className={`px-2.5 py-1.5 font-bold ${info.segments > 1 ? 'text-amber-700' : 'text-slate-600'}`}>
+            {info.segments} part{info.segments !== 1 ? 's' : ''}
+          </span>
+          <span className="px-2.5 py-1.5 text-slate-400">{info.encoding}</span>
+          <span className="px-2.5 py-1.5 tabular-nums text-slate-400">{info.chars} ch</span>
+        </div>
+      </div>
+
+      {/* ── message body ── */}
+      <div className="px-5 py-4">
+        <div className="relative rounded-lg border-l-4 border-[#0B3B2E] bg-slate-50 px-4 py-3.5 text-[12px] leading-[1.7] text-slate-800 whitespace-pre-wrap">
+          {item?.body || '—'}
         </div>
 
-        {/* message detail */}
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex flex-wrap items-center gap-1.5">
-            <span className={`inline-flex rounded-lg px-2 py-0.5 text-[9px] font-bold ${
-              info.segments > 1 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+        {/* char progress bar */}
+        {info.chars > 0 && (
+          <div className="mt-2.5 flex items-center gap-2">
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  info.segments > 2 ? 'bg-red-500' : info.segments > 1 ? 'bg-amber-400' : 'bg-emerald-500'
+                }`}
+                style={{ width: `${Math.min(100, smsSegmentProgress(info))}%` }}
+              />
+            </div>
+            <span className={`text-[10px] font-semibold tabular-nums ${
+              info.segments > 1 ? 'text-amber-600' : 'text-slate-400'
             }`}>
-              {info.segments} SMS part{info.segments !== 1 ? 's' : ''}
-            </span>
-            <span className="inline-flex rounded-lg bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-500">
-              {info.encoding}
+              {info.remaining} remaining
             </span>
           </div>
-          <p className="mb-0.5 text-[12px] font-bold text-slate-800">{item?.recipientName}</p>
-          {item?.recipientPhone && (
-            <p className="mb-2 flex items-center gap-1 text-[11px] text-slate-400">
-              <FaPhone className="text-[9px]" /> {item.recipientPhone}
-            </p>
-          )}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-700 whitespace-pre-wrap">
-            {item?.body || '—'}
+        )}
+
+        {/* warnings */}
+        {item?.missingPlaceholders?.length > 0 && (
+          <div className="mt-3 flex items-start gap-2 rounded border border-red-200 bg-red-50 px-3 py-2.5">
+            <FaExclamationTriangle size={10} className="mt-0.5 shrink-0 text-red-500" />
+            <div>
+              <p className="text-[11px] font-bold text-red-800">Missing placeholder data</p>
+              <p className="text-[10px] text-red-600">{item.missingPlaceholders.join(' · ')}</p>
+            </div>
           </div>
-          {item?.missingPlaceholders?.length > 0 && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold text-red-600">
-              <FaExclamationTriangle className="text-[9px]" />
-              Missing: {item.missingPlaceholders.join(', ')}
-            </p>
-          )}
-        </div>
+        )}
+        {!item?.canSend && item?.reason && !item?.missingPlaceholders?.length && (
+          <div className="mt-3 flex items-start gap-2 rounded border border-red-200 bg-red-50 px-3 py-2.5">
+            <FaLock size={9} className="mt-0.5 shrink-0 text-red-500" />
+            <p className="text-[11px] font-semibold text-red-700">{item.reason}</p>
+          </div>
+        )}
       </div>
     </div>
   );

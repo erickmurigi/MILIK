@@ -7,6 +7,7 @@ import { getProperties } from '../../redux/propertyRedux';
 import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
+import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 
 const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
@@ -18,8 +19,10 @@ const MRITaxSummaryReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
-  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
+  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", ["accounts", "propertyManagement"]);
   const properties = useSelector(selectAllProperties);
+
+  const isLandlordMode = isSelfManagingLandlordCompany(currentCompany || currentUser?.company);
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
   const companyName = currentCompany?.name
@@ -124,7 +127,8 @@ const MRITaxSummaryReport = () => {
     const win = window.open('', '_blank', 'width=900,height=800');
     if (!win) { toast.error('Pop-up blocked. Please allow pop-ups to print.'); return; }
     const fmt = (v) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-    win.document.write(`<!DOCTYPE html><html><head><title>MRI Tax Summary</title><style>
+    const printTitle = isLandlordMode ? 'Rental Income Tax (MRI)' : 'MRI Tax Summary';
+    win.document.write(`<!DOCTYPE html><html><head><title>${printTitle}</title><style>
       @page{size:A4 portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#0f172a;font-size:9px;margin:0}
       .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0B3B2E;padding-bottom:8px;margin-bottom:10px}
       .co{font-size:13px;font-weight:900;color:#0B3B2E}.ttl{font-size:16px;font-weight:900;margin:2px 0}
@@ -143,7 +147,7 @@ const MRITaxSummaryReport = () => {
       .note{margin-top:14px;border-left:4px solid #f59e0b;background:#fffbeb;border-radius:8px;padding:8px 10px;font-size:8.5px;color:#78350f}
       *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
     </style></head><body>
-    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">MRI Tax Summary</div><div class="sub">Residential Rental Income — ${mriRatePercent}% flat rate · Period: ${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}</div></div>
+    <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">${printTitle}</div><div class="sub">Residential Rental Income — ${mriRatePercent}% flat rate · Period: ${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}</div></div>
     <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div></div></div>
     <div class="cards">
       <div class="card"><div class="cl">Total Gross Rent</div><div class="cv">${fmt(summary.totalGrossRent)}</div></div>
@@ -195,7 +199,7 @@ const MRITaxSummaryReport = () => {
           <div className="mri-print-header">
             <div>
               <div className="mri-print-brand">{companyName}</div>
-              <h1 className="mri-print-title">MRI Tax Summary</h1>
+              <h1 className="mri-print-title">{isLandlordMode ? 'Rental Income Tax (MRI)' : 'MRI Tax Summary'}</h1>
               <p className="mri-print-subtitle">
                 Residential Rental Income (MRI) tax summary — {mriRatePercent}% flat rate on gross rent collected.
                 Period: {formatDate(filters.startDate)} to {formatDate(filters.endDate)}.

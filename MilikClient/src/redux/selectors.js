@@ -131,6 +131,14 @@ export const selectAllLeases = createSelector(
   (leases) => (Array.isArray(leases) ? leases : EMPTY_ARRAY)
 );
 
+// ─── Expense Properties ────────────────────────────────────────────────────
+const selectExpensePropertySlice = (state) => state.expenseProperty?.expenseProperties;
+
+export const selectAllExpenseProperties = createSelector(
+  selectExpensePropertySlice,
+  (expenses) => (Array.isArray(expenses) ? expenses : EMPTY_ARRAY)
+);
+
 // ─── Notifications ─────────────────────────────────────────────────────────
 const selectNotificationSlice = (state) => state.notification?.notifications;
 
